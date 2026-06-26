@@ -17,6 +17,7 @@ import com.toir.repository.LaborEntryRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,7 @@ public class LaborEntryService {
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
     private final AuditBuilderService auditBuilderService;
+    private final RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
 
     @Transactional(readOnly = true)
     public List<LaborEntryDto> findByWorkOrder(UUID workOrderId) {
@@ -175,6 +177,7 @@ public class LaborEntryService {
         cost.setSourceType(ActualCostSourceType.LABOR_ENTRY);
         cost.setSourceId(laborEntry.getId());
         cost.setWorkOrderId(workOrder.getId());
+        cost.setBudgetLineId(repairCampaignBudgetLineResolver.resolveForWorkOrder(workOrder));
         cost.setCostCategoryId(category.getId());
         cost.setAmount(laborEntry.getHours() * laborEntry.getRate());
         cost.setStatus(ActualCostStatus.PENDING);

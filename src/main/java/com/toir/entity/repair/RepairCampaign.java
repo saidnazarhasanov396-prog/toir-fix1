@@ -39,6 +39,9 @@ public class RepairCampaign extends BaseEntity {
     @Column(name = "department_id")
     private UUID departmentId;
 
+    @Column(name = "maintenance_budget_id")
+    private UUID maintenanceBudgetId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "scope_type", nullable = false)
     @Builder.Default

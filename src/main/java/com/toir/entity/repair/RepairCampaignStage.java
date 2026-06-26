@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 /**
  * Этап ремонтной кампании: диагностика, закупка, останов, разборка, сборка, испытания, пуск.
@@ -34,6 +35,9 @@ public class RepairCampaignStage extends BaseEntity {
 
     @Column(name = "end_date", nullable = false)
     private LocalDate endDate;
+
+    @Column(name = "budget_line_id")
+    private UUID budgetLineId;
 
     @Column(name = "planned_cost", nullable = false)
     private double plannedCost;

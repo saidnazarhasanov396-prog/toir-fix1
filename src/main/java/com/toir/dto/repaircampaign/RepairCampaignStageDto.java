@@ -23,7 +23,11 @@ public record RepairCampaignStageDto(
         int workOrderCount,
         int completedWorkOrderCount,
         double approvedActual,
-        double pendingActual
+        double pendingActual,
+        UUID budgetLineId,
+        double budgetLinePlanned,
+        double budgetLineActual,
+        double budgetLineRemaining
 ) {
     public RepairCampaignStageDto(
             UUID id,
@@ -36,7 +40,27 @@ public record RepairCampaignStageDto(
             RepairCampaignStatus status,
             String notes
     ) {
-        this(id, sequence, name, startDate, endDate, plannedCost, actualCost, status, notes, 0, 0, actualCost, 0);
+        this(id, sequence, name, startDate, endDate, plannedCost, actualCost, status, notes, 0, 0, actualCost, 0,
+                null, 0, 0, 0);
+    }
+
+    public RepairCampaignStageDto(
+            UUID id,
+            @Positive int sequence,
+            @NotBlank String name,
+            @NotNull LocalDate startDate,
+            @NotNull LocalDate endDate,
+            @PositiveOrZero double plannedCost,
+            @PositiveOrZero double actualCost,
+            RepairCampaignStatus status,
+            String notes,
+            int workOrderCount,
+            int completedWorkOrderCount,
+            double approvedActual,
+            double pendingActual
+    ) {
+        this(id, sequence, name, startDate, endDate, plannedCost, actualCost, status, notes, workOrderCount,
+                completedWorkOrderCount, approvedActual, pendingActual, null, 0, 0, 0);
     }
 
     public static RepairCampaignStageDto from(RepairCampaignStage s) {
@@ -45,7 +69,8 @@ public record RepairCampaignStageDto(
                 s.getStartDate(), s.getEndDate(),
                 s.getPlannedCost(), s.getActualCost(),
                 s.getStatus(), s.getNotes(),
-                0, 0, s.getActualCost(), 0
+                0, 0, s.getActualCost(), 0,
+                s.getBudgetLineId(), 0, 0, 0
         );
     }
 }

@@ -18,6 +18,7 @@ import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.PermissionConstants;
+import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,6 +71,9 @@ class ActualCostServiceTest {
 
     @Mock
     NotificationService notificationService;
+
+    @Mock
+    RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
 
     @InjectMocks
     ActualCostService service;
@@ -128,6 +132,31 @@ class ActualCostServiceTest {
 
         assertThat(result.status()).isEqualTo(ActualCostStatus.PENDING);
         assertThat(result.workOrderId()).isEqualTo(workOrderId);
+    }
+
+    @Test
+    void createDefaultsBudgetLineFromLinkedCampaignWorkOrder() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(departmentId);
+        BudgetLine line = budgetLine(budgetLineId, 500, 0, BudgetStatus.APPROVED);
+        line.getBudget().setDepartmentId(departmentId);
+
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repairCampaignBudgetLineResolver.resolveForWorkOrder(workOrder)).thenReturn(budgetLineId);
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> {
+            ActualCost saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        ActualCostDto result = service.create(dto(workOrderId, null, null, null, 100));
+
+        assertThat(result.budgetLineId()).isEqualTo(budgetLineId);
     }
 
     @Test

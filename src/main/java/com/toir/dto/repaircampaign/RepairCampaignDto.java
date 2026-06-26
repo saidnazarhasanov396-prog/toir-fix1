@@ -31,7 +31,12 @@ public record RepairCampaignDto(
         int workOrderCount,
         int completedWorkOrderCount,
         double approvedActual,
-        double pendingActual
+        double pendingActual,
+        UUID maintenanceBudgetId,
+        double budgetPlanned,
+        double budgetActual,
+        double budgetRemaining,
+        String budgetStatus
 ) {
     public RepairCampaignDto(
             UUID id,
@@ -53,7 +58,37 @@ public record RepairCampaignDto(
     ) {
         this(id, code, name, year, quarter, departmentId, departmentName, status, startDate, endDate, totalBudget,
                 totalActual, variance, scope, notes, stages, RepairCampaignScopeType.CUSTOM, null, List.of(),
-                0, 0, totalActual, 0);
+                0, 0, totalActual, 0, null, 0, 0, 0, null);
+    }
+
+    public RepairCampaignDto(
+            UUID id,
+            String code,
+            String name,
+            int year,
+            Integer quarter,
+            UUID departmentId,
+            String departmentName,
+            RepairCampaignStatus status,
+            LocalDate startDate,
+            LocalDate endDate,
+            double totalBudget,
+            double totalActual,
+            double variance,
+            String scope,
+            String notes,
+            List<RepairCampaignStageDto> stages,
+            RepairCampaignScopeType scopeType,
+            UUID equipmentTypeId,
+            List<RepairCampaignDepartmentDto> participantDepartments,
+            int workOrderCount,
+            int completedWorkOrderCount,
+            double approvedActual,
+            double pendingActual
+    ) {
+        this(id, code, name, year, quarter, departmentId, departmentName, status, startDate, endDate, totalBudget,
+                totalActual, variance, scope, notes, stages, scopeType, equipmentTypeId, participantDepartments,
+                workOrderCount, completedWorkOrderCount, approvedActual, pendingActual, null, 0, 0, 0, null);
     }
 
     public static RepairCampaignDto from(RepairCampaign c, String departmentName) {
@@ -71,7 +106,12 @@ public record RepairCampaignDto(
                 0,
                 0,
                 c.getTotalActual(),
-                0
+                0,
+                c.getMaintenanceBudgetId(),
+                0,
+                0,
+                0,
+                null
         );
     }
 

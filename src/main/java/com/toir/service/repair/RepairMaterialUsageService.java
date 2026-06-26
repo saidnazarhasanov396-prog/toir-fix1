@@ -74,6 +74,7 @@ public class RepairMaterialUsageService {
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final LowStockRecommendationService lowStockRecommendationService;
     private final ActualCostRepository actualCostRepository;
+    private final RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
     private final CostCategoryRepository costCategoryRepository;
     private final WorkOrderSparePartRequirementRepository requirementRepository;
     private final ToirStockService toirStockService;
@@ -316,6 +317,7 @@ public class RepairMaterialUsageService {
         cost.setSourceType(ActualCostSourceType.MATERIAL_ISSUE);
         cost.setSourceId(usage.getId());
         cost.setWorkOrderId(usage.getWorkOrderId());
+        cost.setBudgetLineId(repairCampaignBudgetLineResolver.resolveForWorkOrderId(usage.getWorkOrderId()));
         cost.setCostCategoryId(category.get().getId());
         cost.setAmount(usage.getQuantity() * usage.getUnitCost());
         cost.setStatus(ActualCostStatus.PENDING);

@@ -65,6 +65,9 @@ public class WorkOrder extends ActorStampedEntity {
     @Column(name = "repair_campaign_stage_id")
     private UUID repairCampaignStageId;
 
+    @Column(name = "budget_line_id")
+    private UUID budgetLineId;
+
     @Column(name = "cycle_key")
     private String cycleKey;
 

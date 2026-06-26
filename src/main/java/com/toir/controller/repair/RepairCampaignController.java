@@ -1,4 +1,6 @@
 package com.toir.controller.repair;
+import com.toir.dto.budget.BudgetLineDto;
+import com.toir.dto.repaircampaign.RepairCampaignBudgetSummaryDto;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignCancelRequest;
 import com.toir.dto.repaircampaign.RepairCampaignCostSummaryDto;
@@ -81,6 +83,16 @@ public class RepairCampaignController {
     @GetMapping("/{id}/costs")
     public ResponseEntity<RepairCampaignCostSummaryDto> costs(@PathVariable UUID id) {
         return ResponseEntity.ok(service.costs(id));
+    }
+
+    @GetMapping("/{id}/budget-summary")
+    public ResponseEntity<RepairCampaignBudgetSummaryDto> budgetSummary(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.budgetSummary(id));
+    }
+
+    @GetMapping("/{id}/available-budget-lines")
+    public ResponseEntity<List<BudgetLineDto>> availableBudgetLines(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.availableBudgetLines(id));
     }
 
     @GetMapping("/{id}/work-orders")

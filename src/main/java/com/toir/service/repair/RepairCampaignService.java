@@ -1,5 +1,8 @@
 package com.toir.service.repair;
 
+import com.toir.dto.budget.BudgetLineDto;
+import com.toir.dto.repaircampaign.RepairCampaignBudgetStageSummaryDto;
+import com.toir.dto.repaircampaign.RepairCampaignBudgetSummaryDto;
 import com.toir.dto.repaircampaign.RepairCampaignCostSummaryDto;
 import com.toir.dto.repaircampaign.RepairCampaignDepartmentDto;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
@@ -16,6 +19,8 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.RepairAcceptance;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.BudgetLine;
+import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignDepartment;
 import com.toir.entity.repair.RepairCampaignStage;
@@ -37,7 +42,9 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.maintenance.RepairAcceptanceRepository;
+import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairCampaignDepartmentRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
@@ -82,6 +89,8 @@ public class RepairCampaignService {
     private final WorkOrderRepository workOrderRepository;
     private final ContractorWorkRepository contractorWorkRepository;
     private final ActualCostRepository actualCostRepository;
+    private final MaintenanceBudgetRepository maintenanceBudgetRepository;
+    private final BudgetLineRepository budgetLineRepository;
     private final EquipmentRepository equipmentRepository;
     private final RepairAcceptanceRepository repairAcceptanceRepository;
     private final WorkOrderService workOrderService;
@@ -113,6 +122,7 @@ public class RepairCampaignService {
     public RepairCampaignDto create(RepairCampaignRequest r) {
         CodeGenerationUtils.rejectClientProvidedCode(r.code());
         validateCampaignRequest(r);
+        validateMaintenanceBudgetLink(r);
 
         RepairCampaign c = new RepairCampaign();
         c.setCode(nextCode());
@@ -122,6 +132,7 @@ public class RepairCampaignService {
         c.setDepartmentId(r.departmentId());
         c.setScopeType(effectiveScopeType(r.scopeType()));
         c.setEquipmentTypeId(r.equipmentTypeId());
+        c.setMaintenanceBudgetId(r.maintenanceBudgetId());
         c.setStartDate(r.startDate());
         c.setEndDate(r.endDate());
         c.setTotalBudget(r.totalBudget());
@@ -143,6 +154,8 @@ public class RepairCampaignService {
         }
         CodeGenerationUtils.rejectClientProvidedCode(r.code());
         validateCampaignRequest(r);
+        validateMaintenanceBudgetLink(r);
+        validateExistingStageBudgetLines(c, r.maintenanceBudgetId());
 
         RepairCampaign before = snapshot(c);
         c.setName(r.name());
@@ -151,6 +164,7 @@ public class RepairCampaignService {
         c.setDepartmentId(r.departmentId());
         c.setScopeType(effectiveScopeType(r.scopeType()));
         c.setEquipmentTypeId(r.equipmentTypeId());
+        c.setMaintenanceBudgetId(r.maintenanceBudgetId());
         c.setStartDate(r.startDate());
         c.setEndDate(r.endDate());
         c.setTotalBudget(r.totalBudget());
@@ -237,9 +251,15 @@ public class RepairCampaignService {
         }
         List<WorkOrder> workOrders = campaignWorkOrders(c.getId());
         assertNoActiveWorkOrders(workOrders, "Cannot close campaign; active work order remains");
-        CampaignCostTotals totals = costTotals(workOrders);
+        List<ActualCost> actualCosts = campaignActualCosts(workOrders);
+        CampaignCostTotals totals = costTotals(actualCosts);
         if (totals.pendingActual() > 0) {
             throw RestException.badRequest("Cannot close campaign while pending actual costs exist");
+        }
+        if (actualCosts.stream()
+                .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED)
+                .anyMatch(cost -> cost.getBudgetLineId() == null)) {
+            throw RestException.badRequest("Cannot close campaign while approved actual costs are not allocated to budget lines");
         }
 
         RepairCampaign before = snapshot(c);
@@ -272,6 +292,7 @@ public class RepairCampaignService {
         RepairCampaign c = getOrThrow(campaignId);
         assertCampaignMutableForStructure(c);
         validateStageRequest(r);
+        validateStageBudgetLine(c, r.budgetLineId());
 
         RepairCampaignStage s = new RepairCampaignStage();
         s.setCampaign(c);
@@ -291,6 +312,7 @@ public class RepairCampaignService {
         RepairCampaignStage stage = getStageForCampaign(campaignId, stageId);
         assertCampaignMutableForStructure(stage.getCampaign());
         validateStageRequest(r);
+        validateStageBudgetLine(stage.getCampaign(), r.budgetLineId());
         RepairCampaignStage before = snapshot(stage);
         applyStageRequest(stage, r);
         RepairCampaignStage saved = stageRepository.save(stage);
@@ -357,6 +379,11 @@ public class RepairCampaignService {
 
         workOrder.setRepairCampaignId(campaignId);
         workOrder.setRepairCampaignStageId(stageId);
+        if (workOrder.getBudgetLineId() == null) {
+            workOrder.setBudgetLineId(stage.getBudgetLineId());
+        } else {
+            validateWorkOrderBudgetLineBelongsToCampaign(campaign, workOrder.getBudgetLineId());
+        }
         WorkOrder saved = workOrderRepository.save(workOrder);
         return workOrderService.findById(saved.getId());
     }
@@ -384,8 +411,12 @@ public class RepairCampaignService {
             throw RestException.badRequest("Cannot detach work order with approved actual costs");
         }
 
+        UUID inheritedBudgetLineId = inheritedStageBudgetLine(workOrder.getRepairCampaignStageId());
         workOrder.setRepairCampaignId(null);
         workOrder.setRepairCampaignStageId(null);
+        if (Objects.equals(workOrder.getBudgetLineId(), inheritedBudgetLineId)) {
+            workOrder.setBudgetLineId(null);
+        }
         WorkOrder saved = workOrderRepository.save(workOrder);
         return workOrderService.findById(saved.getId());
     }
@@ -482,6 +513,49 @@ public class RepairCampaignService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public RepairCampaignBudgetSummaryDto budgetSummary(UUID campaignId) {
+        RepairCampaign campaign = getOrThrow(campaignId);
+        List<WorkOrder> workOrders = campaignWorkOrders(campaignId);
+        List<ActualCost> actualCosts = campaignActualCosts(workOrders);
+        CampaignCostTotals totals = costTotals(actualCosts);
+        MaintenanceBudget budget = budgetOrNull(campaign.getMaintenanceBudgetId());
+        List<RepairCampaignBudgetStageSummaryDto> stages = safeList(campaign.getStages()).stream()
+                .map(stage -> budgetStageSummary(stage, stageWorkOrders(stage.getId())))
+                .toList();
+        List<ActualCost> unallocatedCosts = actualCosts.stream()
+                .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED
+                        || cost.getStatus() == ActualCostStatus.PENDING)
+                .filter(cost -> cost.getBudgetLineId() == null)
+                .toList();
+        return new RepairCampaignBudgetSummaryDto(
+                campaign.getId(),
+                campaign.getMaintenanceBudgetId(),
+                budget == null ? null : budget.getStatus(),
+                campaign.getTotalBudget(),
+                totals.approvedActual(),
+                totals.pendingActual(),
+                budget == null ? 0 : budget.getTotalPlanned(),
+                budget == null ? 0 : budget.getTotalActual(),
+                budget == null ? 0 : budget.getTotalPlanned() - budget.getTotalActual(),
+                unallocatedCosts.size(),
+                unallocatedCosts.stream().mapToDouble(ActualCost::getAmount).sum(),
+                stages
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<BudgetLineDto> availableBudgetLines(UUID campaignId) {
+        RepairCampaign campaign = getOrThrow(campaignId);
+        MaintenanceBudget budget = budgetOrNull(campaign.getMaintenanceBudgetId());
+        if (budget == null) {
+            return List.of();
+        }
+        return safeList(budget.getLines()).stream()
+                .map(BudgetLineDto::from)
+                .toList();
+    }
+
     private WorkOrderRequest generatedWorkOrderRequest(
             RepairCampaign campaign,
             RepairCampaignStage stage,
@@ -556,6 +630,40 @@ public class RepairCampaignService {
         }
     }
 
+    private void validateMaintenanceBudgetLink(RepairCampaignRequest request) {
+        if (request.maintenanceBudgetId() == null) {
+            return;
+        }
+        MaintenanceBudget budget = maintenanceBudgetRepository.findByIdAndIsDeletedFalse(request.maintenanceBudgetId())
+                .orElseThrow(() -> RestException.notFound("Maintenance budget not found: " + request.maintenanceBudgetId()));
+        if (budget.getYear() != request.year()) {
+            throw RestException.badRequest("Maintenance budget year must match repair campaign year");
+        }
+        RepairCampaignScopeType scopeType = effectiveScopeType(request.scopeType());
+        if (scopeType != RepairCampaignScopeType.CROSS_DEPARTMENT
+                && budget.getDepartmentId() != null
+                && request.departmentId() != null
+                && !budget.getDepartmentId().equals(request.departmentId())) {
+            throw RestException.badRequest("Maintenance budget department must match repair campaign department");
+        }
+    }
+
+    private void validateExistingStageBudgetLines(RepairCampaign campaign, UUID maintenanceBudgetId) {
+        for (RepairCampaignStage stage : safeList(campaign.getStages())) {
+            UUID budgetLineId = stage.getBudgetLineId();
+            if (budgetLineId == null) {
+                continue;
+            }
+            if (maintenanceBudgetId == null) {
+                throw RestException.badRequest("Cannot unlink maintenance budget while campaign stages have budget lines");
+            }
+            BudgetLine line = requireBudgetLine(budgetLineId);
+            if (line.getBudget() == null || !maintenanceBudgetId.equals(line.getBudget().getId())) {
+                throw RestException.badRequest("Existing stage budget line does not belong to the selected maintenance budget");
+            }
+        }
+    }
+
     private void replaceParticipantDepartments(
             RepairCampaign campaign,
             List<RepairCampaignDepartmentDto> participantDepartments
@@ -590,12 +698,27 @@ public class RepairCampaignService {
         }
     }
 
+    private void validateStageBudgetLine(RepairCampaign campaign, UUID budgetLineId) {
+        if (budgetLineId == null) {
+            return;
+        }
+        UUID maintenanceBudgetId = campaign.getMaintenanceBudgetId();
+        if (maintenanceBudgetId == null) {
+            throw RestException.badRequest("Campaign must be linked to a maintenance budget before assigning stage budget lines");
+        }
+        BudgetLine line = requireBudgetLine(budgetLineId);
+        if (line.getBudget() == null || !maintenanceBudgetId.equals(line.getBudget().getId())) {
+            throw RestException.badRequest("Stage budget line must belong to the repair campaign maintenance budget");
+        }
+    }
+
     private void applyStageRequest(RepairCampaignStage stage, RepairCampaignStageDto r) {
         stage.setSequence(r.sequence());
         stage.setName(r.name());
         stage.setStartDate(r.startDate());
         stage.setEndDate(r.endDate());
         stage.setPlannedCost(r.plannedCost());
+        stage.setBudgetLineId(r.budgetLineId());
         stage.setNotes(r.notes());
     }
 
@@ -621,6 +744,20 @@ public class RepairCampaignService {
         }
         validateCampaignDepartment(campaign, workOrder.getDepartmentId());
         validateWorkOrderDates(stage, workOrder);
+    }
+
+    private void validateWorkOrderBudgetLineBelongsToCampaign(RepairCampaign campaign, UUID budgetLineId) {
+        if (budgetLineId == null) {
+            return;
+        }
+        UUID maintenanceBudgetId = campaign.getMaintenanceBudgetId();
+        if (maintenanceBudgetId == null) {
+            throw RestException.badRequest("Campaign must be linked to a maintenance budget before assigning work order budget lines");
+        }
+        BudgetLine line = requireBudgetLine(budgetLineId);
+        if (line.getBudget() == null || !maintenanceBudgetId.equals(line.getBudget().getId())) {
+            throw RestException.badRequest("Work order budget line must belong to the repair campaign maintenance budget");
+        }
     }
 
     private void validateCampaignDepartment(RepairCampaign campaign, UUID workOrderDepartmentId) {
@@ -687,12 +824,16 @@ public class RepairCampaignService {
     }
 
     private CampaignCostTotals costTotals(List<WorkOrder> workOrders) {
+        return costTotals(campaignActualCosts(workOrders));
+    }
+
+    private List<ActualCost> campaignActualCosts(List<WorkOrder> workOrders) {
         List<UUID> workOrderIds = safeList(workOrders).stream()
                 .map(WorkOrder::getId)
                 .filter(Objects::nonNull)
                 .toList();
         if (workOrderIds.isEmpty()) {
-            return new CampaignCostTotals(0, 0, 0);
+            return List.of();
         }
         List<ContractorWork> contractorWorks = contractorWorkRepository.findAllByWorkOrderIdInAndIsDeletedFalse(workOrderIds);
         List<UUID> contractorWorkIds = safeList(contractorWorks).stream()
@@ -706,10 +847,14 @@ public class RepairCampaignService {
             safeList(actualCostRepository.findAllByContractorWorkIdInAndIsDeletedFalseOrderByUpdatedAtDesc(contractorWorkIds))
                     .forEach(cost -> costsById.put(cost.getId(), cost));
         }
+        return List.copyOf(costsById.values());
+    }
+
+    private CampaignCostTotals costTotals(Collection<ActualCost> costs) {
         return new CampaignCostTotals(
-                sumByStatus(costsById.values(), ActualCostStatus.APPROVED),
-                sumByStatus(costsById.values(), ActualCostStatus.PENDING),
-                sumByStatus(costsById.values(), ActualCostStatus.REJECTED)
+                sumByStatus(costs, ActualCostStatus.APPROVED),
+                sumByStatus(costs, ActualCostStatus.PENDING),
+                sumByStatus(costs, ActualCostStatus.REJECTED)
         );
     }
 
@@ -737,6 +882,15 @@ public class RepairCampaignService {
 
     private List<WorkOrder> stageWorkOrders(UUID stageId) {
         return safeList(workOrderRepository.findAllByRepairCampaignStageIdAndIsDeletedFalseOrderByUpdatedAtDesc(stageId));
+    }
+
+    private UUID inheritedStageBudgetLine(UUID stageId) {
+        if (stageId == null) {
+            return null;
+        }
+        return stageRepository.findByIdAndIsDeletedFalse(stageId)
+                .map(RepairCampaignStage::getBudgetLineId)
+                .orElse(null);
     }
 
     private void recalcTotals(RepairCampaign c) {
@@ -767,6 +921,7 @@ public class RepairCampaignService {
         List<RepairCampaignStageDto> stageDtos = safeList(c.getStages()).stream()
                 .map(stage -> toStageDto(stage, stageWorkOrders(stage.getId())))
                 .toList();
+        MaintenanceBudget budget = budgetOrNull(c.getMaintenanceBudgetId());
         return new RepairCampaignDto(
                 c.getId(), c.getCode(), c.getName(),
                 c.getYear(), c.getQuarter(), c.getDepartmentId(), departmentName(c.getDepartmentId()), c.getStatus(),
@@ -781,12 +936,18 @@ public class RepairCampaignService {
                 workOrders.size(),
                 completedWorkOrderCount(workOrders),
                 totals.approvedActual(),
-                totals.pendingActual()
+                totals.pendingActual(),
+                c.getMaintenanceBudgetId(),
+                budget == null ? 0 : budget.getTotalPlanned(),
+                budget == null ? 0 : budget.getTotalActual(),
+                budget == null ? 0 : budget.getTotalPlanned() - budget.getTotalActual(),
+                budget == null || budget.getStatus() == null ? null : budget.getStatus().name()
         );
     }
 
     private RepairCampaignStageDto toStageDto(RepairCampaignStage stage, List<WorkOrder> workOrders) {
         CampaignCostTotals totals = costTotals(workOrders);
+        BudgetLine budgetLine = budgetLineOrNull(stage.getBudgetLineId());
         return new RepairCampaignStageDto(
                 stage.getId(),
                 stage.getSequence(),
@@ -800,8 +961,48 @@ public class RepairCampaignService {
                 safeList(workOrders).size(),
                 completedWorkOrderCount(workOrders),
                 totals.approvedActual(),
-                totals.pendingActual()
+                totals.pendingActual(),
+                stage.getBudgetLineId(),
+                budgetLine == null ? 0 : budgetLine.getPlannedAmount(),
+                budgetLine == null ? 0 : budgetLine.getActualAmount(),
+                budgetLine == null ? 0 : budgetLine.getPlannedAmount() - budgetLine.getActualAmount()
         );
+    }
+
+    private RepairCampaignBudgetStageSummaryDto budgetStageSummary(RepairCampaignStage stage, List<WorkOrder> workOrders) {
+        CampaignCostTotals totals = costTotals(workOrders);
+        BudgetLine budgetLine = budgetLineOrNull(stage.getBudgetLineId());
+        return new RepairCampaignBudgetStageSummaryDto(
+                stage.getId(),
+                stage.getName(),
+                stage.getBudgetLineId(),
+                stage.getPlannedCost(),
+                totals.approvedActual(),
+                totals.pendingActual(),
+                budgetLine == null ? 0 : budgetLine.getPlannedAmount(),
+                budgetLine == null ? 0 : budgetLine.getActualAmount(),
+                budgetLine == null ? 0 : budgetLine.getPlannedAmount() - budgetLine.getActualAmount(),
+                stage.getPlannedCost() - totals.approvedActual()
+        );
+    }
+
+    private MaintenanceBudget budgetOrNull(UUID budgetId) {
+        if (budgetId == null) {
+            return null;
+        }
+        return maintenanceBudgetRepository.findByIdAndIsDeletedFalse(budgetId).orElse(null);
+    }
+
+    private BudgetLine budgetLineOrNull(UUID budgetLineId) {
+        if (budgetLineId == null) {
+            return null;
+        }
+        return budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId).orElse(null);
+    }
+
+    private BudgetLine requireBudgetLine(UUID budgetLineId) {
+        return budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)
+                .orElseThrow(() -> RestException.notFound("Budget line not found: " + budgetLineId));
     }
 
     private List<RepairCampaignDto> toDtoList(List<RepairCampaign> campaigns) {
@@ -909,6 +1110,7 @@ public class RepairCampaignService {
         copy.setDepartmentId(source.getDepartmentId());
         copy.setScopeType(source.getScopeType());
         copy.setEquipmentTypeId(source.getEquipmentTypeId());
+        copy.setMaintenanceBudgetId(source.getMaintenanceBudgetId());
         copy.setStatus(source.getStatus());
         copy.setStartDate(source.getStartDate());
         copy.setEndDate(source.getEndDate());
@@ -928,6 +1130,7 @@ public class RepairCampaignService {
         copy.setStartDate(source.getStartDate());
         copy.setEndDate(source.getEndDate());
         copy.setPlannedCost(source.getPlannedCost());
+        copy.setBudgetLineId(source.getBudgetLineId());
         copy.setActualCost(source.getActualCost());
         copy.setStatus(source.getStatus());
         copy.setNotes(source.getNotes());
