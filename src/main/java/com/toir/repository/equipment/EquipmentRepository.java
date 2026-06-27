@@ -301,35 +301,4 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
             @Param("decommissionedStatus") EquipmentStatus decommissionedStatus
     );
 
-    @Query("""
-            select e from Equipment e
-            where e.isDeleted = false
-              and e.hasWarranty = true
-              and (
-                  e.warrantyEndDate in :targetDates
-                  or (e.warrantyEndDate is null and e.warrantyUntil in :targetDates)
-              )
-            """)
-    List<Equipment> findWarrantyExpiringOn(@Param("targetDates") Collection<LocalDate> targetDates);
-
-    @Query("""
-            select e from Equipment e
-            where e.isDeleted = false
-              and e.hasWarranty = true
-              and (:departmentId is null
-                   or e.responsibleDepartmentId = :departmentId
-                   or e.departmentId = :departmentId)
-              and (:supplierId is null
-                   or e.warrantySupplierId = :supplierId)
-              and (cast(:search as string) is null
-                   or lower(e.name) like lower(concat('%', cast(:search as string), '%'))
-                   or lower(e.code) like lower(concat('%', cast(:search as string), '%')))
-            order by e.warrantyEndDate asc nulls last, e.warrantyUntil asc nulls last
-            """)
-    List<Equipment> findAllActiveWithWarranty(
-            @Param("departmentId") UUID departmentId,
-            @Param("supplierId") UUID supplierId,
-            @Param("search") String search
-    );
-
 }
