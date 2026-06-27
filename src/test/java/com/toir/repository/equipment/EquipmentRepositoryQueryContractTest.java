@@ -45,6 +45,37 @@ class EquipmentRepositoryQueryContractTest {
     }
 
     @Test
+    void searchWithMxikQueryFiltersAndSearchesMxikCatalog() {
+        Method method = Arrays.stream(EquipmentRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchWithMxik"))
+                .filter(m -> m.getParameterCount() == 13)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+        assertThat(query.value()).contains("(:mxikId is null or e.mxikId = :mxikId)");
+        assertThat(query.value()).contains("from Mxik m");
+        assertThat(query.value()).contains("m.id = e.mxikId");
+        assertThat(query.value()).contains("lower(m.kod) like :searchPattern");
+        assertThat(query.value()).contains("lower(coalesce(m.barcode, '')) like :searchPattern");
+    }
+
+    @Test
+    void availableReplacementWithMxikQueryFiltersByMxik() {
+        Method method = Arrays.stream(EquipmentRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchAvailableForReplacementWithMxik"))
+                .filter(m -> m.getParameterCount() == 12)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+        assertThat(query.value()).contains("(:mxikId is null or e.mxikId = :mxikId)");
+        assertThat(query.value()).contains("from Mxik m");
+    }
+
+    @Test
     void availableReplacementQueryRequiresCanonicalWarehouseLocation() {
         Method method = Arrays.stream(EquipmentRepository.class.getMethods())
                 .filter(m -> m.getName().equals("searchAvailableForReplacement"))

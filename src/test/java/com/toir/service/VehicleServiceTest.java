@@ -8,11 +8,13 @@ import com.toir.dto.equipmentattribute.EquipmentAttributeValueRequest;
 import com.toir.dto.equipmentattribute.EquipmentAttributeValueDto;
 import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeDto;
 import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeRequest;
+import com.toir.dto.mxik.MxikRefDto;
 import com.toir.dto.vehicle.VehicleDetailDto;
 import com.toir.dto.vehicle.VehicleDocumentDto;
 import com.toir.dto.vehicle.VehicleRequest;
 import com.toir.dto.vehicle.VehicleStatsResponse;
 import com.toir.dto.vehicle.VehicleSummaryDto;
+import com.toir.entity.Mxik;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentLocationHistory;
@@ -29,6 +31,7 @@ import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.enums.VehicleType;
 import com.toir.exception.RestException;
 import com.toir.repository.UploadedFileRepository;
+import com.toir.repository.MxikRepository;
 import com.toir.repository.VehicleDocumentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.VehicleDetailsRepository;
@@ -81,6 +84,9 @@ class VehicleServiceTest {
 
     @Mock
     VehicleDetailsRepository vehicleDetailsRepository;
+
+    @Mock
+    MxikRepository mxikRepository;
 
     @Mock
     EquipmentService equipmentService;
@@ -194,6 +200,39 @@ class VehicleServiceTest {
 
         assertThat(result.equipment().category()).isEqualTo(EquipmentCategory.VEHICLE);
         assertThat(result.vehicleDetails().plateNumber()).isEqualTo("01A123AA");
+    }
+
+    @Test
+    void createVehicleStoresMxikOnEquipment() {
+        UUID mxikId = UUID.randomUUID();
+        Mxik mxik = mxik(mxikId, "8703", "Vehicle");
+        VehicleRequest request = withMxik(
+                fullRequest("VH-MXIK-001", "Truck MXIK", "INV-VH-MXIK-001", "01A787AA", null),
+                mxikId
+        );
+
+        when(mxikRepository.findByIdAndIsDeletedFalse(mxikId)).thenReturn(Optional.of(mxik));
+        when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-MXIK-001")).thenReturn(false);
+        when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A787AA")).thenReturn(false);
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(vehicleDetailsRepository.save(any(VehicleDetails.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(equipmentService.findById(any(UUID.class))).thenAnswer(invocation -> {
+            UUID equipmentId = invocation.getArgument(0);
+            Equipment equipment = equipment(equipmentId, "VH-2026-0001", "Truck MXIK", "INV-VH-MXIK-001");
+            equipment.setMxikId(mxikId);
+            return EquipmentDto.from(equipment, null, null, null, null, null, null, null, null, null, null,
+                    false, null, null, MxikRefDto.from(mxik));
+        });
+
+        service.create(request);
+
+        ArgumentCaptor<Equipment> captor = ArgumentCaptor.forClass(Equipment.class);
+        verify(equipmentRepository).save(captor.capture());
+        assertThat(captor.getValue().getMxikId()).isEqualTo(mxikId);
     }
 
     @Test
@@ -1409,6 +1448,40 @@ class VehicleServiceTest {
     }
 
     @Test
+    void listExposesMxikFromEnrichedEquipment() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID mxikId = UUID.randomUUID();
+        Mxik mxik = mxik(mxikId, "8703", "Vehicle");
+        Equipment equipment = equipment(equipmentId, "VH-MXIK-LIST", "Truck MXIK List", "INV-VH-MXIK-LIST");
+        equipment.setMxikId(mxikId);
+        VehicleDetails details = details(equipmentId, "01A788AA", "VIN-MXIK-LIST");
+        PageRequest pageRequest = PageRequest.of(0, 20);
+        Page<Equipment> equipmentPage = new PageImpl<>(List.of(equipment), pageRequest, 1);
+        EquipmentDto enrichedEquipment = EquipmentDto.from(equipment, null, null, null, null, null, null, null,
+                null, null, null, false, null, null, MxikRefDto.from(mxik));
+
+        when(vehicleDetailsRepository.searchVehicleEquipment(
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(EquipmentCategory.VEHICLE),
+                isNull(),
+                eq(pageRequest)
+        )).thenReturn(equipmentPage);
+        when(equipmentService.enrich(equipmentPage))
+                .thenReturn(new PageImpl<>(List.of(enrichedEquipment), pageRequest, 1));
+        when(vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(details));
+
+        Page<VehicleSummaryDto> result = service.list(null, null, null, null, 0, 20);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().mxikId()).isEqualTo(mxikId);
+        assertThat(result.getContent().getFirst().mxik()).isNotNull();
+        assertThat(result.getContent().getFirst().mxik().kod()).isEqualTo("8703");
+    }
+
+    @Test
     void getStatsWithoutFiltersReturnsVehicleStats() {
         VehicleStatsProjection projection = statsProjection(11L, 9L, 1L, 1L);
 
@@ -2024,6 +2097,52 @@ class VehicleServiceTest {
         );
     }
 
+    private static VehicleRequest withMxik(VehicleRequest request, UUID mxikId) {
+        return new VehicleRequest(
+                request.code(),
+                request.name(),
+                request.inventoryNumber(),
+                request.technicalNumber(),
+                request.serialNumber(),
+                request.equipmentTypeId(),
+                request.departmentId(),
+                request.locationId(),
+                request.status(),
+                request.plateNumber(),
+                request.plateType(),
+                request.vin(),
+                request.brand(),
+                request.model(),
+                request.manufactureYear(),
+                request.vehicleType(),
+                request.bodyNumber(),
+                request.chassisNumber(),
+                request.engineNumber(),
+                request.fuelType(),
+                request.fuelTankCapacity(),
+                request.carryingCapacity(),
+                request.seatCount(),
+                request.assignedDriverId(),
+                request.assignedDriverUsageLimitMinutes(),
+                request.currentOdometerKm(),
+                request.currentEngineHours(),
+                request.registrationCertificateNumber(),
+                request.insurancePolicyNumber(),
+                request.insuranceExpiryDate(),
+                request.technicalInspectionExpiryDate(),
+                request.gpsDeviceId(),
+                request.attributes(),
+                request.manualAttributes(),
+                request.lifetimeCounterType(),
+                request.lifetimeMeterId(),
+                request.lifetimeLimitValue(),
+                request.lifetimeBaselineValue(),
+                request.lifetimeWarningPercent(),
+                request.averageDailyUsage(),
+                mxikId
+        );
+    }
+
     private static VehicleRequest withEquipmentUsage(
             VehicleRequest request,
             MeterType lifetimeCounterType,
@@ -2057,6 +2176,7 @@ class VehicleServiceTest {
                 request.carryingCapacity(),
                 request.seatCount(),
                 request.assignedDriverId(),
+                request.assignedDriverUsageLimitMinutes(),
                 request.currentOdometerKm(),
                 request.currentEngineHours(),
                 request.registrationCertificateNumber(),
@@ -2071,7 +2191,8 @@ class VehicleServiceTest {
                 lifetimeLimitValue,
                 lifetimeBaselineValue,
                 lifetimeWarningPercent,
-                averageDailyUsage
+                averageDailyUsage,
+                request.mxikId()
         );
     }
 
@@ -2284,6 +2405,15 @@ class VehicleServiceTest {
         details.setVin(vin);
         details.setVehicleType(VehicleType.TRUCK);
         return details;
+    }
+
+    private static Mxik mxik(UUID id, String kod, String name) {
+        Mxik mxik = new Mxik();
+        mxik.setId(id);
+        mxik.setKod(kod);
+        mxik.setName(name);
+        mxik.setType("VEHICLE");
+        return mxik;
     }
 
     private static UploadedFile uploadedFile(UUID id, UUID uploadedBy) {

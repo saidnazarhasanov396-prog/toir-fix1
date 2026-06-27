@@ -155,6 +155,59 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                            @Param("searchPattern") String searchPattern,
                            Pageable pageable);
 
+    @Query("""
+            select e from Equipment e where
+            e.isDeleted = false and
+            (:scopeDepartmentId is null or coalesce(e.responsibleDepartmentId, e.departmentId) = :scopeDepartmentId) and
+            (:departmentId is null or e.departmentId = :departmentId) and
+            (:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId) and
+            (:status is null or e.status = :status) and
+            (:category is null or e.category = :category) and
+            (:locationType is null or e.currentLocationType = :locationType) and
+            (:warehouseId is null or e.currentWarehouseId = :warehouseId) and
+            (:outsideReason is null or e.outsideReason = :outsideReason) and
+            (:overdueOnly = false or (
+                e.currentLocationType = com.toir.enums.EquipmentLocationType.OUTSIDE_FACILITY
+                and e.outsideExpectedReturnDate is not null
+                and e.outsideExpectedReturnDate < :today
+            )) and
+            (:mxikId is null or e.mxikId = :mxikId) and
+            (:searchPattern is null or
+            lower(e.code) like :searchPattern or
+            lower(e.name) like :searchPattern or
+            lower(e.inventoryNumber) like :searchPattern or
+            lower(e.technicalNumber) like :searchPattern or
+            lower(e.serialNumber) like :searchPattern or
+            lower(e.model) like :searchPattern or
+            lower(e.manufacturer) like :searchPattern or
+            lower(e.description) like :searchPattern or
+            exists (
+                select 1
+                from Mxik m
+                where m.id = e.mxikId
+                  and m.isDeleted = false
+                  and (
+                      lower(m.kod) like :searchPattern
+                      or lower(m.name) like :searchPattern
+                      or lower(coalesce(m.barcode, '')) like :searchPattern
+                  )
+            ))
+            order by e.updatedAt desc
+            """)
+    Page<Equipment> searchWithMxik(@Param("scopeDepartmentId") UUID scopeDepartmentId,
+                                   @Param("departmentId") UUID departmentId,
+                                   @Param("equipmentTypeId") UUID equipmentTypeId,
+                                   @Param("status") EquipmentStatus status,
+                                   @Param("category") EquipmentCategory category,
+                                   @Param("locationType") EquipmentLocationType locationType,
+                                   @Param("warehouseId") UUID warehouseId,
+                                   @Param("outsideReason") EquipmentOutsideReason outsideReason,
+                                   @Param("overdueOnly") boolean overdueOnly,
+                                   @Param("today") LocalDate today,
+                                   @Param("mxikId") UUID mxikId,
+                                   @Param("searchPattern") String searchPattern,
+                                   Pageable pageable);
+
     @Query("select e from Equipment e where e.isDeleted = false " +
             "and (:equipmentId is null or e.id = :equipmentId) " +
             "and (:searchPattern is null or " +
@@ -227,6 +280,71 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                                                   @Param("category") EquipmentCategory category,
                                                   @Param("searchPattern") String searchPattern,
                                                   Pageable pageable);
+
+    @Query("""
+            select e
+            from Equipment e
+            where e.isDeleted = false
+              and (:departmentId is null or coalesce(e.responsibleDepartmentId, e.departmentId) = :departmentId)
+              and (:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId)
+              and (:status is null or e.status = :status)
+              and (:category is null or e.category = :category)
+              and (:mxikId is null or e.mxikId = :mxikId)
+              and (
+                    :searchPattern is null
+                    or lower(e.code) like :searchPattern
+                    or lower(e.name) like :searchPattern
+                    or lower(e.inventoryNumber) like :searchPattern
+                    or lower(e.technicalNumber) like :searchPattern
+                    or lower(e.serialNumber) like :searchPattern
+                    or lower(e.model) like :searchPattern
+                    or lower(e.manufacturer) like :searchPattern
+                    or lower(e.description) like :searchPattern
+                    or exists (
+                        select 1
+                        from Mxik m
+                        where m.id = e.mxikId
+                          and m.isDeleted = false
+                          and (
+                              lower(m.kod) like :searchPattern
+                              or lower(m.name) like :searchPattern
+                              or lower(coalesce(m.barcode, '')) like :searchPattern
+                          )
+                    )
+                  )
+              and exists (
+                    select 1
+                    from WarehouseEquipmentItem wei
+                    where wei.warehouseId = :warehouseId
+                      and wei.equipmentId = e.id
+                      and wei.active = true
+                      and wei.isDeleted = false
+                      and wei.status = :warehouseEquipmentStatus
+                  )
+              and e.currentLocationType = :locationType
+              and e.currentWarehouseId = :warehouseId
+              and not exists (
+                    select 1
+                    from WorkOrder wo
+                    where wo.isDeleted = false
+                      and wo.workType = :replacementWorkType
+                      and wo.replacementEquipmentId = e.id
+                      and wo.status not in :finalStatuses
+                  )
+            order by e.updatedAt desc
+            """)
+    Page<Equipment> searchAvailableForReplacementWithMxik(@Param("warehouseId") UUID warehouseId,
+                                                          @Param("warehouseEquipmentStatus") WarehouseEquipmentStatus warehouseEquipmentStatus,
+                                                          @Param("locationType") EquipmentLocationType locationType,
+                                                          @Param("replacementWorkType") WorkType replacementWorkType,
+                                                          @Param("finalStatuses") Collection<WorkOrderStatus> finalStatuses,
+                                                          @Param("departmentId") UUID departmentId,
+                                                          @Param("equipmentTypeId") UUID equipmentTypeId,
+                                                          @Param("status") EquipmentStatus status,
+                                                          @Param("category") EquipmentCategory category,
+                                                          @Param("mxikId") UUID mxikId,
+                                                          @Param("searchPattern") String searchPattern,
+                                                          Pageable pageable);
 
     default Page<Equipment> searchAvailableForReplacement(UUID warehouseId,
                                                           WarehouseEquipmentStatus warehouseEquipmentStatus,

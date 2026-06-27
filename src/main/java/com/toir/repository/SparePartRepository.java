@@ -115,6 +115,47 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
                 or (uom.nameUz is not null and lower(sp.unit) = lower(uom.nameUz))
               )
         ))
+        and (:mxikId is null or sp.mxikId = :mxikId)
+        and (:searchPattern is null
+            or lower(sp.code) like :searchPattern
+            or lower(sp.name) like :searchPattern
+            or lower(sp.manufacturer) like :searchPattern
+            or lower(sp.sku) like :searchPattern
+            or lower(sp.specification) like :searchPattern
+            or exists (
+                select 1 from Mxik m
+                where m.id = sp.mxikId
+                  and m.isDeleted = false
+                  and (
+                    lower(m.kod) like :searchPattern
+                    or lower(m.name) like :searchPattern
+                    or lower(coalesce(m.barcode, '')) like :searchPattern
+                  )
+            ))
+        and sp.isDeleted = false
+        order by sp.updatedAt desc
+""")
+    Page<SparePart> findAllByFilterWithMxik(@Param("itemType") InventoryItemKind itemType,
+                                            @Param("typeId") UUID typeId,
+                                            @Param("unitId") UUID unitId,
+                                            @Param("mxikId") UUID mxikId,
+                                            @Param("searchPattern") String searchPattern,
+                                            Pageable pageable);
+
+    @Query(value = """
+        select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
+        and (:typeId is null or sp.type.id = :typeId)
+        and (:unitId is null or exists (
+            select 1 from UnitOfMeasurement uom
+            where uom.id = :unitId
+              and uom.isDeleted = false
+              and (
+                lower(sp.unit) = lower(uom.code)
+                or lower(sp.unit) = lower(uom.name)
+                or (uom.nameEn is not null and lower(sp.unit) = lower(uom.nameEn))
+                or (uom.nameUz is not null and lower(sp.unit) = lower(uom.nameUz))
+              )
+        ))
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -152,6 +193,55 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
                 or (uom.nameUz is not null and lower(sp.unit) = lower(uom.nameUz))
               )
         ))
+        and (:mxikId is null or sp.mxikId = :mxikId)
+        and (:searchPattern is null
+            or lower(sp.code) like :searchPattern
+            or lower(sp.name) like :searchPattern
+            or lower(sp.manufacturer) like :searchPattern
+            or lower(sp.sku) like :searchPattern
+            or lower(sp.specification) like :searchPattern
+            or exists (
+                select 1 from Mxik m
+                where m.id = sp.mxikId
+                  and m.isDeleted = false
+                  and (
+                    lower(m.kod) like :searchPattern
+                    or lower(m.name) like :searchPattern
+                    or lower(coalesce(m.barcode, '')) like :searchPattern
+                  )
+            ))
+        and sp.isDeleted = false
+        and exists (
+            select 1
+            from WarehouseStock ws
+            where ws.sparePartId = sp.id
+              and ws.warehouseId = :warehouseId
+              and ws.isDeleted = false
+        )
+        order by sp.updatedAt desc
+""")
+    Page<SparePart> findAllByFilterAndWarehouseIdWithMxik(@Param("itemType") InventoryItemKind itemType,
+                                                          @Param("typeId") UUID typeId,
+                                                          @Param("unitId") UUID unitId,
+                                                          @Param("mxikId") UUID mxikId,
+                                                          @Param("searchPattern") String searchPattern,
+                                                          @Param("warehouseId") UUID warehouseId,
+                                                          Pageable pageable);
+
+    @Query(value = """
+        select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
+        and (:typeId is null or sp.type.id = :typeId)
+        and (:unitId is null or exists (
+            select 1 from UnitOfMeasurement uom
+            where uom.id = :unitId
+              and uom.isDeleted = false
+              and (
+                lower(sp.unit) = lower(uom.code)
+                or lower(sp.unit) = lower(uom.name)
+                or (uom.nameEn is not null and lower(sp.unit) = lower(uom.nameEn))
+                or (uom.nameUz is not null and lower(sp.unit) = lower(uom.nameUz))
+              )
+        ))
         and (:searchPattern is null
             or lower(sp.code) like :searchPattern
             or lower(sp.name) like :searchPattern
@@ -174,4 +264,53 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
                                                    @Param("searchPattern") String searchPattern,
                                                    @Param("warehouseIds") Collection<UUID> warehouseIds,
                                                    Pageable pageable);
+
+    @Query(value = """
+        select sp from SparePart sp where (:itemType is null or sp.kind = :itemType)
+        and (:typeId is null or sp.type.id = :typeId)
+        and (:unitId is null or exists (
+            select 1 from UnitOfMeasurement uom
+            where uom.id = :unitId
+              and uom.isDeleted = false
+              and (
+                lower(sp.unit) = lower(uom.code)
+                or lower(sp.unit) = lower(uom.name)
+                or (uom.nameEn is not null and lower(sp.unit) = lower(uom.nameEn))
+                or (uom.nameUz is not null and lower(sp.unit) = lower(uom.nameUz))
+              )
+        ))
+        and (:mxikId is null or sp.mxikId = :mxikId)
+        and (:searchPattern is null
+            or lower(sp.code) like :searchPattern
+            or lower(sp.name) like :searchPattern
+            or lower(sp.manufacturer) like :searchPattern
+            or lower(sp.sku) like :searchPattern
+            or lower(sp.specification) like :searchPattern
+            or exists (
+                select 1 from Mxik m
+                where m.id = sp.mxikId
+                  and m.isDeleted = false
+                  and (
+                    lower(m.kod) like :searchPattern
+                    or lower(m.name) like :searchPattern
+                    or lower(coalesce(m.barcode, '')) like :searchPattern
+                  )
+            ))
+        and sp.isDeleted = false
+        and exists (
+            select 1
+            from WarehouseStock ws
+            where ws.sparePartId = sp.id
+              and ws.warehouseId in :warehouseIds
+              and ws.isDeleted = false
+        )
+        order by sp.updatedAt desc
+""")
+    Page<SparePart> findAllByFilterAndWarehouseIdsWithMxik(@Param("itemType") InventoryItemKind itemType,
+                                                           @Param("typeId") UUID typeId,
+                                                           @Param("unitId") UUID unitId,
+                                                           @Param("mxikId") UUID mxikId,
+                                                           @Param("searchPattern") String searchPattern,
+                                                           @Param("warehouseIds") Collection<UUID> warehouseIds,
+                                                           Pageable pageable);
 }

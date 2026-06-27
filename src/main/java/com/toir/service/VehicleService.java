@@ -27,6 +27,7 @@ import com.toir.enums.MeterType;
 import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.exception.RestException;
 import com.toir.repository.UploadedFileRepository;
+import com.toir.repository.MxikRepository;
 import com.toir.repository.VehicleDocumentRepository;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.equipment.EquipmentLocationHistoryRepository;
@@ -67,6 +68,7 @@ public class VehicleService {
     private final EquipmentRepository equipmentRepository;
     private final EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
     private final VehicleDetailsRepository vehicleDetailsRepository;
+    private final MxikRepository mxikRepository;
     private final EquipmentService equipmentService;
     private final AuditBuilderService auditBuilderService;
     private final FileService fileService;
@@ -101,18 +103,43 @@ public class VehicleService {
 
     @Transactional(readOnly = true)
     public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, VehicleRegistrationPlateType plateType,
+                                        UUID mxikId, String search, int page, int pageSize) {
+        return list(departmentId, status, plateType, mxikId, search, page, pageSize, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, VehicleRegistrationPlateType plateType,
                                         String search, int page, int pageSize, String sortBy, String sortDir) {
+        return list(departmentId, status, plateType, null, search, page, pageSize, sortBy, sortDir);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<VehicleSummaryDto> list(UUID departmentId, EquipmentStatus status, VehicleRegistrationPlateType plateType,
+                                        UUID mxikId, String search, int page, int pageSize, String sortBy, String sortDir) {
         int safePage = Math.max(page, 0);
         int safePageSize = Math.max(pageSize, 1);
         boolean numericSort = isNumericSort(sortBy);
-        Page<Equipment> equipmentPage = vehicleDetailsRepository.searchVehicleEquipment(
-                departmentId,
-                status,
-                plateType,
-                EquipmentCategory.VEHICLE,
-                search,
-                numericSort ? Pageable.unpaged() : org.springframework.data.domain.PageRequest.of(safePage, safePageSize)
-        );
+        Pageable pageable = numericSort
+                ? Pageable.unpaged()
+                : org.springframework.data.domain.PageRequest.of(safePage, safePageSize);
+        Page<Equipment> equipmentPage = mxikId == null
+                ? vehicleDetailsRepository.searchVehicleEquipment(
+                        departmentId,
+                        status,
+                        plateType,
+                        EquipmentCategory.VEHICLE,
+                        search,
+                        pageable
+                )
+                : vehicleDetailsRepository.searchVehicleEquipmentWithMxik(
+                        departmentId,
+                        status,
+                        plateType,
+                        EquipmentCategory.VEHICLE,
+                        mxikId,
+                        search,
+                        pageable
+                );
         Page<EquipmentDto> enrichedEquipmentPage = equipmentService.enrich(equipmentPage);
         Map<UUID, VehicleDetails> detailsByEquipment = vehicleDetailsRepository
                 .findAllByEquipmentIdInAndIsDeletedFalse(enrichedEquipmentPage.getContent().stream().map(EquipmentDto::id).toList())
@@ -203,6 +230,7 @@ public class VehicleService {
     public VehicleDetailDto create(VehicleRequest request) {
         CodeGenerationUtils.rejectClientProvidedCode(request.code());
         validateUniqueCreate(request);
+        validateMxik(request.mxikId());
         Equipment equipment = new Equipment();
         equipment.setCode(nextEquipmentCode());
         applyEquipment(equipment, request);
@@ -258,6 +286,7 @@ public class VehicleService {
                 .orElseThrow(() -> RestException.notFound("Vehicle details not found: " + equipmentId));
 
         validateUniqueUpdate(equipmentId, equipment, details, request);
+        validateMxik(request.mxikId());
         boolean equipmentTypeChanged = isEquipmentTypeChanged(equipment.getEquipmentTypeId(), request.equipmentTypeId());
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
         validateAssignedDriver(request.assignedDriverId(), request.assignedDriverUsageLimitMinutes(), request.departmentId(), equipmentId);
@@ -516,6 +545,14 @@ public class VehicleService {
         }
     }
 
+    private void validateMxik(UUID mxikId) {
+        if (mxikId == null) {
+            return;
+        }
+        mxikRepository.findByIdAndIsDeletedFalse(mxikId)
+                .orElseThrow(() -> RestException.notFound("MXIK not found: " + mxikId));
+    }
+
     private List<EquipmentAttributeValueDto> officialAttributes(UUID equipmentId) {
         if (equipmentAttributeService == null) {
             return List.of();
@@ -734,6 +771,7 @@ public class VehicleService {
         equipment.setSerialNumber(request.serialNumber());
         equipment.setModel(request.model());
         equipment.setEquipmentTypeId(request.equipmentTypeId());
+        equipment.setMxikId(request.mxikId());
         equipment.setDepartmentId(request.departmentId());
         equipment.setLocationId(request.locationId());
         equipment.setStatus(request.status() != null ? request.status() : EquipmentStatus.ACTIVE);

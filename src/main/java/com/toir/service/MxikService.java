@@ -138,6 +138,25 @@ public class MxikService {
         entity.setType(requiredTrim(request.type(), "type").toUpperCase(Locale.ROOT));
         entity.setGroupName(trimToNull(request.groupName()));
         entity.setPositionName(trimToNull(request.positionName()));
+        entity.setNameUzLatn(trimToNull(request.nameUzLatn()));
+        entity.setNameRu(trimToNull(request.nameRu()));
+        entity.setGroupNameRu(trimToNull(request.groupNameRu()));
+        entity.setGroupNameCyril(trimToNull(request.groupNameCyril()));
+        entity.setClassName(trimToNull(request.className()));
+        entity.setClassNameRu(trimToNull(request.classNameRu()));
+        entity.setClassNameCyril(trimToNull(request.classNameCyril()));
+        entity.setPositionNameRu(trimToNull(request.positionNameRu()));
+        entity.setPositionNameCyril(trimToNull(request.positionNameCyril()));
+        entity.setSubPositionName(trimToNull(request.subPositionName()));
+        entity.setSubPositionNameRu(trimToNull(request.subPositionNameRu()));
+        entity.setSubPositionNameCyril(trimToNull(request.subPositionNameCyril()));
+        entity.setBrandName(trimToNull(request.brandName()));
+        entity.setBrandNameRu(trimToNull(request.brandNameRu()));
+        entity.setBrandNameCyril(trimToNull(request.brandNameCyril()));
+        entity.setAttributeName(trimToNull(request.attributeName()));
+        entity.setAttributeNameRu(trimToNull(request.attributeNameRu()));
+        entity.setAttributeNameCyril(trimToNull(request.attributeNameCyril()));
+        entity.setBarcode(trimToNull(request.barcode()));
     }
 
     private String normalizeKod(String value) {

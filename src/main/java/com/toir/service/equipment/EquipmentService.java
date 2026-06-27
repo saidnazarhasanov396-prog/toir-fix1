@@ -4,7 +4,9 @@ import com.toir.dto.equipment.*;
 import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.file.UploadFileResponse;
+import com.toir.dto.mxik.MxikRefDto;
 import com.toir.entity.FileAsset;
+import com.toir.entity.Mxik;
 import com.toir.entity.UploadedFile;
 import com.toir.repository.equipment.EquipmentStatsProjection;
 import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
@@ -49,6 +51,7 @@ import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.EquipmentUsageSessionRepository;
 import com.toir.repository.FileAssetRepository;
+import com.toir.repository.MxikRepository;
 import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.LocationRepository;
@@ -109,6 +112,7 @@ public class EquipmentService {
     private final EquipmentMeterRepository equipmentMeterRepository;
     private final WarehouseRepository warehouseRepository;
     private final SupplierRepository supplierRepository;
+    private final MxikRepository mxikRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
     private final EquipmentUsageSessionRepository equipmentUsageSessionRepository;
@@ -237,6 +241,46 @@ public class EquipmentService {
                                      EquipmentOutsideReason outsideReason,
                                      boolean overdueOnly,
                                      boolean availableForReplacement,
+                                     UUID mxikId,
+                                     String search,
+                                     int page,
+                                     int pageSize) {
+        return search(scopeDepartmentId, departmentId, equipmentTypeId, status, category, warehouseId, locationType,
+                outsideReason, overdueOnly, availableForReplacement, mxikId, search, page, pageSize, null, "asc");
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentDto> search(UUID scopeDepartmentId,
+                                     UUID departmentId,
+                                     UUID equipmentTypeId,
+                                     EquipmentStatus status,
+                                     EquipmentCategory category,
+                                     UUID warehouseId,
+                                     EquipmentLocationType locationType,
+                                     EquipmentOutsideReason outsideReason,
+                                     boolean overdueOnly,
+                                     boolean availableForReplacement,
+                                     String search,
+                                     int page,
+                                     int pageSize,
+                                     String sortBy,
+                                     String sortDir) {
+        return search(scopeDepartmentId, departmentId, equipmentTypeId, status, category, warehouseId, locationType,
+                outsideReason, overdueOnly, availableForReplacement, null, search, page, pageSize, sortBy, sortDir);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentDto> search(UUID scopeDepartmentId,
+                                     UUID departmentId,
+                                     UUID equipmentTypeId,
+                                     EquipmentStatus status,
+                                     EquipmentCategory category,
+                                     UUID warehouseId,
+                                     EquipmentLocationType locationType,
+                                     EquipmentOutsideReason outsideReason,
+                                     boolean overdueOnly,
+                                     boolean availableForReplacement,
+                                     UUID mxikId,
                                      String search,
                                      int page,
                                      int pageSize,
@@ -255,34 +299,69 @@ public class EquipmentService {
             }
             warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
                     .orElseThrow(() -> RestException.notFound("Warehouse not found: " + warehouseId));
-            items = repository.searchAvailableForReplacement(
-                    warehouseId,
-                    WarehouseEquipmentStatus.AVAILABLE,
-                    EquipmentLocationType.WAREHOUSE,
-                    WorkType.REPLACEMENT,
-                    FINAL_WORK_ORDER_STATUSES,
-                    scopeDepartmentId,
-                    equipmentTypeId,
-                    status,
-                    category,
-                    searchPattern,
-                    pageable
-            );
+            if (mxikId == null) {
+                items = repository.searchAvailableForReplacement(
+                        warehouseId,
+                        WarehouseEquipmentStatus.AVAILABLE,
+                        EquipmentLocationType.WAREHOUSE,
+                        WorkType.REPLACEMENT,
+                        FINAL_WORK_ORDER_STATUSES,
+                        scopeDepartmentId,
+                        equipmentTypeId,
+                        status,
+                        category,
+                        searchPattern,
+                        pageable
+                );
+            } else {
+                items = repository.searchAvailableForReplacementWithMxik(
+                        warehouseId,
+                        WarehouseEquipmentStatus.AVAILABLE,
+                        EquipmentLocationType.WAREHOUSE,
+                        WorkType.REPLACEMENT,
+                        FINAL_WORK_ORDER_STATUSES,
+                        scopeDepartmentId,
+                        equipmentTypeId,
+                        status,
+                        category,
+                        mxikId,
+                        searchPattern,
+                        pageable
+                );
+            }
         } else {
-            items = repository.search(
-                    scopeDepartmentId,
-                    departmentId,
-                    equipmentTypeId,
-                    status,
-                    category,
-                    locationType,
-                    warehouseId,
-                    outsideReason,
-                    overdueOnly,
-                    LocalDate.now(),
-                    searchPattern,
-                    pageable
-            );
+            if (mxikId == null) {
+                items = repository.search(
+                        scopeDepartmentId,
+                        departmentId,
+                        equipmentTypeId,
+                        status,
+                        category,
+                        locationType,
+                        warehouseId,
+                        outsideReason,
+                        overdueOnly,
+                        LocalDate.now(),
+                        searchPattern,
+                        pageable
+                );
+            } else {
+                items = repository.searchWithMxik(
+                        scopeDepartmentId,
+                        departmentId,
+                        equipmentTypeId,
+                        status,
+                        category,
+                        locationType,
+                        warehouseId,
+                        outsideReason,
+                        overdueOnly,
+                        LocalDate.now(),
+                        mxikId,
+                        searchPattern,
+                        pageable
+                );
+            }
         }
         Page<EquipmentDto> enriched = enrich(items);
         if (!dtoSort) {
@@ -619,6 +698,7 @@ public class EquipmentService {
         validateWarrantyDateRange(request.warrantyStartDate(), request.warrantyEndDate());
         validateWarrantyAttachment(request.hasWarranty(), request.warrantyAttachmentId());
         validateSupplierReferences(request);
+        validateMxik(request.mxikId());
         validateResponsibleEmployee(request.responsibleId());
         Equipment entity = new Equipment();
         entity.setCode(nextCode());
@@ -676,6 +756,7 @@ public class EquipmentService {
         validateWarrantyDateRangeForUpdate(entity, request);
         validateWarrantyAttachmentForUpdate(request);
         validateSupplierReferencesForUpdate(entity, request);
+        validateMxik(request.mxikId());
         validateResponsibleEmployee(request.responsibleId());
 
         applyForUpdate(entity, request);
@@ -800,6 +881,7 @@ public class EquipmentService {
         Set<UUID> warrantyAttachmentIds = collectIds(items, Equipment::getWarrantyAttachmentId);
         Set<UUID> supplierIds = collectIds(items, Equipment::getSupplierId);
         Set<UUID> warrantySupplierIds = collectIds(items, Equipment::getWarrantySupplierId);
+        Set<UUID> mxikIds = collectIds(items, Equipment::getMxikId);
         Set<UUID> equipmentIds = items.stream().map(Equipment::getId).collect(Collectors.toSet());
         Set<UUID> equipmentIdsWithCreatedAct = new HashSet<>(
                 equipmentCommissioningActRepository.findEquipmentIdsWithStatuses(
@@ -842,6 +924,9 @@ public class EquipmentService {
         Map<UUID, Supplier> supplierMap = allSupplierIds.isEmpty()
                 ? Collections.emptyMap()
                 : byId(supplierRepository.findAllByIdInAndIsDeletedFalse(allSupplierIds), Supplier::getId);
+        Map<UUID, Mxik> mxikMap = mxikIds.isEmpty()
+                ? Collections.emptyMap()
+                : byId(mxikRepository.findAllByIdInAndIsDeletedFalse(mxikIds), Mxik::getId);
         Map<UUID, EquipmentPassport> passportMap = passportRepository
                 .findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
                 .collect(Collectors.toMap(EquipmentPassport::getEquipmentId, Function.identity(), (a, b) -> a));
@@ -892,7 +977,8 @@ public class EquipmentService {
                             responsibleRef,
                             equipmentIdsWithCreatedAct.contains(e.getId()),
                             supplierMap.get(e.getSupplierId()),
-                            supplierMap.get(e.getWarrantySupplierId())
+                            supplierMap.get(e.getWarrantySupplierId()),
+                            MxikRefDto.from(mxikMap.get(e.getMxikId()))
                     );
                 })
                 .toList();
@@ -1213,6 +1299,7 @@ public class EquipmentService {
         entity.setModel(request.model());
         entity.setProducedYear(request.producedYear());
         entity.setEquipmentTypeId(request.equipmentTypeId());
+        entity.setMxikId(request.mxikId());
         entity.setDepartmentId(request.departmentId());
         entity.setLocationId(request.locationId());
         entity.setParentId(request.parentId());
@@ -1852,6 +1939,14 @@ public class EquipmentService {
         }
     }
 
+    private void validateMxik(UUID mxikId) {
+        if (mxikId == null) {
+            return;
+        }
+        mxikRepository.findByIdAndIsDeletedFalse(mxikId)
+                .orElseThrow(() -> RestException.notFound("MXIK not found: " + mxikId));
+    }
+
     private void validateWarehouseExists(UUID warehouseId) {
         if (warehouseId == null) {
             return;
@@ -1884,6 +1979,7 @@ public class EquipmentService {
         entity.setModel(request.model() != null ? request.model() : entity.getModel());
         entity.setProducedYear(request.producedYear() != null ? request.producedYear() : entity.getProducedYear());
         entity.setEquipmentTypeId(request.equipmentTypeId() != null ? request.equipmentTypeId() : entity.getEquipmentTypeId());
+        entity.setMxikId(request.mxikId() != null ? request.mxikId() : entity.getMxikId());
         entity.setDepartmentId(request.departmentId() != null ? request.departmentId() : entity.getDepartmentId());
         entity.setLocationId(request.locationId() != null ? request.locationId() : entity.getLocationId());
         entity.setParentId(request.parentId());
