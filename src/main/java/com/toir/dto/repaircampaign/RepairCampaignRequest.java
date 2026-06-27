@@ -2,7 +2,6 @@ package com.toir.dto.repaircampaign;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.toir.enums.RepairCampaignScopeType;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -14,7 +13,6 @@ import java.util.UUID;
 public record RepairCampaignRequest(
         String code,
         @NotBlank String name,
-        @NotNull @Min(2000) Integer year,
         UUID departmentId,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
@@ -29,7 +27,6 @@ public record RepairCampaignRequest(
     public RepairCampaignRequest(
             String code,
             @NotBlank String name,
-            @NotNull @Min(2000) Integer year,
             UUID departmentId,
             @NotNull LocalDate startDate,
             @NotNull LocalDate endDate,
@@ -37,14 +34,13 @@ public record RepairCampaignRequest(
             String description,
             String notes
     ) {
-        this(code, name, year, departmentId, startDate, endDate, totalBudget,
+        this(code, name, departmentId, startDate, endDate, totalBudget,
                 null, null, List.of(), description, notes, null);
     }
 
     public RepairCampaignRequest(
             String code,
             @NotBlank String name,
-            @NotNull @Min(2000) Integer year,
             UUID departmentId,
             @NotNull LocalDate startDate,
             @NotNull LocalDate endDate,
@@ -55,7 +51,7 @@ public record RepairCampaignRequest(
             String description,
             String notes
     ) {
-        this(code, name, year, departmentId, startDate, endDate, totalBudget,
+        this(code, name, departmentId, startDate, endDate, totalBudget,
                 scopeType, equipmentTypeId, participantDepartments, description, notes, null);
     }
 }

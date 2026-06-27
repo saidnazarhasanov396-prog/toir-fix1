@@ -30,9 +30,6 @@ public class RepairCampaign extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
-    private int year;
-
     @Column(name = "department_id")
     private UUID departmentId;
 

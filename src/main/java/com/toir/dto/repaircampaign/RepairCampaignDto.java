@@ -12,7 +12,6 @@ public record RepairCampaignDto(
         UUID id,
         String code,
         String name,
-        int year,
         UUID departmentId,
         String departmentName,
         RepairCampaignStatus status,
@@ -41,7 +40,6 @@ public record RepairCampaignDto(
             UUID id,
             String code,
             String name,
-            int year,
             UUID departmentId,
             String departmentName,
             RepairCampaignStatus status,
@@ -54,7 +52,7 @@ public record RepairCampaignDto(
             String notes,
             List<RepairCampaignStageDto> stages
     ) {
-        this(id, code, name, year, departmentId, departmentName, status, startDate, endDate, totalBudget,
+        this(id, code, name, departmentId, departmentName, status, startDate, endDate, totalBudget,
                 totalActual, variance, description, notes, stages, RepairCampaignScopeType.CUSTOM, null, List.of(),
                 0, 0, totalActual, 0, null, 0, 0, 0, null);
     }
@@ -63,7 +61,6 @@ public record RepairCampaignDto(
             UUID id,
             String code,
             String name,
-            int year,
             UUID departmentId,
             String departmentName,
             RepairCampaignStatus status,
@@ -83,7 +80,7 @@ public record RepairCampaignDto(
             double approvedActual,
             double pendingActual
     ) {
-        this(id, code, name, year, departmentId, departmentName, status, startDate, endDate, totalBudget,
+        this(id, code, name, departmentId, departmentName, status, startDate, endDate, totalBudget,
                 totalActual, variance, description, notes, stages, scopeType, equipmentTypeId, participantDepartments,
                 workOrderCount, completedWorkOrderCount, approvedActual, pendingActual, null, 0, 0, 0, null);
     }
@@ -91,7 +88,7 @@ public record RepairCampaignDto(
     public static RepairCampaignDto from(RepairCampaign c, String departmentName) {
         return new RepairCampaignDto(
                 c.getId(), c.getCode(), c.getName(),
-                c.getYear(), c.getDepartmentId(), departmentName, c.getStatus(),
+                c.getDepartmentId(), departmentName, c.getStatus(),
                 c.getStartDate(), c.getEndDate(),
                 c.getTotalBudget(), c.getTotalActual(),
                 c.getTotalBudget() - c.getTotalActual(),

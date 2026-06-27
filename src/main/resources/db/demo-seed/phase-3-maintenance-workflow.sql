@@ -331,7 +331,7 @@ SELECT ('10000000-0000-0000-0000-' || '00000034' || lpad(gs::text, 4, '0'))::uui
 FROM generate_series(1, 15) AS gs
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO repair_campaigns (id, created_at, updated_at, is_deleted, code, name, scope, notes, status, year, department_id, start_date, end_date, total_budget, total_actual)
+INSERT INTO repair_campaigns (id, created_at, updated_at, is_deleted, code, name, scope, notes, status, department_id, start_date, end_date, total_budget, total_actual)
 SELECT ('10000000-0000-0000-0000-' || '00000035' || lpad(gs::text, 4, '0'))::uuid,
        now(), now(), false,
        'RCM-CAMP-' || lpad(gs::text, 3, '0'),
@@ -339,7 +339,6 @@ SELECT ('10000000-0000-0000-0000-' || '00000035' || lpad(gs::text, 4, '0'))::uui
        'Rotating and static equipment reliability campaign',
        'Navoiyazot campaign for annual maintenance planning',
        (ARRAY['DRAFT','APPROVED','IN_PROGRESS','COMPLETED','CLOSED'])[1 + ((gs - 1) % 5)],
-       2026,
        ('00000000-0000-0000-0000-' || '00000000d00' || (1 + ((gs - 1) % 5))::text)::uuid,
        DATE '2026-01-01' + (gs * 10),
        DATE '2026-02-01' + (gs * 10),

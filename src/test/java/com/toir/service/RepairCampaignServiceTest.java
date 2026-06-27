@@ -99,16 +99,28 @@ class RepairCampaignServiceTest {
         dept.setName("Maintenance");
 
         RepairCampaign c1 = new RepairCampaign();
-        c1.setYear(2026);
         c1.setStatus(RepairCampaignStatus.DRAFT);
         c1.setDepartmentId(departmentId);
+        c1.setStartDate(LocalDate.of(2026, 1, 1));
+        c1.setEndDate(LocalDate.of(2026, 12, 31));
         c1.setStages(List.of());
 
-        when(repository.findAllFiltered(2026, "DRAFT", "%annual%")).thenReturn(List.of(c1));
-        List<RepairCampaignDto> results = service.findAllFiltered("annual", 2026, RepairCampaignStatus.DRAFT);
+        when(repository.findAllFiltered(
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31),
+                "DRAFT",
+                "%annual%"
+        )).thenReturn(List.of(c1));
+        List<RepairCampaignDto> results = service.findAllFiltered(
+                "annual",
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31),
+                RepairCampaignStatus.DRAFT
+        );
 
         assertThat(results).hasSize(1);
-        assertThat(results.get(0).year()).isEqualTo(2026);
+        assertThat(results.get(0).startDate()).isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(results.get(0).endDate()).isEqualTo(LocalDate.of(2026, 12, 31));
         assertThat(results.get(0).status()).isEqualTo(RepairCampaignStatus.DRAFT);
     }
 
@@ -117,7 +129,6 @@ class RepairCampaignServiceTest {
         RepairCampaignRequest request = new RepairCampaignRequest(
                 "RC-CLIENT",
                 "Annual Repair",
-                2026,
                 null,
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 2, 1),
@@ -143,7 +154,6 @@ class RepairCampaignServiceTest {
         RepairCampaignRequest request = new RepairCampaignRequest(
                 null,
                 "Pump type overhaul",
-                2026,
                 null,
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 2, 1),
@@ -169,7 +179,6 @@ class RepairCampaignServiceTest {
         RepairCampaignRequest request = new RepairCampaignRequest(
                 null,
                 "Shutdown overhaul",
-                2026,
                 null,
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 2, 1),
@@ -207,7 +216,6 @@ class RepairCampaignServiceTest {
         RepairCampaignDto result = service.create(new RepairCampaignRequest(
                 null,
                 "Annual Repair",
-                2026,
                 departmentId,
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 2, 1),
@@ -234,7 +242,6 @@ class RepairCampaignServiceTest {
         assertThatThrownBy(() -> service.create(new RepairCampaignRequest(
                 null,
                 "Annual Repair",
-                2026,
                 UUID.randomUUID(),
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 2, 1),
@@ -391,9 +398,10 @@ class RepairCampaignServiceTest {
     private RepairCampaign campaign(UUID id, UUID maintenanceBudgetId) {
         RepairCampaign campaign = new RepairCampaign();
         campaign.setId(id);
-        campaign.setYear(2026);
         campaign.setStatus(RepairCampaignStatus.DRAFT);
         campaign.setMaintenanceBudgetId(maintenanceBudgetId);
+        campaign.setStartDate(LocalDate.of(2026, 1, 1));
+        campaign.setEndDate(LocalDate.of(2026, 12, 31));
         campaign.setStages(new java.util.ArrayList<>());
         return campaign;
     }

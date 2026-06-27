@@ -1,6 +1,7 @@
 package com.toir.repository.repair;
 
 import com.toir.entity.repair.RepairCampaign;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -39,16 +40,11 @@ public interface RepairCampaignRepository extends JpaRepository<RepairCampaign, 
             """, nativeQuery = true)
     long maxSequenceByCodePrefix(@Param("prefix") String prefix);
 
-    @Query(value = "SELECT * FROM repair_campaigns WHERE year = :year AND is_deleted = false ORDER BY created_at DESC, updated_at DESC", nativeQuery = true)
-    List<RepairCampaign> findAllByYearAndIsDeletedFalseOrderByCreatedAtDesc(@Param("year") int year);
-
-    @Query(value = "SELECT * FROM repair_campaigns WHERE department_id = :departmentId AND year = :year AND is_deleted = false ORDER BY created_at DESC, updated_at DESC", nativeQuery = true)
-    List<RepairCampaign> findAllByDepartmentIdAndYearAndIsDeletedFalseOrderByCreatedAtDesc(@Param("departmentId") UUID departmentId, @Param("year") int year);
-
     @Query(value = """
             SELECT * FROM repair_campaigns 
             WHERE is_deleted = false 
-              AND (:year IS NULL OR year = :year)
+              AND (cast(:startDate as date) IS NULL OR end_date >= cast(:startDate as date))
+              AND (cast(:endDate as date) IS NULL OR start_date <= cast(:endDate as date))
               AND (:status IS NULL OR status = :status)
               AND (
                 :searchPattern IS NULL 
@@ -60,7 +56,8 @@ public interface RepairCampaignRepository extends JpaRepository<RepairCampaign, 
             ORDER BY created_at DESC, updated_at DESC
             """, nativeQuery = true)
     List<RepairCampaign> findAllFiltered(
-            @Param("year") Integer year, 
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
             @Param("status") String status,
             @Param("searchPattern") String searchPattern
     );

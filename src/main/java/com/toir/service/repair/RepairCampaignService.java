@@ -102,15 +102,16 @@ public class RepairCampaignService {
     }
 
     @Transactional(readOnly = true)
-    public List<RepairCampaignDto> findByYear(int year) {
-        return toDtoList(repository.findAllByYearAndIsDeletedFalseOrderByCreatedAtDesc(year));
-    }
-
-    @Transactional(readOnly = true)
-    public List<RepairCampaignDto> findAllFiltered(String search, Integer year, RepairCampaignStatus status) {
+    public List<RepairCampaignDto> findAllFiltered(
+            String search,
+            LocalDate startDate,
+            LocalDate endDate,
+            RepairCampaignStatus status
+    ) {
+        validateDateFilter(startDate, endDate);
         String statusStr = status != null ? status.name() : null;
         String searchPattern = (search != null && !search.isBlank()) ? "%" + search.trim().toLowerCase() + "%" : null;
-        return toDtoList(repository.findAllFiltered(year, statusStr, searchPattern));
+        return toDtoList(repository.findAllFiltered(startDate, endDate, statusStr, searchPattern));
     }
 
     @Transactional(readOnly = true)
@@ -127,7 +128,6 @@ public class RepairCampaignService {
         RepairCampaign c = new RepairCampaign();
         c.setCode(nextCode());
         c.setName(r.name());
-        c.setYear(r.year());
         c.setDepartmentId(r.departmentId());
         c.setScopeType(effectiveScopeType(r.scopeType()));
         c.setEquipmentTypeId(r.equipmentTypeId());
@@ -158,7 +158,6 @@ public class RepairCampaignService {
 
         RepairCampaign before = snapshot(c);
         c.setName(r.name());
-        c.setYear(r.year());
         c.setDepartmentId(r.departmentId());
         c.setScopeType(effectiveScopeType(r.scopeType()));
         c.setEquipmentTypeId(r.equipmentTypeId());
@@ -628,14 +627,23 @@ public class RepairCampaignService {
         }
     }
 
+    private void validateDateFilter(LocalDate startDate, LocalDate endDate) {
+        if (startDate != null && endDate != null && endDate.isBefore(startDate)) {
+            throw RestException.badRequest("Filter end date must be on or after start date");
+        }
+    }
+
     private void validateMaintenanceBudgetLink(RepairCampaignRequest request) {
         if (request.maintenanceBudgetId() == null) {
             return;
         }
         MaintenanceBudget budget = maintenanceBudgetRepository.findByIdAndIsDeletedFalse(request.maintenanceBudgetId())
                 .orElseThrow(() -> RestException.notFound("Maintenance budget not found: " + request.maintenanceBudgetId()));
-        if (budget.getYear() != request.year()) {
-            throw RestException.badRequest("Maintenance budget year must match repair campaign year");
+        if (request.startDate() == null
+                || request.endDate() == null
+                || budget.getYear() < request.startDate().getYear()
+                || budget.getYear() > request.endDate().getYear()) {
+            throw RestException.badRequest("Maintenance budget year must overlap repair campaign dates");
         }
         RepairCampaignScopeType scopeType = effectiveScopeType(request.scopeType());
         if (scopeType != RepairCampaignScopeType.CROSS_DEPARTMENT
@@ -922,7 +930,7 @@ public class RepairCampaignService {
         MaintenanceBudget budget = budgetOrNull(c.getMaintenanceBudgetId());
         return new RepairCampaignDto(
                 c.getId(), c.getCode(), c.getName(),
-                c.getYear(), c.getDepartmentId(), departmentName(c.getDepartmentId()), c.getStatus(),
+                c.getDepartmentId(), departmentName(c.getDepartmentId()), c.getStatus(),
                 c.getStartDate(), c.getEndDate(),
                 c.getTotalBudget(), totals.approvedActual(),
                 c.getTotalBudget() - totals.approvedActual(),
@@ -1103,7 +1111,6 @@ public class RepairCampaignService {
         copy.setId(source.getId());
         copy.setCode(source.getCode());
         copy.setName(source.getName());
-        copy.setYear(source.getYear());
         copy.setDepartmentId(source.getDepartmentId());
         copy.setScopeType(source.getScopeType());
         copy.setEquipmentTypeId(source.getEquipmentTypeId());

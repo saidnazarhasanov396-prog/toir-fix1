@@ -18,6 +18,7 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,8 +37,19 @@ public class RepairCampaignController {
     private final RepairCampaignService service;
 
     @GetMapping
-    public ResponseEntity<Page<RepairCampaignDto>> list(@RequestParam(required = false) String search, @RequestParam(required = false) Integer year, @RequestParam(required = false) RepairCampaignStatus status , @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAllFiltered(search, year, status), page, size));
+    public ResponseEntity<Page<RepairCampaignDto>> list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
+            @RequestParam(required = false) RepairCampaignStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(PaginationUtils.page(
+                service.findAllFiltered(search, startDate, endDate, status),
+                page,
+                size
+        ));
     }
 
     @GetMapping("/{id}")
