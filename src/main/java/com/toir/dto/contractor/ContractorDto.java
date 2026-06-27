@@ -1,10 +1,8 @@
 package com.toir.dto.contractor;
 
-import com.toir.dto.common.BankAccountDto;
 import com.toir.entity.contractors.Contractor;
 import com.toir.enums.ContractorStatus;
-import com.toir.util.PartyLegalDetailsUtils;
-import java.util.List;
+
 import java.util.UUID;
 
 public record ContractorDto(
@@ -17,13 +15,14 @@ public record ContractorDto(
         String email,
         String specialization,
         String directorName,
-        List<BankAccountDto> bankAccounts,
+        String bankName,
+        String bankAccount,
+        String mfo,
         ContractorStatus status,
         Summary summary
 ) {
     public ContractorDto {
         summary = summary == null ? Summary.empty() : summary;
-        bankAccounts = bankAccounts == null ? List.of() : List.copyOf(bankAccounts);
     }
 
     public static ContractorDto from(Contractor c) {
@@ -41,7 +40,9 @@ public record ContractorDto(
                 c.getEmail(),
                 c.getSpecialization(),
                 c.getDirectorName(),
-                PartyLegalDetailsUtils.toBankAccountDtos(c.getBankAccounts()),
+                c.getBankName(),
+                c.getBankAccount(),
+                c.getMfo(),
                 c.getStatus(),
                 summary
         );

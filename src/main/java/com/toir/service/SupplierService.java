@@ -10,14 +10,12 @@ import com.toir.enums.SupplierType;
 import com.toir.exception.RestException;
 import com.toir.repository.PurchaseOrderRepository;
 import com.toir.repository.SupplierRepository;
-import com.toir.util.PartyLegalDetailsUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -129,14 +127,15 @@ public class SupplierService {
         supplier.setPhone(trimToNull(request.phone()));
         supplier.setEmail(trimToNull(request.email()));
         supplier.setAddress(trimToNull(request.address()));
-        String taxNumber = PartyLegalDetailsUtils.normalizeTaxNumber(request.taxNumber());
-        supplier.setTaxNumber(taxNumber);
-        supplier.setBaseInn(PartyLegalDetailsUtils.resolveBaseInn(
-                taxNumber,
-                PartyLegalDetailsUtils.normalizeTaxNumber(request.baseInn())
+        supplier.setTaxNumber(trimToNull(request.taxNumber()));
+        supplier.setBaseInn(resolveBaseInn(
+                trimToNull(request.taxNumber()),
+                trimToNull(request.baseInn())
         ));
         supplier.setDirectorName(trimToNull(request.directorName()));
-        supplier.setBankAccounts(new ArrayList<>(PartyLegalDetailsUtils.toBankAccounts(request.bankAccounts())));
+        supplier.setBankName(trimToNull(request.bankName()));
+        supplier.setBankAccount(trimToNull(request.bankAccount()));
+        supplier.setMfo(trimToNull(request.mfo()));
         supplier.setSupplierType(request.supplierType() != null ? request.supplierType() : SupplierType.BOTH);
         if (request.active() != null) {
             supplier.setActive(request.active());
@@ -166,5 +165,23 @@ public class SupplierService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String resolveBaseInn(String taxNumber, String explicitBaseInn) {
+        if (explicitBaseInn != null && !explicitBaseInn.isBlank()) {
+            return explicitBaseInn.trim();
+        }
+        if (taxNumber == null || taxNumber.isBlank()) {
+            return null;
+        }
+        String trimmed = taxNumber.trim();
+        int underscoreIdx = trimmed.lastIndexOf('_');
+        if (underscoreIdx > 0) {
+            String suffix = trimmed.substring(underscoreIdx + 1);
+            if (suffix.matches("\\d+")) {
+                return trimmed.substring(0, underscoreIdx);
+            }
+        }
+        return trimmed;
     }
 }

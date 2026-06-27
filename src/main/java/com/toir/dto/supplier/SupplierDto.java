@@ -1,11 +1,9 @@
 package com.toir.dto.supplier;
 
-import com.toir.dto.common.BankAccountDto;
 import com.toir.entity.Supplier;
 import com.toir.enums.SupplierType;
-import com.toir.util.PartyLegalDetailsUtils;
+
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 public record SupplierDto(
@@ -19,16 +17,14 @@ public record SupplierDto(
         String taxNumber,
         String baseInn,
         String directorName,
-        List<BankAccountDto> bankAccounts,
+        String bankName,
+        String bankAccount,
+        String mfo,
         Boolean active,
         SupplierType supplierType,
         Instant createdAt,
         Instant updatedAt
 ) {
-    public SupplierDto {
-        bankAccounts = bankAccounts == null ? List.of() : List.copyOf(bankAccounts);
-    }
-
     public static SupplierDto from(Supplier supplier) {
         return new SupplierDto(
                 supplier.getId(),
@@ -41,7 +37,9 @@ public record SupplierDto(
                 supplier.getTaxNumber(),
                 supplier.getBaseInn(),
                 supplier.getDirectorName(),
-                PartyLegalDetailsUtils.toBankAccountDtos(supplier.getBankAccounts()),
+                supplier.getBankName(),
+                supplier.getBankAccount(),
+                supplier.getMfo(),
                 supplier.getActive(),
                 supplier.getSupplierType() == null ? SupplierType.BOTH : supplier.getSupplierType(),
                 supplier.getCreatedAt(),
