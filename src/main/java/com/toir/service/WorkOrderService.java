@@ -132,6 +132,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -1722,6 +1723,17 @@ public class WorkOrderService {
             }
         }
 
+        if (request.repairRequestId() == null && request.equipmentId() != null) {
+            equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
+                    .ifPresent(equipment -> {
+                        if (hasActiveWarranty(equipment)) {
+                            throw RestException.badRequest(
+                                    "Cannot create work order: equipment " + equipment.getCode()
+                                            + " is under warranty. Create a repair request first to record a warranty decision.");
+                        }
+                    });
+        }
+
         validatePprTaskRelationForCreate(request.pprTaskId(), request.equipmentId());
 
         if (request.defectId() == null) {
@@ -1849,6 +1861,21 @@ public class WorkOrderService {
                     "Work order cannot be created: warranty decision required or pending supplier response for repair request "
                             + repairRequest.getId());
         }
+    }
+
+    private boolean hasActiveWarranty(Equipment equipment) {
+        if (!Boolean.TRUE.equals(equipment.getHasWarranty())) {
+            return false;
+        }
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate start = equipment.getWarrantyStartDate();
+        if (start != null && start.isAfter(today)) {
+            return false;
+        }
+        LocalDate end = equipment.getWarrantyEndDate() != null
+                ? equipment.getWarrantyEndDate()
+                : equipment.getWarrantyUntil();
+        return end == null || !end.isBefore(today);
     }
 
     private void assertDefectListGate(WorkOrder workOrder) {
