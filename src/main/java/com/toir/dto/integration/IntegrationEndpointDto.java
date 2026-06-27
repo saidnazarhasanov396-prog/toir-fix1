@@ -17,6 +17,9 @@ public record IntegrationEndpointDto(
         String basePath,
         String authType,
         String apiKey,
+        String clientId,
+        String clientSecret,
+        String companyInn,
         String username,
         String password,
         Integer timeoutSeconds,
@@ -36,6 +39,7 @@ public record IntegrationEndpointDto(
         return new IntegrationEndpointDto(
                 e.getId(), e.getCode(), e.getName(), e.getSystem(), e.getUrl(),
                 e.getPort(), e.getBasePath(), e.getAuthType(), e.getApiKey(),
+                e.getClientId(), null, e.getCompanyInn(),
                 e.getUsername(), null,
                 e.getTimeoutSeconds(), e.getSyncIntervalMinutes(),
                 e.isSyncWorkOrders(), e.isSyncDowntimes(), e.isSyncDefects(),
