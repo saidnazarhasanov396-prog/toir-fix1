@@ -1,7 +1,5 @@
 package com.toir.service.contactor;
 
-import com.toir.dto.common.BankAccountDto;
-import com.toir.entity.common.BankAccount;
 import com.toir.entity.contractors.Contractor;
 import com.toir.entity.contractors.ContractorContract;
 import com.toir.entity.contractors.ContractorWork;
@@ -120,10 +118,9 @@ class ContractorServiceTest {
         UUID contractorId = UUID.randomUUID();
         Contractor contractor = contractor(contractorId);
         contractor.setDirectorName("Karimov A.A.");
-        contractor.setBankAccounts(List.of(
-                new BankAccount("NBU", "20208000123456789", "00401"),
-                new BankAccount("Kapitalbank", "00208000987654321", "01158")
-        ));
+        contractor.setBankName("NBU");
+        contractor.setBankAccount("20208000123456789");
+        contractor.setMfo("00401");
 
         when(repository.findByIdAndIsDeletedFalse(contractorId)).thenReturn(Optional.of(contractor));
         when(contractorContractRepository.findAllByContractorIdAndIsDeletedFalse(contractorId))
@@ -136,9 +133,9 @@ class ContractorServiceTest {
         var detail = service.findDetailById(contractorId);
 
         assertThat(detail.directorName()).isEqualTo("Karimov A.A.");
-        assertThat(detail.bankAccounts()).hasSize(2);
-        assertThat(detail.bankAccounts().get(0).bankName()).isEqualTo("NBU");
-        assertThat(detail.bankAccounts().get(1).bankAccount()).isEqualTo("00208000987654321");
+        assertThat(detail.bankName()).isEqualTo("NBU");
+        assertThat(detail.bankAccount()).isEqualTo("20208000123456789");
+        assertThat(detail.mfo()).isEqualTo("00401");
     }
 
     private Contractor contractor(UUID id) {
