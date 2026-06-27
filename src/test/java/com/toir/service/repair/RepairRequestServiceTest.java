@@ -1978,6 +1978,36 @@ class RepairRequestServiceTest {
                 });
 
         verify(repository, never()).save(any(RepairRequest.class));
+        verify(scopeAccessService, never()).hasAuthority(any());
+    }
+
+    @Test
+    void recordWarrantyDecisionEmergencyOverrideForbiddenWithoutElevatedPermission() {
+        UUID id = UUID.randomUUID();
+        RepairRequest entity = repairRequest(id);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(entity));
+        when(scopeAccessService.hasAuthority(com.toir.security.PermissionConstants.REPAIR_REQUEST_WARRANTY_OVERRIDE))
+                .thenReturn(false);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+
+        assertThatThrownBy(() -> service.recordWarrantyDecision(
+                id,
+                new WarrantyDecisionRequest(
+                        WarrantyHandling.EMERGENCY_OVERRIDE,
+                        "comment",
+                        null,
+                        null,
+                        "Critical failure"
+                ),
+                UUID.randomUUID()
+        ))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(ex.getMessage()).contains("REPAIR_REQUEST_WARRANTY_OVERRIDE");
+                });
+
+        verify(repository, never()).save(any(RepairRequest.class));
     }
 
     @Test
