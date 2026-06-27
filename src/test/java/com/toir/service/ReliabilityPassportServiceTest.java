@@ -111,12 +111,12 @@ class ReliabilityPassportServiceTest {
         assertThat(result.explanation().steps()).anySatisfy(step -> {
             assertThat(step.label()).isEqualTo("Простой");
             assertThat(step.value().doubleValue()).isCloseTo(2.0, org.assertj.core.data.Offset.offset(0.01));
-            assertThat(step.unit()).isEqualTo("часы");
+            assertThat(step.unit()).isEqualTo("ч");
         });
         assertThat(result.explanation().steps()).anySatisfy(step -> {
             assertThat(step.label()).isEqualTo("Рабочее время");
             assertThat(step.value().doubleValue()).isGreaterThan(0.0);
-            assertThat(step.unit()).isEqualTo("часы");
+            assertThat(step.unit()).isEqualTo("ч");
         });
         assertThat(result.explanation().steps()).anySatisfy(step -> {
             assertThat(step.label()).isEqualTo("Доступность");
