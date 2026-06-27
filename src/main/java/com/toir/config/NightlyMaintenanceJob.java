@@ -3,7 +3,6 @@ package com.toir.config;
 import com.toir.service.CertificationService;
 import com.toir.service.OperationalIssueScannerService;
 import com.toir.service.OverdueDetectorService;
-import com.toir.service.equipment.WarrantyExpiryService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,18 +22,15 @@ public class NightlyMaintenanceJob {
     private final CertificationService certificationService;
     private final MaintenanceAutomationService maintenanceAutomationService;
     private final OperationalIssueScannerService operationalIssueScannerService;
-    private final WarrantyExpiryService warrantyExpiryService;
 
     public NightlyMaintenanceJob(OverdueDetectorService overdueDetectorService,
                                  CertificationService certificationService,
                                  MaintenanceAutomationService maintenanceAutomationService,
-                                 OperationalIssueScannerService operationalIssueScannerService,
-                                 WarrantyExpiryService warrantyExpiryService) {
+                                 OperationalIssueScannerService operationalIssueScannerService) {
         this.overdueDetectorService = overdueDetectorService;
         this.certificationService = certificationService;
         this.maintenanceAutomationService = maintenanceAutomationService;
         this.operationalIssueScannerService = operationalIssueScannerService;
-        this.warrantyExpiryService = warrantyExpiryService;
     }
 
     @Scheduled(cron = "0 0 3 * * *", zone = "UTC")
@@ -65,12 +61,6 @@ public class NightlyMaintenanceJob {
                     result.openedOrUpdated(), result.resolved());
         } catch (Exception e) {
             log.error("Nightly operational issue scan failed", e);
-        }
-        try {
-            int sent = warrantyExpiryService.notifyExpiringWarranties();
-            log.info("Nightly warranty expiry check: {} notifications sent", sent);
-        } catch (Exception e) {
-            log.error("Nightly warranty expiry check failed", e);
         }
     }
 }

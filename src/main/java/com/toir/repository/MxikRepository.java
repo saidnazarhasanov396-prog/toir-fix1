@@ -45,76 +45,45 @@ public interface MxikRepository extends JpaRepository<Mxik, UUID> {
               and (
                     :searchPattern is null
                     or lower(m.name) like :searchPattern
-                    or lower(coalesce(m.nameUzLatn, '')) like :searchPattern
-                    or lower(coalesce(m.nameRu, '')) like :searchPattern
                     or lower(m.kod) like :searchPattern
                     or lower(m.type) like :searchPattern
-                    or lower(coalesce(m.barcode, '')) like :searchPattern
-                    or lower(coalesce(m.brandName, '')) like :searchPattern
                     or lower(coalesce(m.groupName, '')) like :searchPattern
-                    or lower(coalesce(m.className, '')) like :searchPattern
                     or lower(coalesce(m.positionName, '')) like :searchPattern
-                    or lower(coalesce(m.subPositionName, '')) like :searchPattern
-                    or lower(coalesce(m.attributeName, '')) like :searchPattern
                   )
-            order by m.createdAt desc
+            order by m.name asc
             """)
     Page<Mxik> search(@Param("searchPattern") String searchPattern, Pageable pageable);
 
     @Query("""
-            select max(m.groupName) as name, count(m) as count
+            select m.groupName as name, count(m) as count
             from Mxik m
             where m.isDeleted = false
               and m.groupName is not null
               and trim(m.groupName) <> ''
             group by m.groupName
-            order by name asc
+            order by m.groupName asc
             """)
     List<MxikNameCountProjection> findGroupCounts();
 
     @Query("""
-            select max(m.className) as name, count(m) as count
+            select m.positionName as name, count(m) as count
             from Mxik m
             where m.isDeleted = false
               and m.groupName = :groupName
-              and m.className is not null
-              and trim(m.className) <> ''
-            group by m.className
-            order by name asc
-            """)
-    List<MxikNameCountProjection> findClassCounts(@Param("groupName") String groupName);
-
-    @Query("""
-            select max(m.positionName) as name, count(m) as count
-            from Mxik m
-            where m.isDeleted = false
-              and m.className = :className
               and m.positionName is not null
               and trim(m.positionName) <> ''
             group by m.positionName
-            order by name asc
+            order by m.positionName asc
             """)
-    List<MxikNameCountProjection> findPositionCounts(@Param("className") String className);
+    List<MxikNameCountProjection> findSubPositionCounts(@Param("groupName") String groupName);
 
     @Query("""
-            select max(m.subPositionName) as name, count(m) as count
+            select m.name as name, max(m.kod) as code, count(m) as count
             from Mxik m
             where m.isDeleted = false
               and m.positionName = :positionName
-              and m.subPositionName is not null
-              and trim(m.subPositionName) <> ''
-            group by m.subPositionName
-            order by name asc
-            """)
-    List<MxikNameCountProjection> findSubPositionCounts(@Param("positionName") String positionName);
-
-    @Query("""
-            select max(m.name) as name, max(m.kod) as code, count(m) as count
-            from Mxik m
-            where m.isDeleted = false
-              and m.subPositionName = :subPositionName
             group by m.name
-            order by name asc
+            order by m.name asc
             """)
-    List<MxikNameCodeCountProjection> findMxikCounts(@Param("subPositionName") String subPositionName);
+    Page<MxikNameCodeCountProjection> findMxikCounts(@Param("positionName") String positionName, Pageable pageable);
 }
