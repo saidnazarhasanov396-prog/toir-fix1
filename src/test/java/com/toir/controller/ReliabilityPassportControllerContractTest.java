@@ -55,11 +55,15 @@ class ReliabilityPassportControllerContractTest {
                 2,
                 3,
                 180L,
+                "3 hours",
                 120.0,
+                "120 hours",
                 0.5,
+                "30 minutes",
                 98.5,
                 List.of(new TopCause("Wear", 3), new TopCause("Overload", 2)),
-                now
+                now,
+                null
         );
 
         when(reliabilityPassportService.list(isNull(), isNull(), isNull(), eq(0), eq(20)))
@@ -74,8 +78,11 @@ class ReliabilityPassportControllerContractTest {
                 .andExpect(jsonPath("$.content[0].openDefects").value(2))
                 .andExpect(jsonPath("$.content[0].totalDowntimeEvents").value(3))
                 .andExpect(jsonPath("$.content[0].totalDowntimeMinutes").value(180))
+                .andExpect(jsonPath("$.content[0].totalDowntimeDuration").value("3 hours"))
                 .andExpect(jsonPath("$.content[0].mtbfHours").value(120.0))
+                .andExpect(jsonPath("$.content[0].mtbfDuration").value("120 hours"))
                 .andExpect(jsonPath("$.content[0].mttrHours").value(0.5))
+                .andExpect(jsonPath("$.content[0].mttrDuration").value("30 minutes"))
                 .andExpect(jsonPath("$.content[0].availabilityPct").value(98.5))
                 .andExpect(jsonPath("$.content[0].topRootCauses[0].cause").value("Wear"))
                 .andExpect(jsonPath("$.content[0].topRootCauses[0].count").value(3))

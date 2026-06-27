@@ -9,8 +9,14 @@ public record MetricExplanationStepDto(
         @Schema(description = "Numeric value used in the calculation.")
         Number value,
         @Schema(description = "Optional localized unit or suffix.")
-        String unit
+        String unit,
+        @Schema(description = "Optional localized display value for human-readable durations or formatted metrics.")
+        String displayValue
 ) {
+    public MetricExplanationStepDto(String label, Number value, String unit) {
+        this(label, value, unit, null);
+    }
+
     public MetricExplanationStepDto(String label, Number value) {
         this(label, value, null);
     }

@@ -83,9 +83,21 @@ public class MetricExplanationService {
                 text.formula(),
                 text.summary(availabilityPct, observedHours, downtimeHours),
                 List.of(
-                        new MetricExplanationStepDto(text.observedTime(), round2(observedHours), text.hoursUnit()),
-                        new MetricExplanationStepDto(text.downtime(), round2(downtimeHours), text.hoursUnit()),
-                        new MetricExplanationStepDto(text.operatingTime(), round2(operatingHours), text.hoursUnit()),
+                        new MetricExplanationStepDto(
+                                text.observedTime(),
+                                round2(observedHours),
+                                text.hoursUnit(),
+                                durationHours(locale, observedHours)),
+                        new MetricExplanationStepDto(
+                                text.downtime(),
+                                round2(downtimeHours),
+                                text.hoursUnit(),
+                                durationHours(locale, downtimeHours)),
+                        new MetricExplanationStepDto(
+                                text.operatingTime(),
+                                round2(operatingHours),
+                                text.hoursUnit(),
+                                durationHours(locale, operatingHours)),
                         new MetricExplanationStepDto(text.availability(), round2(availabilityPct), "%")
                 )
         );
@@ -394,6 +406,17 @@ public class MetricExplanationService {
             return durationHours(locale, number.doubleValue());
         }
         return String.valueOf(value);
+    }
+
+    public String formatDurationHours(String lang, Double value) {
+        if (value == null) {
+            return null;
+        }
+        return durationHours(normalizeLocale(lang), value);
+    }
+
+    public String formatDurationMinutes(String lang, long value) {
+        return durationHours(normalizeLocale(lang), value / 60.0);
     }
 
     private String durationHours(String locale, double value) {

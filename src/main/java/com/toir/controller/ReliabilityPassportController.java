@@ -41,10 +41,16 @@ public class ReliabilityPassportController {
             int totalDowntimeEvents,
             @Schema(description = "Deduplicated unavailable minutes from failure downtime and repair intervals")
             long totalDowntimeMinutes,
+            @Schema(description = "Localized human-readable total downtime duration")
+            String totalDowntimeDuration,
             @Schema(description = "Operating hours in the analysis period divided by failure downtime event count")
             Double mtbfHours,
+            @Schema(description = "Localized human-readable MTBF duration")
+            String mtbfDuration,
             @Schema(description = "Average duration in hours of completed unplanned or emergency downtime events")
             Double mttrHours,
+            @Schema(description = "Localized human-readable MTTR duration")
+            String mttrDuration,
             @Schema(description = "Operating time divided by observed time, as percent")
             double availabilityPct,
             @Schema(description = "Top causes from non-cancelled defect rootCause/failureReason fields")
@@ -69,7 +75,8 @@ public class ReliabilityPassportController {
                 Instant generatedAt
         ) {
             this(equipmentId, equipmentCode, equipmentName, totalDefects, openDefects, totalDowntimeEvents,
-                    totalDowntimeMinutes, mtbfHours, mttrHours, availabilityPct, topRootCauses, generatedAt, null);
+                    totalDowntimeMinutes, null, mtbfHours, null, mttrHours, null, availabilityPct,
+                    topRootCauses, generatedAt, null);
         }
     }
 

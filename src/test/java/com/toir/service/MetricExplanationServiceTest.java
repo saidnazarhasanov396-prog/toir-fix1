@@ -26,6 +26,12 @@ class MetricExplanationServiceTest {
         assertThat(explanation.summary())
                 .contains("observed time was 122 hours 27 minutes")
                 .contains("downtime was 2 hours 30 minutes");
+        assertThat(explanation.steps()).anySatisfy(step -> {
+            assertThat(step.label()).isEqualTo("Observed time");
+            assertThat(step.value().doubleValue()).isEqualTo(122.46);
+            assertThat(step.unit()).isEqualTo("hours");
+            assertThat(step.displayValue()).isEqualTo("122 hours 27 minutes");
+        });
     }
 
     @Test

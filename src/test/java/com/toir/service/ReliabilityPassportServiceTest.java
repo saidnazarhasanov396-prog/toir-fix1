@@ -84,8 +84,11 @@ class ReliabilityPassportServiceTest {
         assertThat(result.openDefects()).isEqualTo(1);
         assertThat(result.totalDowntimeEvents()).isEqualTo(1);
         assertThat(result.totalDowntimeMinutes()).isEqualTo(120);
+        assertThat(result.totalDowntimeDuration()).isEqualTo("2 hours");
         assertThat(result.mttrHours()).isEqualTo(2.0);
+        assertThat(result.mttrDuration()).isEqualTo("2 hours");
         assertThat(result.mtbfHours()).isCloseTo(8758.0, withinOneMinute());
+        assertThat(result.mtbfDuration()).contains("8758 hours");
         assertThat(result.availabilityPct()).isCloseTo(8758.0 / 8760.0 * 100.0, withinOneMinute());
         assertThat(result.topRootCauses()).extracting(cause -> cause.cause())
                 .containsExactlyInAnyOrder("Wear", "Overload");
