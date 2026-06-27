@@ -56,6 +56,11 @@ class SupplierServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 true,
                 null
         ));
@@ -104,6 +109,96 @@ class SupplierServiceTest {
                     assertThat(ex.getMessage()).contains("purchase orders");
                     assertThat(ex.getMessage()).contains("SPARE_PART");
                 });
+    }
+
+    @Test
+    void createDerivesBaseInnFromBranchTaxNumber() {
+        when(supplierRepository.count()).thenReturn(0L);
+        when(supplierRepository.existsByCodeAndIsDeletedFalse("SUP-00001")).thenReturn(false);
+        when(supplierRepository.save(any(Supplier.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.create(new SupplierRequest(
+                null,
+                "Uzmetkombinat Filial 1",
+                null,
+                null,
+                null,
+                null,
+                "123456789_1",
+                null,
+                null,
+                null,
+                null,
+                null,
+                true,
+                SupplierType.BOTH
+        ));
+
+        ArgumentCaptor<Supplier> captor = ArgumentCaptor.forClass(Supplier.class);
+        verify(supplierRepository).save(captor.capture());
+        assertThat(captor.getValue().getTaxNumber()).isEqualTo("123456789_1");
+        assertThat(captor.getValue().getBaseInn()).isEqualTo("123456789");
+    }
+
+    @Test
+    void createUsesExplicitBaseInnWhenProvided() {
+        when(supplierRepository.count()).thenReturn(0L);
+        when(supplierRepository.existsByCodeAndIsDeletedFalse("SUP-00001")).thenReturn(false);
+        when(supplierRepository.save(any(Supplier.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.create(new SupplierRequest(
+                null,
+                "Uzmetkombinat",
+                null,
+                null,
+                null,
+                null,
+                "123456789",
+                "123456789",
+                null,
+                null,
+                null,
+                null,
+                true,
+                SupplierType.BOTH
+        ));
+
+        ArgumentCaptor<Supplier> captor = ArgumentCaptor.forClass(Supplier.class);
+        verify(supplierRepository).save(captor.capture());
+        assertThat(captor.getValue().getBaseInn()).isEqualTo("123456789");
+    }
+
+    @Test
+    void createPersistsLegalAndBankDetails() {
+        when(supplierRepository.count()).thenReturn(0L);
+        when(supplierRepository.existsByCodeAndIsDeletedFalse("SUP-00001")).thenReturn(false);
+        when(supplierRepository.save(any(Supplier.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.create(new SupplierRequest(
+                null,
+                "Bank Vendor",
+                null,
+                null,
+                null,
+                null,
+                "308123456",
+                null,
+                "Karimov A.A.",
+                "NBU",
+                "20208000123456789",
+                "00401",
+                true,
+                SupplierType.SPARE_PART
+        ));
+
+        ArgumentCaptor<Supplier> captor = ArgumentCaptor.forClass(Supplier.class);
+        verify(supplierRepository).save(captor.capture());
+        Supplier saved = captor.getValue();
+        assertThat(saved.getDirectorName()).isEqualTo("Karimov A.A.");
+        assertThat(saved.getBankName()).isEqualTo("NBU");
+        assertThat(saved.getBankAccount()).isEqualTo("20208000123456789");
+        assertThat(saved.getMfo()).isEqualTo("00401");
+        assertThat(saved.getBaseInn()).isEqualTo("308123456");
     }
 
     private Supplier supplier(UUID id, String name, SupplierType supplierType) {

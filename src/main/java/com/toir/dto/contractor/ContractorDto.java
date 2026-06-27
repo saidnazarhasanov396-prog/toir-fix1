@@ -14,6 +14,10 @@ public record ContractorDto(
         String phone,
         String email,
         String specialization,
+        String directorName,
+        String bankName,
+        String bankAccount,
+        String mfo,
         ContractorStatus status,
         Summary summary
 ) {
@@ -26,8 +30,22 @@ public record ContractorDto(
     }
 
     public static ContractorDto from(Contractor c, Summary summary) {
-        return new ContractorDto(c.getId(), c.getCode(), c.getName(), c.getTaxNumber(),
-                c.getContactPerson(), c.getPhone(), c.getEmail(), c.getSpecialization(), c.getStatus(), summary);
+        return new ContractorDto(
+                c.getId(),
+                c.getCode(),
+                c.getName(),
+                c.getTaxNumber(),
+                c.getContactPerson(),
+                c.getPhone(),
+                c.getEmail(),
+                c.getSpecialization(),
+                c.getDirectorName(),
+                c.getBankName(),
+                c.getBankAccount(),
+                c.getMfo(),
+                c.getStatus(),
+                summary
+        );
     }
 
     public record Summary(

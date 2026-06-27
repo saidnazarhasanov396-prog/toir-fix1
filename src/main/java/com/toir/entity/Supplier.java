@@ -40,6 +40,21 @@ public class Supplier extends BaseEntity {
     @Column(name = "tax_number")
     private String taxNumber;
 
+    @Column(name = "base_inn")
+    private String baseInn;
+
+    @Column(name = "director_name")
+    private String directorName;
+
+    @Column(name = "bank_name")
+    private String bankName;
+
+    @Column(name = "bank_account")
+    private String bankAccount;
+
+    @Column(name = "mfo")
+    private String mfo;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "supplier_type", nullable = false, length = 32)
     @Builder.Default
