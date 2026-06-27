@@ -1,8 +1,10 @@
 package com.toir.dto.contractor;
 
+import com.toir.dto.common.BankAccountDto;
 import com.toir.enums.ContractorStatus;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import java.util.List;
 
 public record ContractorRequest(
         String code,
@@ -13,8 +15,6 @@ public record ContractorRequest(
         @Email String email,
         String specialization,
         String directorName,
-        String bankName,
-        String bankAccount,
-        String mfo,
+        List<BankAccountDto> bankAccounts,
         ContractorStatus status
 ) {}

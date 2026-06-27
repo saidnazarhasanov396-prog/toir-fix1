@@ -1,8 +1,11 @@
 package com.toir.entity.contractors;
 
 import com.toir.entity.BaseEntity;
+import com.toir.entity.common.BankAccount;
 import com.toir.enums.ContractorStatus;
 import jakarta.persistence.*;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.*;
 
 @Entity
@@ -20,7 +23,7 @@ public class Contractor extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "tax_number")
+    @Column(name = "tax_number", length = 32)
     private String taxNumber;
 
     @Column(name = "contact_person")
@@ -33,14 +36,14 @@ public class Contractor extends BaseEntity {
     @Column(name = "director_name")
     private String directorName;
 
-    @Column(name = "bank_name")
-    private String bankName;
-
-    @Column(name = "bank_account")
-    private String bankAccount;
-
-    @Column(name = "mfo")
-    private String mfo;
+    @Builder.Default
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(
+            name = "contractor_bank_accounts",
+            joinColumns = @JoinColumn(name = "contractor_id")
+    )
+    @OrderColumn(name = "account_order")
+    private List<BankAccount> bankAccounts = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
