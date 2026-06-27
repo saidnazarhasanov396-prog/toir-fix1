@@ -53,7 +53,6 @@ class RepairCampaignControllerContractTest {
                 "RC-2026-001",
                 "Annual campaign",
                 2026,
-                null,
                 UUID.randomUUID(),
                 "Maintenance Dept",
                 RepairCampaignStatus.DRAFT,
@@ -77,7 +76,8 @@ class RepairCampaignControllerContractTest {
                 .andExpect(jsonPath("$.content[0].id").value(campaignId.toString()))
                 .andExpect(jsonPath("$.content[0].code").value("RC-2026-001"))
                 .andExpect(jsonPath("$.content[0].status").value("DRAFT"))
-                .andExpect(jsonPath("$.content[0].year").value(2026));
+                .andExpect(jsonPath("$.content[0].year").value(2026))
+                .andExpect(jsonPath("$.content[0].description").value("Scope details"));
     }
 
     @Test

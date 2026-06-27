@@ -128,7 +128,6 @@ public class RepairCampaignService {
         c.setCode(nextCode());
         c.setName(r.name());
         c.setYear(r.year());
-        c.setQuarter(r.quarter());
         c.setDepartmentId(r.departmentId());
         c.setScopeType(effectiveScopeType(r.scopeType()));
         c.setEquipmentTypeId(r.equipmentTypeId());
@@ -137,7 +136,7 @@ public class RepairCampaignService {
         c.setEndDate(r.endDate());
         c.setTotalBudget(r.totalBudget());
         c.setTotalActual(0);
-        c.setScope(r.scope());
+        c.setScope(r.description());
         c.setNotes(r.notes());
         replaceParticipantDepartments(c, r.participantDepartments());
 
@@ -160,7 +159,6 @@ public class RepairCampaignService {
         RepairCampaign before = snapshot(c);
         c.setName(r.name());
         c.setYear(r.year());
-        c.setQuarter(r.quarter());
         c.setDepartmentId(r.departmentId());
         c.setScopeType(effectiveScopeType(r.scopeType()));
         c.setEquipmentTypeId(r.equipmentTypeId());
@@ -168,7 +166,7 @@ public class RepairCampaignService {
         c.setStartDate(r.startDate());
         c.setEndDate(r.endDate());
         c.setTotalBudget(r.totalBudget());
-        c.setScope(r.scope());
+        c.setScope(r.description());
         c.setNotes(r.notes());
         replaceParticipantDepartments(c, r.participantDepartments());
 
@@ -924,7 +922,7 @@ public class RepairCampaignService {
         MaintenanceBudget budget = budgetOrNull(c.getMaintenanceBudgetId());
         return new RepairCampaignDto(
                 c.getId(), c.getCode(), c.getName(),
-                c.getYear(), c.getQuarter(), c.getDepartmentId(), departmentName(c.getDepartmentId()), c.getStatus(),
+                c.getYear(), c.getDepartmentId(), departmentName(c.getDepartmentId()), c.getStatus(),
                 c.getStartDate(), c.getEndDate(),
                 c.getTotalBudget(), totals.approvedActual(),
                 c.getTotalBudget() - totals.approvedActual(),
@@ -1106,7 +1104,6 @@ public class RepairCampaignService {
         copy.setCode(source.getCode());
         copy.setName(source.getName());
         copy.setYear(source.getYear());
-        copy.setQuarter(source.getQuarter());
         copy.setDepartmentId(source.getDepartmentId());
         copy.setScopeType(source.getScopeType());
         copy.setEquipmentTypeId(source.getEquipmentTypeId());

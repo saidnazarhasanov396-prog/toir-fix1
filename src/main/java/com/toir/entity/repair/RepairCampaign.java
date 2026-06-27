@@ -33,9 +33,6 @@ public class RepairCampaign extends BaseEntity {
     @Column(nullable = false)
     private int year;
 
-    /** Quarter 1..4 or null for annual campaigns. */
-    private Integer quarter;
-
     @Column(name = "department_id")
     private UUID departmentId;
 
