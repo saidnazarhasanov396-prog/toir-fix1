@@ -13,7 +13,6 @@ import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -110,21 +109,39 @@ public class MxikService {
     }
 
     @Transactional(readOnly = true)
-    public List<MxikNameCountProjection> listSubPositionCounts(String groupName) {
+    public List<MxikNameCountProjection> listClassCounts(String groupName) {
         String normalized = trimToNull(groupName);
         if (normalized == null) {
             throw RestException.badRequest("groupName is required");
+        }
+        return repository.findClassCounts(normalized);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MxikNameCountProjection> listPositionCounts(String className) {
+        String normalized = trimToNull(className);
+        if (normalized == null) {
+            throw RestException.badRequest("className is required");
+        }
+        return repository.findPositionCounts(normalized);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MxikNameCountProjection> listSubPositionCounts(String positionName) {
+        String normalized = trimToNull(positionName);
+        if (normalized == null) {
+            throw RestException.badRequest("positionName is required");
         }
         return repository.findSubPositionCounts(normalized);
     }
 
     @Transactional(readOnly = true)
-    public Page<MxikNameCodeCountProjection> listMxikCounts(String positionName, int page, int size) {
-        String normalized = trimToNull(positionName);
+    public List<MxikNameCodeCountProjection> listMxikCounts(String subPositionName) {
+        String normalized = trimToNull(subPositionName);
         if (normalized == null) {
-            throw RestException.badRequest("positionName is required");
+            throw RestException.badRequest("subPositionName is required");
         }
-        return repository.findMxikCounts(normalized, PageRequest.of(Math.max(page, 0), Math.max(size, 1)));
+        return repository.findMxikCounts(normalized);
     }
 
     private Mxik getOrThrow(UUID id) {
@@ -134,10 +151,29 @@ public class MxikService {
 
     private void apply(Mxik entity, MxikRequest request, String kod) {
         entity.setName(requiredTrim(request.name(), "name"));
+        entity.setNameUzLatn(trimToNull(request.nameUzLatn()));
+        entity.setNameRu(trimToNull(request.nameRu()));
         entity.setKod(kod);
         entity.setType(requiredTrim(request.type(), "type").toUpperCase(Locale.ROOT));
         entity.setGroupName(trimToNull(request.groupName()));
+        entity.setGroupNameRu(trimToNull(request.groupNameRu()));
+        entity.setGroupNameCyril(trimToNull(request.groupNameCyril()));
+        entity.setClassName(trimToNull(request.className()));
+        entity.setClassNameRu(trimToNull(request.classNameRu()));
+        entity.setClassNameCyril(trimToNull(request.classNameCyril()));
         entity.setPositionName(trimToNull(request.positionName()));
+        entity.setPositionNameRu(trimToNull(request.positionNameRu()));
+        entity.setPositionNameCyril(trimToNull(request.positionNameCyril()));
+        entity.setSubPositionName(trimToNull(request.subPositionName()));
+        entity.setSubPositionNameRu(trimToNull(request.subPositionNameRu()));
+        entity.setSubPositionNameCyril(trimToNull(request.subPositionNameCyril()));
+        entity.setBrandName(trimToNull(request.brandName()));
+        entity.setBrandNameRu(trimToNull(request.brandNameRu()));
+        entity.setBrandNameCyril(trimToNull(request.brandNameCyril()));
+        entity.setAttributeName(trimToNull(request.attributeName()));
+        entity.setAttributeNameRu(trimToNull(request.attributeNameRu()));
+        entity.setAttributeNameCyril(trimToNull(request.attributeNameCyril()));
+        entity.setBarcode(trimToNull(request.barcode()));
     }
 
     private String normalizeKod(String value) {
