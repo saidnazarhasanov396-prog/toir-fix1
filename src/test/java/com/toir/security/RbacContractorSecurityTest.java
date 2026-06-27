@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = {
@@ -77,6 +78,20 @@ class RbacContractorSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = "SYSTEM_ADMIN")
+    void systemAdminCanReadContractorsWithContent() throws Exception {
+        UUID contractorId = UUID.randomUUID();
+        when(contractorService.findAll(isNull(), isNull(), isNull())).thenReturn(List.of(
+                new ContractorDto(contractorId, "CTR-ADMIN", "Admin Contractor", null, null, null, null, null, null, null)
+        ));
+
+        mockMvc.perform(get("/api/v1/contractors?page=0&size=5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(contractorId.toString()));
+    }
+
+    @Test
     @WithMockUser(authorities = PermissionConstants.CONTRACTOR_READ)
     void contractorReadCanReadContractorsAndRelatedRegisters() throws Exception {
         UUID contractorId = UUID.randomUUID();
@@ -87,7 +102,10 @@ class RbacContractorSecurityTest {
         when(contractorContractService.findByContractor(contractorId)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/contractors?page=0&size=1"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(contractorId.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1));
         mockMvc.perform(get("/api/v1/contractor-works?contractorId={contractorId}&page=0&size=1", contractorId))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/contractor-contracts?contractorId={contractorId}&page=0&size=1", contractorId))

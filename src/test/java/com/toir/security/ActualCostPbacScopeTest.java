@@ -129,6 +129,71 @@ class ActualCostPbacScopeTest {
     }
 
     @Test
+    void pendingListExcludesContractorWorkActualCostsWhenWorkOrderIsOutOfScope() {
+        UUID departmentId = UUID.randomUUID();
+        UUID contractorWorkId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        ActualCost contractorCost = actualCost(UUID.randomUUID(), null, null, null, ActualCostStatus.PENDING);
+        contractorCost.setContractorWorkId(contractorWorkId);
+        when(repository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(List.of(contractorCost));
+        when(contractorWorkRepository.findByIdAndIsDeletedFalse(contractorWorkId))
+                .thenReturn(Optional.of(contractorWork(contractorWorkId, workOrderId)));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, departmentId)));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
+
+        var result = service.findPending();
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void pendingListIncludesRepairRequestActualCostsWhenDepartmentIsScoped() {
+        UUID departmentId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        ActualCost repairCost = actualCost(UUID.randomUUID(), null, repairRequestId, null, ActualCostStatus.PENDING);
+        when(repository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(List.of(repairCost));
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest(repairRequestId, departmentId)));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+
+        var result = service.findPending();
+
+        assertThat(result).extracting(ActualCostDto::id).containsExactly(repairCost.getId());
+    }
+
+    @Test
+    void pendingListIncludesBudgetLineActualCostsWhenDepartmentIsScoped() {
+        UUID departmentId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        ActualCost budgetLineCost = actualCost(UUID.randomUUID(), null, null, budgetLineId, ActualCostStatus.PENDING);
+        when(repository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(List.of(budgetLineCost));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId))
+                .thenReturn(Optional.of(budgetLine(budgetLineId, departmentId)));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
+
+        var result = service.findPending();
+
+        assertThat(result).extracting(ActualCostDto::id).containsExactly(budgetLineCost.getId());
+    }
+
+    @Test
+    void scopeAdminPendingListReturnsAllActualCostsWithoutDepartmentResolution() {
+        ActualCost first = actualCost(UUID.randomUUID(), UUID.randomUUID(), null, null, ActualCostStatus.PENDING);
+        ActualCost second = actualCost(UUID.randomUUID(), null, UUID.randomUUID(), null, ActualCostStatus.PENDING);
+        when(repository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(List.of(first, second));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+
+        var result = service.findPending();
+
+        assertThat(result).extracting(ActualCostDto::id).containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
     void createValidatesLinkedWorkOrderScope() {
         UUID departmentId = UUID.randomUUID();
         UUID workOrderId = UUID.randomUUID();
