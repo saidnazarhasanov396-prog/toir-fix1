@@ -1,7 +1,7 @@
 package com.toir.dto.repaircampaign;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.toir.enums.RepairCampaignScopeType;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -13,8 +13,6 @@ import java.util.UUID;
 public record RepairCampaignRequest(
         String code,
         @NotBlank String name,
-        @NotNull @Min(2000) Integer year,
-        Integer quarter,
         UUID departmentId,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
@@ -22,31 +20,27 @@ public record RepairCampaignRequest(
         RepairCampaignScopeType scopeType,
         UUID equipmentTypeId,
         List<RepairCampaignDepartmentDto> participantDepartments,
-        String scope,
+        @JsonAlias("description") String description,
         String notes,
         UUID maintenanceBudgetId
 ) {
     public RepairCampaignRequest(
             String code,
             @NotBlank String name,
-            @NotNull @Min(2000) Integer year,
-            Integer quarter,
             UUID departmentId,
             @NotNull LocalDate startDate,
             @NotNull LocalDate endDate,
             @PositiveOrZero double totalBudget,
-            String scope,
+            String description,
             String notes
     ) {
-        this(code, name, year, quarter, departmentId, startDate, endDate, totalBudget,
-                null, null, List.of(), scope, notes, null);
+        this(code, name, departmentId, startDate, endDate, totalBudget,
+                null, null, List.of(), description, notes, null);
     }
 
     public RepairCampaignRequest(
             String code,
             @NotBlank String name,
-            @NotNull @Min(2000) Integer year,
-            Integer quarter,
             UUID departmentId,
             @NotNull LocalDate startDate,
             @NotNull LocalDate endDate,
@@ -54,10 +48,10 @@ public record RepairCampaignRequest(
             RepairCampaignScopeType scopeType,
             UUID equipmentTypeId,
             List<RepairCampaignDepartmentDto> participantDepartments,
-            String scope,
+            String description,
             String notes
     ) {
-        this(code, name, year, quarter, departmentId, startDate, endDate, totalBudget,
-                scopeType, equipmentTypeId, participantDepartments, scope, notes, null);
+        this(code, name, departmentId, startDate, endDate, totalBudget,
+                scopeType, equipmentTypeId, participantDepartments, description, notes, null);
     }
 }

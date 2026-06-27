@@ -236,6 +236,7 @@ public class MetricExplanationService {
 
     private String reasonText(String locale, EquipmentRiskScoringReason reason) {
         String value = valueText(reason.value());
+        String durationValue = durationValueText(locale, reason.value());
         return switch (reason.code()) {
             case OPEN_DEFECTS_CRITICAL -> localized(
                     locale,
@@ -254,14 +255,14 @@ public class MetricExplanationService {
                     "Обнаружено %s открытых дефекта, поэтому вероятность повышена.".formatted(value));
             case LOW_MTBF_HIGH -> localized(
                     locale,
-                    "MTBF is %s hours, below the 2000 hour threshold.".formatted(value),
-                    "MTBF %s soat, bu 2000 soat chegarasidan past.".formatted(value),
-                    "MTBF составляет %s ч, что ниже порога 2000 ч.".formatted(value));
+                    "MTBF is %s, below the 2000 hour threshold.".formatted(durationValue),
+                    "MTBF %s, bu 2000 soat chegarasidan past.".formatted(durationValue),
+                    "MTBF составляет %s, что ниже порога 2000 ч.".formatted(durationValue));
             case LOW_MTBF_MEDIUM -> localized(
                     locale,
-                    "MTBF is %s hours, below the 4000 hour threshold.".formatted(value),
-                    "MTBF %s soat, bu 4000 soat chegarasidan past.".formatted(value),
-                    "MTBF составляет %s ч, что ниже порога 4000 ч.".formatted(value));
+                    "MTBF is %s, below the 4000 hour threshold.".formatted(durationValue),
+                    "MTBF %s, bu 4000 soat chegarasidan past.".formatted(durationValue),
+                    "MTBF составляет %s, что ниже порога 4000 ч.".formatted(durationValue));
             case RECURRING_DEFECTS -> localized(
                     locale,
                     "%s recurring defects show a repeated issue pattern.".formatted(value),
@@ -299,14 +300,14 @@ public class MetricExplanationService {
                     "оборудование имеет низкую критичность.");
             case RECENT_DOWNTIME -> localized(
                     locale,
-                    "recent downtime of %s hours increases consequence.".formatted(value),
-                    "so'nggi %s soatlik to'xtash oqibatni oshiradi.".formatted(value),
-                    "недавний простой %s ч повышает последствие.".formatted(value));
+                    "recent downtime of %s increases consequence.".formatted(durationValue),
+                    "so'nggi %s to'xtash oqibatni oshiradi.".formatted(durationValue),
+                    "недавний простой %s повышает последствие.".formatted(durationValue));
             case HIGH_MTTR -> localized(
                     locale,
-                    "MTTR is %s hours, so recovery is considered difficult.".formatted(value),
-                    "MTTR %s soat, shuning uchun tiklash murakkab deb baholanadi.".formatted(value),
-                    "MTTR составляет %s ч, поэтому восстановление считается сложным.".formatted(value));
+                    "MTTR is %s, so recovery is considered difficult.".formatted(durationValue),
+                    "MTTR %s, shuning uchun tiklash murakkab deb baholanadi.".formatted(durationValue),
+                    "MTTR составляет %s, поэтому восстановление считается сложным.".formatted(durationValue));
             case OPEN_HIGH_REPAIR_REQUEST -> localized(
                     locale,
                     "%s open high-priority repair requests increase consequence.".formatted(value),
@@ -343,18 +344,24 @@ public class MetricExplanationService {
                     "Mavjudlik",
                     "soat",
                     (availabilityPct, observedHours, downtimeHours) ->
-                            "Mavjudlik %s%%, chunki kuzatilgan vaqt %s soat va to'xtash vaqti %s soat."
-                                    .formatted(number(availabilityPct), number(observedHours), number(downtimeHours)));
+                            "Mavjudlik %s%%, chunki kuzatilgan vaqt %s va to'xtash vaqti %s."
+                                    .formatted(
+                                            number(availabilityPct),
+                                            durationHours(locale, observedHours),
+                                            durationHours(locale, downtimeHours)));
             case "ru" -> new AvailabilityText(
                     "(наблюдаемое время - простой) / наблюдаемое время × 100",
                     "Наблюдаемое время",
                     "Простой",
                     "Рабочее время",
                     "Доступность",
-                    "часы",
+                    "ч",
                     (availabilityPct, observedHours, downtimeHours) ->
-                            "Доступность %s%%, потому что наблюдаемое время %s ч, простой %s ч."
-                                    .formatted(number(availabilityPct), number(observedHours), number(downtimeHours)));
+                            "Доступность %s%%, потому что наблюдаемое время %s, простой %s."
+                                    .formatted(
+                                            number(availabilityPct),
+                                            durationHours(locale, observedHours),
+                                            durationHours(locale, downtimeHours)));
             default -> new AvailabilityText(
                     "(observed time - downtime) / observed time × 100",
                     "Observed time",
@@ -363,8 +370,11 @@ public class MetricExplanationService {
                     "Availability",
                     "hours",
                     (availabilityPct, observedHours, downtimeHours) ->
-                            "Availability is %s%% because observed time was %s hours and downtime was %s hours."
-                                    .formatted(number(availabilityPct), number(observedHours), number(downtimeHours)));
+                            "Availability is %s%% because observed time was %s and downtime was %s."
+                                    .formatted(
+                                            number(availabilityPct),
+                                            durationHours(locale, observedHours),
+                                            durationHours(locale, downtimeHours)));
         };
     }
 
@@ -377,6 +387,52 @@ public class MetricExplanationService {
             return number(number.doubleValue());
         }
         return String.valueOf(value);
+    }
+
+    private String durationValueText(String locale, Object value) {
+        if (value instanceof Number number) {
+            return durationHours(locale, number.doubleValue());
+        }
+        return String.valueOf(value);
+    }
+
+    private String durationHours(String locale, double value) {
+        long totalMinutes = Math.max(0, Math.round(value * 60.0));
+        long hours = totalMinutes / 60;
+        long minutes = totalMinutes % 60;
+        StringBuilder result = new StringBuilder();
+
+        if (hours > 0) {
+            result.append(durationPart(hours, hourUnit(locale, hours)));
+        }
+        if (minutes > 0 || result.isEmpty()) {
+            if (!result.isEmpty()) {
+                result.append(' ');
+            }
+            result.append(durationPart(minutes, minuteUnit(locale, minutes)));
+        }
+
+        return result.toString();
+    }
+
+    private String durationPart(long value, String unit) {
+        return value + " " + unit;
+    }
+
+    private String hourUnit(String locale, long value) {
+        return switch (locale) {
+            case "uz" -> "soat";
+            case "ru" -> "ч";
+            default -> value == 1 ? "hour" : "hours";
+        };
+    }
+
+    private String minuteUnit(String locale, long value) {
+        return switch (locale) {
+            case "uz" -> "daq";
+            case "ru" -> "мин";
+            default -> value == 1 ? "minute" : "minutes";
+        };
     }
 
     private static String number(double value) {

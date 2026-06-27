@@ -12,8 +12,6 @@ public record RepairCampaignDto(
         UUID id,
         String code,
         String name,
-        int year,
-        Integer quarter,
         UUID departmentId,
         String departmentName,
         RepairCampaignStatus status,
@@ -22,7 +20,7 @@ public record RepairCampaignDto(
         double totalBudget,
         double totalActual,
         double variance,
-        String scope,
+        String description,
         String notes,
         List<RepairCampaignStageDto> stages,
         RepairCampaignScopeType scopeType,
@@ -42,8 +40,6 @@ public record RepairCampaignDto(
             UUID id,
             String code,
             String name,
-            int year,
-            Integer quarter,
             UUID departmentId,
             String departmentName,
             RepairCampaignStatus status,
@@ -52,12 +48,12 @@ public record RepairCampaignDto(
             double totalBudget,
             double totalActual,
             double variance,
-            String scope,
+            String description,
             String notes,
             List<RepairCampaignStageDto> stages
     ) {
-        this(id, code, name, year, quarter, departmentId, departmentName, status, startDate, endDate, totalBudget,
-                totalActual, variance, scope, notes, stages, RepairCampaignScopeType.CUSTOM, null, List.of(),
+        this(id, code, name, departmentId, departmentName, status, startDate, endDate, totalBudget,
+                totalActual, variance, description, notes, stages, RepairCampaignScopeType.CUSTOM, null, List.of(),
                 0, 0, totalActual, 0, null, 0, 0, 0, null);
     }
 
@@ -65,8 +61,6 @@ public record RepairCampaignDto(
             UUID id,
             String code,
             String name,
-            int year,
-            Integer quarter,
             UUID departmentId,
             String departmentName,
             RepairCampaignStatus status,
@@ -75,7 +69,7 @@ public record RepairCampaignDto(
             double totalBudget,
             double totalActual,
             double variance,
-            String scope,
+            String description,
             String notes,
             List<RepairCampaignStageDto> stages,
             RepairCampaignScopeType scopeType,
@@ -86,15 +80,15 @@ public record RepairCampaignDto(
             double approvedActual,
             double pendingActual
     ) {
-        this(id, code, name, year, quarter, departmentId, departmentName, status, startDate, endDate, totalBudget,
-                totalActual, variance, scope, notes, stages, scopeType, equipmentTypeId, participantDepartments,
+        this(id, code, name, departmentId, departmentName, status, startDate, endDate, totalBudget,
+                totalActual, variance, description, notes, stages, scopeType, equipmentTypeId, participantDepartments,
                 workOrderCount, completedWorkOrderCount, approvedActual, pendingActual, null, 0, 0, 0, null);
     }
 
     public static RepairCampaignDto from(RepairCampaign c, String departmentName) {
         return new RepairCampaignDto(
                 c.getId(), c.getCode(), c.getName(),
-                c.getYear(), c.getQuarter(), c.getDepartmentId(), departmentName, c.getStatus(),
+                c.getDepartmentId(), departmentName, c.getStatus(),
                 c.getStartDate(), c.getEndDate(),
                 c.getTotalBudget(), c.getTotalActual(),
                 c.getTotalBudget() - c.getTotalActual(),

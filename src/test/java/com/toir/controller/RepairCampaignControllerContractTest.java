@@ -1,5 +1,8 @@
 package com.toir.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.toir.controller.repair.RepairCampaignController;
 import com.toir.dto.repaircampaign.RepairCampaignBudgetStageSummaryDto;
 import com.toir.dto.repaircampaign.RepairCampaignBudgetSummaryDto;
@@ -15,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDate;
@@ -40,8 +44,13 @@ class RepairCampaignControllerContractTest {
 
     @BeforeEach
     void setUp() {
+        ObjectMapper objectMapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
         mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service))
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
     }
 
@@ -52,8 +61,6 @@ class RepairCampaignControllerContractTest {
                 campaignId,
                 "RC-2026-001",
                 "Annual campaign",
-                2026,
-                null,
                 UUID.randomUUID(),
                 "Maintenance Dept",
                 RepairCampaignStatus.DRAFT,
@@ -67,17 +74,25 @@ class RepairCampaignControllerContractTest {
                 List.of()
         );
 
-        when(service.findAllFiltered(eq("annual"), eq(2026), eq(RepairCampaignStatus.DRAFT))).thenReturn(List.of(dto));
+        when(service.findAllFiltered(
+                eq("annual"),
+                eq(LocalDate.of(2026, 1, 1)),
+                eq(LocalDate.of(2026, 12, 31)),
+                eq(RepairCampaignStatus.DRAFT)
+        )).thenReturn(List.of(dto));
 
         mockMvc.perform(get("/api/v1/repair-campaigns")
                         .param("search", "annual")
-                        .param("year", "2026")
+                        .param("startDate", "2026-01-01")
+                        .param("endDate", "2026-12-31")
                         .param("status", "DRAFT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(campaignId.toString()))
                 .andExpect(jsonPath("$.content[0].code").value("RC-2026-001"))
                 .andExpect(jsonPath("$.content[0].status").value("DRAFT"))
-                .andExpect(jsonPath("$.content[0].year").value(2026));
+                .andExpect(jsonPath("$.content[0].startDate").value("2026-01-01"))
+                .andExpect(jsonPath("$.content[0].endDate").value("2026-12-31"))
+                .andExpect(jsonPath("$.content[0].description").value("Scope details"));
     }
 
     @Test
