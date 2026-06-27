@@ -50,6 +50,15 @@ public class IntegrationEndpoint extends BaseEntity {
     @Column(name = "api_key")
     private String apiKey;
 
+    @Column(name = "client_id")
+    private String clientId;
+
+    @Column(name = "client_secret")
+    private String clientSecret;
+
+    @Column(name = "company_inn")
+    private String companyInn;
+
     @Column(name = "username")
     private String username;
 

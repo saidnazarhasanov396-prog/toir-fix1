@@ -18,6 +18,13 @@ springdoc:
     disabled: true
 
 app:
+  integrations:
+    faktura-uz:
+      endpoints:
+        auth: https://account.faktura.uz/token
+        get-documents: https://api.faktura.uz/Api/Document/GetDocuments
+        get-documents-content: https://api.faktura.uz/Api/Document/GetDocumentsContent
+        get-user-details: https://api.faktura.uz/Api/account/getuserdetails
   features:
     manual-attributes:
       write-enabled: ${APP_FEATURES_MANUAL_ATTRIBUTES_WRITE_ENABLED:false}

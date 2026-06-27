@@ -111,6 +111,9 @@ public class IntegrationEndpointService {
         e.setBasePath(r.basePath());
         e.setAuthType(r.authType());
         e.setApiKey(r.apiKey());
+        e.setClientId(r.clientId());
+        if (r.clientSecret() != null && !r.clientSecret().isBlank()) e.setClientSecret(r.clientSecret());
+        e.setCompanyInn(r.companyInn());
         if (r.username() != null) e.setUsername(r.username());
         if (r.password() != null && !r.password().isBlank()) e.setPassword(r.password());
         e.setTimeoutSeconds(r.timeoutSeconds());
