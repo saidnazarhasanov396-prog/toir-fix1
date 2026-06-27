@@ -1,6 +1,6 @@
 package com.toir.service;
 
-import com.toir.dto.supplier.SupplierDto;
+import com.toir.dto.common.BankAccountDto;
 import com.toir.dto.supplier.SupplierRequest;
 import com.toir.entity.Supplier;
 import com.toir.enums.SupplierType;
@@ -59,8 +59,6 @@ class SupplierServiceTest {
                 null,
                 null,
                 null,
-                null,
-                null,
                 true,
                 null
         ));
@@ -76,9 +74,9 @@ class SupplierServiceTest {
         Supplier both = supplier(UUID.randomUUID(), "Universal Vendor", SupplierType.BOTH);
         when(supplierRepository.findAllFiltered(true, SupplierType.EQUIPMENT)).thenReturn(List.of(equipmentOnly, both));
 
-        List<SupplierDto> result = service.findAll(null, true, SupplierType.EQUIPMENT);
+        var result = service.findAll(null, true, SupplierType.EQUIPMENT);
 
-        assertThat(result).extracting(SupplierDto::supplierType)
+        assertThat(result).extracting(dto -> dto.supplierType())
                 .containsExactly(SupplierType.EQUIPMENT, SupplierType.BOTH);
         verify(supplierRepository).findAllFiltered(true, SupplierType.EQUIPMENT);
         verify(supplierRepository, never()).search(any(), any(), any());
@@ -89,9 +87,9 @@ class SupplierServiceTest {
         Supplier supplier = supplier(UUID.randomUUID(), "Universal Vendor", SupplierType.BOTH);
         when(supplierRepository.search("universal", null, null)).thenReturn(List.of(supplier));
 
-        List<SupplierDto> result = service.findAll(" universal ", null, null);
+        var result = service.findAll(" universal ", null, null);
 
-        assertThat(result).extracting(SupplierDto::name).containsExactly("Universal Vendor");
+        assertThat(result).extracting(dto -> dto.name()).containsExactly("Universal Vendor");
         verify(supplierRepository).search("universal", null, null);
         verify(supplierRepository, never()).findAllFiltered(any(), any());
     }
@@ -120,15 +118,9 @@ class SupplierServiceTest {
         service.create(new SupplierRequest(
                 null,
                 "Uzmetkombinat Filial 1",
-                null,
-                null,
-                null,
-                null,
+                null, null, null, null,
                 "123456789_1",
-                null,
-                null,
-                null,
-                null,
+                null, null,
                 null,
                 true,
                 SupplierType.BOTH
@@ -141,23 +133,17 @@ class SupplierServiceTest {
     }
 
     @Test
-    void createUsesExplicitBaseInnWhenProvided() {
+    void createPreservesLeadingZerosInTaxNumber() {
         when(supplierRepository.count()).thenReturn(0L);
         when(supplierRepository.existsByCodeAndIsDeletedFalse("SUP-00001")).thenReturn(false);
         when(supplierRepository.save(any(Supplier.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.create(new SupplierRequest(
                 null,
-                "Uzmetkombinat",
-                null,
-                null,
-                null,
-                null,
-                "123456789",
-                "123456789",
-                null,
-                null,
-                null,
+                "Vendor",
+                null, null, null, null,
+                "0123456789",
+                null, null,
                 null,
                 true,
                 SupplierType.BOTH
@@ -165,11 +151,12 @@ class SupplierServiceTest {
 
         ArgumentCaptor<Supplier> captor = ArgumentCaptor.forClass(Supplier.class);
         verify(supplierRepository).save(captor.capture());
-        assertThat(captor.getValue().getBaseInn()).isEqualTo("123456789");
+        assertThat(captor.getValue().getTaxNumber()).isEqualTo("0123456789");
+        assertThat(captor.getValue().getBaseInn()).isEqualTo("0123456789");
     }
 
     @Test
-    void createPersistsLegalAndBankDetails() {
+    void createPersistsMultipleBankAccounts() {
         when(supplierRepository.count()).thenReturn(0L);
         when(supplierRepository.existsByCodeAndIsDeletedFalse("SUP-00001")).thenReturn(false);
         when(supplierRepository.save(any(Supplier.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -177,16 +164,14 @@ class SupplierServiceTest {
         service.create(new SupplierRequest(
                 null,
                 "Bank Vendor",
-                null,
-                null,
-                null,
-                null,
+                null, null, null, null,
                 "308123456",
                 null,
                 "Karimov A.A.",
-                "NBU",
-                "20208000123456789",
-                "00401",
+                List.of(
+                        new BankAccountDto("NBU", "20208000123456789", "00401"),
+                        new BankAccountDto("Kapitalbank", "00208000987654321", "01158")
+                ),
                 true,
                 SupplierType.SPARE_PART
         ));
@@ -195,10 +180,9 @@ class SupplierServiceTest {
         verify(supplierRepository).save(captor.capture());
         Supplier saved = captor.getValue();
         assertThat(saved.getDirectorName()).isEqualTo("Karimov A.A.");
-        assertThat(saved.getBankName()).isEqualTo("NBU");
-        assertThat(saved.getBankAccount()).isEqualTo("20208000123456789");
-        assertThat(saved.getMfo()).isEqualTo("00401");
-        assertThat(saved.getBaseInn()).isEqualTo("308123456");
+        assertThat(saved.getBankAccounts()).hasSize(2);
+        assertThat(saved.getBankAccounts().get(0).getBankAccount()).isEqualTo("20208000123456789");
+        assertThat(saved.getBankAccounts().get(1).getBankName()).isEqualTo("Kapitalbank");
     }
 
     private Supplier supplier(UUID id, String name, SupplierType supplierType) {

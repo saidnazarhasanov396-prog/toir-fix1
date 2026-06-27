@@ -1,7 +1,7 @@
 package com.toir.dto.contractor;
 
+import com.toir.dto.common.BankAccountDto;
 import com.toir.dto.contractorcontract.ContractorContractDto;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -16,9 +16,7 @@ public record ContractorDetailDto(
         String email,
         String specialization,
         String directorName,
-        String bankName,
-        String bankAccount,
-        String mfo,
+        List<BankAccountDto> bankAccounts,
         String status,
         List<ContractorContractDto> contracts,
         List<WorkOrderRef> workOrders,
@@ -26,6 +24,7 @@ public record ContractorDetailDto(
         Summary summary
 ) {
     public ContractorDetailDto {
+        bankAccounts = bankAccounts == null ? List.of() : List.copyOf(bankAccounts);
         contracts = contracts == null ? List.of() : List.copyOf(contracts);
         workOrders = workOrders == null ? List.of() : List.copyOf(workOrders);
         contractorWorks = contractorWorks == null ? List.of() : List.copyOf(contractorWorks);

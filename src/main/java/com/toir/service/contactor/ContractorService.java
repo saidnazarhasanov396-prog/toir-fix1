@@ -27,6 +27,7 @@ import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.util.PartyLegalDetailsUtils;
 import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -136,9 +137,7 @@ public class ContractorService {
                 contractor.getEmail(),
                 contractor.getSpecialization(),
                 contractor.getDirectorName(),
-                contractor.getBankName(),
-                contractor.getBankAccount(),
-                contractor.getMfo(),
+                PartyLegalDetailsUtils.toBankAccountDtos(contractor.getBankAccounts()),
                 contractor.getStatus() == null ? null : contractor.getStatus().name(),
                 contracts.stream().map(ContractorContractDto::from).toList(),
                 workOrderRefs,
@@ -447,15 +446,13 @@ public class ContractorService {
 
     private void apply(Contractor entity, ContractorRequest request) {
         entity.setName(request.name());
-        entity.setTaxNumber(request.taxNumber());
+        entity.setTaxNumber(PartyLegalDetailsUtils.normalizeTaxNumber(request.taxNumber()));
         entity.setContactPerson(request.contactPerson());
         entity.setPhone(request.phone());
         entity.setEmail(request.email());
         entity.setSpecialization(request.specialization());
         entity.setDirectorName(trimToNull(request.directorName()));
-        entity.setBankName(trimToNull(request.bankName()));
-        entity.setBankAccount(trimToNull(request.bankAccount()));
-        entity.setMfo(trimToNull(request.mfo()));
+        entity.setBankAccounts(new ArrayList<>(PartyLegalDetailsUtils.toBankAccounts(request.bankAccounts())));
         if (request.status() != null) entity.setStatus(request.status());
     }
 

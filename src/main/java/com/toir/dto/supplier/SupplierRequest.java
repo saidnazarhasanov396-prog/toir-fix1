@@ -1,7 +1,9 @@
 package com.toir.dto.supplier;
 
+import com.toir.dto.common.BankAccountDto;
 import com.toir.enums.SupplierType;
 import jakarta.validation.constraints.NotBlank;
+import java.util.List;
 
 public record SupplierRequest(
         String code,
@@ -13,9 +15,7 @@ public record SupplierRequest(
         String taxNumber,
         String baseInn,
         String directorName,
-        String bankName,
-        String bankAccount,
-        String mfo,
+        List<BankAccountDto> bankAccounts,
         Boolean active,
         SupplierType supplierType
 ) {

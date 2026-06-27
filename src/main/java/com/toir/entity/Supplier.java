@@ -1,11 +1,19 @@
 package com.toir.entity;
 
+import com.toir.entity.common.BankAccount;
 import com.toir.enums.SupplierType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -37,23 +45,23 @@ public class Supplier extends BaseEntity {
     @Column(columnDefinition = "text")
     private String address;
 
-    @Column(name = "tax_number")
+    @Column(name = "tax_number", length = 32)
     private String taxNumber;
 
-    @Column(name = "base_inn")
+    @Column(name = "base_inn", length = 32)
     private String baseInn;
 
     @Column(name = "director_name")
     private String directorName;
 
-    @Column(name = "bank_name")
-    private String bankName;
-
-    @Column(name = "bank_account")
-    private String bankAccount;
-
-    @Column(name = "mfo")
-    private String mfo;
+    @Builder.Default
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(
+            name = "supplier_bank_accounts",
+            joinColumns = @JoinColumn(name = "supplier_id")
+    )
+    @OrderColumn(name = "account_order")
+    private List<BankAccount> bankAccounts = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "supplier_type", nullable = false, length = 32)
