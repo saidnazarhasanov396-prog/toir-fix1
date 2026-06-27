@@ -113,6 +113,31 @@ class ContractorServiceTest {
         assertThat(detail.summary().pendingActualCostReview()).isEqualTo(1);
     }
 
+    @Test
+    void findDetailByIdIncludesLegalAndBankDetails() {
+        UUID contractorId = UUID.randomUUID();
+        Contractor contractor = contractor(contractorId);
+        contractor.setDirectorName("Karimov A.A.");
+        contractor.setBankName("NBU");
+        contractor.setBankAccount("20208000123456789");
+        contractor.setMfo("00401");
+
+        when(repository.findByIdAndIsDeletedFalse(contractorId)).thenReturn(Optional.of(contractor));
+        when(contractorContractRepository.findAllByContractorIdAndIsDeletedFalse(contractorId))
+                .thenReturn(List.of());
+        when(contractorWorkRepository.findAllByContractorIdAndIsDeletedFalse(contractorId))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(contractorId))
+                .thenReturn(List.of());
+
+        var detail = service.findDetailById(contractorId);
+
+        assertThat(detail.directorName()).isEqualTo("Karimov A.A.");
+        assertThat(detail.bankName()).isEqualTo("NBU");
+        assertThat(detail.bankAccount()).isEqualTo("20208000123456789");
+        assertThat(detail.mfo()).isEqualTo("00401");
+    }
+
     private Contractor contractor(UUID id) {
         Contractor contractor = new Contractor();
         contractor.setId(id);

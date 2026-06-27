@@ -54,6 +54,8 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
                     lower(s.code) like lower(concat('%', :search, '%'))
                     or lower(s.name) like lower(concat('%', :search, '%'))
                     or lower(coalesce(s.contactPerson, '')) like lower(concat('%', :search, '%'))
+                    or lower(coalesce(s.taxNumber, '')) like lower(concat('%', :search, '%'))
+                    or lower(coalesce(s.baseInn, '')) like lower(concat('%', :search, '%'))
                   )
             order by s.updatedAt desc
             """)
@@ -62,4 +64,12 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
             @Param("active") Boolean active,
             @Param("supplierType") SupplierType supplierType
     );
+
+    @Query("""
+            select s from Supplier s
+            where s.isDeleted = false
+              and s.baseInn = :baseInn
+            order by s.updatedAt desc
+            """)
+    List<Supplier> findAllByBaseInn(@Param("baseInn") String baseInn);
 }

@@ -135,6 +135,10 @@ public class ContractorService {
                 contractor.getPhone(),
                 contractor.getEmail(),
                 contractor.getSpecialization(),
+                contractor.getDirectorName(),
+                contractor.getBankName(),
+                contractor.getBankAccount(),
+                contractor.getMfo(),
                 contractor.getStatus() == null ? null : contractor.getStatus().name(),
                 contracts.stream().map(ContractorContractDto::from).toList(),
                 workOrderRefs,
@@ -448,7 +452,19 @@ public class ContractorService {
         entity.setPhone(request.phone());
         entity.setEmail(request.email());
         entity.setSpecialization(request.specialization());
+        entity.setDirectorName(trimToNull(request.directorName()));
+        entity.setBankName(trimToNull(request.bankName()));
+        entity.setBankAccount(trimToNull(request.bankAccount()));
+        entity.setMfo(trimToNull(request.mfo()));
         if (request.status() != null) entity.setStatus(request.status());
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String nextCode() {
