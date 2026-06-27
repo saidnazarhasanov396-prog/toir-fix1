@@ -39,11 +39,11 @@ public class MxikController {
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")
     public ResponseEntity<Page<MxikDto>> list(
-            @RequestParam(required = false) String search,
+            @RequestParam(required = false, name = "searchParam") String searchParam,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size
+            @RequestParam(defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(service.findAll(search, page, size));
+        return ResponseEntity.ok(service.findAll(searchParam, page, size));
     }
 
     @GetMapping("/{id}")
@@ -52,19 +52,19 @@ public class MxikController {
         return ResponseEntity.ok(service.findById(id));
     }
 
-    @PostMapping
+    @PostMapping("/create")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_CREATE')")
     public ResponseEntity<MxikDto> create(@Valid @RequestBody MxikRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
+        return ResponseEntity.ok(service.create(request));
     }
 
-    @PutMapping("/{id}")
+    @PutMapping("/update/{id}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_UPDATE')")
     public ResponseEntity<MxikDto> update(@PathVariable UUID id, @Valid @RequestBody MxikRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/delete/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_DELETE')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
@@ -78,19 +78,27 @@ public class MxikController {
         return ResponseEntity.ok(service.listGroupCounts());
     }
 
+    @GetMapping("/catalog/classes")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")
+    public ResponseEntity<List<MxikNameCountProjection>> classes(@RequestParam String groupName) {
+        return ResponseEntity.ok(service.listClassCounts(groupName));
+    }
+
+    @GetMapping("/catalog/positions")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")
+    public ResponseEntity<List<MxikNameCountProjection>> positions(@RequestParam String className) {
+        return ResponseEntity.ok(service.listPositionCounts(className));
+    }
+
     @GetMapping("/catalog/sub-positions")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")
-    public ResponseEntity<List<MxikNameCountProjection>> subPositions(@RequestParam String groupName) {
-        return ResponseEntity.ok(service.listSubPositionCounts(groupName));
+    public ResponseEntity<List<MxikNameCountProjection>> subPositions(@RequestParam String positionName) {
+        return ResponseEntity.ok(service.listSubPositionCounts(positionName));
     }
 
     @GetMapping("/catalog/mxiks")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_READ')")
-    public ResponseEntity<Page<MxikNameCodeCountProjection>> mxiks(
-            @RequestParam String positionName,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size
-    ) {
-        return ResponseEntity.ok(service.listMxikCounts(positionName, page, size));
+    public ResponseEntity<List<MxikNameCodeCountProjection>> mxiks(@RequestParam String subPositionName) {
+        return ResponseEntity.ok(service.listMxikCounts(subPositionName));
     }
 }

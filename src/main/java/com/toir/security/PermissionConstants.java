@@ -40,6 +40,7 @@ public final class PermissionConstants {
     public static final String REPAIR_REQUEST_ASSIGN = "REPAIR_REQUEST_ASSIGN";
     public static final String REPAIR_REQUEST_REJECT = "REPAIR_REQUEST_REJECT";
     public static final String REPAIR_REQUEST_WARRANTY_DECISION = "REPAIR_REQUEST_WARRANTY_DECISION";
+    public static final String REPAIR_REQUEST_WARRANTY_OVERRIDE = "REPAIR_REQUEST_WARRANTY_OVERRIDE";
     public static final String REPAIR_REQUEST_CLOSE = "REPAIR_REQUEST_CLOSE";
     public static final String DEFECT_READ = "DEFECT_READ";
     public static final String DEFECT_CREATE = "DEFECT_CREATE";

@@ -58,6 +58,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.security.PermissionConstants;
+import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.MeterService;
 import com.toir.service.NotificationService;
@@ -294,9 +295,15 @@ public class RepairRequestService {
         RepairRequest entity = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Repair request not found: " + id));
 
-        if (request.warrantyHandling() == WarrantyHandling.EMERGENCY_OVERRIDE
-                && (request.emergencyReason() == null || request.emergencyReason().isBlank())) {
-            throw RestException.badRequest("emergencyReason is required for EMERGENCY_OVERRIDE");
+        if (request.warrantyHandling() == WarrantyHandling.EMERGENCY_OVERRIDE) {
+            if (request.emergencyReason() == null || request.emergencyReason().isBlank()) {
+                throw RestException.badRequest("emergencyReason is required for EMERGENCY_OVERRIDE");
+            }
+            if (!scopeAccessService.hasAuthority(PermissionConstants.REPAIR_REQUEST_WARRANTY_OVERRIDE)
+                    && !scopeAccessService.isScopeAdmin()) {
+                throw RestException.forbidden(
+                        "REPAIR_REQUEST_WARRANTY_OVERRIDE permission required for EMERGENCY_OVERRIDE");
+            }
         }
 
         entity.setWarrantyHandling(request.warrantyHandling());
