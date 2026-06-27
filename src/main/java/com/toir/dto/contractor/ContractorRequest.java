@@ -12,5 +12,9 @@ public record ContractorRequest(
         String phone,
         @Email String email,
         String specialization,
+        String directorName,
+        String bankName,
+        String bankAccount,
+        String mfo,
         ContractorStatus status
 ) {}

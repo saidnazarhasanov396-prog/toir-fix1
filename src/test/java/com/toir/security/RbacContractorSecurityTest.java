@@ -82,7 +82,7 @@ class RbacContractorSecurityTest {
     void systemAdminCanReadContractorsWithContent() throws Exception {
         UUID contractorId = UUID.randomUUID();
         when(contractorService.findAll(isNull(), isNull(), isNull())).thenReturn(List.of(
-                new ContractorDto(contractorId, "CTR-ADMIN", "Admin Contractor", null, null, null, null, null, null, null)
+                new ContractorDto(contractorId, "CTR-ADMIN", "Admin Contractor", null, null, null, null, null, null, null, null, null, null, null)
         ));
 
         mockMvc.perform(get("/api/v1/contractors?page=0&size=5"))
@@ -96,7 +96,7 @@ class RbacContractorSecurityTest {
     void contractorReadCanReadContractorsAndRelatedRegisters() throws Exception {
         UUID contractorId = UUID.randomUUID();
         when(contractorService.findAll(isNull(), isNull(), isNull())).thenReturn(List.of(
-                new ContractorDto(contractorId, "CTR-1", "Contractor", null, null, null, null, null, null, null)
+                new ContractorDto(contractorId, "CTR-1", "Contractor", null, null, null, null, null, null, null, null, null, null, null)
         ));
         when(contractorWorkService.findByContractor(any())).thenReturn(List.of());
         when(contractorContractService.findByContractor(contractorId)).thenReturn(List.of());

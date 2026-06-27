@@ -128,6 +128,14 @@ public class SupplierService {
         supplier.setEmail(trimToNull(request.email()));
         supplier.setAddress(trimToNull(request.address()));
         supplier.setTaxNumber(trimToNull(request.taxNumber()));
+        supplier.setBaseInn(resolveBaseInn(
+                trimToNull(request.taxNumber()),
+                trimToNull(request.baseInn())
+        ));
+        supplier.setDirectorName(trimToNull(request.directorName()));
+        supplier.setBankName(trimToNull(request.bankName()));
+        supplier.setBankAccount(trimToNull(request.bankAccount()));
+        supplier.setMfo(trimToNull(request.mfo()));
         supplier.setSupplierType(request.supplierType() != null ? request.supplierType() : SupplierType.BOTH);
         if (request.active() != null) {
             supplier.setActive(request.active());
@@ -157,5 +165,23 @@ public class SupplierService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String resolveBaseInn(String taxNumber, String explicitBaseInn) {
+        if (explicitBaseInn != null && !explicitBaseInn.isBlank()) {
+            return explicitBaseInn.trim();
+        }
+        if (taxNumber == null || taxNumber.isBlank()) {
+            return null;
+        }
+        String trimmed = taxNumber.trim();
+        int underscoreIdx = trimmed.lastIndexOf('_');
+        if (underscoreIdx > 0) {
+            String suffix = trimmed.substring(underscoreIdx + 1);
+            if (suffix.matches("\\d+")) {
+                return trimmed.substring(0, underscoreIdx);
+            }
+        }
+        return trimmed;
     }
 }

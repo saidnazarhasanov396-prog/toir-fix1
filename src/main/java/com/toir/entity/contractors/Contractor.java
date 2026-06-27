@@ -30,6 +30,18 @@ public class Contractor extends BaseEntity {
     private String email;
     private String specialization;
 
+    @Column(name = "director_name")
+    private String directorName;
+
+    @Column(name = "bank_name")
+    private String bankName;
+
+    @Column(name = "bank_account")
+    private String bankAccount;
+
+    @Column(name = "mfo")
+    private String mfo;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ContractorStatus status = ContractorStatus.ACTIVE;
