@@ -4,9 +4,9 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://192.168.1.7:5432/toirdb
-    username: toir-user
-    password: 5oe1z42pNm0D1ohP13Z1
+    url: jdbc:postgresql://192.168.1.27:5432/mycoaltoirdb
+    username: mycoal-toir-user
+    password: 024fgUL3o07J65y3BxzC
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
