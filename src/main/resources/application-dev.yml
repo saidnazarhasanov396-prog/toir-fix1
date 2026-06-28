@@ -35,7 +35,7 @@ app:
   security:
     jwt:
       # Local/dev/demo only. Production must use TOIR_JWT_SECRET from the environment or secret manager.
-      secret: test-only-local-demo-jwt-secret-minimum-32-bytes
+      secret: ${JWT_SECRET:KXKeIaA8If2ILfuzmRwhKSp2EMZauqW0YVdUjDUgriw}
       expiration-minutes: 720
       issuer: toir-backend
   jackson:
