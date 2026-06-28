@@ -17,7 +17,7 @@ compile:
   image: maven:3.9.9-eclipse-temurin-21
   stage: compile
   script:
-    - mvn clean package -DskipTests --no-transfer-progress
+    - mvn clean package -Dmaven.test.skip=true --no-transfer-progress
   artifacts:
     paths:
       - target/*.jar
