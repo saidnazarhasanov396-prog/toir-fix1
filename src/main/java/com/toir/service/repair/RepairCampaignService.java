@@ -250,14 +250,13 @@ public class RepairCampaignService {
         assertNoActiveWorkOrders(workOrders, "Cannot close campaign; active work order remains");
         List<ActualCost> actualCosts = campaignActualCosts(workOrders);
         CampaignCostTotals totals = costTotals(actualCosts);
-        if (actualCosts.stream()
-                .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED
-                        || cost.getStatus() == ActualCostStatus.PENDING)
-                .anyMatch(cost -> cost.getBudgetLineId() == null)) {
-            throw RestException.badRequest("Cannot close campaign while actual costs are not allocated to budget lines");
-        }
         if (totals.pendingActual() > 0) {
             throw RestException.badRequest("Cannot close campaign while pending actual costs exist");
+        }
+        if (actualCosts.stream()
+                .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED)
+                .anyMatch(cost -> cost.getBudgetLineId() == null)) {
+            throw RestException.badRequest("Cannot close campaign while approved actual costs are not allocated to budget lines");
         }
 
         RepairCampaign before = snapshot(c);

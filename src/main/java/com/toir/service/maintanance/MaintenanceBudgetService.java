@@ -3,7 +3,6 @@ package com.toir.service.maintanance;
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.entity.Department;
-import com.toir.entity.projects.BudgetEvent;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.AuditAction;
@@ -12,7 +11,6 @@ import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
-import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
@@ -21,9 +19,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -40,7 +36,6 @@ public class MaintenanceBudgetService {
     private final DepartmentRepository departmentRepository;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
-    private final BudgetEventRepository budgetEventRepository;
 
     @Transactional(readOnly = true)
     public List<MaintenanceBudgetDto> findByYear(int year) {
@@ -132,157 +127,32 @@ public class MaintenanceBudgetService {
     @Transactional
     @Deprecated(forRemoval = false)
     public MaintenanceBudgetDto approve(UUID id) {
-        return approve(id, null, null);
-    }
-
-    @Transactional
-    public MaintenanceBudgetDto submit(UUID id, UUID actorUserId, String comment) {
-        MaintenanceBudget budget = getOrThrow(id);
-        assertCanAccessBudget(budget);
-        if (budget.getStatus() != BudgetStatus.DRAFT && budget.getStatus() != BudgetStatus.REJECTED) {
-            throw RestException.badRequest("Only DRAFT or REJECTED budgets can be submitted");
-        }
-        return changeStatus(budget, BudgetStatus.SUBMITTED, actorUserId, comment, "STATUS_SUBMITTED");
-    }
-
-    @Transactional
-    public MaintenanceBudgetDto approve(UUID id, UUID actorUserId, String comment) {
         MaintenanceBudget b = getOrThrow(id);
         assertCanAccessBudget(b);
-        if (b.getStatus() != BudgetStatus.SUBMITTED) {
-            throw RestException.badRequest("Only SUBMITTED budgets can be approved");
+        if (b.getStatus() != BudgetStatus.DRAFT) {
+            throw RestException.badRequest("Only DRAFT budgets can be approved");
         }
-        return changeStatus(b, BudgetStatus.APPROVED, actorUserId, comment, "STATUS_APPROVED");
-    }
+        b.setStatus(BudgetStatus.APPROVED);
+        MaintenanceBudget save = repository.save(b);
 
-    @Transactional
-    public MaintenanceBudgetDto reject(UUID id, UUID actorUserId, String comment) {
-        if (comment == null || comment.isBlank()) {
-            throw RestException.badRequest("Budget rejection comment is required");
-        }
-        MaintenanceBudget budget = getOrThrow(id);
-        assertCanAccessBudget(budget);
-        if (budget.getStatus() != BudgetStatus.SUBMITTED) {
-            throw RestException.badRequest("Only SUBMITTED budgets can be rejected");
-        }
-        return changeStatus(budget, BudgetStatus.REJECTED, actorUserId, comment, "STATUS_REJECTED");
-    }
-
-    @Transactional
-    public MaintenanceBudgetDto lock(UUID id, UUID actorUserId, String comment) {
-        MaintenanceBudget budget = getOrThrow(id);
-        assertCanAccessBudget(budget);
-        if (budget.getStatus() != BudgetStatus.APPROVED) {
-            throw RestException.badRequest("Only APPROVED budgets can be locked");
-        }
-        return changeStatus(budget, BudgetStatus.LOCKED, actorUserId, comment, "STATUS_LOCKED");
-    }
-
-    @Transactional
-    public MaintenanceBudgetDto close(UUID id, UUID actorUserId, String comment) {
-        MaintenanceBudget budget = getOrThrow(id);
-        assertCanAccessBudget(budget);
-        if (budget.getStatus() != BudgetStatus.APPROVED && budget.getStatus() != BudgetStatus.LOCKED) {
-            throw RestException.badRequest("Only APPROVED or LOCKED budgets can be closed");
-        }
-        return changeStatus(budget, BudgetStatus.CLOSED, actorUserId, comment, "STATUS_CLOSED");
-    }
-
-    @Transactional
-    public MaintenanceBudgetDto reopen(UUID id, UUID actorUserId, String comment) {
-        if (comment == null || comment.isBlank()) {
-            throw RestException.badRequest("Budget reopen comment is required");
-        }
-        MaintenanceBudget budget = getOrThrow(id);
-        assertCanAccessBudget(budget);
-        if (budget.getStatus() != BudgetStatus.CLOSED) {
-            throw RestException.badRequest("Only CLOSED budgets can be reopened");
-        }
-        return changeStatus(budget, BudgetStatus.LOCKED, actorUserId, comment, "STATUS_REOPENED");
-    }
-
-    @Transactional
-    public MaintenanceBudgetDto transfer(UUID budgetId,
-                                         UUID fromBudgetLineId,
-                                         UUID toBudgetLineId,
-                                         double amount,
-                                         UUID actorUserId,
-                                         String comment) {
-        if (fromBudgetLineId == null || toBudgetLineId == null || fromBudgetLineId.equals(toBudgetLineId)) {
-            throw RestException.badRequest("Transfer requires two different budget lines");
-        }
-        if (amount <= 0) {
-            throw RestException.badRequest("Transfer amount must be positive");
-        }
-        MaintenanceBudget budget = getOrThrow(budgetId);
-        assertCanAccessBudget(budget);
-        assertBudgetCanChangePlan(budget);
-        BudgetLine from = budgetLineOrThrow(fromBudgetLineId);
-        BudgetLine to = budgetLineOrThrow(toBudgetLineId);
-        assertLineBelongsToBudget(from, budget);
-        assertLineBelongsToBudget(to, budget);
-
-        double newFromAmount = from.getPlannedAmount() - amount;
-        assertPlannedAmountNotBelowActual(from, newFromAmount);
-        from.setPlannedAmount(newFromAmount);
-        to.setPlannedAmount(to.getPlannedAmount() + amount);
-        lineRepository.save(from);
-        lineRepository.save(to);
-        MaintenanceBudget saved = repository.save(budget);
-        recordBudgetEvent(
-                budget.getId(),
-                null,
-                "LINE_TRANSFERRED",
-                "{\"fromBudgetLineId\":\"" + fromBudgetLineId + "\",\"toBudgetLineId\":\"" + toBudgetLineId
-                        + "\",\"amount\":" + amount + "}",
-                "{\"fromPlannedAmount\":" + from.getPlannedAmount() + ",\"toPlannedAmount\":"
-                        + to.getPlannedAmount() + "}",
-                actorUserId,
-                comment
+        auditBuilderService.log(
+                "maintenance_budget",
+                save.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.MAINTENANCE_BUDGET,
+                "Бюджет обслуживания обновлен",
+                b,
+                save
         );
-        return MaintenanceBudgetDto.from(saved);
-    }
-
-    @Transactional
-    public MaintenanceBudgetDto reviseLine(UUID budgetId,
-                                           UUID budgetLineId,
-                                           double plannedAmount,
-                                           UUID actorUserId,
-                                           String comment) {
-        if (plannedAmount <= 0) {
-            throw RestException.badRequest("Budget line planned amount must be positive");
-        }
-        MaintenanceBudget budget = getOrThrow(budgetId);
-        assertCanAccessBudget(budget);
-        assertBudgetCanChangePlan(budget);
-        BudgetLine line = budgetLineOrThrow(budgetLineId);
-        assertLineBelongsToBudget(line, budget);
-        assertPlannedAmountNotBelowActual(line, plannedAmount);
-
-        double oldLineAmount = line.getPlannedAmount();
-        double delta = plannedAmount - oldLineAmount;
-        line.setPlannedAmount(plannedAmount);
-        budget.setTotalPlanned(budget.getTotalPlanned() + delta);
-        lineRepository.save(line);
-        MaintenanceBudget saved = repository.save(budget);
-        recordBudgetEvent(
-                budget.getId(),
-                line.getId(),
-                "LINE_REVISED",
-                "{\"plannedAmount\":" + oldLineAmount + "}",
-                "{\"plannedAmount\":" + plannedAmount + ",\"budgetTotalPlanned\":" + budget.getTotalPlanned() + "}",
-                actorUserId,
-                comment
-        );
-        return MaintenanceBudgetDto.from(saved);
+        return MaintenanceBudgetDto.from(save);
     }
 
     @Transactional(readOnly = true)
     public MaintenanceBudgetDto validateCanApprove(UUID id) {
         MaintenanceBudget b = getOrThrow(id);
         assertCanAccessBudget(b);
-        if (b.getStatus() != BudgetStatus.SUBMITTED) {
-            throw RestException.badRequest("Only SUBMITTED budgets can be approved");
+        if (b.getStatus() != BudgetStatus.DRAFT) {
+            throw RestException.badRequest("Only DRAFT budgets can be approved");
         }
         return MaintenanceBudgetDto.from(b);
     }
@@ -322,43 +192,9 @@ public class MaintenanceBudgetService {
         return BudgetLineDto.from(budgetLine);
     }
 
-    private MaintenanceBudgetDto changeStatus(MaintenanceBudget budget,
-                                              BudgetStatus newStatus,
-                                              UUID actorUserId,
-                                              String comment,
-                                              String eventType) {
-        BudgetStatus oldStatus = budget.getStatus();
-        budget.setStatus(newStatus);
-        MaintenanceBudget saved = repository.save(budget);
-        auditBuilderService.log(
-                "maintenance_budget",
-                saved.getId().toString(),
-                AuditAction.UPDATE,
-                AuditModule.MAINTENANCE_BUDGET,
-                "Бюджет обслуживания обновлен",
-                null,
-                saved
-        );
-        recordBudgetEvent(
-                saved.getId(),
-                null,
-                eventType,
-                "{\"status\":\"" + oldStatus + "\"}",
-                "{\"status\":\"" + newStatus + "\"}",
-                actorUserId,
-                comment
-        );
-        return MaintenanceBudgetDto.from(saved);
-    }
-
     private MaintenanceBudget getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Budget not found: " + id));
-    }
-
-    private BudgetLine budgetLineOrThrow(UUID id) {
-        return lineRepository.findByIdAndIsDeletedFalse(id)
-                .orElseThrow(() -> RestException.notFound("Budget line not found: " + id));
     }
 
     private void assertCanCreateBudget(UUID departmentId) {
@@ -381,44 +217,6 @@ public class MaintenanceBudgetService {
 
     private AccessDeniedException forbidden() {
         return new AccessDeniedException("Access denied by budget scope");
-    }
-
-    private void assertBudgetCanChangePlan(MaintenanceBudget budget) {
-        Set<BudgetStatus> editable = EnumSet.of(BudgetStatus.DRAFT, BudgetStatus.REJECTED, BudgetStatus.APPROVED);
-        if (!editable.contains(budget.getStatus())) {
-            throw RestException.badRequest("Budget plan cannot be changed from status " + budget.getStatus());
-        }
-    }
-
-    private void assertLineBelongsToBudget(BudgetLine line, MaintenanceBudget budget) {
-        if (line.getBudget() == null || !Objects.equals(line.getBudget().getId(), budget.getId())) {
-            throw RestException.badRequest("Budget line does not belong to budget: " + budget.getId());
-        }
-    }
-
-    private void assertPlannedAmountNotBelowActual(BudgetLine line, double plannedAmount) {
-        if (plannedAmount + 0.000001d < line.getActualAmount()) {
-            throw RestException.badRequest("Budget line planned amount cannot be below approved actual amount");
-        }
-    }
-
-    private void recordBudgetEvent(UUID budgetId,
-                                   UUID budgetLineId,
-                                   String eventType,
-                                   String oldValues,
-                                   String newValues,
-                                   UUID actorUserId,
-                                   String comment) {
-        BudgetEvent event = new BudgetEvent();
-        event.setBudgetId(budgetId);
-        event.setBudgetLineId(budgetLineId);
-        event.setEventType(eventType);
-        event.setOldValues(oldValues);
-        event.setNewValues(newValues);
-        event.setActorUserId(actorUserId);
-        event.setComment(comment == null ? null : comment.trim());
-        event.setOccurredAt(Instant.now());
-        budgetEventRepository.save(event);
     }
 
     private Comparator<MaintenanceBudget> budgetComparator(String sortBy) {

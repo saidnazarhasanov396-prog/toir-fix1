@@ -1,6 +1,4 @@
 package com.toir.controller;
-import com.toir.dto.actualcost.ActualCostAllocationRequest;
-import com.toir.dto.actualcost.ActualCostCorrectionRequest;
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
@@ -49,23 +47,6 @@ public class ActualCostController {
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_REJECT')")
     public ResponseEntity<ActualCostDto> reject(@PathVariable UUID id, @RequestParam UUID reviewerId, @RequestParam String comment) {
-        if (comment == null || comment.isBlank()) {
-            throw RestException.badRequest("Rejection comment is required");
-        }
-        return ResponseEntity.ok(service.review(id, false, reviewerId, comment));
-    }
-
-    @PostMapping("/{id}/allocate-budget-line")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_ALLOCATE')")
-    public ResponseEntity<ActualCostDto> allocateBudgetLine(@PathVariable UUID id,
-                                                            @Valid @RequestBody ActualCostAllocationRequest request) {
-        return ResponseEntity.ok(service.allocateBudgetLine(id, request.budgetLineId(), null, request.comment()));
-    }
-
-    @PostMapping("/{id}/request-correction")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_REQUEST_CORRECTION')")
-    public ResponseEntity<ActualCostDto> requestCorrection(@PathVariable UUID id,
-                                                           @Valid @RequestBody ActualCostCorrectionRequest request) {
-        return ResponseEntity.ok(service.requestCorrection(id, null, request.comment()));
+        throw RestException.conflict("Use /api/v1/approvals/{id}/reject to reject approval requests");
     }
 }
