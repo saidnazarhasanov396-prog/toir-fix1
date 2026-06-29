@@ -131,7 +131,6 @@ class AnalyticsServiceTest {
     @Test
     void analyticsForEquipmentReturnsDowntimeHours() {
         UUID equipmentId = UUID.randomUUID();
-        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
         when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
         when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(eq(equipmentId))).thenReturn(List.of());
         when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
@@ -167,10 +166,76 @@ class AnalyticsServiceTest {
                 .thenReturn(List.of(firstDowntime, secondDowntime));
         when(actualCostRepository.sumAmountByEquipmentId(equipmentId)).thenReturn(0.0);
 
+        Equipment equipment = equipment(equipmentId);
+        equipment.setCreatedAt(Instant.parse("2025-01-01T00:00:00Z"));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+
         EquipmentAnalyticsResponse response = service.equipmentAnalytics(equipmentId);
 
         assertThat(response.downtimeMinutes()).isEqualTo(120);
         assertThat(response.downtimeHours()).isEqualTo(2.0);
+        assertThat(response.availability()).isEqualTo(95.0);
+    }
+
+    @Test
+    void analyticsUsesCalculatedAvailabilityWhenStoredMetricAvailabilityIsNull() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setCreatedAt(Instant.parse("2025-01-01T00:00:00Z"));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(eq(equipmentId))).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(eq(equipmentId)))
+                .thenReturn(List.of(ReliabilityMetric.builder()
+                        .equipmentId(equipmentId)
+                        .metricDate(LocalDate.of(2026, 5, 1))
+                        .mtbfHours(10.0)
+                        .mttrHours(2.0)
+                        .availability(null)
+                        .build()));
+        DowntimeEvent downtime = DowntimeEvent.builder()
+                .equipmentId(equipmentId)
+                .departmentId(UUID.randomUUID())
+                .startAt(Instant.parse("2026-05-01T10:00:00Z"))
+                .endAt(Instant.parse("2026-05-01T11:00:00Z"))
+                .durationMinutes(60)
+                .type(DowntimeType.EMERGENCY)
+                .description("Stop")
+                .build();
+        downtime.setId(UUID.randomUUID());
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(eq(equipmentId)))
+                .thenReturn(List.of(downtime));
+        when(actualCostRepository.sumAmountByEquipmentId(equipmentId)).thenReturn(0.0);
+
+        EquipmentAnalyticsResponse response = service.equipmentAnalytics(equipmentId);
+
+        assertThat(response.availability()).isGreaterThan(0.0);
+        assertThat(response.availability()).isLessThan(100.0);
+    }
+
+    @Test
+    void analyticsNormalizesFractionalStoredAvailabilityToPercent() {
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment(equipmentId)));
+        when(repairRequestRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(defectRepository.findAllByEquipmentIdAndIsDeletedFalse(eq(equipmentId))).thenReturn(List.of());
+        when(workOrderRepository.search(null, null, equipmentId)).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByMetricDateDesc(eq(equipmentId)))
+                .thenReturn(List.of(ReliabilityMetric.builder()
+                        .equipmentId(equipmentId)
+                        .metricDate(LocalDate.of(2026, 5, 1))
+                        .availability(0.95)
+                        .build()));
+        when(downtimeEventRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByStartAtDesc(eq(equipmentId)))
+                .thenReturn(List.of());
+        when(actualCostRepository.sumAmountByEquipmentId(equipmentId)).thenReturn(0.0);
+
+        EquipmentAnalyticsResponse response = service.equipmentAnalytics(equipmentId);
+
+        assertThat(response.availability()).isEqualTo(95.0);
+        assertThat(response.history()).singleElement().satisfies(row ->
+                assertThat(row.availability()).isEqualTo(95.0));
     }
 
     @Test
