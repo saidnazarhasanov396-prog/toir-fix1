@@ -11,7 +11,9 @@ import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,12 +35,40 @@ public class WarehouseBinService {
     private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
-    public List<WarehouseBinDto> list(UUID warehouseId) {
+    public Page<WarehouseBinDto> list(UUID warehouseId,
+                                      String search,
+                                      String zone,
+                                      String aisle,
+                                      String rack,
+                                      String shelfLevel,
+                                      String binType,
+                                      WarehouseQualityZoneType qualityZoneType,
+                                      String temperatureZone,
+                                      String hazardClass,
+                                      Boolean active,
+                                      Boolean blocked,
+                                      Boolean frozen,
+                                      Integer binLevel,
+                                      int page,
+                                      int size) {
         assertWarehouseExists(warehouseId);
-        return binRepository.findAllByWarehouseIdAndIsDeletedFalseOrderByTravelSequenceAscCodeAsc(warehouseId)
-                .stream()
-                .map(WarehouseBinDto::from)
-                .toList();
+        return binRepository.search(
+                warehouseId,
+                trimToNull(search),
+                trimToNull(zone),
+                trimToNull(aisle),
+                trimToNull(rack),
+                trimToNull(shelfLevel),
+                trimToNull(binType),
+                qualityZoneType,
+                trimToNull(temperatureZone),
+                trimToNull(hazardClass),
+                active,
+                blocked,
+                frozen,
+                binLevel,
+                PaginationUtils.pageRequest(page, size)
+        ).map(WarehouseBinDto::from);
     }
 
     @Transactional(readOnly = true)

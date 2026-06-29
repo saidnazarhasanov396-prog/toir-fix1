@@ -7,6 +7,7 @@ import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostAllocationEvent;
+import com.toir.entity.projects.FinancialApprovalRule;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.ActualCostSourceType;
@@ -19,6 +20,7 @@ import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.repository.projects.FinancialApprovalRuleRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.PermissionConstants;
 import com.toir.service.repair.RepairCampaignBudgetLineResolver;
@@ -69,6 +71,9 @@ class ActualCostServiceTest {
 
     @Mock
     BudgetLineRepository budgetLineRepository;
+
+    @Mock
+    FinancialApprovalRuleRepository financialApprovalRuleRepository;
 
     @Mock
     MaintenanceBudgetRepository maintenanceBudgetRepository;
@@ -137,11 +142,100 @@ class ActualCostServiceTest {
             saved.setId(UUID.randomUUID());
             return saved;
         });
+        when(financialApprovalRuleRepository.findFirstMatchingRule(any(), any()))
+                .thenReturn(Optional.empty());
 
         ActualCostDto result = service.create(dto(workOrderId, null, null, null, 100));
 
         assertThat(result.status()).isEqualTo(ActualCostStatus.PENDING);
         assertThat(result.workOrderId()).isEqualTo(workOrderId);
+    }
+
+    @Test
+    void createWritesInitialReviewEventWithDefaultRole() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(departmentId);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder));
+        when(repository.save(any(ActualCost.class))).thenAnswer(inv -> {
+            ActualCost saved = inv.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(financialApprovalRuleRepository.findFirstMatchingRule(eq(departmentId), any()))
+                .thenReturn(Optional.empty());
+
+        service.create(dto(workOrderId, null, null, null, 100));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.toir.entity.projects.ActualCostReviewEvent.class);
+        verify(reviewEventRepository).save(captor.capture());
+        var saved = captor.getValue();
+        assertThat(saved.getActualCostId()).isNotNull();
+        assertThat(saved.getNextApprovalRoleCode()).isEqualTo("FINANCE_MANAGER");
+        assertThat(saved.getEventCode()).isEqualTo("CREATED");
+        assertThat(saved.getEventGroup()).isEqualTo("REVIEW");
+        assertThat(saved.getStatus()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void createWritesInitialReviewEventWithMatchedApprovalRole() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(departmentId);
+        FinancialApprovalRule rule = new FinancialApprovalRule();
+        rule.setRequiredRoleCode("CHIEF_ACCOUNTANT");
+        rule.setEscalateToRoleCode("CFO");
+        rule.setThresholdHours(48);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder));
+        when(repository.save(any(ActualCost.class))).thenAnswer(inv -> {
+            ActualCost saved = inv.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(financialApprovalRuleRepository.findFirstMatchingRule(eq(departmentId), any()))
+                .thenReturn(Optional.of(rule));
+
+        service.create(dto(workOrderId, null, null, null, 100));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.toir.entity.projects.ActualCostReviewEvent.class);
+        verify(reviewEventRepository).save(captor.capture());
+        var saved = captor.getValue();
+        assertThat(saved.getNextApprovalRoleCode()).isEqualTo("CHIEF_ACCOUNTANT");
+        assertThat(saved.getNextEscalationRoleCode()).isEqualTo("CFO");
+        assertThat(saved.getNextThresholdHours()).isEqualTo(48);
+    }
+
+    @Test
+    void createWritesInitialReviewEventForRepairRequestSource() {
+        UUID repairRequestId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        RepairRequest repairRequest = new RepairRequest();
+        repairRequest.setId(repairRequestId);
+        repairRequest.setDepartmentId(departmentId);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
+                .thenReturn(Optional.of(repairRequest));
+        when(repository.save(any(ActualCost.class))).thenAnswer(inv -> {
+            ActualCost saved = inv.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(financialApprovalRuleRepository.findFirstMatchingRule(eq(departmentId), any()))
+                .thenReturn(Optional.empty());
+
+        service.create(dto(null, repairRequestId, null, null, 200));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.toir.entity.projects.ActualCostReviewEvent.class);
+        verify(reviewEventRepository).save(captor.capture());
+        assertThat(captor.getValue().getNextApprovalRoleCode()).isEqualTo("FINANCE_MANAGER");
     }
 
     @Test
@@ -163,6 +257,8 @@ class ActualCostServiceTest {
             saved.setId(UUID.randomUUID());
             return saved;
         });
+        when(financialApprovalRuleRepository.findFirstMatchingRule(any(), any()))
+                .thenReturn(Optional.empty());
 
         ActualCostDto result = service.create(dto(workOrderId, null, null, null, 100));
 
@@ -182,6 +278,8 @@ class ActualCostServiceTest {
             saved.setId(UUID.randomUUID());
             return saved;
         });
+        when(financialApprovalRuleRepository.findFirstMatchingRule(any(), any()))
+                .thenReturn(Optional.empty());
 
         ActualCostDto laborLikeCost = service.create(dto(
                 workOrderId, null, null, null, UUID.randomUUID(), 100, "manual labor adjustment"));
@@ -225,6 +323,8 @@ class ActualCostServiceTest {
             saved.setId(UUID.randomUUID());
             return saved;
         });
+        when(financialApprovalRuleRepository.findFirstMatchingRule(any(), any()))
+                .thenReturn(Optional.empty());
 
         ActualCostDto result = service.create(dto(null, repairRequestId, null, null, 100));
 
@@ -251,6 +351,8 @@ class ActualCostServiceTest {
             saved.setId(UUID.randomUUID());
             return saved;
         });
+        when(financialApprovalRuleRepository.findFirstMatchingRule(any(), any()))
+                .thenReturn(Optional.empty());
 
         ActualCostDto result = service.create(dto(null, null, contractorWorkId, null, 100));
 
@@ -528,6 +630,8 @@ class ActualCostServiceTest {
             saved.setId(UUID.randomUUID());
             return saved;
         });
+        when(financialApprovalRuleRepository.findFirstMatchingRule(any(), any()))
+                .thenReturn(Optional.empty());
 
         ActualCostDto result = service.create(dto(workOrderId, null, null, budgetLineId, 120));
 

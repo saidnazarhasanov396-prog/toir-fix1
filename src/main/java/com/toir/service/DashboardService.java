@@ -249,6 +249,12 @@ public class DashboardService {
                         WorkOrder wo = workOrderById.get(ac.getWorkOrderId());
                         if (wo != null && wo.getDepartmentId() != null) return wo.getDepartmentId();
                     }
+                    if (ac.getRepairRequestId() != null) {
+                        UUID rrDept = repairRequestRepository.findById(ac.getRepairRequestId())
+                                .map(rr -> rr.getDepartmentId())
+                                .orElse(null);
+                        if (rrDept != null) return rrDept;
+                    }
                     return new UUID(0, 0);
                 }));
 
