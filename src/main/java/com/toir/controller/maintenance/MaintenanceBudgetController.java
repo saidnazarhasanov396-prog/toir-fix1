@@ -2,6 +2,8 @@ package com.toir.controller.maintenance;
 
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUser;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import com.toir.util.PaginationUtils;
@@ -62,55 +64,62 @@ public class MaintenanceBudgetController {
     @PostMapping("/{id}/submit")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_UPDATE')")
     public ResponseEntity<MaintenanceBudgetDto> submit(@PathVariable UUID id,
+                                                       @CurrentUser AuthenticatedUser user,
                                                        @RequestBody(required = false) BudgetCommandRequest request) {
-        return ResponseEntity.ok(service.submit(id, null, comment(request)));
+        return ResponseEntity.ok(service.submit(id, currentUserId(user), comment(request)));
     }
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_APPROVE')")
     public ResponseEntity<MaintenanceBudgetDto> approve(@PathVariable UUID id,
+                                                        @CurrentUser AuthenticatedUser user,
                                                         @RequestBody(required = false) BudgetCommandRequest request) {
-        return ResponseEntity.ok(service.approve(id, null, comment(request)));
+        return ResponseEntity.ok(service.approve(id, currentUserId(user), comment(request)));
     }
 
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_APPROVE')")
     public ResponseEntity<MaintenanceBudgetDto> reject(@PathVariable UUID id,
+                                                       @CurrentUser AuthenticatedUser user,
                                                        @RequestBody(required = false) BudgetCommandRequest request) {
-        return ResponseEntity.ok(service.reject(id, null, comment(request)));
+        return ResponseEntity.ok(service.reject(id, currentUserId(user), comment(request)));
     }
 
     @PostMapping("/{id}/lock")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_UPDATE')")
     public ResponseEntity<MaintenanceBudgetDto> lock(@PathVariable UUID id,
+                                                     @CurrentUser AuthenticatedUser user,
                                                      @RequestBody(required = false) BudgetCommandRequest request) {
-        return ResponseEntity.ok(service.lock(id, null, comment(request)));
+        return ResponseEntity.ok(service.lock(id, currentUserId(user), comment(request)));
     }
 
     @PostMapping("/{id}/close")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_CLOSE')")
     public ResponseEntity<MaintenanceBudgetDto> close(@PathVariable UUID id,
+                                                      @CurrentUser AuthenticatedUser user,
                                                       @RequestBody(required = false) BudgetCommandRequest request) {
-        return ResponseEntity.ok(service.close(id, null, comment(request)));
+        return ResponseEntity.ok(service.close(id, currentUserId(user), comment(request)));
     }
 
     @PostMapping("/{id}/reopen")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_REOPEN')")
     public ResponseEntity<MaintenanceBudgetDto> reopen(@PathVariable UUID id,
+                                                       @CurrentUser AuthenticatedUser user,
                                                        @RequestBody(required = false) BudgetCommandRequest request) {
-        return ResponseEntity.ok(service.reopen(id, null, comment(request)));
+        return ResponseEntity.ok(service.reopen(id, currentUserId(user), comment(request)));
     }
 
     @PostMapping("/{id}/transfer")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_TRANSFER')")
     public ResponseEntity<MaintenanceBudgetDto> transfer(@PathVariable UUID id,
+                                                         @CurrentUser AuthenticatedUser user,
                                                          @RequestBody BudgetTransferRequest request) {
         return ResponseEntity.ok(service.transfer(
                 id,
                 request.fromBudgetLineId(),
                 request.toBudgetLineId(),
                 request.amount(),
-                null,
+                currentUserId(user),
                 request.comment()
         ));
     }
@@ -118,12 +127,13 @@ public class MaintenanceBudgetController {
     @PostMapping("/{id}/revise")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_REVISE')")
     public ResponseEntity<MaintenanceBudgetDto> revise(@PathVariable UUID id,
+                                                       @CurrentUser AuthenticatedUser user,
                                                        @RequestBody BudgetRevisionRequest request) {
         return ResponseEntity.ok(service.reviseLine(
                 id,
                 request.budgetLineId(),
                 request.plannedAmount(),
-                null,
+                currentUserId(user),
                 request.comment()
         ));
     }
@@ -139,5 +149,9 @@ public class MaintenanceBudgetController {
     }
 
     public record BudgetRevisionRequest(UUID budgetLineId, double plannedAmount, String comment) {
+    }
+
+    private UUID currentUserId(AuthenticatedUser user) {
+        return user != null ? UUID.fromString(user.id()) : null;
     }
 }

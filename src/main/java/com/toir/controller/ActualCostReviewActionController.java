@@ -16,9 +16,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/budgets/actual-costs")
@@ -186,45 +194,167 @@ public class ActualCostReviewActionController {
     @GetMapping(value = "/review-queue/export", produces = "text/csv;charset=UTF-8")
     @PreAuthorize(EXPORT_AUTH)
     public ResponseEntity<String> exportReviewQueue(@RequestParam(required = false) String search,
+                                                    @RequestParam(required = false) String status,
+                                                    @RequestParam(required = false) Boolean overdueOnly,
+                                                    @RequestParam(required = false) Boolean myQueue,
+                                                    @RequestParam(required = false) String attentionMode,
+                                                    @RequestParam(required = false) Integer reminderWindowHours,
+                                                    @RequestParam(required = false) String approvalRoleCode,
+                                                    @RequestParam(required = false) UUID departmentId,
+                                                    @RequestParam(required = false) UUID contractorId,
+                                                    @RequestParam(required = false) UUID actualCostId,
+                                                    @RequestParam(required = false) String actualCostIds,
                                                     @RequestParam(required = false) String allocationStatus) {
         return csv("actual-cost-review-queue.csv",
-                service.csv("actual-cost-review-queue.csv", filterByAllocationStatus(service.reviewQueue(search), allocationStatus)));
+                service.csv("actual-cost-review-queue.csv", filterReviewItems(
+                        service.reviewQueue(search),
+                        status,
+                        Boolean.TRUE.equals(overdueOnly),
+                        approvalRoleCode,
+                        null,
+                        departmentId,
+                        contractorId,
+                        attentionMode,
+                        reminderWindowHours,
+                        null,
+                        null,
+                        actualCostId,
+                        actualCostIds,
+                        myQueue,
+                        allocationStatus
+                )));
     }
 
     @GetMapping(value = "/review-history-pack/export", produces = "text/csv;charset=UTF-8")
     @PreAuthorize(EXPORT_AUTH)
     public ResponseEntity<String> exportReviewHistoryPack(@RequestParam(required = false) String search,
+                                                          @RequestParam(required = false) String status,
+                                                          @RequestParam(required = false) UUID costCategoryId,
+                                                          @RequestParam(required = false) UUID departmentId,
+                                                          @RequestParam(required = false) UUID contractorId,
+                                                          @RequestParam(required = false) String dateFrom,
+                                                          @RequestParam(required = false) String dateTo,
+                                                          @RequestParam(required = false) UUID actualCostId,
+                                                          @RequestParam(required = false) String actualCostIds,
                                                           @RequestParam(required = false) String allocationStatus) {
         return csv("actual-cost-review-history-pack.csv",
-                service.csv("actual-cost-review-history-pack.csv", filterByAllocationStatus(service.actualCostRegister(search), allocationStatus)));
+                service.csv("actual-cost-review-history-pack.csv", filterReviewItems(
+                        service.actualCostRegister(search),
+                        status,
+                        null,
+                        null,
+                        costCategoryId,
+                        departmentId,
+                        contractorId,
+                        null,
+                        null,
+                        parseDateStart(dateFrom),
+                        parseDateEnd(dateTo),
+                        actualCostId,
+                        actualCostIds,
+                        null,
+                        allocationStatus
+                )));
     }
 
     @GetMapping(value = "/approval-pack/export", produces = "text/csv;charset=UTF-8")
     @PreAuthorize(EXPORT_AUTH)
     public ResponseEntity<String> exportApprovalPack(@RequestParam(required = false) String search,
+                                                     @RequestParam(required = false) String status,
+                                                     @RequestParam(required = false) Boolean overdueOnly,
+                                                     @RequestParam(required = false) Boolean myQueue,
+                                                     @RequestParam(required = false) String attentionMode,
+                                                     @RequestParam(required = false) Integer reminderWindowHours,
+                                                     @RequestParam(required = false) String approvalRoleCode,
+                                                     @RequestParam(required = false) UUID departmentId,
+                                                     @RequestParam(required = false) UUID contractorId,
+                                                     @RequestParam(required = false) UUID actualCostId,
+                                                     @RequestParam(required = false) String actualCostIds,
                                                      @RequestParam(required = false) String allocationStatus) {
         return csv("actual-cost-review-approval-pack.csv",
-                service.csv("actual-cost-review-approval-pack.csv", filterByAllocationStatus(service.reviewQueue(search), allocationStatus)));
+                service.csv("actual-cost-review-approval-pack.csv", filterReviewItems(
+                        service.reviewQueue(search),
+                        status,
+                        Boolean.TRUE.equals(overdueOnly),
+                        approvalRoleCode,
+                        null,
+                        departmentId,
+                        contractorId,
+                        attentionMode,
+                        reminderWindowHours,
+                        null,
+                        null,
+                        actualCostId,
+                        actualCostIds,
+                        myQueue,
+                        allocationStatus
+                )));
     }
 
     @GetMapping(value = "/review-activity/export", produces = "text/csv;charset=UTF-8")
     @PreAuthorize(EXPORT_AUTH)
-    public ResponseEntity<String> exportReviewActivity(@RequestParam(required = false) String search) {
-        return csv("actual-cost-review-activity.csv", service.activityCsv(service.activity(search)));
+    public ResponseEntity<String> exportReviewActivity(@RequestParam(required = false) String search,
+                                                       @RequestParam(required = false) String eventGroup,
+                                                       @RequestParam(required = false) UUID departmentId,
+                                                       @RequestParam(required = false) String roleCode,
+                                                       @RequestParam(required = false) UUID actualCostId,
+                                                       @RequestParam(required = false) String actualCostIds) {
+        return csv("actual-cost-review-activity.csv", service.activityCsv(filterActivityItems(
+                service.activity(search),
+                eventGroup,
+                departmentId,
+                roleCode,
+                actualCostId,
+                actualCostIds
+        )));
     }
 
     @GetMapping(value = "/handovers/export", produces = "text/csv;charset=UTF-8")
     @PreAuthorize(EXPORT_AUTH)
-    public ResponseEntity<String> exportHandovers(@RequestParam(required = false) String search) {
-        return csv("actual-cost-review-handovers.csv", service.handoversCsv(service.handovers(search)));
+    public ResponseEntity<String> exportHandovers(@RequestParam(required = false) String search,
+                                                  @RequestParam(required = false) UUID departmentId,
+                                                  @RequestParam(required = false) String approvalRoleCode,
+                                                  @RequestParam(required = false) UUID actualCostId,
+                                                  @RequestParam(required = false) String actualCostIds) {
+        return csv("actual-cost-review-handovers.csv", service.handoversCsv(filterHandoverItems(
+                service.handovers(search),
+                departmentId,
+                approvalRoleCode,
+                actualCostId,
+                actualCostIds
+        )));
     }
 
     @GetMapping(value = "/export", produces = "text/csv;charset=UTF-8")
     @PreAuthorize(EXPORT_AUTH)
     public ResponseEntity<String> exportActualCosts(@RequestParam(required = false) String search,
+                                                    @RequestParam(required = false) String status,
+                                                    @RequestParam(required = false) UUID costCategoryId,
+                                                    @RequestParam(required = false) UUID departmentId,
+                                                    @RequestParam(required = false) UUID contractorId,
+                                                    @RequestParam(required = false) String dateFrom,
+                                                    @RequestParam(required = false) String dateTo,
+                                                    @RequestParam(required = false) UUID actualCostId,
+                                                    @RequestParam(required = false) String actualCostIds,
                                                     @RequestParam(required = false) String allocationStatus) {
         return csv("actual-costs.csv",
-                service.csv("actual-costs.csv", filterByAllocationStatus(service.actualCostRegister(search), allocationStatus)));
+                service.csv("actual-costs.csv", filterReviewItems(
+                        service.actualCostRegister(search),
+                        status,
+                        null,
+                        null,
+                        costCategoryId,
+                        departmentId,
+                        contractorId,
+                        null,
+                        null,
+                        parseDateStart(dateFrom),
+                        parseDateEnd(dateTo),
+                        actualCostId,
+                        actualCostIds,
+                        null,
+                        allocationStatus
+                )));
     }
 
     private ResponseEntity<String> csv(String filename, String content) {
@@ -244,21 +374,192 @@ public class ActualCostReviewActionController {
                 || (user.permissions() != null && user.permissions().contains(PermissionConstants.WILDCARD));
     }
 
-    private List<ActualCostReviewItem> filterByAllocationStatus(List<ActualCostReviewItem> items, String allocationStatus) {
+    private List<ActualCostReviewItem> filterReviewItems(List<ActualCostReviewItem> items,
+                                                         String status,
+                                                         Boolean overdueOnly,
+                                                         String approvalRoleCode,
+                                                         UUID costCategoryId,
+                                                         UUID departmentId,
+                                                         UUID contractorId,
+                                                         String attentionMode,
+                                                         Integer reminderWindowHours,
+                                                         Instant dateFrom,
+                                                         Instant dateTo,
+                                                         UUID actualCostId,
+                                                         String actualCostIds,
+                                                         Boolean myQueue,
+                                                         String allocationStatus) {
+        Set<UUID> scopedIds = parseActualCostIds(actualCostId, actualCostIds);
+        return items.stream()
+                .filter(item -> status == null || status.isBlank() || "ALL".equalsIgnoreCase(status)
+                        || status.equalsIgnoreCase(item.status()))
+                .filter(item -> overdueOnly == null || !overdueOnly || item.isOverdue())
+                .filter(item -> approvalRoleCode == null || approvalRoleCode.isBlank()
+                        || approvalRoleCode.equalsIgnoreCase(item.approvalRoleCode()))
+                .filter(item -> costCategoryId == null || costCategoryId.equals(item.costCategoryId()))
+                .filter(item -> departmentId == null || matchesDepartment(item.department(), item.workOrder(), departmentId))
+                .filter(item -> contractorId == null || contractorId.equals(contractorId(item)))
+                .filter(item -> matchesAttention(item, attentionMode, reminderWindowHours))
+                .filter(item -> dateFrom == null || item.costDate() == null || !item.costDate().isBefore(dateFrom))
+                .filter(item -> dateTo == null || item.costDate() == null || item.costDate().isBefore(dateTo))
+                .filter(item -> scopedIds.isEmpty() || scopedIds.contains(item.id()))
+                .filter(item -> !Boolean.TRUE.equals(myQueue) || matchesCurrentReviewQueue(item))
+                .filter(item -> matchesAllocationStatus(item, allocationStatus))
+                .toList();
+    }
+
+    private boolean matchesAllocationStatus(ActualCostReviewItem item, String allocationStatus) {
         if (allocationStatus == null || allocationStatus.isBlank() || "ALL".equalsIgnoreCase(allocationStatus)) {
-            return items;
+            return true;
         }
         if ("UNALLOCATED".equalsIgnoreCase(allocationStatus)) {
-            return items.stream()
-                    .filter(item -> item.budgetLine() == null || item.unallocated())
-                    .toList();
+            return item.budgetLine() == null || item.unallocated();
         }
         if ("ALLOCATED".equalsIgnoreCase(allocationStatus)) {
-            return items.stream()
-                    .filter(item -> item.budgetLine() != null && !item.unallocated())
-                    .toList();
+            return item.budgetLine() != null && !item.unallocated();
         }
         throw RestException.badRequest("Unsupported allocationStatus: " + allocationStatus);
+    }
+
+    private List<ActualCostReviewActivityItem> filterActivityItems(List<ActualCostReviewActivityItem> items,
+                                                                   String eventGroup,
+                                                                   UUID departmentId,
+                                                                   String roleCode,
+                                                                   UUID actualCostId,
+                                                                   String actualCostIds) {
+        Set<UUID> scopedIds = parseActualCostIds(actualCostId, actualCostIds);
+        return items.stream()
+                .filter(item -> eventGroup == null || eventGroup.isBlank() || eventGroup.equalsIgnoreCase(item.eventGroup()))
+                .filter(item -> departmentId == null || matchesDepartment(item.department(), item.workOrder(), departmentId))
+                .filter(item -> roleCode == null || roleCode.isBlank()
+                        || roleCode.equalsIgnoreCase(item.recipientRoleCode())
+                        || roleCode.equalsIgnoreCase(item.approvalRoleCode()))
+                .filter(item -> scopedIds.isEmpty() || scopedIds.contains(item.actualCostId()))
+                .toList();
+    }
+
+    private List<ActualCostReviewHandoverItem> filterHandoverItems(List<ActualCostReviewHandoverItem> items,
+                                                                  UUID departmentId,
+                                                                  String approvalRoleCode,
+                                                                  UUID actualCostId,
+                                                                  String actualCostIds) {
+        Set<UUID> scopedIds = parseActualCostIds(actualCostId, actualCostIds);
+        return items.stream()
+                .filter(item -> departmentId == null || matchesDepartment(item.department(), item.workOrder(), departmentId))
+                .filter(item -> approvalRoleCode == null || approvalRoleCode.isBlank()
+                        || approvalRoleCode.equalsIgnoreCase(item.nextApprovalRoleCode())
+                        || approvalRoleCode.equalsIgnoreCase(item.previousApprovalRoleCode()))
+                .filter(item -> scopedIds.isEmpty() || scopedIds.contains(item.actualCostId()))
+                .toList();
+    }
+
+    private boolean matchesAttention(ActualCostReviewItem item, String attentionMode, Integer reminderWindowHours) {
+        if (attentionMode == null || attentionMode.isBlank() || "ALL".equalsIgnoreCase(attentionMode)) {
+            return true;
+        }
+        if ("OVERDUE".equalsIgnoreCase(attentionMode)) {
+            return item.isOverdue();
+        }
+        if ("DUE_SOON".equalsIgnoreCase(attentionMode)) {
+            int reminderWindow = reminderWindowHours != null ? reminderWindowHours : 4;
+            return !item.isOverdue() && item.hoursToOverdue() <= reminderWindow;
+        }
+        return true;
+    }
+
+    private boolean matchesDepartment(Object department, Object workOrder, UUID departmentId) {
+        UUID directDepartmentId = objectId(department);
+        if (departmentId.equals(directDepartmentId)) {
+            return true;
+        }
+        Object workOrderDepartment = objectProperty(workOrder, "department");
+        return departmentId.equals(objectId(workOrderDepartment));
+    }
+
+    private UUID contractorId(ActualCostReviewItem item) {
+        Object contractorWork = item.contractorWork();
+        Object contractor = objectProperty(contractorWork, "contractor");
+        return objectId(contractor);
+    }
+
+    private UUID objectId(Object value) {
+        if (value instanceof UUID id) {
+            return id;
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return UUID.fromString(text);
+            } catch (IllegalArgumentException ignored) {
+                return null;
+            }
+        }
+        Object nestedId = objectProperty(value, "id");
+        if (nestedId == value) {
+            return null;
+        }
+        return objectId(nestedId);
+    }
+
+    private Object objectProperty(Object value, String name) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Map<?, ?> map) {
+            return map.get(name);
+        }
+        try {
+            return value.getClass().getMethod(name).invoke(value);
+        } catch (ReflectiveOperationException | SecurityException ex) {
+            return null;
+        }
+    }
+
+    private Set<UUID> parseActualCostIds(UUID actualCostId, String actualCostIds) {
+        Set<UUID> ids = new LinkedHashSet<>();
+        if (actualCostId != null) {
+            ids.add(actualCostId);
+        }
+        if (actualCostIds != null && !actualCostIds.isBlank()) {
+            for (String rawId : actualCostIds.split(",")) {
+                if (!rawId.isBlank()) {
+                    ids.add(UUID.fromString(rawId.trim()));
+                }
+            }
+        }
+        return ids;
+    }
+
+    private Instant parseDateStart(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return LocalDate.parse(value).atStartOfDay().toInstant(ZoneOffset.UTC);
+    }
+
+    private Instant parseDateEnd(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return LocalDate.parse(value).plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+    }
+
+    private boolean matchesCurrentReviewQueue(ActualCostReviewItem item) {
+        var authentication = org.springframework.security.core.context.SecurityContextHolder
+                .getContext()
+                .getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        Set<String> authorities = authentication.getAuthorities().stream()
+                .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (authorities.contains("SYSTEM_ADMIN") || authorities.contains("*")) {
+            return true;
+        }
+        return authorities.contains(item.effectiveReviewRoleCode())
+                || authorities.contains(item.approvalRoleCode())
+                || authorities.contains("ACTUAL_COST_APPROVE");
     }
 
     public record ReviewRequest(String reviewComment) {

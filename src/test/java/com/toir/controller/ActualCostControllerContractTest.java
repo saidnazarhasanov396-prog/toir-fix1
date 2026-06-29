@@ -5,13 +5,18 @@ import com.toir.dto.actualcost.ActualCostAllocationRequest;
 import com.toir.enums.ActualCostStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUserArgumentResolver;
 import com.toir.service.ApprovalService;
 import com.toir.service.ActualCostService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -41,8 +46,14 @@ class ActualCostControllerContractTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(new ActualCostController(service))
+                .setCustomArgumentResolvers(new CurrentUserArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -102,8 +113,10 @@ class ActualCostControllerContractTest {
 
     @Test
     void allocateBudgetLineShouldDelegateCommand() throws Exception {
+        UUID actorId = UUID.randomUUID();
         UUID id = UUID.randomUUID();
         UUID budgetLineId = UUID.randomUUID();
+        authenticate(actorId);
         ActualCostDto dto = new ActualCostDto(
                 id,
                 null,
@@ -119,7 +132,7 @@ class ActualCostControllerContractTest {
                 Instant.now(),
                 null
         );
-        when(service.allocateBudgetLine(id, budgetLineId, null, "Allocate")).thenReturn(dto);
+        when(service.allocateBudgetLine(id, budgetLineId, actorId, "Allocate")).thenReturn(dto);
 
         mockMvc.perform(post("/api/v1/actual-costs/{id}/allocate-budget-line", id)
                         .contentType("application/json")
@@ -129,7 +142,40 @@ class ActualCostControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.budgetLineId").value(budgetLineId.toString()));
 
-        verify(service).allocateBudgetLine(id, budgetLineId, null, "Allocate");
+        verify(service).allocateBudgetLine(id, budgetLineId, actorId, "Allocate");
+    }
+
+    @Test
+    void requestCorrectionShouldDelegateCurrentUser() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID id = UUID.randomUUID();
+        authenticate(actorId);
+        ActualCostDto dto = new ActualCostDto(
+                id,
+                null,
+                null,
+                null,
+                null,
+                UUID.randomUUID(),
+                ActualCostStatus.REJECTED,
+                actorId,
+                Instant.now(),
+                "Fix source document",
+                100,
+                Instant.now(),
+                null
+        );
+        when(service.requestCorrection(id, actorId, "Fix source document")).thenReturn(dto);
+
+        mockMvc.perform(post("/api/v1/actual-costs/{id}/request-correction", id)
+                        .contentType("application/json")
+                        .content("""
+                                {"comment":"Fix source document"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+
+        verify(service).requestCorrection(id, actorId, "Fix source document");
     }
 
     @Test
@@ -179,5 +225,23 @@ class ActualCostControllerContractTest {
                 .andExpect(jsonPath("$.message").value("Invalid value for parameter 'workOrderId': invalid-uuid. Expected UUID."));
 
         verifyNoInteractions(service);
+    }
+
+    private void authenticate(UUID userId) {
+        AuthenticatedUser user = new AuthenticatedUser(
+                userId.toString(),
+                "finance.user",
+                "finance.user@example.test",
+                "Finance User",
+                UUID.randomUUID().toString(),
+                "FINANCE_MANAGER",
+                List.of("ACTUAL_COST_ALLOCATE", "ACTUAL_COST_REQUEST_CORRECTION")
+        );
+        SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(
+                user,
+                "n/a",
+                "ACTUAL_COST_ALLOCATE",
+                "ACTUAL_COST_REQUEST_CORRECTION"
+        ));
     }
 }
