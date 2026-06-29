@@ -35,7 +35,7 @@ springdoc:
 app:
   security:
     jwt:
-      secret: 1234
+      secret: qPLc6N8MrrcHSK9kg28L2sR1axfEOSvR390ssog7BTS
       expiration-minutes: 720
       issuer: toir-backend
   jackson:
