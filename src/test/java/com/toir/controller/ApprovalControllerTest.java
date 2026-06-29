@@ -110,7 +110,8 @@ class ApprovalControllerTest {
         UUID requesterId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         ApprovalRequestDto response = response(approvalId, requesterId, targetId);
-        when(service.requestApproval(org.mockito.ArgumentMatchers.any())).thenReturn(response);
+        when(service.requestApproval(org.mockito.ArgumentMatchers.any(com.toir.dto.approval.ApprovalStartRequest.class)))
+                .thenReturn(response);
 
         mockMvc.perform(post("/api/v1/approvals/start")
                         .contentType("application/json")
