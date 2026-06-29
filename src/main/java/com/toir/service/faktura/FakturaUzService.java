@@ -427,7 +427,10 @@ public class FakturaUzService {
     }
 
     private void saveType32Services(String uniqueId, JsonNode servicesNode) {
-        type32ServiceRepository.deleteByDocumentUniqueId(uniqueId);
+        List<FakturaUzDocumentType32Service> existingServices =
+                type32ServiceRepository.findAllByDocumentUniqueIdAndIsDeletedFalseOrderByNumberAsc(uniqueId);
+        existingServices.forEach(service -> service.setDeleted(true));
+        type32ServiceRepository.saveAll(existingServices);
         if (servicesNode == null || !servicesNode.isArray()) {
             return;
         }
@@ -470,7 +473,10 @@ public class FakturaUzService {
     }
 
     private void saveType32Parts(String uniqueId, JsonNode partsNode) {
-        type32PartRepository.deleteByDocumentUniqueId(uniqueId);
+        List<FakturaUzDocumentType32Part> existingParts =
+                type32PartRepository.findAllByDocumentUniqueIdAndIsDeletedFalseOrderByNumberAsc(uniqueId);
+        existingParts.forEach(part -> part.setDeleted(true));
+        type32PartRepository.saveAll(existingParts);
         if (partsNode == null || !partsNode.isArray()) {
             return;
         }
