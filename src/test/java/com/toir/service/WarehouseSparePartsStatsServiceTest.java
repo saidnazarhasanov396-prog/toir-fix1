@@ -1,8 +1,10 @@
 package com.toir.service;
 
 import com.toir.dto.warehouse.SparePartsWarehouseStatsResponse;
+import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.repository.SparePartsWarehouseStatsProjection;
+import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
@@ -39,11 +41,19 @@ class WarehouseSparePartsStatsServiceTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    UnitOfMeasurementRepository unitOfMeasurementRepository;
+
     WarehouseSparePartsStatsService service;
 
     @BeforeEach
     void setUp() {
-        service = new WarehouseSparePartsStatsService(stockRepository, warehouseRepository, scopeAccessService);
+        service = new WarehouseSparePartsStatsService(
+                stockRepository,
+                warehouseRepository,
+                scopeAccessService,
+                unitOfMeasurementRepository
+        );
     }
 
     @Test
@@ -146,11 +156,14 @@ class WarehouseSparePartsStatsServiceTest {
     void getStatsWithAllFiltersAndWarehouseId() {
         UUID warehouseId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
+        UUID unitId = UUID.randomUUID();
         Warehouse warehouse = warehouse(warehouseId, UUID.randomUUID(), null);
+        UnitOfMeasurement kgUnit = unit(unitId, "KG", "Kilogram");
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(unitOfMeasurementRepository.findByTokenIgnoreCase("KG")).thenReturn(List.of(kgUnit));
         when(stockRepository.getSparePartsWarehouseStatsByWarehouseIds(
-                eq(List.of(warehouseId)), eq("bolt"), eq(typeId), eq("SPARE_PART"), eq("KG")))
+                eq(List.of(warehouseId)), eq("bolt"), eq(typeId), eq("SPARE_PART"), eq(unitId)))
                 .thenReturn(stats(2L, 0L, 0L, 1.0));
 
         SparePartsWarehouseStatsResponse result = service.getStats(warehouseId, "bolt", typeId, "SPARE_PART", "KG");
@@ -169,6 +182,60 @@ class WarehouseSparePartsStatsServiceTest {
         verify(stockRepository).getSparePartsWarehouseStats(null, null, null, null);
     }
 
+    @Test
+    void unitFilterPassesUuidToRepositoryWhenValidIdProvided() {
+        UUID unitId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(unitOfMeasurementRepository.existsByIdAndIsDeletedFalse(unitId)).thenReturn(true);
+        when(stockRepository.getSparePartsWarehouseStats(isNull(), isNull(), isNull(), eq(unitId)))
+                .thenReturn(stats(4L, 0L, 0L, 0.0));
+
+        SparePartsWarehouseStatsResponse result = service.getStats(null, null, null, null, unitId.toString());
+
+        assertThat(result.nomenclature()).isEqualTo(4);
+        verify(stockRepository).getSparePartsWarehouseStats(null, null, null, unitId);
+    }
+
+    @Test
+    void unitFilterLegacyCodeResolvesToUuid() {
+        UUID unitId = UUID.randomUUID();
+        UnitOfMeasurement pcsUnit = unit(unitId, "PCS", "Piece");
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(unitOfMeasurementRepository.findByTokenIgnoreCase("PCS")).thenReturn(List.of(pcsUnit));
+        when(stockRepository.getSparePartsWarehouseStats(isNull(), isNull(), isNull(), eq(unitId)))
+                .thenReturn(stats(2L, 0L, 0L, 0.0));
+
+        service.getStats(null, null, null, null, "PCS");
+
+        verify(stockRepository).getSparePartsWarehouseStats(null, null, null, unitId);
+    }
+
+    @Test
+    void unitFilterUnknownUuidPassesNull() {
+        UUID unknownId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(unitOfMeasurementRepository.existsByIdAndIsDeletedFalse(unknownId)).thenReturn(false);
+        when(stockRepository.getSparePartsWarehouseStats(isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(stats(10L, 0L, 0L, 0.0));
+
+        service.getStats(null, null, null, null, unknownId.toString());
+
+        verify(stockRepository).getSparePartsWarehouseStats(null, null, null, null);
+    }
+
+    @Test
+    void unitFilterBlankPassesNull() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(stockRepository.getSparePartsWarehouseStats(isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(stats(10L, 0L, 0L, 0.0));
+
+        service.getStats(null, null, null, null, "   ");
+
+        verify(stockRepository).getSparePartsWarehouseStats(null, null, null, null);
+        verify(unitOfMeasurementRepository, never()).existsByIdAndIsDeletedFalse(any());
+        verify(unitOfMeasurementRepository, never()).findByTokenIgnoreCase(any());
+    }
+
     private Warehouse warehouse(UUID id, UUID departmentId, UUID responsibleId) {
         Warehouse warehouse = new Warehouse();
         warehouse.setId(id);
@@ -178,6 +245,14 @@ class WarehouseSparePartsStatsServiceTest {
         warehouse.setResponsibleId(responsibleId);
         warehouse.setActive(true);
         return warehouse;
+    }
+
+    private UnitOfMeasurement unit(UUID id, String code, String name) {
+        UnitOfMeasurement unit = new UnitOfMeasurement();
+        unit.setId(id);
+        unit.setCode(code);
+        unit.setName(name);
+        return unit;
     }
 
     private SparePartsWarehouseStatsProjection stats(Long nomenclature,

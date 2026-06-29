@@ -4,6 +4,7 @@ import com.toir.entity.Reservation;
 import com.toir.entity.SparePart;
 import com.toir.entity.SparePartType;
 import com.toir.entity.StockMovement;
+import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
@@ -174,6 +175,75 @@ class WarehouseStockRepositorySparePartsStatsTest {
                 List.of(warehouse.getId()), null, null, null, null);
 
         assertThat(stats.getIssuedToWork()).isEqualTo(3.0);
+    }
+
+    @Test
+    void filtersByUnitIdInGlobalStats() {
+        UnitOfMeasurement kg = saveUnitOfMeasurement("KG", "Kilogram");
+        saveUnitOfMeasurement("PCS", "Piece");
+        Warehouse warehouse = saveWarehouse("WH-UOM-1", "Warehouse");
+        SparePart kgPart = saveSparePartWithUnit("SP-KG-1", "KG Part", "KG");
+        SparePart pcsPart = saveSparePartWithUnit("SP-PCS-1", "PCS Part", "PCS");
+        saveStock(warehouse, kgPart, 5, 0, 0, null);
+        saveStock(warehouse, pcsPart, 5, 0, 0, null);
+
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStats(
+                null, null, null, kg.getId());
+
+        assertThat(stats.getNomenclature()).isEqualTo(1);
+    }
+
+    @Test
+    void filtersByUnitIdWithWarehouseIds() {
+        UnitOfMeasurement kg = saveUnitOfMeasurement("KG-WH", "KG-WH");
+        saveUnitOfMeasurement("PCS-WH", "PCS-WH");
+        Warehouse warehouseA = saveWarehouse("WH-UOM-2A", "Warehouse A");
+        Warehouse warehouseB = saveWarehouse("WH-UOM-2B", "Warehouse B");
+        SparePart kgPart = saveSparePartWithUnit("SP-KG-2", "KG Part", "KG-WH");
+        SparePart pcsPart = saveSparePartWithUnit("SP-PCS-2", "PCS Part", "PCS-WH");
+        saveStock(warehouseA, kgPart, 5, 0, 0, null);
+        saveStock(warehouseB, pcsPart, 5, 0, 0, null);
+
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStatsByWarehouseIds(
+                List.of(warehouseA.getId(), warehouseB.getId()), null, null, null, kg.getId());
+
+        assertThat(stats.getNomenclature()).isEqualTo(1);
+    }
+
+    @Test
+    void unitIdFilterNullReturnsAllParts() {
+        UnitOfMeasurement kg = saveUnitOfMeasurement("KG-ALL", "Kilogram");
+        Warehouse warehouse = saveWarehouse("WH-UOM-3", "Warehouse");
+        SparePart kgPart = saveSparePartWithUnit("SP-KG-3", "KG Part", "KG");
+        SparePart pcsPart = saveSparePartWithUnit("SP-PCS-3", "PCS Part", "PCS");
+        saveStock(warehouse, kgPart, 5, 0, 0, null);
+        saveStock(warehouse, pcsPart, 5, 0, 0, null);
+
+        SparePartsWarehouseStatsProjection stats = repository.getSparePartsWarehouseStats(
+                null, null, null, null);
+
+        assertThat(stats.getNomenclature()).isEqualTo(2);
+        assertThat(kg.getId()).isNotNull();
+    }
+
+    private UnitOfMeasurement saveUnitOfMeasurement(String code, String name) {
+        UnitOfMeasurement unit = new UnitOfMeasurement();
+        unit.setCode(code);
+        unit.setName(name);
+        unit.setDeleted(false);
+        return entityManager.persistAndFlush(unit);
+    }
+
+    private SparePart saveSparePartWithUnit(String code, String name, String unit) {
+        SparePart sparePart = new SparePart();
+        sparePart.setCode(code);
+        sparePart.setName(name);
+        sparePart.setKind(InventoryItemKind.SPARE_PART);
+        sparePart.setType(defaultSparePartType());
+        sparePart.setLegacyType("OTHER");
+        sparePart.setUnit(unit);
+        sparePart.setMinStock(0);
+        return entityManager.persistAndFlush(sparePart);
     }
 
     private Warehouse saveWarehouse(String code, String name) {
