@@ -32,8 +32,8 @@ public interface WarehouseStockBalanceRepository extends JpaRepository<Warehouse
               and (:binId is null or b.binId = :binId)
               and (:sparePartId is null or b.sparePartId = :sparePartId)
               and (:stockStatus is null or b.stockStatus = :stockStatus)
-              and (:lotNumber is null or lower(coalesce(b.lotNumber, '')) = lower(:lotNumber))
-              and (:serialNumber is null or lower(coalesce(b.serialNumber, '')) = lower(:serialNumber))
+              and (cast(:lotNumber as string) is null or lower(coalesce(b.lotNumber, '')) = lower(cast(:lotNumber as string)))
+              and (cast(:serialNumber as string) is null or lower(coalesce(b.serialNumber, '')) = lower(cast(:serialNumber as string)))
             order by b.updatedAt desc
             """)
     Page<WarehouseStockBalance> search(@Param("warehouseId") UUID warehouseId,
