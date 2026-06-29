@@ -339,24 +339,16 @@ public class ActualCostReviewFacadeService {
     @Transactional(readOnly = true)
     public String csv(String filename, List<ActualCostReviewItem> items) {
         return CsvWriter.build(
-                List.of("id", "status", "allocationStatus", "unallocated", "budgetLineId", "amount", "costDate",
-                        "approvalRoleCode", "routeSource", "isOverdue", "allocatedAt", "allocatedById", "notes"),
+                List.of("id", "status", "amount", "costDate", "approvalRoleCode", "routeSource", "isOverdue", "notes"),
                 items,
                 List.of(
                         ActualCostReviewItem::id,
                         ActualCostReviewItem::status,
-                        ActualCostReviewItem::allocationStatus,
-                        ActualCostReviewItem::unallocated,
-                        item -> item.budgetLine() instanceof ActualCostReviewItem.BudgetLineRef budgetLine
-                                ? budgetLine.id()
-                                : null,
                         ActualCostReviewItem::amount,
                         ActualCostReviewItem::costDate,
                         ActualCostReviewItem::approvalRoleCode,
                         ActualCostReviewItem::routeSource,
                         ActualCostReviewItem::isOverdue,
-                        ActualCostReviewItem::allocatedAt,
-                        ActualCostReviewItem::allocatedById,
                         ActualCostReviewItem::notes
                 )
         );
@@ -466,12 +458,7 @@ public class ActualCostReviewFacadeService {
                 contextType(cost),
                 "/budgets?actualCostId=" + cost.getId(),
                 "/financial-review?actualCostId=" + cost.getId(),
-                sourceLink(cost),
-                cost.getBudgetLineId() == null ? "UNALLOCATED" : "ALLOCATED",
-                cost.getBudgetLineId() == null,
-                cost.getAllocationComment(),
-                cost.getAllocatedAt(),
-                cost.getAllocatedById()
+                sourceLink(cost)
         );
     }
 

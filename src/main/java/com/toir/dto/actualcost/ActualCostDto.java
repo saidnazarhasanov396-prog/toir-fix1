@@ -24,32 +24,8 @@ public record ActualCostDto(
         String reviewComment,
         @Positive double amount,
         Instant costDate,
-        String notes,
-        String correctionReason,
-        String allocationComment,
-        UUID allocatedById,
-        Instant allocatedAt
+        String notes
 ) {
-    public ActualCostDto(UUID id,
-                         UUID workOrderId,
-                         UUID repairRequestId,
-                         UUID contractorWorkId,
-                         ActualCostSourceType sourceType,
-                         UUID sourceId,
-                         UUID budgetLineId,
-                         UUID costCategoryId,
-                         ActualCostStatus status,
-                         UUID reviewedById,
-                         Instant reviewedAt,
-                         String reviewComment,
-                         double amount,
-                         Instant costDate,
-                         String notes) {
-        this(id, workOrderId, repairRequestId, contractorWorkId, sourceType, sourceId, budgetLineId,
-                costCategoryId, status, reviewedById, reviewedAt, reviewComment, amount, costDate, notes,
-                null, null, null, null);
-    }
-
     public ActualCostDto(UUID id,
                          UUID workOrderId,
                          UUID repairRequestId,
@@ -64,14 +40,12 @@ public record ActualCostDto(
                          Instant costDate,
                          String notes) {
         this(id, workOrderId, repairRequestId, contractorWorkId, null, null, budgetLineId, costCategoryId, status,
-                reviewedById, reviewedAt, reviewComment, amount, costDate, notes,
-                null, null, null, null);
+                reviewedById, reviewedAt, reviewComment, amount, costDate, notes);
     }
 
     public static ActualCostDto from(ActualCost c) {
         return new ActualCostDto(c.getId(), c.getWorkOrderId(), c.getRepairRequestId(), c.getContractorWorkId(),
                 c.getSourceType(), c.getSourceId(), c.getBudgetLineId(), c.getCostCategoryId(), c.getStatus(), c.getReviewedById(),
-                c.getReviewedAt(), c.getReviewComment(), c.getAmount(), c.getCostDate(), c.getNotes(),
-                c.getCorrectionReason(), c.getAllocationComment(), c.getAllocatedById(), c.getAllocatedAt());
+                c.getReviewedAt(), c.getReviewComment(), c.getAmount(), c.getCostDate(), c.getNotes());
     }
 }

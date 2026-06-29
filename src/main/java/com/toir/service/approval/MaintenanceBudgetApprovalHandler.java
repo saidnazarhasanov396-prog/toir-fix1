@@ -32,8 +32,8 @@ public class MaintenanceBudgetApprovalHandler implements ApprovalActionHandler {
         UUID targetId = approval.getTargetId() == null ? approval.getDocumentId() : approval.getTargetId();
         MaintenanceBudget budget = maintenanceBudgetRepository.findByIdAndIsDeletedFalse(targetId)
                 .orElseThrow(() -> RestException.notFound("Budget not found: " + targetId));
-        if (budget.getStatus() != BudgetStatus.SUBMITTED) {
-            throw RestException.badRequest("Budget approval request can be finalized only from SUBMITTED status");
+        if (budget.getStatus() != BudgetStatus.DRAFT) {
+            throw RestException.badRequest("Budget approval request can be finalized only from DRAFT status");
         }
         budget.setStatus(BudgetStatus.APPROVED);
         maintenanceBudgetRepository.save(budget);

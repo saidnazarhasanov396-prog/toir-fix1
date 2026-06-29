@@ -185,28 +185,6 @@ class BudgetSummaryControllerContractTest {
     }
 
     @Test
-    void actualCostRegisterAppliesAllocationStatusFilter() throws Exception {
-        ActualCost unallocatedCost = actualCost(UUID.randomUUID());
-        ActualCost allocatedCost = actualCost(UUID.randomUUID());
-        allocatedCost.setBudgetLineId(UUID.randomUUID());
-        ActualCostReviewItem unallocated = reviewItem(unallocatedCost, null);
-        ActualCostReviewItem allocated = reviewItem(allocatedCost, null);
-
-        when(actualCostReviewFacadeService.actualCostRegister(null))
-                .thenReturn(List.of(allocated, unallocated));
-        when(actualCostReviewFacadeService.registerSummary(any()))
-                .thenAnswer(invocation -> registerSummary(invocation.getArgument(0)));
-
-        mockMvc.perform(get("/api/v1/budgets/actual-costs/register")
-                        .param("allocationStatus", "UNALLOCATED"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.content[0].id").value(unallocated.id().toString()))
-                .andExpect(jsonPath("$.content[0].allocationStatus").value("UNALLOCATED"))
-                .andExpect(jsonPath("$.summary.totalCount").value(1));
-    }
-
-    @Test
     void reviewQueueAppliesFrontendDepartmentContractorAndAttentionFilters() throws Exception {
         UUID departmentId = UUID.randomUUID();
         UUID contractorId = UUID.randomUUID();
@@ -230,25 +208,6 @@ class BudgetSummaryControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].id").value(matching.id().toString()));
-    }
-
-    @Test
-    void reviewQueueAppliesAllocationStatusFilter() throws Exception {
-        ActualCost unallocatedCost = actualCost(UUID.randomUUID());
-        ActualCost allocatedCost = actualCost(UUID.randomUUID());
-        allocatedCost.setBudgetLineId(UUID.randomUUID());
-        ActualCostReviewItem unallocated = reviewItem(unallocatedCost, null);
-        ActualCostReviewItem allocated = reviewItem(allocatedCost, null);
-
-        when(actualCostReviewFacadeService.reviewQueue(null))
-                .thenReturn(List.of(unallocated, allocated));
-
-        mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue")
-                        .param("allocationStatus", "ALLOCATED"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.content[0].id").value(allocated.id().toString()))
-                .andExpect(jsonPath("$.content[0].allocationStatus").value("ALLOCATED"));
     }
 
     @Test
@@ -462,9 +421,7 @@ class BudgetSummaryControllerContractTest {
                 null,
                 null,
                 null,
-                actualCost.getBudgetLineId() != null
-                        ? new ActualCostReviewItem.BudgetLineRef(actualCost.getBudgetLineId(), null, null, null)
-                        : null,
+                null,
                 null,
                 new ActualCostReviewItem.Ref(actualCost.getCostCategoryId(), "", ""),
                 0,
