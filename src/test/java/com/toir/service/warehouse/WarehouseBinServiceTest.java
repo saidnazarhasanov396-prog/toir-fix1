@@ -16,6 +16,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -25,6 +27,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -93,6 +97,53 @@ class WarehouseBinServiceTest {
         assertThat(saved.getQualityZoneType()).isEqualTo(WarehouseQualityZoneType.RECEIVING);
         assertThat(saved.isAllowMixedSpareParts()).isFalse();
         assertThat(saved.isAllowMixedLots()).isTrue();
+    }
+
+    @Test
+    void listForwardsTrimmedFiltersAndPagination() {
+        UUID warehouseId = UUID.randomUUID();
+        WarehouseBin bin = bin(warehouseId, UUID.randomUUID());
+        when(warehouseRepository.existsByIdAndIsDeletedFalse(warehouseId)).thenReturn(true);
+        when(binRepository.search(
+                eq(warehouseId),
+                eq("A-01"),
+                isNull(),
+                eq("A"),
+                eq("01"),
+                eq("02"),
+                eq("PALLET"),
+                eq(WarehouseQualityZoneType.STORAGE),
+                eq("AMBIENT"),
+                eq("NONE"),
+                eq(true),
+                eq(false),
+                eq(false),
+                eq(2),
+                eq(PageRequest.of(1, 5))
+        )).thenReturn(new PageImpl<>(List.of(bin), PageRequest.of(1, 5), 6));
+
+        var result = service.list(
+                warehouseId,
+                " A-01 ",
+                "   ",
+                " A ",
+                " 01 ",
+                " 02 ",
+                " PALLET ",
+                WarehouseQualityZoneType.STORAGE,
+                " AMBIENT ",
+                " NONE ",
+                true,
+                false,
+                false,
+                2,
+                1,
+                5
+        );
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().id()).isEqualTo(bin.getId());
+        assertThat(result.getTotalElements()).isEqualTo(6);
     }
 
     @Test

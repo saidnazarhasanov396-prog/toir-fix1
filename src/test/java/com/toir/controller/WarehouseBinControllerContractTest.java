@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -21,6 +23,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -46,13 +49,74 @@ class WarehouseBinControllerContractTest {
     void listBinsReturnsWarehouseBins() throws Exception {
         UUID warehouseId = UUID.randomUUID();
         UUID binId = UUID.randomUUID();
-        when(service.list(warehouseId)).thenReturn(List.of(binDto(warehouseId, binId)));
+        when(service.list(
+                eq(warehouseId),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(0),
+                eq(20)
+        )).thenReturn(new PageImpl<>(List.of(binDto(warehouseId, binId)), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/warehouses/{warehouseId}/bins", warehouseId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(binId.toString()))
-                .andExpect(jsonPath("$[0].code").value("A-01-02-03"))
-                .andExpect(jsonPath("$[0].qualityZoneType").value("STORAGE"));
+                .andExpect(jsonPath("$.content[0].id").value(binId.toString()))
+                .andExpect(jsonPath("$.content[0].code").value("A-01-02-03"))
+                .andExpect(jsonPath("$.content[0].qualityZoneType").value("STORAGE"))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void listBinsForwardsPaginationAndFilters() throws Exception {
+        UUID warehouseId = UUID.randomUUID();
+        when(service.list(
+                eq(warehouseId),
+                eq("A-01"),
+                eq("storage"),
+                eq("A"),
+                eq("01"),
+                eq("02"),
+                eq("PALLET"),
+                eq(WarehouseQualityZoneType.STORAGE),
+                eq("AMBIENT"),
+                eq("NONE"),
+                eq(true),
+                eq(false),
+                eq(false),
+                eq(2),
+                eq(1),
+                eq(5)
+        )).thenReturn(new PageImpl<>(List.of(), PageRequest.of(1, 5), 0));
+
+        mockMvc.perform(get("/api/v1/warehouses/{warehouseId}/bins", warehouseId)
+                        .param("search", "A-01")
+                        .param("zone", "storage")
+                        .param("aisle", "A")
+                        .param("rack", "01")
+                        .param("shelfLevel", "02")
+                        .param("binType", "PALLET")
+                        .param("qualityZoneType", "STORAGE")
+                        .param("temperatureZone", "AMBIENT")
+                        .param("hazardClass", "NONE")
+                        .param("active", "true")
+                        .param("blocked", "false")
+                        .param("frozen", "false")
+                        .param("binLevel", "2")
+                        .param("page", "1")
+                        .param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @Test
