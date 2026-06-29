@@ -5,10 +5,12 @@ import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.Department;
+import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignStage;
+import com.toir.enums.ActualCostStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignScopeType;
 import com.toir.enums.RepairCampaignStatus;
@@ -393,6 +395,38 @@ class RepairCampaignServiceTest {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("active work order");
                 });
+    }
+
+    @Test
+    void closeBlocksApprovedOrPendingUnallocatedActualCosts() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, UUID.randomUUID());
+        campaign.setStatus(RepairCampaignStatus.COMPLETED);
+        WorkOrder closedOrder = new WorkOrder();
+        closedOrder.setId(UUID.randomUUID());
+        closedOrder.setStatus(WorkOrderStatus.CLOSED);
+        ActualCost approvedUnallocated = new ActualCost();
+        approvedUnallocated.setId(UUID.randomUUID());
+        approvedUnallocated.setWorkOrderId(closedOrder.getId());
+        approvedUnallocated.setStatus(ActualCostStatus.APPROVED);
+        approvedUnallocated.setCostCategoryId(UUID.randomUUID());
+        approvedUnallocated.setAmount(100);
+
+        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(workOrderRepository.findAllByRepairCampaignIdAndIsDeletedFalseOrderByUpdatedAtDesc(campaignId))
+                .thenReturn(List.of(closedOrder));
+        when(contractorWorkRepository.findAllByWorkOrderIdInAndIsDeletedFalse(List.of(closedOrder.getId())))
+                .thenReturn(List.of());
+        when(actualCostRepository.findAllByWorkOrderIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(closedOrder.getId())))
+                .thenReturn(List.of(approvedUnallocated));
+
+        assertThatThrownBy(() -> service.close(campaignId))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("not allocated");
+                });
+
+        verify(repository, never()).save(campaign);
     }
 
     private RepairCampaign campaign(UUID id, UUID maintenanceBudgetId) {
