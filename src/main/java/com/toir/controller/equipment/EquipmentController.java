@@ -63,6 +63,7 @@ public class EquipmentController {
             @RequestParam(required = false) EquipmentOutsideReason outsideReason,
             @RequestParam(defaultValue = "false") boolean overdueOnly,
             @RequestParam(defaultValue = "false") boolean availableForReplacement,
+            @RequestParam(required = false) UUID mxikId,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
@@ -72,6 +73,23 @@ public class EquipmentController {
         int safePage = Math.max(0, page);
         int safePageSize = Math.max(1, size);
         if (sortBy == null || sortBy.isBlank()) {
+            if (mxikId != null) {
+                return ResponseEntity.ok(service.search(
+                        scopedDepartment(),
+                        departmentId,
+                        equipmentTypeId,
+                        status,
+                        category,
+                        warehouseId,
+                        locationType,
+                        outsideReason,
+                        overdueOnly,
+                        availableForReplacement,
+                        mxikId,
+                        search,
+                        safePage,
+                        safePageSize));
+            }
             return ResponseEntity.ok(service.search(
                     scopedDepartment(),
                     departmentId,
@@ -86,6 +104,25 @@ public class EquipmentController {
                     search,
                     safePage,
                     safePageSize));
+        }
+        if (mxikId != null) {
+            return ResponseEntity.ok(service.search(
+                    scopedDepartment(),
+                    departmentId,
+                    equipmentTypeId,
+                    status,
+                    category,
+                    warehouseId,
+                    locationType,
+                    outsideReason,
+                    overdueOnly,
+                    availableForReplacement,
+                    mxikId,
+                    search,
+                    safePage,
+                    safePageSize,
+                    sortBy,
+                    sortDir));
         }
         return ResponseEntity.ok(service.search(
                 scopedDepartment(),

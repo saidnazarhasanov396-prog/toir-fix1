@@ -1,5 +1,6 @@
 package com.toir.dto.sparepart;
 
+import com.toir.dto.mxik.MxikRefDto;
 import com.toir.entity.SparePart;
 import com.toir.entity.SparePartType;
 import com.toir.enums.CriticalityLevel;
@@ -39,7 +40,9 @@ public record SparePartDto(
         BigDecimal averageCost,
         BigDecimal lastPurchaseCost,
         BigDecimal inventoryValue,
-        CriticalityLevel criticality
+        CriticalityLevel criticality,
+        UUID mxikId,
+        MxikRefDto mxik
 ) {
     public record UnitRef(String code, String name) {}
 
@@ -62,7 +65,7 @@ public record SparePartDto(
         this(id, entityType, code, name, kind, unit == null ? null : unit.code(), unit == null ? null : unit.code(),
                 unit == null ? null : unit.name(), manufacturer, sku, specification, minStock, currentStock,
                 reservedStock, availableStock, warehouseCount, null, null, null, com.toir.enums.SparePartType.OTHER,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     public static SparePartDto from(SparePart s) {
@@ -79,6 +82,17 @@ public record SparePartDto(
             double reservedStock,
             int warehouseCount,
             UnitRef unitRef
+    ) {
+        return from(s, currentStock, reservedStock, warehouseCount, unitRef, null);
+    }
+
+    public static SparePartDto from(
+            SparePart s,
+            double currentStock,
+            double reservedStock,
+            int warehouseCount,
+            UnitRef unitRef,
+            MxikRefDto mxik
     ) {
         SparePartType type = s.getType();
         String unit = s.getUnit();
@@ -113,7 +127,9 @@ public record SparePartDto(
                 s.getAverageCost(),
                 s.getLastPurchaseCost(),
                 s.getInventoryValue(),
-                s.getCriticality()
+                s.getCriticality(),
+                s.getMxikId(),
+                mxik
         );
     }
 
@@ -121,7 +137,8 @@ public record SparePartDto(
         return new SparePartDto(id, entityType, code, name, kind, unit, unitCode, unitName, manufacturer, sku,
                 specification, minStock, currentStock, reservedStock, availableStock, warehouseCount,
                 typeId, typeCode, typeName, type, preferredSupplierId, preferredSupplierName,
-                leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, inventoryValue, criticality);
+                leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, inventoryValue, criticality,
+                mxikId, mxik);
     }
 
     public static UnitRef unitRef(String unit) {

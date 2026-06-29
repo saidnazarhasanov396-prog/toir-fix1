@@ -942,6 +942,20 @@ class EquipmentControllerContractTest {
     }
 
     @Test
+    void listPassesMxikFilterToService() throws Exception {
+        UUID mxikId = UUID.randomUUID();
+        when(service.search(null, null, null, null, null, null, null, null, false, false, mxikId, null, 0, 20))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        mockMvc.perform(get("/api/v1/equipment").param("mxikId", mxikId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty());
+
+        verify(service).search(null, null, null, null, null, null, null, null, false, false, mxikId, null, 0, 20);
+    }
+
+    @Test
     void listShouldSupportBusinessSearchByCode() throws Exception {
         when(service.search(null, null, null, null, null, null, null, null, false, false, "EQ-2026-0012", 0, 20))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));

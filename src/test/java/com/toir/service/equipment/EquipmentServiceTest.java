@@ -18,6 +18,7 @@ import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.FileAsset;
 import com.toir.entity.Location;
+import com.toir.entity.Mxik;
 import com.toir.entity.Supplier;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.defects.Defect;
@@ -60,6 +61,7 @@ import com.toir.repository.equipment.EquipmentDocumentRepository;
 import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.service.file_management.FileService;
 import com.toir.repository.LocationRepository;
+import com.toir.repository.MxikRepository;
 import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -168,6 +170,9 @@ class EquipmentServiceTest {
 
     @Mock
     SupplierRepository supplierRepository;
+
+    @Mock
+    MxikRepository mxikRepository;
 
     @Mock
     WarehouseEquipmentItemService warehouseEquipmentItemService;
@@ -1411,6 +1416,44 @@ class EquipmentServiceTest {
         verify(repository).save(entityCaptor.capture());
         assertThat(entityCaptor.getValue().getResponsibleId()).isNull();
         verifyNoInteractions(employeeRepository);
+    }
+
+    @Test
+    void createStoresMxikReference() {
+        UUID departmentId = UUID.randomUUID();
+        UUID mxikId = UUID.randomUUID();
+        Mxik mxik = mxik(mxikId, "123", "Bearing");
+        EquipmentCreateRequest request = createRequestWithMxik("INV-MXIK-001", departmentId, mxikId);
+        stubCreateFlow("INV-MXIK-001");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+        when(mxikRepository.findByIdAndIsDeletedFalse(mxikId)).thenReturn(Optional.of(mxik));
+        when(mxikRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of(mxik));
+
+        EquipmentDto created = service.create(request);
+
+        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
+        verify(repository).save(entityCaptor.capture());
+        assertThat(entityCaptor.getValue().getMxikId()).isEqualTo(mxikId);
+        assertThat(created.mxikId()).isEqualTo(mxikId);
+        assertThat(created.mxik()).isNotNull();
+        assertThat(created.mxik().kod()).isEqualTo("123");
+    }
+
+    @Test
+    void createRejectsMissingMxik() {
+        UUID departmentId = UUID.randomUUID();
+        UUID mxikId = UUID.randomUUID();
+        EquipmentCreateRequest request = createRequestWithMxik("INV-MXIK-404", departmentId, mxikId);
+        when(repository.existsByInventoryNumberAndIsDeletedFalse("INV-MXIK-404")).thenReturn(false);
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
+                .thenReturn(Optional.of(department(departmentId)));
+        when(mxikRepository.findByIdAndIsDeletedFalse(mxikId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("MXIK not found: " + mxikId);
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -3661,6 +3704,62 @@ class EquipmentServiceTest {
 
     private EquipmentCreateRequest createRequestWithoutExpectedLifetime(String inventoryNumber, UUID departmentId) {
         return createRequestWithExpectedLifetime(inventoryNumber, departmentId, null, null, null);
+    }
+
+    private EquipmentCreateRequest createRequestWithMxik(String inventoryNumber, UUID departmentId, UUID mxikId) {
+        return new EquipmentCreateRequest(
+                null,
+                "Compressor",
+                inventoryNumber,
+                "TN-1",
+                "SN-1",
+                "Model X",
+                null,
+                UUID.randomUUID(),
+                departmentId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "ACME",
+                EquipmentStatus.ACTIVE,
+                EquipmentCategory.PRODUCTION_EQUIPMENT,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                "test",
+                null,
+                null,
+                null,
+                10_000L,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                mxikId
+        );
+    }
+
+    private Mxik mxik(UUID id, String kod, String name) {
+        Mxik mxik = new Mxik();
+        mxik.setId(id);
+        mxik.setKod(kod);
+        mxik.setName(name);
+        mxik.setType("SPARE_PART");
+        mxik.setGroupName("Group");
+        return mxik;
     }
 
     private String stubCreateFlow(String inventoryNumber) {

@@ -10,7 +10,26 @@ public record MxikDto(
         String kod,
         String type,
         String groupName,
-        String positionName
+        String positionName,
+        String nameUzLatn,
+        String nameRu,
+        String groupNameRu,
+        String groupNameCyril,
+        String className,
+        String classNameRu,
+        String classNameCyril,
+        String positionNameRu,
+        String positionNameCyril,
+        String subPositionName,
+        String subPositionNameRu,
+        String subPositionNameCyril,
+        String brandName,
+        String brandNameRu,
+        String brandNameCyril,
+        String attributeName,
+        String attributeNameRu,
+        String attributeNameCyril,
+        String barcode
 ) {
     public static MxikDto from(Mxik mxik) {
         return new MxikDto(
@@ -19,7 +38,26 @@ public record MxikDto(
                 mxik.getKod(),
                 mxik.getType(),
                 mxik.getGroupName(),
-                mxik.getPositionName()
+                mxik.getPositionName(),
+                mxik.getNameUzLatn(),
+                mxik.getNameRu(),
+                mxik.getGroupNameRu(),
+                mxik.getGroupNameCyril(),
+                mxik.getClassName(),
+                mxik.getClassNameRu(),
+                mxik.getClassNameCyril(),
+                mxik.getPositionNameRu(),
+                mxik.getPositionNameCyril(),
+                mxik.getSubPositionName(),
+                mxik.getSubPositionNameRu(),
+                mxik.getSubPositionNameCyril(),
+                mxik.getBrandName(),
+                mxik.getBrandNameRu(),
+                mxik.getBrandNameCyril(),
+                mxik.getAttributeName(),
+                mxik.getAttributeNameRu(),
+                mxik.getAttributeNameCyril(),
+                mxik.getBarcode()
         );
     }
 }

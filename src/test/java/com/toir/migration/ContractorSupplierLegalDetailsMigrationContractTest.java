@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ContractorSupplierLegalDetailsMigrationContractTest {
 
     private static final Path MIGRATION = Path.of(
-            "src/main/resources/db/migration/V20260627_4__contractor_supplier_legal_details.sql"
+            "src/main/resources/db/migration/V20260627_7__contractor_supplier_legal_details.sql"
     );
 
     @Test

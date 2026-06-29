@@ -36,6 +36,9 @@ public class SparePart extends BaseEntity {
     @Column(name = "type", nullable = false)
     private String legacyType = "OTHER";
 
+    @Column(name = "mxik_id")
+    private UUID mxikId;
+
     @Column(name = "unit", nullable = false)
     private String unit;
 

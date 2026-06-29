@@ -4,10 +4,12 @@ import com.toir.dto.sparepart.SparePartDto;
 import com.toir.dto.sparepart.SparePartDetailDto;
 import com.toir.dto.sparepart.SparePartLocationDto;
 import com.toir.dto.sparepart.SparePartRecentMovementDto;
+import com.toir.dto.mxik.MxikRefDto;
 import com.toir.entity.Department;
 import com.toir.entity.Location;
 import com.toir.dto.sparepart.SparePartRequest;
 import com.toir.entity.InventoryTransaction;
+import com.toir.entity.Mxik;
 import com.toir.entity.SparePart;
 import com.toir.entity.SparePartType;
 import com.toir.entity.StockMovement;
@@ -25,6 +27,7 @@ import com.toir.enums.SupplierType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.LocationRepository;
+import com.toir.repository.MxikRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.SparePartTypeRepository;
 import com.toir.repository.StockMovementRepository;
@@ -50,6 +53,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -68,6 +72,7 @@ public class SparePartService {
     private final SparePartRepository repository;
     private final SparePartTypeRepository typeRepository;
     private final SupplierRepository supplierRepository;
+    private final MxikRepository mxikRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final WarehouseStockRepository stockRepository;
     private final StockMovementRepository stockMovementRepository;
@@ -178,6 +183,23 @@ public class SparePartService {
             String sortBy,
             String sortDir
     ) {
+        return findAll(pageSize, page, itemType, typeId, type, unit, search, warehouseId, null, sortBy, sortDir);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SparePartDto> findAll(
+            Integer pageSize,
+            Integer page,
+            String itemType,
+            UUID typeId,
+            String type,
+            String unit,
+            String search,
+            UUID warehouseId,
+            UUID mxikId,
+            String sortBy,
+            String sortDir
+    ) {
         int safePage = Math.max(page != null ? page : 0, 0);
         int safePageSize = Math.max(pageSize != null ? pageSize : 20, 1);
         boolean numericSort = isNumericSort(sortBy);
@@ -191,35 +213,64 @@ public class SparePartService {
         Page<SparePart> parts;
         if (warehouseId != null) {
             assertCanAccessWarehouseId(warehouseId);
-            parts = repository.findAllByFilterAndWarehouseId(
-                    inventoryItemKind,
-                    sparePartTypeId,
-                    unitId,
-                    searchPattern,
-                    warehouseId,
-                    pageable
-            );
+            parts = mxikId == null
+                    ? repository.findAllByFilterAndWarehouseId(
+                            inventoryItemKind,
+                            sparePartTypeId,
+                            unitId,
+                            searchPattern,
+                            warehouseId,
+                            pageable
+                    )
+                    : repository.findAllByFilterAndWarehouseIdWithMxik(
+                            inventoryItemKind,
+                            sparePartTypeId,
+                            unitId,
+                            mxikId,
+                            searchPattern,
+                            warehouseId,
+                            pageable
+                    );
         } else if (scopeAccessService.isScopeAdmin()) {
-            parts = repository.findAllByFilter(
-                    inventoryItemKind,
-                    sparePartTypeId,
-                    unitId,
-                    searchPattern,
-                    pageable
-            );
+            parts = mxikId == null
+                    ? repository.findAllByFilter(
+                            inventoryItemKind,
+                            sparePartTypeId,
+                            unitId,
+                            searchPattern,
+                            pageable
+                    )
+                    : repository.findAllByFilterWithMxik(
+                            inventoryItemKind,
+                            sparePartTypeId,
+                            unitId,
+                            mxikId,
+                            searchPattern,
+                            pageable
+                    );
         } else {
             scopedWarehouseIds = accessibleWarehouseIds();
             if (scopedWarehouseIds.isEmpty()) {
                 return Page.empty(pageable);
             }
-            parts = repository.findAllByFilterAndWarehouseIds(
-                    inventoryItemKind,
-                    sparePartTypeId,
-                    unitId,
-                    searchPattern,
-                    scopedWarehouseIds,
-                    pageable
-            );
+            parts = mxikId == null
+                    ? repository.findAllByFilterAndWarehouseIds(
+                            inventoryItemKind,
+                            sparePartTypeId,
+                            unitId,
+                            searchPattern,
+                            scopedWarehouseIds,
+                            pageable
+                    )
+                    : repository.findAllByFilterAndWarehouseIdsWithMxik(
+                            inventoryItemKind,
+                            sparePartTypeId,
+                            unitId,
+                            mxikId,
+                            searchPattern,
+                            scopedWarehouseIds,
+                            pageable
+                    );
         }
 
         if (parts.isEmpty()) {
@@ -259,6 +310,7 @@ public class SparePartService {
                 .filter(s -> s.getSparePartId() != null)
                 .collect(Collectors.groupingBy(WarehouseStock::getSparePartId));
         var stockSnapshots = legacyStockProjectionService.currentAll();
+        Map<UUID, Mxik> mxikById = mxikMap(parts.getContent());
 
         return parts
                 .map(part -> {
@@ -270,7 +322,8 @@ public class SparePartService {
                             currentStock,
                             reservedStock,
                             stocks.size(),
-                            unitRefFor(part.getUnit(), unitRefsByToken)
+                            unitRefFor(part.getUnit(), unitRefsByToken),
+                            MxikRefDto.from(mxikById.get(part.getMxikId()))
                     ));
                 });
     }
@@ -356,7 +409,8 @@ public class SparePartService {
         var stockSnapshots = legacyStockProjectionService.currentForSparePart(id);
         double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
         double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
-        return enrichSupplier(SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit())));
+        return enrichSupplier(SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit()),
+                MxikRefDto.from(mxik(part.getMxikId()).orElse(null))));
     }
 
     @Transactional(readOnly = true)
@@ -390,6 +444,8 @@ public class SparePartService {
                 part.getUnit(),
                 part.getSpecification(),
                 part.getManufacturer(),
+                part.getMxikId(),
+                MxikRefDto.from(mxik(part.getMxikId()).orElse(null)),
                 totalQuantity,
                 totalReservedQty,
                 totalAvailableQty,
@@ -408,6 +464,7 @@ public class SparePartService {
     @Transactional
     public SparePartDto create(SparePartRequest request) {
         CodeGenerationUtils.rejectClientProvidedCode(request.code());
+        validateMxik(request.mxikId());
         SparePart entity = new SparePart();
         entity.setCode(nextCode());
         apply(entity, request);
@@ -423,12 +480,14 @@ public class SparePartService {
                 saved
         );
 
-        return enrichSupplier(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit())));
+        return enrichSupplier(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()),
+                MxikRefDto.from(mxik(request.mxikId()).orElse(null))));
     }
 
     @Transactional
     public SparePartDto update(UUID id, SparePartRequest request) {
         CodeGenerationUtils.rejectClientProvidedCode(request.code());
+        validateMxik(request.mxikId());
         SparePart entity = getOrThrow(id);
         apply(entity, request);
 
@@ -443,7 +502,8 @@ public class SparePartService {
                 entity,
                 saved
         );
-        return enrichSupplier(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit())));
+        return enrichSupplier(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()),
+                MxikRefDto.from(mxik(request.mxikId()).orElse(null))));
     }
 
     @Transactional
@@ -475,6 +535,7 @@ public class SparePartService {
         SparePartType type = resolveTypeForRequest(request);
         entity.setType(type);
         entity.setLegacyType(type.getCode());
+        entity.setMxikId(request.mxikId());
         entity.setUnit(resolveUnit(request.unit(), type));
         entity.setSpecification(request.specification());
         entity.setManufacturer(request.manufacturer());
@@ -488,6 +549,35 @@ public class SparePartService {
         if (request.criticality() != null) {
             entity.setCriticality(request.criticality());
         }
+    }
+
+    private void validateMxik(UUID mxikId) {
+        if (mxikId == null) {
+            return;
+        }
+        mxikRepository.findByIdAndIsDeletedFalse(mxikId)
+                .orElseThrow(() -> RestException.notFound("MXIK not found: " + mxikId));
+    }
+
+    private Optional<Mxik> mxik(UUID mxikId) {
+        if (mxikId == null) {
+            return Optional.empty();
+        }
+        return mxikRepository.findByIdAndIsDeletedFalse(mxikId);
+    }
+
+    private Map<UUID, Mxik> mxikMap(List<SparePart> parts) {
+        List<UUID> mxikIds = parts.stream()
+                .map(SparePart::getMxikId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (mxikIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return mxikRepository.findAllByIdInAndIsDeletedFalse(mxikIds)
+                .stream()
+                .collect(Collectors.toMap(Mxik::getId, Function.identity(), (left, right) -> left));
     }
 
     private SparePartDto enrichSupplier(SparePartDto dto) {

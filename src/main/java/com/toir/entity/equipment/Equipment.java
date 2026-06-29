@@ -44,6 +44,9 @@ public class Equipment extends BaseEntity {
     @Column(name = "equipment_type_id", nullable = false)
     private UUID equipmentTypeId;
 
+    @Column(name = "mxik_id")
+    private UUID mxikId;
+
     @Column(name = "department_id")
     // Physical department where equipment is currently installed.
     // PBAC ownership/scope is stored in responsibleDepartmentId.

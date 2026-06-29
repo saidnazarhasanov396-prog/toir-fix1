@@ -8,6 +8,7 @@ import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.VehicleType;
 import com.toir.exception.RestException;
+import com.toir.repository.MxikRepository;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.VehicleDocumentRepository;
@@ -48,6 +49,8 @@ class VehicleServiceDriverAssignmentTest {
     EquipmentRepository equipmentRepository;
     @Mock
     VehicleDetailsRepository vehicleDetailsRepository;
+    @Mock
+    MxikRepository mxikRepository;
     @Mock
     EquipmentService equipmentService;
     @Mock

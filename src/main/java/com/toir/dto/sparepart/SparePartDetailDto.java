@@ -1,5 +1,7 @@
 package com.toir.dto.sparepart;
 
+import com.toir.dto.mxik.MxikRefDto;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -16,6 +18,8 @@ public record SparePartDetailDto(
         String unit,
         String specification,
         String manufacturer,
+        UUID mxikId,
+        MxikRefDto mxik,
         double totalQuantity,
         double totalReservedQty,
         double totalAvailableQty,

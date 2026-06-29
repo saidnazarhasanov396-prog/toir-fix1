@@ -54,6 +54,49 @@ public interface VehicleDetailsRepository extends JpaRepository<VehicleDetails, 
                                            @Param("search") String search,
                                            Pageable pageable);
 
+    @Query("""
+            select e from Equipment e
+            join VehicleDetails vd on vd.equipmentId = e.id
+            where e.isDeleted = false
+            and vd.isDeleted = false
+            and e.category = :category
+            and (:departmentId is null or e.departmentId = :departmentId)
+            and (:status is null or e.status = :status)
+            and (:plateType is null or vd.plateType = :plateType)
+            and (:mxikId is null or e.mxikId = :mxikId)
+            and (cast(:search as string) is null or :search = '' or
+                lower(e.code) like lower(concat('%', cast(:search as string), '%')) or
+                lower(e.name) like lower(concat('%', cast(:search as string), '%')) or
+                lower(e.inventoryNumber) like lower(concat('%', cast(:search as string), '%')) or
+                lower(e.technicalNumber) like lower(concat('%', cast(:search as string), '%')) or
+                lower(e.serialNumber) like lower(concat('%', cast(:search as string), '%')) or
+                lower(e.model) like lower(concat('%', cast(:search as string), '%')) or
+                lower(e.manufacturer) like lower(concat('%', cast(:search as string), '%')) or
+                lower(vd.plateNumber) like lower(concat('%', cast(:search as string), '%')) or
+                lower(vd.vin) like lower(concat('%', cast(:search as string), '%')) or
+                lower(vd.brand) like lower(concat('%', cast(:search as string), '%')) or
+                lower(vd.model) like lower(concat('%', cast(:search as string), '%')) or
+                exists (
+                    select 1
+                    from Mxik m
+                    where m.id = e.mxikId
+                      and m.isDeleted = false
+                      and (
+                          lower(m.kod) like lower(concat('%', cast(:search as string), '%'))
+                          or lower(m.name) like lower(concat('%', cast(:search as string), '%'))
+                          or lower(coalesce(m.barcode, '')) like lower(concat('%', cast(:search as string), '%'))
+                      )
+                ))
+            order by e.updatedAt desc
+            """)
+    Page<Equipment> searchVehicleEquipmentWithMxik(@Param("departmentId") UUID departmentId,
+                                                   @Param("status") EquipmentStatus status,
+                                                   @Param("plateType") VehicleRegistrationPlateType plateType,
+                                                   @Param("category") EquipmentCategory category,
+                                                   @Param("mxikId") UUID mxikId,
+                                                   @Param("search") String search,
+                                                   Pageable pageable);
+
     @Query(value = "SELECT * FROM vehicle_details WHERE plate_number = cast(:plateNumber as varchar) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<VehicleDetails> findByPlateNumberAndIsDeletedFalse(@Param("plateNumber") String plateNumber);
 

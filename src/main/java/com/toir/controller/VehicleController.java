@@ -73,6 +73,7 @@ public class VehicleController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) EquipmentStatus status,
             @RequestParam(required = false) VehicleRegistrationPlateType plateType,
+            @RequestParam(required = false) UUID mxikId,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
@@ -80,6 +81,17 @@ public class VehicleController {
             @RequestParam(required = false, defaultValue = "asc") String sortDir
     ) {
         if (sortBy == null || sortBy.isBlank()) {
+            if (mxikId != null) {
+                return ResponseEntity.ok(service.list(
+                        scopedDepartment(departmentId),
+                        status,
+                        plateType,
+                        mxikId,
+                        search,
+                        page,
+                        size
+                ));
+            }
             return ResponseEntity.ok(service.list(
                     scopedDepartment(departmentId),
                     status,
@@ -87,6 +99,19 @@ public class VehicleController {
                     search,
                     page,
                     size
+            ));
+        }
+        if (mxikId != null) {
+            return ResponseEntity.ok(service.list(
+                    scopedDepartment(departmentId),
+                    status,
+                    plateType,
+                    mxikId,
+                    search,
+                    page,
+                    size,
+                    sortBy,
+                    sortDir
             ));
         }
         return ResponseEntity.ok(service.list(

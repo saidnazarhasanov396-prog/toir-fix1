@@ -55,7 +55,8 @@ public record VehicleRequest(
         @Positive Double lifetimeLimitValue,
         @PositiveOrZero Double lifetimeBaselineValue,
         @Positive Double lifetimeWarningPercent,
-        @Positive Double averageDailyUsage
+        @Positive Double averageDailyUsage,
+        UUID mxikId
 ) {
     public VehicleRequest(
             String code,
@@ -94,7 +95,7 @@ public record VehicleRequest(
                 bodyNumber, chassisNumber, engineNumber, fuelType, fuelTankCapacity, carryingCapacity,
                 seatCount, assignedDriverId, null, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
-                technicalInspectionExpiryDate, gpsDeviceId, null, null, null, null, null, null, null, null);
+                technicalInspectionExpiryDate, gpsDeviceId, null, null, null, null, null, null, null, null, null);
     }
 
     public VehicleRequest(
@@ -137,7 +138,7 @@ public record VehicleRequest(
                 seatCount, assignedDriverId, null, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
                 technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
     }
 
     public VehicleRequest(
@@ -181,7 +182,7 @@ public record VehicleRequest(
                 seatCount, assignedDriverId, null, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
                 technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
     }
 
     public VehicleRequest(
@@ -232,7 +233,7 @@ public record VehicleRequest(
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
                 technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes,
                 lifetimeCounterType, lifetimeMeterId, lifetimeLimitValue, lifetimeBaselineValue,
-                lifetimeWarningPercent, averageDailyUsage);
+                lifetimeWarningPercent, averageDailyUsage, null);
     }
 
     public VehicleRequest(
@@ -277,7 +278,7 @@ public record VehicleRequest(
                 seatCount, assignedDriverId, assignedDriverUsageLimitMinutes, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
                 technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
     }
 
     public static VehicleRequest minimal(String code, String name, String inventoryNumber,
@@ -332,7 +333,8 @@ public record VehicleRequest(
                 lifetimeLimitValue,
                 lifetimeBaselineValue,
                 lifetimeWarningPercent,
-                averageDailyUsage
+                averageDailyUsage,
+                mxikId
         );
     }
 }

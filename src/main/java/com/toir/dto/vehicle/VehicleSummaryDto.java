@@ -1,6 +1,7 @@
 package com.toir.dto.vehicle;
 
 import com.toir.dto.equipment.EquipmentDto;
+import com.toir.dto.mxik.MxikRefDto;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MeterType;
@@ -18,6 +19,8 @@ public record VehicleSummaryDto(
         EquipmentStatus status,
         EquipmentDto.Ref department,
         EquipmentDto.Ref location,
+        UUID mxikId,
+        MxikRefDto mxik,
         String plateNumber,
         VehicleRegistrationPlateType plateType,
         String vin,
@@ -46,6 +49,8 @@ public record VehicleSummaryDto(
                 equipment.status(),
                 equipment.department(),
                 equipment.location(),
+                equipment.mxikId(),
+                equipment.mxik(),
                 details.getPlateNumber(),
                 details.getPlateType(),
                 details.getVin(),

@@ -1,5 +1,6 @@
 package com.toir.dto.equipment;
 
+import com.toir.dto.mxik.MxikRefDto;
 import com.toir.entity.FileAsset;
 import com.toir.entity.Supplier;
 import com.toir.entity.equipment.Equipment;
@@ -82,7 +83,9 @@ public record EquipmentDto(
         UUID supplierId,
         String supplierName,
         UUID warrantySupplierId,
-        String warrantySupplierName
+        String warrantySupplierName,
+        UUID mxikId,
+        MxikRefDto mxik
 ) {
     public EquipmentDto(
             UUID id,
@@ -135,7 +138,7 @@ public record EquipmentDto(
                 expectedEndDate, remainingLifetime, lifetimeStatus, hasWarranty, warrantyAttachmentId,
                 warrantyStartDate, warrantyEndDate, warrantyAttachment, passportCompleteness,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                false, null, null, null, null);
+                false, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -184,7 +187,7 @@ public record EquipmentDto(
                 expectedLifetimeMonths, expectedLifetimeYears, null, operatingDuration, expectedEndDate, remainingLifetime,
                 lifetimeStatus, hasWarranty, warrantyAttachmentId, null, null, warrantyAttachment, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                false, null, null, null, null);
+                false, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -221,7 +224,7 @@ public record EquipmentDto(
                 location, equipmentType, parent, passport, placement, null, null, null, null, null, null, null,
                 LifetimeStatus.UNKNOWN, false, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                false, null, null, null, null);
+                false, null, null, null, null, null, null);
     }
 
     public EquipmentDto(
@@ -435,6 +438,25 @@ public record EquipmentDto(
                                     boolean isCreatedAct,
                                     Supplier supplier,
                                     Supplier warrantySupplier) {
+        return from(e, department, location, equipmentType, parent, passport, placement, warrantyAttachment,
+                passportCompleteness, lifetimeMeter, responsible, isCreatedAct, supplier, warrantySupplier, null);
+    }
+
+    public static EquipmentDto from(Equipment e,
+                                    Ref department,
+                                    Ref location,
+                                    Ref equipmentType,
+                                    Ref parent,
+                                    PassportRef passport,
+                                    PlacementRef placement,
+                                    FileAsset warrantyAttachment,
+                                    PassportCompletenessRef passportCompleteness,
+                                    EquipmentMeter lifetimeMeter,
+                                    ResponsibleRef responsible,
+                                    boolean isCreatedAct,
+                                    Supplier supplier,
+                                    Supplier warrantySupplier,
+                                    MxikRefDto mxik) {
         return new EquipmentDto(
                 e.getId(), e.getCode(), e.getName(), e.getInventoryNumber(), e.getTechnicalNumber(),
                 e.getSerialNumber(), e.getModel(), e.getProducedYear(), e.getEquipmentTypeId(), e.getDepartmentId(),
@@ -469,7 +491,9 @@ public record EquipmentDto(
                 e.getSupplierId(),
                 supplier == null ? null : supplier.getName(),
                 e.getWarrantySupplierId(),
-                warrantySupplier == null ? null : warrantySupplier.getName()
+                warrantySupplier == null ? null : warrantySupplier.getName(),
+                e.getMxikId(),
+                mxik
         );
     }
 

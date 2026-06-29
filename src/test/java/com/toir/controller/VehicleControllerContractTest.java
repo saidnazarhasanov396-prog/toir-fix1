@@ -32,6 +32,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
@@ -149,6 +150,21 @@ class VehicleControllerContractTest {
 
         verify(scopeAccessService).enforceDepartmentScope(departmentId);
         verify(service).getStats(scopedDepartmentId, "kamaz");
+    }
+
+    @Test
+    void listPassesMxikFilterToService() throws Exception {
+        UUID mxikId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
+        when(service.list(null, null, null, mxikId, null, 0, 20))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        mockMvc.perform(get("/api/v1/vehicles").param("mxikId", mxikId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty());
+
+        verify(service).list(null, null, null, mxikId, null, 0, 20);
     }
 
     @Test

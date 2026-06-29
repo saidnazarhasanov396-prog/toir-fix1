@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +21,14 @@ public interface MxikRepository extends JpaRepository<Mxik, UUID> {
     Optional<Mxik> findByIdAndIsDeletedFalse(UUID id);
 
     Optional<Mxik> findByKodAndIsDeletedFalse(String kod);
+
+    @Query("""
+            select m
+            from Mxik m
+            where m.isDeleted = false
+              and m.id in :ids
+            """)
+    List<Mxik> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
     @Query("""
             select count(m) > 0
@@ -49,6 +58,25 @@ public interface MxikRepository extends JpaRepository<Mxik, UUID> {
                     or lower(m.type) like :searchPattern
                     or lower(coalesce(m.groupName, '')) like :searchPattern
                     or lower(coalesce(m.positionName, '')) like :searchPattern
+                    or lower(coalesce(m.nameUzLatn, '')) like :searchPattern
+                    or lower(coalesce(m.nameRu, '')) like :searchPattern
+                    or lower(coalesce(m.groupNameRu, '')) like :searchPattern
+                    or lower(coalesce(m.groupNameCyril, '')) like :searchPattern
+                    or lower(coalesce(m.className, '')) like :searchPattern
+                    or lower(coalesce(m.classNameRu, '')) like :searchPattern
+                    or lower(coalesce(m.classNameCyril, '')) like :searchPattern
+                    or lower(coalesce(m.positionNameRu, '')) like :searchPattern
+                    or lower(coalesce(m.positionNameCyril, '')) like :searchPattern
+                    or lower(coalesce(m.subPositionName, '')) like :searchPattern
+                    or lower(coalesce(m.subPositionNameRu, '')) like :searchPattern
+                    or lower(coalesce(m.subPositionNameCyril, '')) like :searchPattern
+                    or lower(coalesce(m.brandName, '')) like :searchPattern
+                    or lower(coalesce(m.brandNameRu, '')) like :searchPattern
+                    or lower(coalesce(m.brandNameCyril, '')) like :searchPattern
+                    or lower(coalesce(m.attributeName, '')) like :searchPattern
+                    or lower(coalesce(m.attributeNameRu, '')) like :searchPattern
+                    or lower(coalesce(m.attributeNameCyril, '')) like :searchPattern
+                    or lower(coalesce(m.barcode, '')) like :searchPattern
                   )
             order by m.name asc
             """)
