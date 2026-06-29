@@ -2,6 +2,7 @@ package com.toir.service.department;
 
 import com.toir.dto.department.DepartmentDto;
 import com.toir.dto.department.DepartmentRequest;
+import com.toir.dto.department.DepartmentTreeDto;
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.entity.Department;
 import com.toir.entity.users.Brigade;
@@ -39,6 +40,43 @@ public class DepartmentService {
         String searchPattern = buildSearchPattern(normalizedSearch);
         return repository.findAllByIsDeletedFalseAndByType(type, searchPattern).stream()
                 .map(DepartmentDto::from)
+                .toList();
+    }
+
+
+    @Transactional(readOnly = true)
+    public List<DepartmentTreeDto> findTree(DepartmentType type, String search) {
+        String normalizedSearch = normalizeSearch(search);
+        List<Department> departments = repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        Map<UUID, Department> byId = departments.stream()
+                .collect(Collectors.toMap(
+                        Department::getId,
+                        department -> department,
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+        Map<UUID, List<Department>> childrenByParentId = departments.stream()
+                .filter(department -> department.getParentId() != null)
+                .collect(Collectors.groupingBy(Department::getParentId));
+
+        Set<UUID> includedIds = resolveIncludedDepartmentIds(departments, byId, childrenByParentId, type, normalizedSearch);
+        List<Department> roots = departments.stream()
+                .filter(department -> includedIds.contains(department.getId()))
+                .filter(department -> department.getParentId() == null
+                        || !byId.containsKey(department.getParentId())
+                        || !includedIds.contains(department.getParentId()))
+                .sorted(this::compareDepartmentsForTree)
+                .toList();
+
+        if (roots.isEmpty() && !includedIds.isEmpty()) {
+            roots = departments.stream()
+                    .filter(department -> includedIds.contains(department.getId()))
+                    .sorted(this::compareDepartmentsForTree)
+                    .toList();
+        }
+
+        return roots.stream()
+                .map(root -> toTreeNode(root, childrenByParentId, includedIds, new LinkedHashSet<>()))
                 .toList();
     }
 
@@ -136,6 +174,111 @@ public class DepartmentService {
                 null
         );
 
+    }
+
+
+
+    private Set<UUID> resolveIncludedDepartmentIds(
+            List<Department> departments,
+            Map<UUID, Department> byId,
+            Map<UUID, List<Department>> childrenByParentId,
+            DepartmentType type,
+            String normalizedSearch
+    ) {
+        boolean hasTypeFilter = type != null;
+        boolean hasSearchFilter = normalizedSearch != null;
+        if (!hasTypeFilter && !hasSearchFilter) {
+            return departments.stream()
+                    .map(Department::getId)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+        }
+
+        Set<UUID> includedIds = new LinkedHashSet<>();
+        for (Department department : departments) {
+            boolean matchesType = !hasTypeFilter || department.getType() == type;
+            boolean matchesSearch = !hasSearchFilter || departmentMatchesSearch(department, normalizedSearch);
+            if (matchesType && matchesSearch) {
+                addAncestors(department, byId, includedIds);
+                addDescendants(department, childrenByParentId, includedIds, new LinkedHashSet<>());
+            }
+        }
+        return includedIds;
+    }
+
+    private void addAncestors(Department department, Map<UUID, Department> byId, Set<UUID> includedIds) {
+        Department current = department;
+        Set<UUID> seen = new LinkedHashSet<>();
+        while (current != null && current.getId() != null && seen.add(current.getId())) {
+            includedIds.add(current.getId());
+            UUID parentId = current.getParentId();
+            current = parentId == null ? null : byId.get(parentId);
+        }
+    }
+
+    private void addDescendants(
+            Department department,
+            Map<UUID, List<Department>> childrenByParentId,
+            Set<UUID> includedIds,
+            Set<UUID> path
+    ) {
+        if (department == null || department.getId() == null || !path.add(department.getId())) {
+            return;
+        }
+        includedIds.add(department.getId());
+        for (Department child : childrenByParentId.getOrDefault(department.getId(), List.of())) {
+            addDescendants(child, childrenByParentId, includedIds, path);
+        }
+        path.remove(department.getId());
+    }
+
+    private DepartmentTreeDto toTreeNode(
+            Department department,
+            Map<UUID, List<Department>> childrenByParentId,
+            Set<UUID> includedIds,
+            Set<UUID> path
+    ) {
+        if (department.getId() == null || !path.add(department.getId())) {
+            return DepartmentTreeDto.from(department, List.of());
+        }
+        List<DepartmentTreeDto> children = childrenByParentId.getOrDefault(department.getId(), List.of()).stream()
+                .filter(child -> includedIds.contains(child.getId()))
+                .filter(child -> child.getId() != null && !path.contains(child.getId()))
+                .sorted(this::compareDepartmentsForTree)
+                .map(child -> toTreeNode(child, childrenByParentId, includedIds, new LinkedHashSet<>(path)))
+                .toList();
+        return DepartmentTreeDto.from(department, children);
+    }
+
+    private int compareDepartmentsForTree(Department left, Department right) {
+        int typeCompare = Integer.compare(typeOrder(left.getType()), typeOrder(right.getType()));
+        if (typeCompare != 0) {
+            return typeCompare;
+        }
+        int codeCompare = safeText(left.getCode()).compareToIgnoreCase(safeText(right.getCode()));
+        if (codeCompare != 0) {
+            return codeCompare;
+        }
+        return safeText(left.getName()).compareToIgnoreCase(safeText(right.getName()));
+    }
+
+    private int typeOrder(DepartmentType type) {
+        return type == null ? Integer.MAX_VALUE : type.ordinal();
+    }
+
+    private boolean departmentMatchesSearch(Department department, String normalizedSearch) {
+        return containsNormalized(department.getCode(), normalizedSearch)
+                || containsNormalized(department.getName(), normalizedSearch)
+                || containsNormalized(department.getNameEn(), normalizedSearch)
+                || containsNormalized(department.getNameUz(), normalizedSearch)
+                || containsNormalized(department.getDescription(), normalizedSearch);
+    }
+
+    private boolean containsNormalized(String value, String normalizedSearch) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(normalizedSearch);
+    }
+
+    private String safeText(String value) {
+        return value == null ? "" : value;
     }
 
     private Department getOrThrow(UUID id) {

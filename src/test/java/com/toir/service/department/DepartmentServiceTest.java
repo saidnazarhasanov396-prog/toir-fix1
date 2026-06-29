@@ -2,6 +2,7 @@ package com.toir.service.department;
 
 import com.toir.dto.department.DepartmentDto;
 import com.toir.dto.department.DepartmentRequest;
+import com.toir.dto.department.DepartmentTreeDto;
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.entity.Department;
 import com.toir.entity.users.Brigade;
@@ -242,6 +243,91 @@ class DepartmentServiceTest {
         verify(brigadeRepository).findAllByIdInAndIsDeletedFalse(List.of(brigadeId));
     }
 
+
+    @Test
+    void findTreeReturnsRootWithNestedChildren() {
+        Department enterprise = department("ENT-001", "Tenzorsoft", DepartmentType.ENTERPRISE);
+        Department workshop = department("WS-001", "Ammonia Workshop", DepartmentType.WORKSHOP);
+        Department section = department("SEC-001", "Shift A", DepartmentType.SECTION);
+        workshop.setParentId(enterprise.getId());
+        section.setParentId(workshop.getId());
+
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(section, workshop, enterprise));
+
+        List<DepartmentTreeDto> tree = service.findTree(null, "");
+
+        assertThat(tree).hasSize(1);
+        assertThat(tree.getFirst().code()).isEqualTo("ENT-001");
+        assertThat(tree.getFirst().children()).hasSize(1);
+        assertThat(tree.getFirst().children().getFirst().code()).isEqualTo("WS-001");
+        assertThat(tree.getFirst().children().getFirst().children().getFirst().code()).isEqualTo("SEC-001");
+    }
+
+    @Test
+    void findTreeTreatsOrphanAsRoot() {
+        UUID missingParentId = UUID.randomUUID();
+        Department orphan = department("WS-001", "Orphan Workshop", DepartmentType.WORKSHOP);
+        orphan.setParentId(missingParentId);
+
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(orphan));
+
+        List<DepartmentTreeDto> tree = service.findTree(null, null);
+
+        assertThat(tree).hasSize(1);
+        assertThat(tree.getFirst().id()).isEqualTo(orphan.getId());
+        assertThat(tree.getFirst().parentId()).isEqualTo(missingParentId);
+    }
+
+    @Test
+    void findTreeSearchByChildIncludesParentContext() {
+        Department enterprise = department("ENT-001", "Tenzorsoft", DepartmentType.ENTERPRISE);
+        Department child = department("ENT-003", "Navoiyazot", DepartmentType.ENTERPRISE);
+        child.setParentId(enterprise.getId());
+
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(child, enterprise));
+
+        List<DepartmentTreeDto> tree = service.findTree(null, "navoi");
+
+        assertThat(tree).hasSize(1);
+        assertThat(tree.getFirst().code()).isEqualTo("ENT-001");
+        assertThat(tree.getFirst().children()).extracting(DepartmentTreeDto::code).containsExactly("ENT-003");
+    }
+
+    @Test
+    void findTreeSearchByParentIncludesDescendants() {
+        Department enterprise = department("ENT-001", "Tenzorsoft", DepartmentType.ENTERPRISE);
+        Department child = department("ENT-003", "Navoiyazot", DepartmentType.ENTERPRISE);
+        child.setParentId(enterprise.getId());
+
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(child, enterprise));
+
+        List<DepartmentTreeDto> tree = service.findTree(null, "tenzor");
+
+        assertThat(tree).hasSize(1);
+        assertThat(tree.getFirst().code()).isEqualTo("ENT-001");
+        assertThat(tree.getFirst().children()).extracting(DepartmentTreeDto::code).containsExactly("ENT-003");
+    }
+
+    @Test
+    void findTreeStopsWhenCycleExists() {
+        Department first = department("ENT-001", "First", DepartmentType.ENTERPRISE);
+        Department second = department("WS-001", "Second", DepartmentType.WORKSHOP);
+        first.setParentId(second.getId());
+        second.setParentId(first.getId());
+
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(first, second));
+
+        List<DepartmentTreeDto> tree = service.findTree(null, null);
+
+        assertThat(tree).hasSize(2);
+        assertThat(tree).extracting(DepartmentTreeDto::code).containsExactly("ENT-001", "WS-001");
+    }
+
     private static Employee getEmployee(UUID employeeId, UUID departmentId, UUID brigadeId) {
         Employee employee = new Employee();
         employee.setId(employeeId);
@@ -262,11 +348,15 @@ class DepartmentServiceTest {
     }
 
     private Department department(String code, String name) {
+        return department(code, name, DepartmentType.WORKSHOP);
+    }
+
+    private Department department(String code, String name, DepartmentType type) {
         Department department = new Department();
         ReflectionTestUtils.setField(department, "id", UUID.randomUUID());
         department.setCode(code);
         department.setName(name);
-        department.setType(DepartmentType.WORKSHOP);
+        department.setType(type);
         department.setDeleted(false);
         return department;
     }

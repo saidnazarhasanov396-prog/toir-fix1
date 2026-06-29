@@ -4,6 +4,8 @@ import com.toir.dto.actualcost.ActualCostCorrectionRequest;
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUser;
 import com.toir.service.ActualCostService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -58,14 +60,20 @@ public class ActualCostController {
     @PostMapping("/{id}/allocate-budget-line")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_ALLOCATE')")
     public ResponseEntity<ActualCostDto> allocateBudgetLine(@PathVariable UUID id,
+                                                            @CurrentUser AuthenticatedUser user,
                                                             @Valid @RequestBody ActualCostAllocationRequest request) {
-        return ResponseEntity.ok(service.allocateBudgetLine(id, request.budgetLineId(), null, request.comment()));
+        return ResponseEntity.ok(service.allocateBudgetLine(id, request.budgetLineId(), currentUserId(user), request.comment()));
     }
 
     @PostMapping("/{id}/request-correction")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_REQUEST_CORRECTION')")
     public ResponseEntity<ActualCostDto> requestCorrection(@PathVariable UUID id,
+                                                           @CurrentUser AuthenticatedUser user,
                                                            @Valid @RequestBody ActualCostCorrectionRequest request) {
-        return ResponseEntity.ok(service.requestCorrection(id, null, request.comment()));
+        return ResponseEntity.ok(service.requestCorrection(id, currentUserId(user), request.comment()));
+    }
+
+    private UUID currentUserId(AuthenticatedUser user) {
+        return user != null ? UUID.fromString(user.id()) : null;
     }
 }

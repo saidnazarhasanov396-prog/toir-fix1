@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.core.env.Environment;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.util.StringUtils;
 
 public final class FirebaseDiagnostics {
@@ -82,6 +83,13 @@ public final class FirebaseDiagnostics {
         }
         if (!StringUtils.hasText(serviceAccountFile)) {
             return Credential.none();
+        }
+
+        if (serviceAccountFile.startsWith("classpath:")) {
+            String resourcePath = serviceAccountFile.substring("classpath:".length());
+            ClassPathResource resource = new ClassPathResource(resourcePath);
+            boolean exists = resource.exists();
+            return Credential.file(serviceAccountFile, exists, exists, exists);
         }
 
         try {

@@ -6,13 +6,6 @@ variables:
   CHART_VERSION: 10.2-full
   CI_DEBUG_TRACE: "false"
   SERVICE_NAME: toir-backend
-  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
-
-cache:
-  key: "${CI_PROJECT_NAME}-maven"
-  paths:
-    - .m2/repository
-  policy: pull-push
 
 stages:
   - compile
@@ -23,8 +16,6 @@ compile:
   image: maven:3.9.9-eclipse-temurin-21
   stage: compile
   script:
-    - echo "Using cached Maven repository..."
-    - mvn dependency:go-offline --no-transfer-progress
     - mvn clean package -DskipTests --no-transfer-progress
   artifacts:
     paths:
@@ -34,8 +25,6 @@ compile:
 build:
   stage: build
   image: docker:24.0.9
-  services:
-    - docker:24.0.9-dind
   script:
     - docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
     - docker build -t "${CI_REGISTRY_IMAGE}:latest" .
@@ -47,7 +36,7 @@ deploy:
   image: alpine:latest
   script:
     - chmod og= $SSH_PRIVATE_KEY
-    - apk update && apk add openssh-client
+    - apk add openssh-client
     - |
       cat > toir-backend.env <<EOF
       SPRING_PROFILES_ACTIVE=prod
