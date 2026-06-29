@@ -6,13 +6,16 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.ActualCostAllocationEvent;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostAllocationEventRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -37,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -47,6 +51,12 @@ class ActualCostServiceTest {
 
     @Mock
     ActualCostRepository repository;
+
+    @Mock
+    ActualCostAllocationEventRepository allocationEventRepository;
+
+    @Mock
+    ActualCostReviewEventRepository reviewEventRepository;
 
     @Mock
     WorkOrderRepository workOrderRepository;
@@ -388,6 +398,99 @@ class ActualCostServiceTest {
     }
 
     @Test
+    void allocatePendingUnallocatedCostSetsBudgetLineAndAuditEvent() {
+        UUID id = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID categoryId = UUID.randomUUID();
+        ActualCost actualCost = pendingActualCost(id, null, categoryId, 120);
+        BudgetLine line = budgetLine(budgetLineId, 500, 200, BudgetStatus.APPROVED);
+        line.setCostCategoryId(categoryId);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(allocationEventRepository.save(any(ActualCostAllocationEvent.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ActualCostDto result = service.allocateBudgetLine(id, budgetLineId, actorId, "Allocated after work order fix");
+
+        assertThat(result.budgetLineId()).isEqualTo(budgetLineId);
+        assertThat(result.status()).isEqualTo(ActualCostStatus.PENDING);
+        assertThat(result.allocationComment()).isEqualTo("Allocated after work order fix");
+        assertThat(result.allocatedById()).isEqualTo(actorId);
+        assertThat(result.allocatedAt()).isNotNull();
+        assertThat(line.getActualAmount()).isEqualTo(200);
+        assertThat(line.getBudget().getTotalActual()).isEqualTo(200);
+
+        var eventCaptor = forClass(ActualCostAllocationEvent.class);
+        verify(allocationEventRepository).save(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getActualCostId()).isEqualTo(id);
+        assertThat(eventCaptor.getValue().getOldBudgetLineId()).isNull();
+        assertThat(eventCaptor.getValue().getNewBudgetLineId()).isEqualTo(budgetLineId);
+        assertThat(eventCaptor.getValue().getComment()).isEqualTo("Allocated after work order fix");
+        verify(budgetLineRepository, never()).save(any(BudgetLine.class));
+        verify(maintenanceBudgetRepository, never()).save(any(MaintenanceBudget.class));
+    }
+
+    @Test
+    void allocateRejectsDraftBudget() {
+        UUID id = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        UUID categoryId = UUID.randomUUID();
+        ActualCost actualCost = pendingActualCost(id, null, categoryId, 120);
+        BudgetLine line = budgetLine(budgetLineId, 500, 200, BudgetStatus.DRAFT);
+        line.setCostCategoryId(categoryId);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
+
+        assertThatThrownBy(() -> service.allocateBudgetLine(id, budgetLineId, UUID.randomUUID(), "Allocate"))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("APPROVED or LOCKED");
+
+        verify(repository, never()).save(any());
+        verify(allocationEventRepository, never()).save(any());
+    }
+
+    @Test
+    void allocateRejectsMismatchedCostCategory() {
+        UUID id = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        ActualCost actualCost = pendingActualCost(id, null, UUID.randomUUID(), 120);
+        BudgetLine line = budgetLine(budgetLineId, 500, 200, BudgetStatus.APPROVED);
+        line.setCostCategoryId(UUID.randomUUID());
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
+
+        assertThatThrownBy(() -> service.allocateBudgetLine(id, budgetLineId, UUID.randomUUID(), "Allocate"))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Cost category");
+
+        verify(repository, never()).save(any());
+        verify(allocationEventRepository, never()).save(any());
+    }
+
+    @Test
+    void requestCorrectionRejectsPendingCostWithoutBudgetMutation() {
+        UUID id = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        ActualCost actualCost = pendingActualCost(id, budgetLineId, UUID.randomUUID(), 120);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ActualCostDto result = service.requestCorrection(id, actorId, "Need source correction");
+
+        assertThat(result.status()).isEqualTo(ActualCostStatus.REJECTED);
+        assertThat(result.correctionReason()).isEqualTo("Need source correction");
+        verify(budgetLineRepository, never()).save(any(BudgetLine.class));
+        verify(maintenanceBudgetRepository, never()).save(any(MaintenanceBudget.class));
+    }
+
+    @Test
     void findByFiltersShouldSupportBusinessSearchAndKeepWorkOrderFilter() {
         UUID workOrderId = UUID.randomUUID();
         ActualCost actualCost = new ActualCost();
@@ -510,5 +613,15 @@ class ActualCostServiceTest {
         line.setActualAmount(actual);
         line.setCostCategoryId(UUID.randomUUID());
         return line;
+    }
+
+    private ActualCost pendingActualCost(UUID id, UUID budgetLineId, UUID costCategoryId, double amount) {
+        ActualCost actualCost = new ActualCost();
+        actualCost.setId(id);
+        actualCost.setStatus(ActualCostStatus.PENDING);
+        actualCost.setBudgetLineId(budgetLineId);
+        actualCost.setCostCategoryId(costCategoryId);
+        actualCost.setAmount(amount);
+        return actualCost;
     }
 }

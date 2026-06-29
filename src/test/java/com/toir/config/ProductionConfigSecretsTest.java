@@ -17,6 +17,7 @@ class ProductionConfigSecretsTest {
     private static final Path DEV_CONFIG = Path.of("src/main/resources/application-dev.yml");
     private static final Path DOCKER_COMPOSE = Path.of("docker-compose.yml");
     private static final Path GITLAB_CI = Path.of(".gitlab-ci.yml");
+    private static final Path FIREBASE_SERVICE_ACCOUNT = Path.of("src/main/resources/firebase-service-account.json");
     private static final Pattern ENV_PLACEHOLDER = Pattern.compile("\\$\\{[A-Z0-9_]+(?::[^}]*)?}");
     private static final Pattern COMPOSE_ENV_LINE = Pattern.compile("^\\s*([A-Z0-9_]+):\\s*(.+?)\\s*$");
 
@@ -83,17 +84,24 @@ class ProductionConfigSecretsTest {
     }
 
     @Test
-    void gitlabDeployDoesNotUseLegacyFirebaseEnvironmentSwitches() throws IOException {
+    void firebaseServiceAccountIsNotPackagedInApplicationResources() {
+        assertThat(FIREBASE_SERVICE_ACCOUNT)
+                .as("Firebase service account JSON must be supplied by runtime env or mounted secret, not packaged in the jar")
+                .doesNotExist();
+    }
+
+    @Test
+    void gitlabDeployPassesFirebaseEnvironmentToBackendContainer() throws IOException {
         String gitlabCi = Files.readString(GITLAB_CI);
 
         assertThat(gitlabCi)
-                .as("Firebase is initialized from the packaged classpath service account")
-                .doesNotContain("APP_FIREBASE_ENABLED")
-                .doesNotContain("APP_FIREBASE_PROJECT_ID")
-                .doesNotContain("APP_FIREBASE_SERVICE_ACCOUNT_BASE64")
-                .doesNotContain("APP_FIREBASE_SERVICE_ACCOUNT_JSON")
-                .doesNotContain("APP_FIREBASE_SERVICE_ACCOUNT_FILE")
-                .doesNotContain("Missing Firebase credentials")
+                .as("Firebase runtime settings must be propagated from GitLab variables into docker run")
+                .contains("APP_FIREBASE_ENABLED=${APP_FIREBASE_EFFECTIVE_ENABLED}")
+                .contains("APP_FIREBASE_PROJECT_ID=${APP_FIREBASE_EFFECTIVE_PROJECT_ID}")
+                .contains("APP_FIREBASE_SERVICE_ACCOUNT_BASE64=${APP_FIREBASE_SERVICE_ACCOUNT_BASE64:-}")
+                .contains("APP_FIREBASE_SERVICE_ACCOUNT_JSON=${APP_FIREBASE_SERVICE_ACCOUNT_JSON:-}")
+                .contains("APP_FIREBASE_SERVICE_ACCOUNT_FILE=${APP_FIREBASE_SERVICE_ACCOUNT_FILE:-}")
+                .contains("Missing Firebase credentials")
                 .contains("--env-file /tmp/toir-backend.env");
     }
 

@@ -7,6 +7,7 @@ import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
+import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import com.toir.util.AuditBuilderService;
@@ -43,7 +44,12 @@ class BudgetPbacScopeTest {
         auditBuilderService = mock(AuditBuilderService.class);
         scopeAccessService = mock(ScopeAccessService.class);
         service = new MaintenanceBudgetService(
-                repository, lineRepository, departmentRepository, auditBuilderService, scopeAccessService);
+                repository,
+                lineRepository,
+                departmentRepository,
+                auditBuilderService,
+                scopeAccessService,
+                mock(BudgetEventRepository.class));
     }
 
     @Test

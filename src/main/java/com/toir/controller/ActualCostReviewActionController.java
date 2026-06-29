@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideResponseDto;
 import com.toir.dto.financialreview.*;
+import com.toir.exception.RestException;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.security.PermissionConstants;
@@ -30,6 +31,7 @@ public class ActualCostReviewActionController {
     private static final String REJECT_AUTH = "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('ACTUAL_COST_REJECT')";
     private static final String OVERRIDE_APPLY_AUTH = "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_ROUTE_OVERRIDE_APPLY')";
     private static final String OVERRIDE_CLEAR_AUTH = "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_ROUTE_OVERRIDE_CLEAR')";
+    private static final String EXPORT_AUTH = "hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_REPORT_EXPORT')";
 
     private final ActualCostReviewFacadeService service;
 
@@ -182,39 +184,47 @@ public class ActualCostReviewActionController {
     }
 
     @GetMapping(value = "/review-queue/export", produces = "text/csv;charset=UTF-8")
-    @PreAuthorize(READ_AUTH)
-    public ResponseEntity<String> exportReviewQueue(@RequestParam(required = false) String search) {
-        return csv("actual-cost-review-queue.csv", service.csv("actual-cost-review-queue.csv", service.reviewQueue(search)));
+    @PreAuthorize(EXPORT_AUTH)
+    public ResponseEntity<String> exportReviewQueue(@RequestParam(required = false) String search,
+                                                    @RequestParam(required = false) String allocationStatus) {
+        return csv("actual-cost-review-queue.csv",
+                service.csv("actual-cost-review-queue.csv", filterByAllocationStatus(service.reviewQueue(search), allocationStatus)));
     }
 
     @GetMapping(value = "/review-history-pack/export", produces = "text/csv;charset=UTF-8")
-    @PreAuthorize(READ_AUTH)
-    public ResponseEntity<String> exportReviewHistoryPack(@RequestParam(required = false) String search) {
-        return csv("actual-cost-review-history-pack.csv", service.csv("actual-cost-review-history-pack.csv", service.actualCostRegister(search)));
+    @PreAuthorize(EXPORT_AUTH)
+    public ResponseEntity<String> exportReviewHistoryPack(@RequestParam(required = false) String search,
+                                                          @RequestParam(required = false) String allocationStatus) {
+        return csv("actual-cost-review-history-pack.csv",
+                service.csv("actual-cost-review-history-pack.csv", filterByAllocationStatus(service.actualCostRegister(search), allocationStatus)));
     }
 
     @GetMapping(value = "/approval-pack/export", produces = "text/csv;charset=UTF-8")
-    @PreAuthorize(READ_AUTH)
-    public ResponseEntity<String> exportApprovalPack(@RequestParam(required = false) String search) {
-        return csv("actual-cost-review-approval-pack.csv", service.csv("actual-cost-review-approval-pack.csv", service.reviewQueue(search)));
+    @PreAuthorize(EXPORT_AUTH)
+    public ResponseEntity<String> exportApprovalPack(@RequestParam(required = false) String search,
+                                                     @RequestParam(required = false) String allocationStatus) {
+        return csv("actual-cost-review-approval-pack.csv",
+                service.csv("actual-cost-review-approval-pack.csv", filterByAllocationStatus(service.reviewQueue(search), allocationStatus)));
     }
 
     @GetMapping(value = "/review-activity/export", produces = "text/csv;charset=UTF-8")
-    @PreAuthorize(READ_AUTH)
+    @PreAuthorize(EXPORT_AUTH)
     public ResponseEntity<String> exportReviewActivity(@RequestParam(required = false) String search) {
         return csv("actual-cost-review-activity.csv", service.activityCsv(service.activity(search)));
     }
 
     @GetMapping(value = "/handovers/export", produces = "text/csv;charset=UTF-8")
-    @PreAuthorize(READ_AUTH)
+    @PreAuthorize(EXPORT_AUTH)
     public ResponseEntity<String> exportHandovers(@RequestParam(required = false) String search) {
         return csv("actual-cost-review-handovers.csv", service.handoversCsv(service.handovers(search)));
     }
 
     @GetMapping(value = "/export", produces = "text/csv;charset=UTF-8")
-    @PreAuthorize(READ_AUTH)
-    public ResponseEntity<String> exportActualCosts(@RequestParam(required = false) String search) {
-        return csv("actual-costs.csv", service.csv("actual-costs.csv", service.actualCostRegister(search)));
+    @PreAuthorize(EXPORT_AUTH)
+    public ResponseEntity<String> exportActualCosts(@RequestParam(required = false) String search,
+                                                    @RequestParam(required = false) String allocationStatus) {
+        return csv("actual-costs.csv",
+                service.csv("actual-costs.csv", filterByAllocationStatus(service.actualCostRegister(search), allocationStatus)));
     }
 
     private ResponseEntity<String> csv(String filename, String content) {
@@ -232,6 +242,23 @@ public class ActualCostReviewActionController {
         return user == null
                 || "SYSTEM_ADMIN".equals(user.primaryRoleCode())
                 || (user.permissions() != null && user.permissions().contains(PermissionConstants.WILDCARD));
+    }
+
+    private List<ActualCostReviewItem> filterByAllocationStatus(List<ActualCostReviewItem> items, String allocationStatus) {
+        if (allocationStatus == null || allocationStatus.isBlank() || "ALL".equalsIgnoreCase(allocationStatus)) {
+            return items;
+        }
+        if ("UNALLOCATED".equalsIgnoreCase(allocationStatus)) {
+            return items.stream()
+                    .filter(item -> item.budgetLine() == null || item.unallocated())
+                    .toList();
+        }
+        if ("ALLOCATED".equalsIgnoreCase(allocationStatus)) {
+            return items.stream()
+                    .filter(item -> item.budgetLine() != null && !item.unallocated())
+                    .toList();
+        }
+        throw RestException.badRequest("Unsupported allocationStatus: " + allocationStatus);
     }
 
     public record ReviewRequest(String reviewComment) {

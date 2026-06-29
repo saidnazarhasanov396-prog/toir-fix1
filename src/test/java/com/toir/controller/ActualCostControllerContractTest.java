@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.dto.actualcost.ActualCostAllocationRequest;
 import com.toir.enums.ActualCostStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
@@ -65,8 +66,8 @@ class ActualCostControllerContractTest {
         mockMvc.perform(post("/api/v1/actual-costs/{id}/reject", id)
                         .param("reviewerId", reviewerId.toString())
                         .param("comment", "   "))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Use /api/v1/approvals/{id}/reject to reject approval requests"));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Rejection comment is required"));
     }
 
     @Test
@@ -88,12 +89,47 @@ class ActualCostControllerContractTest {
                 Instant.now(),
                 null
         );
+        when(service.review(id, false, reviewerId, "Reason")).thenReturn(dto);
 
         mockMvc.perform(post("/api/v1/actual-costs/{id}/reject", id)
                         .param("reviewerId", reviewerId.toString())
                         .param("comment", "Reason"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Use /api/v1/approvals/{id}/reject to reject approval requests"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+
+        verify(service).review(id, false, reviewerId, "Reason");
+    }
+
+    @Test
+    void allocateBudgetLineShouldDelegateCommand() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        ActualCostDto dto = new ActualCostDto(
+                id,
+                null,
+                null,
+                null,
+                budgetLineId,
+                UUID.randomUUID(),
+                ActualCostStatus.PENDING,
+                null,
+                null,
+                null,
+                100,
+                Instant.now(),
+                null
+        );
+        when(service.allocateBudgetLine(id, budgetLineId, null, "Allocate")).thenReturn(dto);
+
+        mockMvc.perform(post("/api/v1/actual-costs/{id}/allocate-budget-line", id)
+                        .contentType("application/json")
+                        .content("""
+                                {"budgetLineId":"%s","comment":"Allocate"}
+                                """.formatted(budgetLineId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.budgetLineId").value(budgetLineId.toString()));
+
+        verify(service).allocateBudgetLine(id, budgetLineId, null, "Allocate");
     }
 
     @Test
