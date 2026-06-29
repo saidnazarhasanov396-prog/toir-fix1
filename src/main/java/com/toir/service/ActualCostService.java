@@ -7,6 +7,7 @@ import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostAllocationEvent;
 import com.toir.entity.projects.ActualCostReviewEvent;
 import com.toir.entity.projects.BudgetLine;
+import com.toir.entity.projects.FinancialApprovalRule;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ActualCostStatus;
@@ -23,6 +24,7 @@ import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.repository.projects.FinancialApprovalRuleRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
@@ -51,6 +53,7 @@ public class ActualCostService {
     private final RepairRequestRepository repairRequestRepository;
     private final ContractorWorkRepository contractorWorkRepository;
     private final BudgetLineRepository budgetLineRepository;
+    private final FinancialApprovalRuleRepository financialApprovalRuleRepository;
     private final MaintenanceBudgetRepository maintenanceBudgetRepository;
     private final AuditBuilderService auditBuilderService;
     private final FinanceScopeService financeScopeService;
@@ -114,6 +117,23 @@ public class ActualCostService {
         c.setStatus(ActualCostStatus.PENDING);
         financeScopeService.assertCanMutateActualCost(c);
         ActualCost saved = repository.save(c);
+
+        UUID deptIdForRule = resolveActualCostDepartment(effectiveWorkOrder, repairRequest, budgetLine);
+        FinancialApprovalRule matchedRule = financialApprovalRuleRepository
+                .findFirstMatchingRule(deptIdForRule, saved.getAmount())
+                .orElse(null);
+        String initialApprovalRole = (matchedRule != null && matchedRule.getRequiredRoleCode() != null)
+                ? matchedRule.getRequiredRoleCode()
+                : "FINANCE_MANAGER";
+        String initialEscalationRole = matchedRule != null ? matchedRule.getEscalateToRoleCode() : null;
+        Integer initialThresholdHours = matchedRule != null ? matchedRule.getThresholdHours() : null;
+        recordInitialReviewEvent(
+                saved.getId(),
+                saved.getAmount(),
+                initialApprovalRole,
+                initialEscalationRole,
+                initialThresholdHours
+        );
 
         auditBuilderService.log(
                 "actual_cost",
@@ -475,6 +495,27 @@ public class ActualCostService {
         event.setTitle(title);
         event.setDescription(description);
         event.setStatus(status);
+        event.setOccurredAt(Instant.now());
+        reviewEventRepository.save(event);
+    }
+
+    private void recordInitialReviewEvent(UUID actualCostId,
+                                          double amount,
+                                          String approvalRoleCode,
+                                          String escalationRoleCode,
+                                          Integer thresholdHours) {
+        ActualCostReviewEvent event = new ActualCostReviewEvent();
+        event.setActualCostId(actualCostId);
+        event.setActorUserId(null);
+        event.setSource("SYSTEM");
+        event.setEventGroup("REVIEW");
+        event.setEventCode("CREATED");
+        event.setTitle("Actual cost submitted for review");
+        event.setDescription("Amount: " + amount + ". Assigned to: " + approvalRoleCode);
+        event.setStatus("PENDING");
+        event.setNextApprovalRoleCode(approvalRoleCode);
+        event.setNextEscalationRoleCode(escalationRoleCode);
+        event.setNextThresholdHours(thresholdHours);
         event.setOccurredAt(Instant.now());
         reviewEventRepository.save(event);
     }

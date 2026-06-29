@@ -17,6 +17,7 @@ import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.repository.projects.FinancialApprovalRuleRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.ActualCostService;
 import com.toir.service.FinanceScopeService;
@@ -51,6 +52,7 @@ class ActualCostPbacScopeTest {
     ContractorWorkRepository contractorWorkRepository;
     MaintenanceBudgetRepository maintenanceBudgetRepository;
     BudgetLineRepository budgetLineRepository;
+    FinancialApprovalRuleRepository financialApprovalRuleRepository;
     ScopeAccessService scopeAccessService;
     NotificationService notificationService;
     RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
@@ -67,6 +69,7 @@ class ActualCostPbacScopeTest {
         contractorWorkRepository = mock(ContractorWorkRepository.class);
         maintenanceBudgetRepository = mock(MaintenanceBudgetRepository.class);
         budgetLineRepository = mock(BudgetLineRepository.class);
+        financialApprovalRuleRepository = mock(FinancialApprovalRuleRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
         notificationService = mock(NotificationService.class);
         repairCampaignBudgetLineResolver = mock(RepairCampaignBudgetLineResolver.class);
@@ -86,6 +89,7 @@ class ActualCostPbacScopeTest {
                 repairRequestRepository,
                 contractorWorkRepository,
                 budgetLineRepository,
+                financialApprovalRuleRepository,
                 maintenanceBudgetRepository,
                 auditBuilderService,
                 financeScopeService,
