@@ -5,8 +5,7 @@ workflow:
 variables:
   CHART_VERSION: 10.2-full
   CI_DEBUG_TRACE: "false"
-  SERVICE_NAME: mycoal-toir-backend
-
+  SERVICE_NAME: toir-backend
 
 stages:
   - compile
@@ -17,7 +16,7 @@ compile:
   image: maven:3.9.9-eclipse-temurin-21
   stage: compile
   script:
-    - mvn clean package -Dmaven.test.skip=true --no-transfer-progress
+    - mvn clean package -DskipTests --no-transfer-progress
   artifacts:
     paths:
       - target/*.jar
@@ -38,9 +37,18 @@ deploy:
   script:
     - chmod og= $SSH_PRIVATE_KEY
     - apk add openssh-client
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT_TENZOR $SSH_USER@$SERVER_HOST_TENZOR "docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password ${CI_REGISTRY_PASSWORD}"
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT_TENZOR $SSH_USER@$SERVER_HOST_TENZOR "docker pull ${CI_REGISTRY_IMAGE}:latest"
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT_TENZOR $SSH_USER@$SERVER_HOST_TENZOR "docker stop ${SERVICE_NAME} || true"
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT_TENZOR $SSH_USER@$SERVER_HOST_TENZOR "docker rm ${SERVICE_NAME} || true"
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT_TENZOR $SSH_USER@$SERVER_HOST_TENZOR "docker run -d --name ${SERVICE_NAME} --restart unless-stopped -p 10260:8080 ${CI_REGISTRY_IMAGE}:latest"
-
+    - |
+      cat > toir-backend.env <<EOF
+      SPRING_PROFILES_ACTIVE=prod
+      EOF
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password ${CI_REGISTRY_PASSWORD}"
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker pull ${CI_REGISTRY_IMAGE}:latest"
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker stop ${SERVICE_NAME} || true"
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker rm ${SERVICE_NAME} || true"
+    - scp -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -P $SSH_PORT toir-backend.env $SSH_USER@$SERVER_HOST:/tmp/toir-backend.env
+    - rm -f toir-backend.env
+    - |
+      RUN_STATUS=0
+      ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker run -d --name ${SERVICE_NAME} --restart unless-stopped --env-file /tmp/toir-backend.env -p 10260:8080 ${CI_REGISTRY_IMAGE}:latest" || RUN_STATUS=$?
+      ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "rm -f /tmp/toir-backend.env"
+      exit $RUN_STATUS
