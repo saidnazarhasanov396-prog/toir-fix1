@@ -1,39 +1,33 @@
 spring:
-  application:
-    name: toir-backend
-  profiles:
-    default: prod
+  datasource:
+    url: jdbc:postgresql://localhost:5433/toir_demo
+    username: postgres
+    password: root123
+    hikari:
+      connection-timeout: 3000
+
+  flyway:
+    enabled: false
+
   sql:
     init:
       mode: never
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-    baseline-version: 0
-    locations: classpath:db/migration
-    validate-on-migrate: true
 
-springdoc:
-  cache:
-    disabled: true
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
 
-app:
-  integrations:
-    faktura-uz:
-      endpoints:
-        auth: https://account.faktura.uz/token
-        get-documents: https://api.faktura.uz/Api/Document/GetDocuments
-        get-documents-content: https://api.faktura.uz/Api/Document/GetDocumentsContent
-        get-user-details: https://api.faktura.uz/Api/account/getuserdetails
-  features:
-    manual-attributes:
-      write-enabled: ${APP_FEATURES_MANUAL_ATTRIBUTES_WRITE_ENABLED:false}
-  firebase:
-    enabled: true
+  test:
+    database:
+      replace: none
 
 minio:
-  endpoint: https://s3.tenzorsoft.uz
-  access-key: s3_tenzorsoft_minio_user
-  secret-key: b7Qbuf8DpyAdZmlok2X3PSlD6n9jilSuhctZRd2b
-  bucket-name: s3-toir
-  public-url: https://s3.tenzorsoft.uz
+  endpoint: http://minio.test:9000
+  access-key: test-access
+  secret-key: test-secret
+  bucket-name: test-bucket
+  public-url:
+
+app:
+  firebase:
+    enabled: false
