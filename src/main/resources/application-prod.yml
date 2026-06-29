@@ -4,9 +4,9 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://192.168.1.27:5432/mycoaltoirdb
-    username: mycoal-toir-user
-    password: 024fgUL3o07J65y3BxzC
+    url: jdbc:postgresql://192.168.1.7:5432/toirdb
+    username: toir-user
+    password: 5oe1z42pNm0D1ohP13Z1
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -45,12 +45,13 @@ app:
       - http://localhost:3000
       - http://localhost:8080
       - http://localhost:5173
-      - https://api-toir.mycoal.uz
+      - https://toir.tenzorsoft.uz
+      - https://api-toir.tenzorsoft.uz
   files:
     storage-path: ./uploads
   openapi:
     dev-url: http://localhost:8080
-    prod-url: https://api-toir.mycoal.uz
+    prod-url: https://api-toir.tenzorsoft.uz
   bootstrap:
     create-default-admin: true
     admin-username: admin
