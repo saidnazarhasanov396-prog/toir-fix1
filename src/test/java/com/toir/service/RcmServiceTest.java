@@ -162,7 +162,7 @@ class RcmServiceTest {
         assertThat(score.riskScore()).isEqualTo(16);
         assertThat(score.explanation().locale()).isEqualTo("uz");
         assertThat(score.explanation().formula())
-                .isEqualTo("min(100, (xavfsizlik + ishlab chiqarish + ekologiya + energiya) × ehtimollik)");
+                .isEqualTo("min(100, oqibat × ehtimollik)");
         assertThat(score.explanation().summary())
                 .isEqualTo("Xavf 16/100, chunki 3 ta ochiq nuqson aniqlandi, shuning uchun ehtimollik yuqori.");
         assertThat(score.reasons()).extracting(reason -> reason.code().name())
@@ -173,11 +173,7 @@ class RcmServiceTest {
             assertThat(reason.effect()).isEqualTo("Ehtimollik 4 ga o'rnatildi");
         });
         assertThat(score.explanation().steps()).anySatisfy(step -> {
-            assertThat(step.label()).isEqualTo("Ekologik ta'sir");
-            assertThat(step.value()).isEqualTo(3);
-        });
-        assertThat(score.explanation().steps()).anySatisfy(step -> {
-            assertThat(step.label()).isEqualTo("Ehtimollik (ochiq nuqsonlar bo'yicha)");
+            assertThat(step.label()).isEqualTo("Ehtimollik");
             assertThat(step.value()).isEqualTo(4);
         });
         assertThat(score.explanation().steps()).anySatisfy(step -> {
@@ -187,6 +183,8 @@ class RcmServiceTest {
         });
         assertThat(score.explanation().steps()).noneSatisfy(step ->
                 assertThat(step.label()).isEqualTo("MTTR"));
+        assertThat(score.explanation().steps()).extracting(step -> step.label())
+                .doesNotContain("Xavfsizlik ta'siri", "Ishlab chiqarish ta'siri", "Ekologik ta'sir", "Energiya ta'siri");
     }
 
     @Test
