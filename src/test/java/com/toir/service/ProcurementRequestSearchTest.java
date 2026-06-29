@@ -21,6 +21,8 @@ import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsDocumentPolicyService;
+import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,6 +62,8 @@ class ProcurementRequestSearchTest {
     @Mock SupplierRepository supplierRepository;
     @Mock ToirStockService toirStockService;
     @Mock LegacyStockProjectionService legacyStockProjectionService;
+    @Mock WmsStockCoordinateValidator coordinateValidator;
+    @Mock WmsDocumentPolicyService documentPolicyService;
 
     ProcurementRequestService service;
 
@@ -84,7 +88,9 @@ class ProcurementRequestSearchTest {
                 costCategoryRepository,
                 supplierRepository,
                 toirStockService,
-                legacyStockProjectionService
+                legacyStockProjectionService,
+                coordinateValidator,
+                documentPolicyService
         );
     }
 

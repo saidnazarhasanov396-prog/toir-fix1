@@ -2,6 +2,7 @@ package com.toir.entity.warehouse;
 
 import com.toir.entity.BaseEntity;
 import com.toir.enums.StockLedgerMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,6 +14,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -35,6 +37,13 @@ public class WarehouseStockLedger extends BaseEntity {
 
     @Column(name = "serial_number", length = 128)
     private String serialNumber;
+
+    @Column(name = "expiry_date")
+    private LocalDate expiryDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stock_status", nullable = false, length = 32)
+    private WarehouseStockStatus stockStatus = WarehouseStockStatus.AVAILABLE;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "movement_type", nullable = false, length = 64)
@@ -74,6 +83,9 @@ public class WarehouseStockLedger extends BaseEntity {
         }
         if (quantity == null) {
             quantity = BigDecimal.ZERO;
+        }
+        if (stockStatus == null) {
+            stockStatus = WarehouseStockStatus.AVAILABLE;
         }
         if (unitCost != null && totalCost == null) {
             totalCost = quantity.multiply(unitCost);

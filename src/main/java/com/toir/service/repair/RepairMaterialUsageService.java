@@ -17,6 +17,7 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WorkOrderSparePartRequirementStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
@@ -199,6 +200,8 @@ public class RepairMaterialUsageService {
                 BigDecimal.valueOf(movement.getQuantity()),
                 null,
                 null,
+                null,
+                WarehouseStockStatus.AVAILABLE,
                 "WORK_ORDER",
                 workOrder.getId(),
                 null,

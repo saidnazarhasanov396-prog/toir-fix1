@@ -6,6 +6,7 @@ import com.toir.entity.warehouse.WarehouseStockBalance;
 import com.toir.entity.warehouse.WarehouseStockLedger;
 import com.toir.entity.warehouse.WarehouseReservationLedger;
 import com.toir.enums.StockLedgerMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseReservationLedgerRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,7 +55,9 @@ public class ToirStockService {
                 command.sparePartId(),
                 command.binId(),
                 command.lotNumber(),
-                command.serialNumber()
+                command.serialNumber(),
+                command.expiryDate(),
+                command.effectiveStatus()
         );
         WarehouseStockBalance balance = balanceRepository.lockByIdentityKey(identityKey)
                 .orElseGet(() -> newBalance(command, identityKey));
@@ -72,6 +76,8 @@ public class ToirStockService {
                 command.binId(),
                 command.lotNumber(),
                 command.serialNumber(),
+                command.expiryDate(),
+                command.effectiveStatus(),
                 movementType,
                 receiptQty,
                 command.unitCost(),
@@ -98,6 +104,35 @@ public class ToirStockService {
                                               UUID referenceId,
                                               String referenceDocNo,
                                               String idempotencyKey) {
+        return reserve(
+                warehouseId,
+                sparePartId,
+                binId,
+                null,
+                null,
+                null,
+                WarehouseStockStatus.AVAILABLE,
+                quantity,
+                referenceType,
+                referenceId,
+                referenceDocNo,
+                idempotencyKey
+        );
+    }
+
+    @Transactional
+    public WarehouseReservationLedger reserve(UUID warehouseId,
+                                              UUID sparePartId,
+                                              UUID binId,
+                                              String lotNumber,
+                                              String serialNumber,
+                                              LocalDate expiryDate,
+                                              WarehouseStockStatus stockStatus,
+                                              BigDecimal quantity,
+                                              String referenceType,
+                                              UUID referenceId,
+                                              String referenceDocNo,
+                                              String idempotencyKey) {
         validateRequiredIds(warehouseId, sparePartId);
         validatePositiveQuantity(quantity);
 
@@ -106,7 +141,15 @@ public class ToirStockService {
             return existingLedger.get();
         }
 
-        WarehouseStockBalance balance = lockedBalance(warehouseId, sparePartId, binId, null, null);
+        WarehouseStockBalance balance = lockedBalance(
+                warehouseId,
+                sparePartId,
+                binId,
+                lotNumber,
+                serialNumber,
+                expiryDate,
+                stockStatus
+        );
         BigDecimal availableQty = balance.getAvailableQty();
         if (availableQty.compareTo(quantity) < 0) {
             throw RestException.badRequest("Insufficient available stock: available="
@@ -121,8 +164,10 @@ public class ToirStockService {
                 warehouseId,
                 sparePartId,
                 binId,
-                null,
-                null,
+                lotNumber,
+                serialNumber,
+                expiryDate,
+                effectiveStatus(stockStatus),
                 StockLedgerMovementType.RESERVE,
                 quantity,
                 referenceType,
@@ -143,6 +188,35 @@ public class ToirStockService {
                                                         UUID referenceId,
                                                         String referenceDocNo,
                                                         String idempotencyKey) {
+        return releaseReservation(
+                warehouseId,
+                sparePartId,
+                binId,
+                null,
+                null,
+                null,
+                WarehouseStockStatus.AVAILABLE,
+                quantity,
+                referenceType,
+                referenceId,
+                referenceDocNo,
+                idempotencyKey
+        );
+    }
+
+    @Transactional
+    public WarehouseReservationLedger releaseReservation(UUID warehouseId,
+                                                        UUID sparePartId,
+                                                        UUID binId,
+                                                        String lotNumber,
+                                                        String serialNumber,
+                                                        LocalDate expiryDate,
+                                                        WarehouseStockStatus stockStatus,
+                                                        BigDecimal quantity,
+                                                        String referenceType,
+                                                        UUID referenceId,
+                                                        String referenceDocNo,
+                                                        String idempotencyKey) {
         validateRequiredIds(warehouseId, sparePartId);
         validatePositiveQuantity(quantity);
 
@@ -151,7 +225,15 @@ public class ToirStockService {
             return existingLedger.get();
         }
 
-        WarehouseStockBalance balance = lockedBalance(warehouseId, sparePartId, binId, null, null);
+        WarehouseStockBalance balance = lockedBalance(
+                warehouseId,
+                sparePartId,
+                binId,
+                lotNumber,
+                serialNumber,
+                expiryDate,
+                stockStatus
+        );
         assertReservedCanCover(balance, quantity);
 
         balance.setQtyReserved(zero(balance.getQtyReserved()).subtract(quantity));
@@ -162,8 +244,10 @@ public class ToirStockService {
                 warehouseId,
                 sparePartId,
                 binId,
-                null,
-                null,
+                lotNumber,
+                serialNumber,
+                expiryDate,
+                effectiveStatus(stockStatus),
                 StockLedgerMovementType.RELEASE,
                 quantity.negate(),
                 referenceType,
@@ -184,6 +268,35 @@ public class ToirStockService {
                                                   UUID referenceId,
                                                   String referenceDocNo,
                                                   String idempotencyKey) {
+        return fulfillReservation(
+                warehouseId,
+                sparePartId,
+                binId,
+                null,
+                null,
+                null,
+                WarehouseStockStatus.AVAILABLE,
+                quantity,
+                referenceType,
+                referenceId,
+                referenceDocNo,
+                idempotencyKey
+        );
+    }
+
+    @Transactional
+    public WarehouseStockLedger fulfillReservation(UUID warehouseId,
+                                                  UUID sparePartId,
+                                                  UUID binId,
+                                                  String lotNumber,
+                                                  String serialNumber,
+                                                  LocalDate expiryDate,
+                                                  WarehouseStockStatus stockStatus,
+                                                  BigDecimal quantity,
+                                                  String referenceType,
+                                                  UUID referenceId,
+                                                  String referenceDocNo,
+                                                  String idempotencyKey) {
         validateRequiredIds(warehouseId, sparePartId);
         validatePositiveQuantity(quantity);
 
@@ -192,7 +305,15 @@ public class ToirStockService {
             return existingLedger.get();
         }
 
-        WarehouseStockBalance balance = lockedBalance(warehouseId, sparePartId, binId, null, null);
+        WarehouseStockBalance balance = lockedBalance(
+                warehouseId,
+                sparePartId,
+                binId,
+                lotNumber,
+                serialNumber,
+                expiryDate,
+                stockStatus
+        );
         assertReservedCanCover(balance, quantity);
         if (zero(balance.getQtyOnHand()).compareTo(quantity) < 0) {
             throw RestException.badRequest("Cannot fulfill more than stock quantity: available="
@@ -208,8 +329,10 @@ public class ToirStockService {
                 warehouseId,
                 sparePartId,
                 binId,
-                null,
-                null,
+                lotNumber,
+                serialNumber,
+                expiryDate,
+                effectiveStatus(stockStatus),
                 StockLedgerMovementType.RELEASE,
                 quantity.negate(),
                 referenceType,
@@ -223,8 +346,10 @@ public class ToirStockService {
                 warehouseId,
                 sparePartId,
                 binId,
-                null,
-                null,
+                lotNumber,
+                serialNumber,
+                expiryDate,
+                effectiveStatus(stockStatus),
                 StockLedgerMovementType.ISSUE,
                 quantity.negate(),
                 balance.getAvgCost(),
@@ -253,13 +378,16 @@ public class ToirStockService {
                 command.sparePartId(),
                 command.binId(),
                 command.lotNumber(),
-                command.serialNumber()
+                command.serialNumber(),
+                command.expiryDate(),
+                command.effectiveStatus()
         );
         WarehouseStockBalance balance = balanceRepository.lockByIdentityKey(identityKey)
                 .orElseThrow(() -> RestException.badRequest("No stock balance exists for requested item"));
 
+        validateDecreaseStatus(command, movementType);
         BigDecimal requestedQty = command.quantity();
-        BigDecimal availableQty = balance.getAvailableQty();
+        BigDecimal availableQty = availableQuantityForDecrease(balance, movementType);
         if (availableQty.compareTo(requestedQty) < 0) {
             throw RestException.badRequest("Insufficient available stock: available="
                     + availableQty + ", requested=" + requestedQty);
@@ -275,6 +403,8 @@ public class ToirStockService {
                 command.binId(),
                 command.lotNumber(),
                 command.serialNumber(),
+                command.expiryDate(),
+                command.effectiveStatus(),
                 movementType,
                 requestedQty.negate(),
                 balance.getAvgCost(),
@@ -308,7 +438,25 @@ public class ToirStockService {
                                                 UUID binId,
                                                 String lotNumber,
                                                 String serialNumber) {
-        String identityKey = identityKey(warehouseId, sparePartId, binId, lotNumber, serialNumber);
+        return lockedBalance(
+                warehouseId,
+                sparePartId,
+                binId,
+                lotNumber,
+                serialNumber,
+                null,
+                WarehouseStockStatus.AVAILABLE
+        );
+    }
+
+    private WarehouseStockBalance lockedBalance(UUID warehouseId,
+                                                UUID sparePartId,
+                                                UUID binId,
+                                                String lotNumber,
+                                                String serialNumber,
+                                                LocalDate expiryDate,
+                                                WarehouseStockStatus stockStatus) {
+        String identityKey = identityKey(warehouseId, sparePartId, binId, lotNumber, serialNumber, expiryDate, stockStatus);
         return balanceRepository.lockByIdentityKey(identityKey)
                 .orElseThrow(() -> RestException.badRequest("No stock balance exists for requested item"));
     }
@@ -321,6 +469,7 @@ public class ToirStockService {
         balance.setLotNumber(trimToNull(command.lotNumber()));
         balance.setSerialNumber(trimToNull(command.serialNumber()));
         balance.setExpiryDate(command.expiryDate());
+        balance.setStockStatus(command.effectiveStatus());
         balance.setQtyOnHand(BigDecimal.ZERO);
         balance.setQtyReserved(BigDecimal.ZERO);
         balance.setIdentityKey(identityKey);
@@ -332,6 +481,8 @@ public class ToirStockService {
                                         UUID binId,
                                         String lotNumber,
                                         String serialNumber,
+                                        LocalDate expiryDate,
+                                        WarehouseStockStatus stockStatus,
                                         StockLedgerMovementType movementType,
                                         BigDecimal quantity,
                                         BigDecimal unitCost,
@@ -346,6 +497,8 @@ public class ToirStockService {
         ledger.setBinId(binId);
         ledger.setLotNumber(trimToNull(lotNumber));
         ledger.setSerialNumber(trimToNull(serialNumber));
+        ledger.setExpiryDate(expiryDate);
+        ledger.setStockStatus(effectiveStatus(stockStatus));
         ledger.setMovementType(movementType);
         ledger.setQuantity(quantity);
         ledger.setUnitCost(unitCost);
@@ -364,6 +517,8 @@ public class ToirStockService {
                                                         UUID binId,
                                                         String lotNumber,
                                                         String serialNumber,
+                                                        LocalDate expiryDate,
+                                                        WarehouseStockStatus stockStatus,
                                                         StockLedgerMovementType movementType,
                                                         BigDecimal quantity,
                                                         String referenceType,
@@ -377,6 +532,8 @@ public class ToirStockService {
         ledger.setBinId(binId);
         ledger.setLotNumber(trimToNull(lotNumber));
         ledger.setSerialNumber(trimToNull(serialNumber));
+        ledger.setExpiryDate(expiryDate);
+        ledger.setStockStatus(effectiveStatus(stockStatus));
         ledger.setMovementType(movementType);
         ledger.setQuantity(quantity);
         ledger.setReferenceType(trimToNull(referenceType));
@@ -444,6 +601,7 @@ public class ToirStockService {
                 StockLedgerMovementType.RECEIPT,
                 StockLedgerMovementType.RETURN,
                 StockLedgerMovementType.TRANSFER_IN,
+                StockLedgerMovementType.STATUS_TRANSFER_IN,
                 StockLedgerMovementType.ADJUSTMENT_INC,
                 StockLedgerMovementType.MOVE_IN
         ).contains(movementType)) {
@@ -458,6 +616,7 @@ public class ToirStockService {
         if (!EnumSet.of(
                 StockLedgerMovementType.ISSUE,
                 StockLedgerMovementType.TRANSFER_OUT,
+                StockLedgerMovementType.STATUS_TRANSFER_OUT,
                 StockLedgerMovementType.ADJUSTMENT_DEC,
                 StockLedgerMovementType.WRITEOFF,
                 StockLedgerMovementType.MOVE_OUT
@@ -466,8 +625,50 @@ public class ToirStockService {
         }
     }
 
-    private String identityKey(UUID warehouseId, UUID sparePartId, UUID binId, String lotNumber, String serialNumber) {
-        return WarehouseStockBalance.buildIdentityKey(warehouseId, sparePartId, binId, lotNumber, serialNumber);
+    private void validateDecreaseStatus(StockIssueCommand command, StockLedgerMovementType movementType) {
+        WarehouseStockStatus status = command.effectiveStatus();
+        if (movementType == StockLedgerMovementType.WRITEOFF) {
+            if (status == WarehouseStockStatus.AVAILABLE || status == WarehouseStockStatus.BLOCKED) {
+                throw RestException.badRequest("Writeoff must use non-available quality stock");
+            }
+            return;
+        }
+        if (movementType == StockLedgerMovementType.STATUS_TRANSFER_OUT) {
+            return;
+        }
+        if (status != WarehouseStockStatus.AVAILABLE) {
+            throw RestException.badRequest("Only AVAILABLE stock can be issued or moved");
+        }
+    }
+
+    private BigDecimal availableQuantityForDecrease(WarehouseStockBalance balance, StockLedgerMovementType movementType) {
+        if (movementType == StockLedgerMovementType.WRITEOFF
+                || movementType == StockLedgerMovementType.STATUS_TRANSFER_OUT) {
+            return zero(balance.getQtyOnHand()).subtract(zero(balance.getQtyReserved()));
+        }
+        return balance.getAvailableQty();
+    }
+
+    private String identityKey(UUID warehouseId,
+                               UUID sparePartId,
+                               UUID binId,
+                               String lotNumber,
+                               String serialNumber,
+                               LocalDate expiryDate,
+                               WarehouseStockStatus stockStatus) {
+        return WarehouseStockBalance.buildIdentityKey(
+                warehouseId,
+                sparePartId,
+                binId,
+                lotNumber,
+                serialNumber,
+                expiryDate,
+                effectiveStatus(stockStatus)
+        );
+    }
+
+    private WarehouseStockStatus effectiveStatus(WarehouseStockStatus stockStatus) {
+        return stockStatus == null ? WarehouseStockStatus.AVAILABLE : stockStatus;
     }
 
     private BigDecimal zero(BigDecimal value) {

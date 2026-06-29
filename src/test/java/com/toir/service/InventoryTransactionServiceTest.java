@@ -21,6 +21,7 @@ import com.toir.enums.InventoryAdjustmentReason;
 import com.toir.enums.InventoryTransactionType;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.SparePartRepository;
@@ -33,6 +34,7 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -107,6 +109,9 @@ class InventoryTransactionServiceTest {
     @Mock
     LegacyStockProjectionService legacyStockProjectionService;
 
+    @Mock
+    WmsStockCoordinateValidator coordinateValidator;
+
     InventoryTransactionService service;
 
     @BeforeEach
@@ -125,7 +130,8 @@ class InventoryTransactionServiceTest {
                 lowStockRecommendationService,
                 inventoryCostService,
                 toirStockService,
-                legacyStockProjectionService
+                legacyStockProjectionService,
+                coordinateValidator
         );
     }
 
@@ -190,6 +196,72 @@ class InventoryTransactionServiceTest {
         assertThat(stockCommand.referenceId()).isEqualTo(result.id());
         assertThat(stockCommand.referenceDocNo()).isEqualTo("RCV-2026-0001");
         assertThat(stockCommand.idempotencyKey()).isEqualTo("inventory-receipt:" + result.id());
+    }
+
+    @Test
+    void receiptPassesWmsIdentityToCoreStockAndMovement() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID responsibleId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        LocalDate expiryDate = LocalDate.of(2027, 3, 15);
+        Warehouse warehouse = warehouse(warehouseId, UUID.randomUUID(), "Central Warehouse");
+        SparePart sparePart = sparePart(sparePartId, "Engine Oil");
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId))
+                .thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId))
+                .thenReturn(stock(warehouseId, sparePart, 105, 0));
+        when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+
+        var result = service.createReceipt(new InventoryReceiptRequest(
+                warehouseId,
+                sparePartId,
+                BigDecimal.valueOf(5),
+                "LITER",
+                BigDecimal.valueOf(45000),
+                LocalDate.of(2026, 6, 13),
+                "Shell Distributor",
+                responsibleId,
+                "RCV-2026-0002",
+                "quarantine receipt",
+                binId,
+                "LOT-7",
+                "SN-8",
+                expiryDate,
+                WarehouseStockStatus.QUARANTINE
+        ));
+
+        ArgumentCaptor<InventoryTransaction> transactionCaptor = ArgumentCaptor.forClass(InventoryTransaction.class);
+        verify(repository).save(transactionCaptor.capture());
+        assertThat(transactionCaptor.getValue().getBinId()).isEqualTo(binId);
+        assertThat(transactionCaptor.getValue().getLotNumber()).isEqualTo("LOT-7");
+        assertThat(transactionCaptor.getValue().getSerialNumber()).isEqualTo("SN-8");
+        assertThat(transactionCaptor.getValue().getExpiryDate()).isEqualTo(expiryDate);
+        assertThat(transactionCaptor.getValue().getStockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
+
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(stockMovementRepository).save(movementCaptor.capture());
+        assertThat(movementCaptor.getValue().getBinId()).isEqualTo(binId);
+        assertThat(movementCaptor.getValue().getLotNumber()).isEqualTo("LOT-7");
+        assertThat(movementCaptor.getValue().getSerialNumber()).isEqualTo("SN-8");
+        assertThat(movementCaptor.getValue().getExpiryDate()).isEqualTo(expiryDate);
+        assertThat(movementCaptor.getValue().getStockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
+
+        ArgumentCaptor<StockReceiptCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
+        verify(toirStockService).postReceipt(stockCommandCaptor.capture());
+        StockReceiptCommand stockCommand = stockCommandCaptor.getValue();
+        assertThat(stockCommand.referenceId()).isEqualTo(result.id());
+        assertThat(stockCommand.binId()).isEqualTo(binId);
+        assertThat(stockCommand.lotNumber()).isEqualTo("LOT-7");
+        assertThat(stockCommand.serialNumber()).isEqualTo("SN-8");
+        assertThat(stockCommand.expiryDate()).isEqualTo(expiryDate);
+        assertThat(stockCommand.stockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
+        verify(coordinateValidator).assertCanReceiveOrMoveInto(warehouseId, binId, WarehouseStockStatus.QUARANTINE);
     }
 
     @Test
@@ -261,6 +333,76 @@ class InventoryTransactionServiceTest {
     }
 
     @Test
+    void issuePassesWmsIdentityToCoreStockAndMovement() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID responsibleId = UUID.randomUUID();
+        UUID takenById = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        LocalDate expiryDate = LocalDate.of(2027, 3, 15);
+        Warehouse warehouse = warehouse(warehouseId, UUID.randomUUID(), "Central Warehouse");
+        SparePart sparePart = sparePart(sparePartId, "Engine Oil");
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(employeeRepository.findByIdAndIsDeletedFalse(takenById))
+                .thenReturn(Optional.of(employee(takenById, "Ali", "Valiyev")));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId))
+                .thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId))
+                .thenReturn(stock(warehouseId, sparePart, 15, 0));
+        when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+
+        var result = service.createIssue(new InventoryIssueRequest(
+                warehouseId,
+                sparePartId,
+                BigDecimal.valueOf(5),
+                "LITER",
+                LocalDate.of(2026, 6, 13),
+                takenById,
+                responsibleId,
+                null,
+                null,
+                "ISS-2026-0002",
+                "identity issue",
+                binId,
+                "LOT-7",
+                "SN-8",
+                expiryDate,
+                WarehouseStockStatus.AVAILABLE
+        ));
+
+        ArgumentCaptor<InventoryTransaction> transactionCaptor = ArgumentCaptor.forClass(InventoryTransaction.class);
+        verify(repository).save(transactionCaptor.capture());
+        assertThat(transactionCaptor.getValue().getBinId()).isEqualTo(binId);
+        assertThat(transactionCaptor.getValue().getLotNumber()).isEqualTo("LOT-7");
+        assertThat(transactionCaptor.getValue().getSerialNumber()).isEqualTo("SN-8");
+        assertThat(transactionCaptor.getValue().getExpiryDate()).isEqualTo(expiryDate);
+        assertThat(transactionCaptor.getValue().getStockStatus()).isEqualTo(WarehouseStockStatus.AVAILABLE);
+
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(stockMovementRepository).save(movementCaptor.capture());
+        assertThat(movementCaptor.getValue().getBinId()).isEqualTo(binId);
+        assertThat(movementCaptor.getValue().getLotNumber()).isEqualTo("LOT-7");
+        assertThat(movementCaptor.getValue().getSerialNumber()).isEqualTo("SN-8");
+        assertThat(movementCaptor.getValue().getExpiryDate()).isEqualTo(expiryDate);
+        assertThat(movementCaptor.getValue().getStockStatus()).isEqualTo(WarehouseStockStatus.AVAILABLE);
+
+        ArgumentCaptor<StockIssueCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
+        verify(toirStockService).postIssue(stockCommandCaptor.capture());
+        StockIssueCommand stockCommand = stockCommandCaptor.getValue();
+        assertThat(stockCommand.referenceId()).isEqualTo(result.id());
+        assertThat(stockCommand.binId()).isEqualTo(binId);
+        assertThat(stockCommand.lotNumber()).isEqualTo("LOT-7");
+        assertThat(stockCommand.serialNumber()).isEqualTo("SN-8");
+        assertThat(stockCommand.expiryDate()).isEqualTo(expiryDate);
+        assertThat(stockCommand.stockStatus()).isEqualTo(WarehouseStockStatus.AVAILABLE);
+        verify(coordinateValidator).assertCanReadFrom(warehouseId, binId);
+    }
+
+    @Test
     void transferMovesStockBetweenWarehousesAndCreatesTwoMovements() {
         UUID sourceWarehouseId = UUID.randomUUID();
         UUID destinationWarehouseId = UUID.randomUUID();
@@ -323,6 +465,79 @@ class InventoryTransactionServiceTest {
         verify(toirStockService).postIncrease(receiptCommandCaptor.capture(), eq(StockLedgerMovementType.TRANSFER_IN));
         assertThat(receiptCommandCaptor.getValue().warehouseId()).isEqualTo(destinationWarehouseId);
         assertThat(receiptCommandCaptor.getValue().quantity()).isEqualByComparingTo("20");
+    }
+
+    @Test
+    void transferPassesSourceAndDestinationBinsToCoreStock() {
+        UUID sourceWarehouseId = UUID.randomUUID();
+        UUID destinationWarehouseId = UUID.randomUUID();
+        UUID sourceBinId = UUID.randomUUID();
+        UUID destinationBinId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID responsibleId = UUID.randomUUID();
+        LocalDate expiryDate = LocalDate.of(2027, 3, 15);
+        SparePart sparePart = sparePart(sparePartId, "Filter");
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(sourceWarehouseId))
+                .thenReturn(Optional.of(warehouse(sourceWarehouseId, UUID.randomUUID(), "Central")));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(destinationWarehouseId))
+                .thenReturn(Optional.of(warehouse(destinationWarehouseId, UUID.randomUUID(), "Workshop")));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId))
+                .thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
+        when(legacyStockProjectionService.sync(sourceWarehouseId, sparePartId))
+                .thenReturn(stock(sourceWarehouseId, sparePart, 10, 0));
+        when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+
+        service.createTransfer(new InventoryTransferRequest(
+                sourceWarehouseId,
+                destinationWarehouseId,
+                sparePartId,
+                BigDecimal.valueOf(20),
+                "PCS",
+                LocalDate.of(2026, 6, 13),
+                responsibleId,
+                "TRF-2026-0002",
+                "bin transfer",
+                sourceBinId,
+                destinationBinId,
+                "LOT-7",
+                "SN-8",
+                expiryDate,
+                WarehouseStockStatus.AVAILABLE
+        ));
+
+        ArgumentCaptor<InventoryTransaction> transactionCaptor = ArgumentCaptor.forClass(InventoryTransaction.class);
+        verify(repository).save(transactionCaptor.capture());
+        assertThat(transactionCaptor.getValue().getSourceBinId()).isEqualTo(sourceBinId);
+        assertThat(transactionCaptor.getValue().getDestinationBinId()).isEqualTo(destinationBinId);
+
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(stockMovementRepository, org.mockito.Mockito.times(2)).save(movementCaptor.capture());
+        assertThat(movementCaptor.getAllValues())
+                .extracting(StockMovement::getWarehouseId, StockMovement::getBinId, StockMovement::getSourceBinId, StockMovement::getDestinationBinId)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(sourceWarehouseId, sourceBinId, sourceBinId, destinationBinId),
+                        org.assertj.core.groups.Tuple.tuple(destinationWarehouseId, destinationBinId, sourceBinId, destinationBinId)
+                );
+
+        ArgumentCaptor<StockIssueCommand> issueCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
+        verify(toirStockService).postDecrease(issueCommandCaptor.capture(), eq(StockLedgerMovementType.TRANSFER_OUT));
+        assertThat(issueCommandCaptor.getValue().binId()).isEqualTo(sourceBinId);
+        assertThat(issueCommandCaptor.getValue().lotNumber()).isEqualTo("LOT-7");
+        assertThat(issueCommandCaptor.getValue().serialNumber()).isEqualTo("SN-8");
+        assertThat(issueCommandCaptor.getValue().expiryDate()).isEqualTo(expiryDate);
+
+        ArgumentCaptor<StockReceiptCommand> receiptCommandCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
+        verify(toirStockService).postIncrease(receiptCommandCaptor.capture(), eq(StockLedgerMovementType.TRANSFER_IN));
+        assertThat(receiptCommandCaptor.getValue().binId()).isEqualTo(destinationBinId);
+        assertThat(receiptCommandCaptor.getValue().lotNumber()).isEqualTo("LOT-7");
+        assertThat(receiptCommandCaptor.getValue().serialNumber()).isEqualTo("SN-8");
+        assertThat(receiptCommandCaptor.getValue().expiryDate()).isEqualTo(expiryDate);
+        verify(coordinateValidator).assertCanReadFrom(sourceWarehouseId, sourceBinId);
+        verify(coordinateValidator).assertCanReceiveOrMoveInto(destinationWarehouseId, destinationBinId, WarehouseStockStatus.AVAILABLE);
     }
 
     @Test
@@ -405,6 +620,54 @@ class InventoryTransactionServiceTest {
         verify(toirStockService).postDecrease(stockCommandCaptor.capture(), eq(StockLedgerMovementType.ADJUSTMENT_DEC));
         assertThat(stockCommandCaptor.getValue().quantity()).isEqualByComparingTo("3");
         assertThat(stockCommandCaptor.getValue().idempotencyKey()).isEqualTo("inventory-adjustment-dec:" + result.id());
+    }
+
+    @Test
+    void adjustmentDecreasePassesRequestedBinAndStatusToCoreStock() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID responsibleId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        LocalDate expiryDate = LocalDate.of(2027, 3, 15);
+        SparePart sparePart = sparePart(sparePartId, "Filter");
+
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId))
+                .thenReturn(Optional.of(warehouse(warehouseId, UUID.randomUUID(), "Central")));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId))
+                .thenReturn(Optional.of(employee(responsibleId, "Jane", "Smith")));
+        when(legacyStockProjectionService.current(warehouseId, sparePartId))
+                .thenReturn(new WmsStockSnapshot(warehouseId, sparePartId, BigDecimal.valueOf(100), BigDecimal.ZERO));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId))
+                .thenReturn(stock(warehouseId, sparePart, 97, 0));
+        when(repository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> withId(invocation.getArgument(0)));
+
+        service.createAdjustment(new InventoryAdjustmentRequest(
+                warehouseId,
+                sparePartId,
+                BigDecimal.valueOf(97),
+                InventoryAdjustmentReason.PHYSICAL_COUNT,
+                responsibleId,
+                LocalDate.of(2026, 6, 13),
+                "ADJ-2026-0002",
+                "Physical count",
+                binId,
+                "LOT-7",
+                "SN-8",
+                expiryDate,
+                WarehouseStockStatus.AVAILABLE
+        ));
+
+        ArgumentCaptor<StockIssueCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
+        verify(toirStockService).postDecrease(stockCommandCaptor.capture(), eq(StockLedgerMovementType.ADJUSTMENT_DEC));
+        assertThat(stockCommandCaptor.getValue().binId()).isEqualTo(binId);
+        assertThat(stockCommandCaptor.getValue().lotNumber()).isEqualTo("LOT-7");
+        assertThat(stockCommandCaptor.getValue().serialNumber()).isEqualTo("SN-8");
+        assertThat(stockCommandCaptor.getValue().expiryDate()).isEqualTo(expiryDate);
+        assertThat(stockCommandCaptor.getValue().stockStatus()).isEqualTo(WarehouseStockStatus.AVAILABLE);
+        verify(coordinateValidator).assertCanReadFrom(warehouseId, binId);
     }
 
     @Test

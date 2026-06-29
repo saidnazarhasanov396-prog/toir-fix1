@@ -23,6 +23,7 @@ import com.toir.enums.FileCategory;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
@@ -149,6 +150,14 @@ public class StockMovementService {
         movement.setNotes(request.notes());
         movement.setComment(request.notes());
         movement.setSourceType(StockMovementSourceType.MANUAL);
+        applyMovementCoordinate(
+                movement,
+                request.binId(),
+                request.lotNumber(),
+                request.serialNumber(),
+                request.expiryDate(),
+                request.effectiveStatus()
+        );
         StockMovement saved = repository.save(movement);
         postCoreStockMovement(saved, currentStock.qtyOnHand());
         WarehouseStock stock = legacyStockProjectionService.sync(request.warehouseId(), request.sparePartId());
@@ -191,6 +200,14 @@ public class StockMovementService {
         movement.setDocumentNumber(trimToNull(request.documentNumber()));
         movement.setComment(trimToNull(request.comment()));
         movement.setNotes(trimToNull(request.comment()));
+        applyMovementCoordinate(
+                movement,
+                request.binId(),
+                request.lotNumber(),
+                request.serialNumber(),
+                request.expiryDate(),
+                request.effectiveStatus()
+        );
 
         StockMovement saved = repository.save(movement);
         postCoreStockReceipt(saved);
@@ -218,6 +235,14 @@ public class StockMovementService {
         movement.setDocumentNumber(trimToNull(request.documentNumber()));
         movement.setComment(trimToNull(request.comment()));
         movement.setNotes(trimToNull(request.comment()));
+        applyMovementCoordinate(
+                movement,
+                request.binId(),
+                request.lotNumber(),
+                request.serialNumber(),
+                request.expiryDate(),
+                request.effectiveStatus()
+        );
 
         StockMovement saved = repository.save(movement);
         postCoreStockIssue(saved);
@@ -601,12 +626,13 @@ public class StockMovementService {
         return new StockReceiptCommand(
                 saved.getWarehouseId(),
                 saved.getSparePartId(),
-                null,
+                saved.getBinId(),
                 quantity,
                 stockUnitCost(saved),
-                null,
-                null,
-                null,
+                saved.getLotNumber(),
+                saved.getSerialNumber(),
+                saved.getExpiryDate(),
+                saved.getStockStatus(),
                 "STOCK_MOVEMENT",
                 saved.getId(),
                 saved.getDocumentNumber(),
@@ -619,10 +645,12 @@ public class StockMovementService {
         return new StockIssueCommand(
                 saved.getWarehouseId(),
                 saved.getSparePartId(),
-                null,
+                saved.getBinId(),
                 quantity,
-                null,
-                null,
+                saved.getLotNumber(),
+                saved.getSerialNumber(),
+                saved.getExpiryDate(),
+                saved.getStockStatus(),
                 "STOCK_MOVEMENT",
                 saved.getId(),
                 saved.getDocumentNumber(),
@@ -640,6 +668,23 @@ public class StockMovementService {
 
     private String coreStockIdempotencyKey(StockMovement saved, StockLedgerMovementType movementType) {
         return "stock-movement-" + movementType.name().toLowerCase() + ":" + saved.getId();
+    }
+
+    private void applyMovementCoordinate(StockMovement movement,
+                                         UUID binId,
+                                         String lotNumber,
+                                         String serialNumber,
+                                         LocalDate expiryDate,
+                                         WarehouseStockStatus stockStatus) {
+        movement.setBinId(binId);
+        movement.setLotNumber(trimToNull(lotNumber));
+        movement.setSerialNumber(trimToNull(serialNumber));
+        movement.setExpiryDate(expiryDate);
+        movement.setStockStatus(effectiveStatus(stockStatus));
+    }
+
+    private WarehouseStockStatus effectiveStatus(WarehouseStockStatus stockStatus) {
+        return stockStatus == null ? WarehouseStockStatus.AVAILABLE : stockStatus;
     }
 
     private BigDecimal totalAmount(double quantity, BigDecimal unitPrice) {

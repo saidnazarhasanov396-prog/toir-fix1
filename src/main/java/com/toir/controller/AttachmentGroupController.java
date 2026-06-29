@@ -50,7 +50,8 @@ public class AttachmentGroupController {
             hasAuthority('DEFECT_CREATE') or hasAuthority('DEFECT_UPDATE') or
             hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
             hasAuthority('EMPLOYEE_UPDATE') or
-            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
+            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE') or hasAuthority('PURCHASE_ORDER_CREATE') or
+            hasAuthority('WAREHOUSE_BIN_MANAGE') or hasAuthority('WAREHOUSE_DOCUMENT_UPLOAD')
             """)
     @Operation(summary = "Create an attachment group and upload one or more files")
     public ResponseEntity<AttachmentGroupDto> createGroup(
@@ -88,7 +89,8 @@ public class AttachmentGroupController {
             hasAuthority('DEFECT_CREATE') or hasAuthority('DEFECT_UPDATE') or
             hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
             hasAuthority('EMPLOYEE_UPDATE') or
-            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
+            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE') or hasAuthority('PURCHASE_ORDER_CREATE') or
+            hasAuthority('WAREHOUSE_BIN_MANAGE') or hasAuthority('WAREHOUSE_DOCUMENT_UPLOAD')
             """)
     @Operation(summary = "Add files to an existing attachment group")
     public ResponseEntity<AttachmentGroupDto> addFiles(
@@ -108,7 +110,8 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
             hasAuthority('DEFECT_READ') or hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ') or
-            hasAuthority('EMPLOYEE_READ') or
+            hasAuthority('PURCHASE_ORDER_READ') or hasAuthority('WAREHOUSE_BIN_READ') or
+            hasAuthority('WAREHOUSE_TASK_READ') or hasAuthority('EMPLOYEE_READ') or
             hasAuthority('EQUIPMENT_COMMISSIONING_READ')
             """)
     public ResponseEntity<AttachmentGroupDto> getGroup(
@@ -124,7 +127,8 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
             hasAuthority('DEFECT_READ') or hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ') or
-            hasAuthority('EMPLOYEE_READ')
+            hasAuthority('PURCHASE_ORDER_READ') or hasAuthority('WAREHOUSE_BIN_READ') or
+            hasAuthority('WAREHOUSE_TASK_READ') or hasAuthority('EMPLOYEE_READ')
             """)
     public ResponseEntity<List<AttachmentGroupDto>> listGroups(
             @RequestParam String targetType,
@@ -140,7 +144,8 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
             hasAuthority('DEFECT_READ') or hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ') or
-            hasAuthority('EMPLOYEE_READ')
+            hasAuthority('PURCHASE_ORDER_READ') or hasAuthority('WAREHOUSE_BIN_READ') or
+            hasAuthority('WAREHOUSE_TASK_READ') or hasAuthority('EMPLOYEE_READ')
             """)
     public ResponseEntity<PresignedUrlResponse> getFilePresignedUrl(
             @PathVariable UUID groupId,
@@ -156,7 +161,8 @@ public class AttachmentGroupController {
             hasAuthority('EQUIPMENT_READ') or hasAuthority('WORK_ORDER_READ') or
             hasAuthority('STOCK_READ') or hasAuthority('REPAIR_REQUEST_READ') or
             hasAuthority('DEFECT_READ') or hasAuthority('APPROVAL_READ') or hasAuthority('PROCUREMENT_READ') or
-            hasAuthority('EMPLOYEE_READ')
+            hasAuthority('PURCHASE_ORDER_READ') or hasAuthority('WAREHOUSE_BIN_READ') or
+            hasAuthority('WAREHOUSE_TASK_READ') or hasAuthority('EMPLOYEE_READ')
             """)
     public ResponseEntity<Resource> downloadFile(
             @PathVariable UUID groupId,
@@ -187,7 +193,8 @@ public class AttachmentGroupController {
             hasAuthority('DEFECT_CREATE') or hasAuthority('DEFECT_UPDATE') or
             hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
             hasAuthority('EMPLOYEE_UPDATE') or
-            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
+            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE') or hasAuthority('PURCHASE_ORDER_CREATE') or
+            hasAuthority('WAREHOUSE_BIN_MANAGE') or hasAuthority('WAREHOUSE_DOCUMENT_UPLOAD')
             """)
     public ResponseEntity<Void> deleteGroup(
             @PathVariable UUID groupId,
@@ -207,7 +214,8 @@ public class AttachmentGroupController {
             hasAuthority('DEFECT_CREATE') or hasAuthority('DEFECT_UPDATE') or
             hasAuthority('APPROVAL_UPDATE') or hasAuthority('PROCUREMENT_CREATE') or
             hasAuthority('EMPLOYEE_UPDATE') or
-            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')
+            hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE') or hasAuthority('PURCHASE_ORDER_CREATE') or
+            hasAuthority('WAREHOUSE_BIN_MANAGE') or hasAuthority('WAREHOUSE_DOCUMENT_UPLOAD')
             """)
     public ResponseEntity<Void> removeFile(
             @PathVariable UUID groupId,
@@ -231,8 +239,12 @@ public class AttachmentGroupController {
             case DEFECT -> List.of("DEFECT_CREATE", "DEFECT_UPDATE");
             case APPROVAL -> List.of("APPROVAL_UPDATE");
             case PROCUREMENT_REQUEST -> List.of("PROCUREMENT_CREATE");
+            case PURCHASE_ORDER -> List.of("PURCHASE_ORDER_CREATE");
             case STOCK_MOVEMENT -> List.of();
             case EQUIPMENT_COMMISSIONING -> List.of("EQUIPMENT_COMMISSIONING_UPDATE");
+            case INVENTORY_COUNT_SESSION, WAREHOUSE_TASK, WAREHOUSE_WRITEOFF ->
+                    List.of("WAREHOUSE_DOCUMENT_UPLOAD");
+            case WAREHOUSE_BIN -> List.of("WAREHOUSE_BIN_MANAGE");
             case HR_EMPLOYEE -> List.of("EMPLOYEE_UPDATE");
         };
         if (requiredAuthorities.isEmpty()

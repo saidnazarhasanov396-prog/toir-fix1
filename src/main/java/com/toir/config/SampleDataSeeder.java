@@ -69,6 +69,7 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.repository.WarehouseRepository;
 import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.enums.StockLedgerMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.entity.maintenance.WorkOrder;
@@ -771,6 +772,7 @@ public class SampleDataSeeder implements CommandLineRunner {
                 null,
                 null,
                 null,
+                WarehouseStockStatus.AVAILABLE,
                 "SAMPLE_DATA_SEED",
                 sourceId,
                 null,

@@ -1,0 +1,364 @@
+package com.toir.service.warehouse;
+
+import com.toir.dto.warehouse.WarehouseStockMoveRequest;
+import com.toir.dto.warehouse.WarehouseTaskAssignRequest;
+import com.toir.dto.warehouse.WarehouseTaskCompleteRequest;
+import com.toir.dto.warehouse.WarehouseTaskDto;
+import com.toir.dto.warehouse.WarehouseTaskLineRequest;
+import com.toir.dto.warehouse.WarehouseTaskRequest;
+import com.toir.dto.warehouse.WarehouseTaskScanConfirmRequest;
+import com.toir.entity.warehouse.WarehouseTask;
+import com.toir.entity.warehouse.WarehouseTaskLine;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.enums.WarehouseStockStatus;
+import com.toir.enums.WarehouseTaskLineStatus;
+import com.toir.enums.WarehouseTaskPriority;
+import com.toir.enums.WarehouseTaskStatus;
+import com.toir.enums.WarehouseTaskType;
+import com.toir.exception.RestException;
+import com.toir.repository.WarehouseTaskRepository;
+import com.toir.util.AuditBuilderService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class WarehouseTaskService {
+
+    private static final int MAX_PAGE_SIZE = 100;
+
+    private final WarehouseTaskRepository taskRepository;
+    private final WarehouseStockMoveService stockMoveService;
+    private final AuditBuilderService auditBuilderService;
+
+    @Transactional(readOnly = true)
+    public Page<WarehouseTaskDto> findAll(WarehouseTaskStatus status,
+                                          WarehouseTaskType type,
+                                          UUID warehouseId,
+                                          UUID assignedToId,
+                                          int page,
+                                          int size) {
+        PageRequest pageable = PageRequest.of(Math.max(page, 0), Math.max(1, Math.min(size, MAX_PAGE_SIZE)));
+        return taskRepository.search(warehouseId, status, type, assignedToId, pageable)
+                .map(WarehouseTaskDto::from);
+    }
+
+    @Transactional
+    public WarehouseTaskDto create(WarehouseTaskRequest request) {
+        validateCreateRequest(request);
+        WarehouseTask task = new WarehouseTask();
+        task.setTaskNumber(nextTaskNumber());
+        task.setTaskType(request.taskType());
+        task.setStatus(normalizeCreateStatus(request.effectiveStatus()));
+        task.setPriority(WarehouseTaskPriority.NORMAL);
+        task.setWarehouseId(request.warehouseId());
+        task.setSourceType(request.sourceType());
+        task.setSourceId(request.sourceId());
+        task.setAssignedToId(request.assignedToId());
+        task.setDueAt(request.dueAt());
+        task.setComment(trimToNull(request.comment()));
+        for (WarehouseTaskLineRequest lineRequest : request.lines()) {
+            task.getLines().add(line(task, lineRequest));
+        }
+        WarehouseTask saved = taskRepository.save(task);
+        audit(saved, AuditAction.CREATE, "Warehouse task created");
+        return WarehouseTaskDto.from(saved);
+    }
+
+    @Transactional
+    public WarehouseTaskDto assign(UUID id, WarehouseTaskAssignRequest request) {
+        if (request == null || request.assignedToId() == null) {
+            throw RestException.badRequest("assignedToId is required");
+        }
+        WarehouseTask task = load(id);
+        requireStatus(task, WarehouseTaskStatus.OPEN, WarehouseTaskStatus.ASSIGNED);
+        task.setAssignedToId(request.assignedToId());
+        task.setStatus(WarehouseTaskStatus.ASSIGNED);
+        WarehouseTask saved = taskRepository.save(task);
+        audit(saved, AuditAction.UPDATE, "Warehouse task assigned");
+        return WarehouseTaskDto.from(saved);
+    }
+
+    @Transactional
+    public WarehouseTaskDto start(UUID id) {
+        WarehouseTask task = load(id);
+        requireStatus(task, WarehouseTaskStatus.OPEN, WarehouseTaskStatus.ASSIGNED);
+        task.setStatus(WarehouseTaskStatus.IN_PROGRESS);
+        if (task.getStartedAt() == null) {
+            task.setStartedAt(Instant.now());
+        }
+        task.getLines().stream()
+                .filter(line -> line.getStatus() == WarehouseTaskLineStatus.OPEN)
+                .forEach(line -> line.setStatus(WarehouseTaskLineStatus.IN_PROGRESS));
+        WarehouseTask saved = taskRepository.save(task);
+        audit(saved, AuditAction.UPDATE, "Warehouse task started");
+        return WarehouseTaskDto.from(saved);
+    }
+
+    @Transactional
+    public WarehouseTaskDto scanConfirm(UUID id, UUID lineId, WarehouseTaskScanConfirmRequest request) {
+        WarehouseTask task = load(id);
+        requireStatus(task, WarehouseTaskStatus.IN_PROGRESS);
+        WarehouseTaskLine line = lineOrThrow(task, lineId);
+        validateScan(task, line, request == null ? new WarehouseTaskScanConfirmRequest(null, null, null, null, null) : request);
+        line.setScanConfirmed(true);
+        line.setStatus(WarehouseTaskLineStatus.IN_PROGRESS);
+        WarehouseTask saved = taskRepository.save(task);
+        return WarehouseTaskDto.from(saved);
+    }
+
+    @Transactional
+    public WarehouseTaskDto complete(UUID id, WarehouseTaskCompleteRequest request) {
+        WarehouseTask task = load(id);
+        requireStatus(task, WarehouseTaskStatus.IN_PROGRESS);
+        Map<UUID, WarehouseTaskCompleteRequest.Line> requestedLines = completionLinesById(request);
+        for (WarehouseTaskLine line : task.getLines()) {
+            WarehouseTaskCompleteRequest.Line lineRequest = requestedLines.get(line.getId());
+            if (lineRequest != null) {
+                line.setActualQty(lineRequest.actualQty());
+                line.setExceptionReason(trimToNull(lineRequest.exceptionReason()));
+            }
+            validateCompletionVariance(line);
+            line.setStatus(lineHasVariance(line) ? WarehouseTaskLineStatus.EXCEPTION : WarehouseTaskLineStatus.DONE);
+        }
+        if (task.getTaskType() == WarehouseTaskType.PUTAWAY) {
+            for (WarehouseTaskLine line : task.getLines()) {
+                if (zero(line.getActualQty()).signum() > 0) {
+                    stockMoveService.move(moveRequest(task, line, request == null ? null : request.comment()));
+                }
+            }
+        }
+        task.setStatus(WarehouseTaskStatus.DONE);
+        task.setCompletedAt(Instant.now());
+        if (request != null && trimToNull(request.comment()) != null) {
+            task.setComment(trimToNull(request.comment()));
+        }
+        WarehouseTask saved = taskRepository.save(task);
+        audit(saved, AuditAction.UPDATE, "Warehouse task completed");
+        return WarehouseTaskDto.from(saved);
+    }
+
+    @Transactional
+    public WarehouseTaskDto cancel(UUID id, String reason) {
+        WarehouseTask task = load(id);
+        requireStatus(
+                task,
+                WarehouseTaskStatus.OPEN,
+                WarehouseTaskStatus.ASSIGNED,
+                WarehouseTaskStatus.IN_PROGRESS,
+                WarehouseTaskStatus.BLOCKED
+        );
+        task.setStatus(WarehouseTaskStatus.CANCELLED);
+        task.setCancelledAt(Instant.now());
+        String normalizedReason = trimToNull(reason);
+        if (normalizedReason != null) {
+            task.setComment(normalizedReason);
+        }
+        task.getLines().stream()
+                .filter(line -> line.getStatus() != WarehouseTaskLineStatus.DONE)
+                .forEach(line -> line.setStatus(WarehouseTaskLineStatus.CANCELLED));
+        WarehouseTask saved = taskRepository.save(task);
+        audit(saved, AuditAction.UPDATE, "Warehouse task cancelled");
+        return WarehouseTaskDto.from(saved);
+    }
+
+    private WarehouseTaskLine line(WarehouseTask task, WarehouseTaskLineRequest request) {
+        WarehouseTaskLine line = new WarehouseTaskLine();
+        line.setTask(task);
+        line.setSparePartId(request.sparePartId());
+        line.setEquipmentId(request.equipmentId());
+        line.setFromBinId(request.fromBinId());
+        line.setToBinId(request.toBinId());
+        line.setLotNumber(trimToNull(request.lotNumber()));
+        line.setSerialNumber(trimToNull(request.serialNumber()));
+        line.setExpiryDate(request.expiryDate());
+        line.setStockStatus(request.effectiveStatus());
+        line.setPlannedQty(request.plannedQty());
+        line.setActualQty(BigDecimal.ZERO);
+        line.setUnit(trimToNull(request.unit()));
+        line.setStatus(WarehouseTaskLineStatus.OPEN);
+        return line;
+    }
+
+    private WarehouseStockMoveRequest moveRequest(WarehouseTask task, WarehouseTaskLine line, String comment) {
+        if (line.getSparePartId() == null) {
+            throw RestException.badRequest("PUTAWAY task line sparePartId is required");
+        }
+        if (line.getFromBinId() == null || line.getToBinId() == null) {
+            throw RestException.badRequest("PUTAWAY task line fromBinId and toBinId are required");
+        }
+        return new WarehouseStockMoveRequest(
+                task.getWarehouseId(),
+                line.getSparePartId(),
+                line.getFromBinId(),
+                line.getToBinId(),
+                line.getActualQty(),
+                line.getLotNumber(),
+                line.getSerialNumber(),
+                line.getExpiryDate(),
+                effectiveStatus(line.getStockStatus()),
+                task.getTaskNumber(),
+                trimToNull(comment) == null ? task.getComment() : trimToNull(comment)
+        );
+    }
+
+    private void validateCreateRequest(WarehouseTaskRequest request) {
+        if (request == null) {
+            throw RestException.badRequest("request is required");
+        }
+        if (request.lines() == null || request.lines().isEmpty()) {
+            throw RestException.badRequest("At least one task line is required");
+        }
+        for (WarehouseTaskLineRequest line : request.lines()) {
+            if (line.plannedQty() == null || line.plannedQty().compareTo(BigDecimal.ZERO) <= 0) {
+                throw RestException.badRequest("Task line plannedQty must be greater than 0");
+            }
+        }
+    }
+
+    private WarehouseTaskStatus normalizeCreateStatus(WarehouseTaskStatus status) {
+        if (status == WarehouseTaskStatus.DRAFT) {
+            return WarehouseTaskStatus.DRAFT;
+        }
+        return WarehouseTaskStatus.OPEN;
+    }
+
+    private void validateScan(WarehouseTask task, WarehouseTaskLine line, WarehouseTaskScanConfirmRequest request) {
+        UUID expectedBinId = expectedScanBin(task, line);
+        if (request.scannedBinId() != null && expectedBinId != null && !Objects.equals(request.scannedBinId(), expectedBinId)) {
+            throw RestException.badRequest("Scanned bin does not match expected bin");
+        }
+        if (request.scannedSparePartId() != null
+                && line.getSparePartId() != null
+                && !Objects.equals(request.scannedSparePartId(), line.getSparePartId())) {
+            throw RestException.badRequest("Scanned spare part does not match task line");
+        }
+        if (request.scannedEquipmentId() != null
+                && line.getEquipmentId() != null
+                && !Objects.equals(request.scannedEquipmentId(), line.getEquipmentId())) {
+            throw RestException.badRequest("Scanned equipment does not match task line");
+        }
+        if (trimToNull(request.lotNumber()) != null
+                && trimToNull(line.getLotNumber()) != null
+                && !trimToNull(request.lotNumber()).equalsIgnoreCase(trimToNull(line.getLotNumber()))) {
+            throw RestException.badRequest("Scanned lot does not match task line");
+        }
+        if (trimToNull(request.serialNumber()) != null
+                && trimToNull(line.getSerialNumber()) != null
+                && !trimToNull(request.serialNumber()).equalsIgnoreCase(trimToNull(line.getSerialNumber()))) {
+            throw RestException.badRequest("Scanned serial does not match task line");
+        }
+    }
+
+    private UUID expectedScanBin(WarehouseTask task, WarehouseTaskLine line) {
+        if (task.getTaskType() == WarehouseTaskType.PUTAWAY || task.getTaskType() == WarehouseTaskType.RECEIVE) {
+            return line.getToBinId();
+        }
+        return line.getFromBinId() == null ? line.getToBinId() : line.getFromBinId();
+    }
+
+    private Map<UUID, WarehouseTaskCompleteRequest.Line> completionLinesById(WarehouseTaskCompleteRequest request) {
+        if (request == null || request.lines() == null || request.lines().isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, WarehouseTaskCompleteRequest.Line> byId = new HashMap<>();
+        for (WarehouseTaskCompleteRequest.Line line : request.lines()) {
+            if (line.lineId() == null) {
+                throw RestException.badRequest("lineId is required");
+            }
+            if (line.actualQty() == null || line.actualQty().compareTo(BigDecimal.ZERO) < 0) {
+                throw RestException.badRequest("actualQty cannot be negative");
+            }
+            if (byId.put(line.lineId(), line) != null) {
+                throw RestException.badRequest("Duplicate task line completion: " + line.lineId());
+            }
+        }
+        return byId;
+    }
+
+    private void validateCompletionVariance(WarehouseTaskLine line) {
+        if (!lineHasVariance(line)) {
+            return;
+        }
+        if (trimToNull(line.getExceptionReason()) == null) {
+            throw RestException.badRequest("Task line exception reason is required when actual quantity differs from planned");
+        }
+    }
+
+    private boolean lineHasVariance(WarehouseTaskLine line) {
+        return zero(line.getActualQty()).compareTo(zero(line.getPlannedQty())) != 0;
+    }
+
+    private WarehouseTaskLine lineOrThrow(WarehouseTask task, UUID lineId) {
+        if (lineId == null) {
+            throw RestException.badRequest("lineId is required");
+        }
+        return task.getLines().stream()
+                .filter(line -> Objects.equals(line.getId(), lineId))
+                .findFirst()
+                .orElseThrow(() -> RestException.notFound("Warehouse task line not found: " + lineId));
+    }
+
+    private WarehouseTask load(UUID id) {
+        return taskRepository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Warehouse task not found: " + id));
+    }
+
+    private void requireStatus(WarehouseTask task, WarehouseTaskStatus... allowedStatuses) {
+        for (WarehouseTaskStatus allowedStatus : allowedStatuses) {
+            if (task.getStatus() == allowedStatus) {
+                return;
+            }
+        }
+        throw RestException.badRequest("Warehouse task status does not allow this operation: " + task.getStatus());
+    }
+
+    private WarehouseStockStatus effectiveStatus(WarehouseStockStatus status) {
+        return status == null ? WarehouseStockStatus.AVAILABLE : status;
+    }
+
+    private BigDecimal zero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private String nextTaskNumber() {
+        long sequence = taskRepository.countByIsDeletedFalse() + 1;
+        return "WT-" + LocalDate.now(ZoneOffset.UTC).getYear() + "-" + String.format("%05d", sequence);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private void audit(WarehouseTask task, AuditAction action, String message) {
+        if (task.getId() == null) {
+            return;
+        }
+        auditBuilderService.log(
+                "warehouse_task",
+                task.getId().toString(),
+                action,
+                AuditModule.WAREHOUSE_TASK,
+                message,
+                null,
+                task
+        );
+    }
+}

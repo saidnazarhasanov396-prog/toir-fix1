@@ -1,5 +1,6 @@
 package com.toir.dto.procurement;
 
+import com.toir.dto.wms.WmsDocumentGroupRequest;
 import jakarta.validation.Valid;
 
 import java.time.LocalDate;
@@ -11,6 +12,15 @@ public record ProcurementReceiptRequest(
         LocalDate receiptDate,
         String documentNumber,
         UUID responsiblePersonId,
-        String comment
+        String comment,
+        List<@Valid WmsDocumentGroupRequest> documentGroups,
+        boolean strictDocumentPolicy
 ) {
+    public ProcurementReceiptRequest(List<@Valid ProcurementReceiptLineRequest> lines,
+                                     LocalDate receiptDate,
+                                     String documentNumber,
+                                     UUID responsiblePersonId,
+                                     String comment) {
+        this(lines, receiptDate, documentNumber, responsiblePersonId, comment, List.of(), false);
+    }
 }

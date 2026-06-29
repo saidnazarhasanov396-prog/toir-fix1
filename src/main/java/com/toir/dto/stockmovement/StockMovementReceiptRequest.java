@@ -1,5 +1,6 @@
 package com.toir.dto.stockmovement;
 
+import com.toir.enums.WarehouseStockStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -18,5 +19,28 @@ public record StockMovementReceiptRequest(
         UUID responsiblePersonId,
         String supplierName,
         String documentNumber,
-        String comment
-) {}
+        String comment,
+        UUID binId,
+        String lotNumber,
+        String serialNumber,
+        LocalDate expiryDate,
+        WarehouseStockStatus stockStatus
+) {
+    public StockMovementReceiptRequest(UUID sparePartId,
+                                       UUID warehouseId,
+                                       double quantity,
+                                       String unit,
+                                       BigDecimal unitPrice,
+                                       LocalDate receivedAt,
+                                       UUID responsiblePersonId,
+                                       String supplierName,
+                                       String documentNumber,
+                                       String comment) {
+        this(sparePartId, warehouseId, quantity, unit, unitPrice, receivedAt, responsiblePersonId,
+                supplierName, documentNumber, comment, null, null, null, null, null);
+    }
+
+    public WarehouseStockStatus effectiveStatus() {
+        return stockStatus == null ? WarehouseStockStatus.AVAILABLE : stockStatus;
+    }
+}

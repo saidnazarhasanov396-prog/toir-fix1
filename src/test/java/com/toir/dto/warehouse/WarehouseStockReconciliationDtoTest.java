@@ -1,6 +1,7 @@
 package com.toir.dto.warehouse;
 
 import com.toir.repository.WarehouseStockReconciliationRow;
+import com.toir.enums.WarehouseStockStatus;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -17,6 +18,9 @@ class WarehouseStockReconciliationDtoTest {
         WarehouseStockReconciliationRow row = mock(WarehouseStockReconciliationRow.class);
         when(row.getWarehouseId()).thenReturn(UUID.randomUUID());
         when(row.getSparePartId()).thenReturn(UUID.randomUUID());
+        when(row.getStockStatus()).thenReturn(WarehouseStockStatus.AVAILABLE);
+        when(row.getLegacyBinId()).thenReturn(null);
+        when(row.getLegacyBinless()).thenReturn(true);
         when(row.getLegacyPresent()).thenReturn(true);
         when(row.getWmsPresent()).thenReturn(true);
         when(row.getLegacyQtyOnHand()).thenReturn(BigDecimal.TEN);
@@ -28,6 +32,9 @@ class WarehouseStockReconciliationDtoTest {
 
         WarehouseStockReconciliationDto result = WarehouseStockReconciliationDto.from(row);
 
+        assertThat(result.stockStatus()).isEqualTo(WarehouseStockStatus.AVAILABLE);
+        assertThat(result.legacyBinId()).isNull();
+        assertThat(result.legacyBinless()).isTrue();
         assertThat(result.legacyOnHandDrift()).isEqualByComparingTo("-1");
         assertThat(result.legacyReservedDrift()).isEqualByComparingTo("1");
         assertThat(result.stockLedgerDrift()).isEqualByComparingTo("1");

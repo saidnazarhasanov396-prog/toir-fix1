@@ -1,9 +1,11 @@
 package com.toir.entity.repair;
 
 import com.toir.entity.BaseEntity;
+import com.toir.enums.WarehouseStockStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 import java.time.Instant;
 
@@ -46,6 +48,22 @@ public class RepairMaterialUsage extends BaseEntity {
 
     @Column(name = "issued_by_id")
     private UUID issuedById;
+
+    @Column(name = "bin_id")
+    private UUID binId;
+
+    @Column(name = "lot_number", length = 100)
+    private String lotNumber;
+
+    @Column(name = "serial_number", length = 128)
+    private String serialNumber;
+
+    @Column(name = "expiry_date")
+    private LocalDate expiryDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stock_status", nullable = false, length = 32)
+    private WarehouseStockStatus stockStatus = WarehouseStockStatus.AVAILABLE;
 
     @Column(name = "issued_at")
     private Instant issuedAt;

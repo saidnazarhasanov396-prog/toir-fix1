@@ -2,6 +2,7 @@ package com.toir.entity;
 
 import com.toir.enums.InventoryTransactionType;
 import com.toir.enums.InventoryAdjustmentReason;
+import com.toir.enums.WarehouseStockStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -98,6 +99,34 @@ public class InventoryTransaction {
     @Column(columnDefinition = "text")
     private String comment;
 
+    @Column(name = "bin_id")
+    private UUID binId;
+
+    @Column(name = "source_bin_id")
+    private UUID sourceBinId;
+
+    @Column(name = "destination_bin_id")
+    private UUID destinationBinId;
+
+    @Column(name = "lot_number", length = 100)
+    private String lotNumber;
+
+    @Column(name = "serial_number", length = 128)
+    private String serialNumber;
+
+    @Column(name = "expiry_date")
+    private LocalDate expiryDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stock_status", nullable = false, length = 32)
+    private WarehouseStockStatus stockStatus = WarehouseStockStatus.AVAILABLE;
+
+    @Column(name = "source_type", length = 64)
+    private String sourceType;
+
+    @Column(name = "source_id")
+    private UUID sourceId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -109,6 +138,9 @@ public class InventoryTransaction {
     void onCreate() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+        if (stockStatus == null) {
+            stockStatus = WarehouseStockStatus.AVAILABLE;
         }
     }
 }

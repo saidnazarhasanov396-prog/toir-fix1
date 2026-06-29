@@ -1,6 +1,7 @@
 package com.toir.dto.warehouse;
 
 import com.toir.repository.WarehouseStockReconciliationRow;
+import com.toir.enums.WarehouseStockStatus;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -8,6 +9,9 @@ import java.util.UUID;
 public record WarehouseStockReconciliationDto(
         UUID warehouseId,
         UUID sparePartId,
+        WarehouseStockStatus stockStatus,
+        UUID legacyBinId,
+        boolean legacyBinless,
         boolean legacyPresent,
         boolean wmsPresent,
         BigDecimal legacyQtyOnHand,
@@ -44,6 +48,9 @@ public record WarehouseStockReconciliationDto(
         return new WarehouseStockReconciliationDto(
                 row.getWarehouseId(),
                 row.getSparePartId(),
+                row.getStockStatus(),
+                row.getLegacyBinId(),
+                row.getLegacyBinless(),
                 row.getLegacyPresent(),
                 row.getWmsPresent(),
                 legacyOnHand,
