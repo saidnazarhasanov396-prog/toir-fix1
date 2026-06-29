@@ -1,8 +1,11 @@
 package com.toir.security;
 
 import com.toir.controller.BudgetSummaryController;
+import com.toir.controller.FinanceReportController;
 import com.toir.controller.maintenance.MaintenanceBudgetController;
 import com.toir.dto.budget.BudgetLineDto;
+import com.toir.dto.budget.FinanceDashboardResponse;
+import com.toir.dto.budget.FinanceReportRow;
 import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.enums.BudgetStatus;
 import com.toir.repository.CostCategoryRepository;
@@ -18,6 +21,8 @@ import com.toir.repository.users.UserRepository;
 import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.ApprovalService;
 import com.toir.service.FinanceScopeService;
+import com.toir.service.FinanceReportService;
+import com.toir.service.ReportsService;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,7 +50,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(controllers = {
         MaintenanceBudgetController.class,
-        BudgetSummaryController.class
+        BudgetSummaryController.class,
+        FinanceReportController.class
 })
 @Import({
         SecurityConfig.class,
@@ -105,6 +111,9 @@ class RbacBudgetSecurityTest {
     @MockBean
     ActualCostReviewFacadeService actualCostReviewFacadeService;
 
+    @MockBean
+    FinanceReportService financeReportService;
+
     @BeforeEach
     void setUpFinanceScope() {
         lenient().when(financeScopeService.filterBudgets(any())).thenReturn(List.of());
@@ -145,6 +154,8 @@ class RbacBudgetSecurityTest {
         when(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(financeReportService.dashboard(2026, 6, null)).thenReturn(dashboard());
+        when(financeReportService.planVsActualByDepartment(2026, 6, null)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/budgets?year=2026&page=0&size=1"))
                 .andExpect(status().isOk());
@@ -152,6 +163,27 @@ class RbacBudgetSecurityTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/budgets/summary"))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/budgets/summary/dashboard?year=2026&month=6"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/budgets/reports/plan-vs-actual-by-department?year=2026&month=6"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.FINANCE_REPORT_EXPORT)
+    void financeReportExportPermissionCanExportBudgetReports() throws Exception {
+        when(financeReportService.planVsActualByDepartmentCsv(2026, 6, null))
+                .thenReturn(new ReportsService.CsvFile("finance.csv", "id\n"));
+
+        mockMvc.perform(get("/api/v1/budgets/reports/plan-vs-actual-by-department/export?year=2026&month=6"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.BUDGET_READ)
+    void budgetReadCannotExportFinanceReports() throws Exception {
+        mockMvc.perform(get("/api/v1/budgets/reports/plan-vs-actual-by-department/export?year=2026&month=6"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -216,23 +248,107 @@ class RbacBudgetSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.BUDGET_APPROVE)
-    void budgetApproveEndpointIsRemoved() throws Exception {
+    void budgetApproveCanApproveAndRejectSubmittedBudgets() throws Exception {
         UUID budgetId = UUID.randomUUID();
+        when(budgetService.approve(eq(budgetId), any(), eq("approved"))).thenReturn(budgetDto(budgetId));
+        when(budgetService.reject(eq(budgetId), any(), eq("rework"))).thenReturn(budgetDto(budgetId));
 
-        mockMvc.perform(post("/api/v1/budgets/{id}/approve", budgetId))
-                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/v1/budgets/{id}/approve", budgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(commentPayload("approved")))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/budgets/{id}/reject", budgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(commentPayload("rework")))
+                .andExpect(status().isOk());
     }
 
     @Test
     @WithMockUser(authorities = PermissionConstants.BUDGET_UPDATE)
-    void budgetUpdateCanAddBudgetLine() throws Exception {
+    void budgetUpdateCanAddBudgetLineSubmitAndLock() throws Exception {
         UUID budgetId = UUID.randomUUID();
         when(budgetService.addLine(eq(budgetId), any(BudgetLineDto.class))).thenReturn(budgetLineDto());
+        when(budgetService.submit(eq(budgetId), any(), eq("ready"))).thenReturn(budgetDto(budgetId));
+        when(budgetService.lock(eq(budgetId), any(), eq("lock"))).thenReturn(budgetDto(budgetId));
 
         mockMvc.perform(post("/api/v1/budgets/{id}/lines", budgetId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(budgetLinePayload()))
                 .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/budgets/{id}/submit", budgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(commentPayload("ready")))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/budgets/{id}/lock", budgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(commentPayload("lock")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.BUDGET_CLOSE)
+    void budgetCloseCanCloseBudget() throws Exception {
+        UUID budgetId = UUID.randomUUID();
+        when(budgetService.close(eq(budgetId), any(), eq("close"))).thenReturn(budgetDto(budgetId));
+
+        mockMvc.perform(post("/api/v1/budgets/{id}/close", budgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(commentPayload("close")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.BUDGET_REOPEN)
+    void budgetReopenCanReopenBudget() throws Exception {
+        UUID budgetId = UUID.randomUUID();
+        when(budgetService.reopen(eq(budgetId), any(), eq("reopen"))).thenReturn(budgetDto(budgetId));
+
+        mockMvc.perform(post("/api/v1/budgets/{id}/reopen", budgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(commentPayload("reopen")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.BUDGET_TRANSFER)
+    void budgetTransferCanMovePlannedAmount() throws Exception {
+        UUID budgetId = UUID.randomUUID();
+        UUID fromLineId = UUID.randomUUID();
+        UUID toLineId = UUID.randomUUID();
+        when(budgetService.transfer(eq(budgetId), eq(fromLineId), eq(toLineId), eq(150.0), any(), eq("shift")))
+                .thenReturn(budgetDto(budgetId));
+
+        mockMvc.perform(post("/api/v1/budgets/{id}/transfer", budgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fromBudgetLineId": "%s",
+                                  "toBudgetLineId": "%s",
+                                  "amount": 150,
+                                  "comment": "shift"
+                                }
+                                """.formatted(fromLineId, toLineId)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.BUDGET_REVISE)
+    void budgetReviseCanChangeLineAmount() throws Exception {
+        UUID budgetId = UUID.randomUUID();
+        UUID lineId = UUID.randomUUID();
+        when(budgetService.reviseLine(eq(budgetId), eq(lineId), eq(650.0), any(), eq("increase")))
+                .thenReturn(budgetDto(budgetId));
+
+        mockMvc.perform(post("/api/v1/budgets/{id}/revise", budgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "budgetLineId": "%s",
+                                  "plannedAmount": 650,
+                                  "comment": "increase"
+                                }
+                                """.formatted(lineId)))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -245,7 +361,20 @@ class RbacBudgetSecurityTest {
                         .content(budgetPayload()))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/budgets/{id}/approve", budgetId))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/budgets/{id}/close", budgetId))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/budgets/{id}/transfer", budgetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fromBudgetLineId": "%s",
+                                  "toBudgetLineId": "%s",
+                                  "amount": 150,
+                                  "comment": "shift"
+                                }
+                                """.formatted(UUID.randomUUID(), UUID.randomUUID())))
+                .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/budgets/{id}/lines", budgetId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(budgetLinePayload()))
@@ -288,5 +417,32 @@ class RbacBudgetSecurityTest {
                   "plannedAmount": 100
                 }
                 """.formatted(UUID.randomUUID());
+    }
+
+    private String commentPayload(String comment) {
+        return """
+                {
+                  "comment": "%s"
+                }
+                """.formatted(comment);
+    }
+
+    private FinanceDashboardResponse dashboard() {
+        return new FinanceDashboardResponse(
+                100,
+                10,
+                5,
+                0,
+                90,
+                85,
+                90,
+                0.1,
+                0,
+                0,
+                java.time.Instant.parse("2026-06-27T00:00:00Z"),
+                new FinanceDashboardResponse.Filters(2026, 6, null),
+                List.of(new FinanceReportRow(null, "D", "Dept", "DEPARTMENT", 100, 10, 5, 0, 90, 85, 90, 0.1, 0, 0, 1)),
+                List.of()
+        );
     }
 }

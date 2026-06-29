@@ -1069,7 +1069,7 @@ class ApprovalPbacScopeTest {
         approval.setDocumentType("MAINTENANCE_BUDGET");
         MaintenanceBudget budget = new MaintenanceBudget();
         budget.setId(documentId);
-        budget.setStatus(BudgetStatus.DRAFT);
+        budget.setStatus(BudgetStatus.SUBMITTED);
         when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
         when(requestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(maintenanceBudgetRepository.findByIdAndIsDeletedFalse(documentId)).thenReturn(Optional.of(budget));

@@ -1,5 +1,10 @@
 package com.toir.enums;
 
 public enum BudgetStatus {
-    DRAFT, APPROVED, LOCKED, CLOSED
+    DRAFT,
+    SUBMITTED,
+    APPROVED,
+    LOCKED,
+    CLOSED,
+    REJECTED
 }

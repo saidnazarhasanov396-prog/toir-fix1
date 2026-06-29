@@ -137,6 +137,11 @@ class RolePermissionMatrixTest {
                 PermissionConstants.BUDGET_READ,
                 PermissionConstants.BUDGET_CREATE,
                 PermissionConstants.BUDGET_UPDATE,
+                PermissionConstants.BUDGET_TRANSFER,
+                PermissionConstants.BUDGET_REVISE,
+                PermissionConstants.ACTUAL_COST_ALLOCATE,
+                PermissionConstants.ACTUAL_COST_REQUEST_CORRECTION,
+                PermissionConstants.FINANCE_REPORT_EXPORT,
                 PermissionConstants.ANALYTICS_READ,
                 PermissionConstants.ANALYTICS_EXPORT,
                 PermissionConstants.APPROVAL_READ,
@@ -221,7 +226,14 @@ class RolePermissionMatrixTest {
         assertThat(matrix.get("FINANCE_MANAGER")).contains(
                 PermissionConstants.ACTUAL_COST_APPROVE,
                 PermissionConstants.BUDGET_APPROVE,
+                PermissionConstants.BUDGET_CLOSE,
+                PermissionConstants.BUDGET_REOPEN,
+                PermissionConstants.BUDGET_TRANSFER,
+                PermissionConstants.BUDGET_REVISE,
+                PermissionConstants.ACTUAL_COST_ALLOCATE,
+                PermissionConstants.ACTUAL_COST_REQUEST_CORRECTION,
                 PermissionConstants.FINANCE_ROUTE_OVERRIDE_APPLY,
+                PermissionConstants.FINANCE_REPORT_EXPORT,
                 PermissionConstants.APPROVAL_APPROVE
         );
         assertThat(matrix.get("INSPECTOR")).contains(

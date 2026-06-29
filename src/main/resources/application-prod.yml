@@ -58,6 +58,12 @@ app:
     admin-password: Root123456
     admin-email: admin@toir.local
     admin-full-name: System Administrator
+  firebase:
+    enabled: ${APP_FIREBASE_ENABLED:false}
+    project-id: ${APP_FIREBASE_PROJECT_ID:}
+    service-account-file: ${APP_FIREBASE_SERVICE_ACCOUNT_FILE:}
+    service-account-json: ${APP_FIREBASE_SERVICE_ACCOUNT_JSON:}
+    service-account-base64: ${APP_FIREBASE_SERVICE_ACCOUNT_BASE64:}
 
   logging:
     level:
