@@ -1,6 +1,7 @@
 package com.toir.controller.department;
 
 import com.toir.dto.department.DepartmentDto;
+import com.toir.dto.department.DepartmentTreeDto;
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.enums.DepartmentType;
 import com.toir.exception.GlobalExceptionHandler;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -132,6 +134,47 @@ class DepartmentControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(created.id().toString()))
                 .andExpect(jsonPath("$.content[0].code").value("UI-E2E-20260516052136"));
+    }
+
+
+    @Test
+    void treeReturnsNestedDepartmentsAndForwardsFilters() throws Exception {
+        UUID rootId = UUID.randomUUID();
+        UUID childId = UUID.randomUUID();
+        DepartmentTreeDto child = new DepartmentTreeDto(
+                childId,
+                "ENT-003",
+                "Navoiyazot",
+                null,
+                null,
+                DepartmentType.ENTERPRISE,
+                rootId,
+                null,
+                List.of()
+        );
+        DepartmentTreeDto root = new DepartmentTreeDto(
+                rootId,
+                "ENT-002",
+                "Tenzorsoft",
+                null,
+                null,
+                DepartmentType.ENTERPRISE,
+                null,
+                null,
+                List.of(child)
+        );
+        when(service.findTree(eq(DepartmentType.ENTERPRISE), eq("navoi"))).thenReturn(List.of(root));
+
+        mockMvc.perform(get("/api/v1/departments/tree")
+                        .param("type", "ENTERPRISE")
+                        .param("search", "navoi"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(rootId.toString()))
+                .andExpect(jsonPath("$[0].code").value("ENT-002"))
+                .andExpect(jsonPath("$[0].children[0].id").value(childId.toString()))
+                .andExpect(jsonPath("$[0].children[0].code").value("ENT-003"));
+
+        verify(service).findTree(DepartmentType.ENTERPRISE, "navoi");
     }
 
     @Test
