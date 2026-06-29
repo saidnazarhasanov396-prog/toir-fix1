@@ -35,7 +35,7 @@ springdoc:
 app:
   security:
     jwt:
-      secret: change-me-in-production-use-a-long-random-secret-at-least-32-bytes
+      secret: 1234
       expiration-minutes: 720
       issuer: toir-backend
   jackson:
