@@ -9,6 +9,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -32,9 +34,11 @@ public class BudgetEvent extends BaseEntity {
     private String eventType;
 
     @Column(name = "old_values", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String oldValues;
 
     @Column(name = "new_values", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String newValues;
 
     @Column(name = "actor_user_id")
