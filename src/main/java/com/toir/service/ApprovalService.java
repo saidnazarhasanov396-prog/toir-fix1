@@ -30,6 +30,7 @@ import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.service.approval.ApprovalActionExecutor;
 import com.toir.service.approval.ApprovalGovernanceService;
+import com.toir.service.approval.ApprovalOrchestrator;
 import com.toir.service.approval.ApprovalRouteResolver;
 import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.repair.RepairRequestService;
@@ -56,7 +57,7 @@ import java.util.stream.Stream;
 @Service
 @Transactional
 @RequiredArgsConstructor
-public class ApprovalService {
+public class ApprovalService implements ApprovalOrchestrator {
 
     private static final Set<String> INTEGRATED_DOCUMENT_TYPES = Set.of(
             "WORK_ORDER",
@@ -289,6 +290,12 @@ public class ApprovalService {
             return request.documentId();
         }
         return UUID.randomUUID();
+    }
+
+    @Transactional
+    @Override
+    public ApprovalRequestDto requestApproval(CreateApprovalRequest request) {
+        return create(request);
     }
 
     @Transactional
@@ -569,6 +576,7 @@ public class ApprovalService {
     }
 
     @Transactional
+    @Override
     public ApprovalRequestDto approve(UUID requestId, DecisionRequest decision) {
         return applyDecision(requestId, decision, ApprovalDecision.APPROVED);
     }
@@ -579,6 +587,7 @@ public class ApprovalService {
     }
 
     @Transactional
+    @Override
     public ApprovalRequestDto reject(UUID requestId, DecisionRequest decision) {
         return applyDecision(requestId, decision, ApprovalDecision.REJECTED);
     }
