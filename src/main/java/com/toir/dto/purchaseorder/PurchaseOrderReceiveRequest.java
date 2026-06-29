@@ -1,5 +1,6 @@
 package com.toir.dto.purchaseorder;
 
+import com.toir.dto.wms.WmsDocumentGroupRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -12,6 +13,14 @@ public record PurchaseOrderReceiveRequest(
         @NotEmpty List<@Valid PurchaseOrderReceiveLineRequest> lines,
         LocalDate receiptDate,
         String documentNumber,
-        @NotNull UUID responsiblePersonId
+        @NotNull UUID responsiblePersonId,
+        List<@Valid WmsDocumentGroupRequest> documentGroups,
+        boolean strictDocumentPolicy
 ) {
+    public PurchaseOrderReceiveRequest(@NotEmpty List<@Valid PurchaseOrderReceiveLineRequest> lines,
+                                       LocalDate receiptDate,
+                                       String documentNumber,
+                                       UUID responsiblePersonId) {
+        this(lines, receiptDate, documentNumber, responsiblePersonId, List.of(), false);
+    }
 }

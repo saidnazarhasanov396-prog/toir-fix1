@@ -7,6 +7,7 @@ import com.toir.dto.warehouse.WarehouseStockDto;
 import com.toir.dto.warehouse.WarehouseStockLedgerDto;
 import com.toir.dto.warehouse.WarehouseStockReconciliationDto;
 import com.toir.enums.WarehouseEquipmentStatus;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
@@ -72,9 +73,23 @@ public class WarehouseController {
     @GetMapping("/{id}/stock-balances")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
     public ResponseEntity<Page<WarehouseStockBalanceDto>> stockBalances(@PathVariable UUID id,
+                                                                        @RequestParam(required = false) UUID binId,
+                                                                        @RequestParam(required = false) UUID sparePartId,
+                                                                        @RequestParam(required = false) WarehouseStockStatus stockStatus,
+                                                                        @RequestParam(required = false) String lotNumber,
+                                                                        @RequestParam(required = false) String serialNumber,
                                                                         @RequestParam(defaultValue = "0") int page,
                                                                         @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(warehouseQueryService.stockBalances(id, page, size));
+        return ResponseEntity.ok(warehouseQueryService.stockBalances(
+                id,
+                binId,
+                sparePartId,
+                stockStatus,
+                lotNumber,
+                serialNumber,
+                page,
+                size
+        ));
     }
 
     @GetMapping("/{id}/stock-ledgers")

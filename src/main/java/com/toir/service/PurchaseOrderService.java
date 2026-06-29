@@ -27,6 +27,7 @@ import com.toir.enums.PurchaseOrderStatus;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.SupplierType;
+import com.toir.enums.WmsDocumentOperationType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -38,6 +39,8 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsDocumentPolicyService;
+import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -72,6 +75,8 @@ public class PurchaseOrderService {
     private final InventoryCostService inventoryCostService;
     private final ToirStockService toirStockService;
     private final LegacyStockProjectionService legacyStockProjectionService;
+    private final WmsStockCoordinateValidator coordinateValidator;
+    private final WmsDocumentPolicyService documentPolicyService;
 
     @Transactional
     public PurchaseOrderDto create(PurchaseOrderRequest request) {
@@ -198,12 +203,19 @@ public class PurchaseOrderService {
         Map<UUID, PurchaseOrderLine> linesById = order.getLines().stream()
                 .filter(line -> !line.isDeleted())
                 .collect(Collectors.toMap(PurchaseOrderLine::getId, Function.identity()));
+        documentPolicyService.validateReceiptDocuments(
+                WmsDocumentOperationType.PURCHASE_ORDER_RECEIPT,
+                request.documentGroups(),
+                hasReceiptDiscrepancy(request, linesById),
+                false,
+                request.strictDocumentPolicy()
+        );
         for (PurchaseOrderReceiveLineRequest lineRequest : request.lines()) {
             PurchaseOrderLine line = linesById.get(lineRequest.purchaseOrderLineId());
             if (line == null) {
                 throw RestException.badRequest("Purchase order line does not belong to this order: " + lineRequest.purchaseOrderLineId());
             }
-            receiveLine(order, line, lineRequest.receivedQuantity(), receiptDate, request.documentNumber(), responsible);
+            receiveLine(order, line, lineRequest, receiptDate, request.documentNumber(), responsible);
         }
         recalcReceiptStatus(order, receiptDate);
         PurchaseOrder saved = purchaseOrderRepository.save(order);
@@ -267,10 +279,17 @@ public class PurchaseOrderService {
         return line;
     }
 
-    private void receiveLine(PurchaseOrder order, PurchaseOrderLine line, BigDecimal quantity, LocalDate receiptDate, String documentNumber, Employee responsible) {
+    private void receiveLine(PurchaseOrder order,
+                             PurchaseOrderLine line,
+                             PurchaseOrderReceiveLineRequest lineRequest,
+                             LocalDate receiptDate,
+                             String documentNumber,
+                             Employee responsible) {
+        BigDecimal quantity = lineRequest.receivedQuantity();
         if (quantity.compareTo(line.getRemainingQuantity()) > 0) {
             throw RestException.badRequest("Received quantity cannot exceed remaining quantity");
         }
+        coordinateValidator.assertCanReceiveOrMoveInto(order.getWarehouseId(), lineRequest.binId(), lineRequest.effectiveStatus());
         SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(line.getSparePartId())
                 .orElseThrow(() -> RestException.notFound("Spare part not found: " + line.getSparePartId()));
         BigDecimal previousTotalQuantity = totalStockQuantity(sparePart.getId());
@@ -278,27 +297,29 @@ public class PurchaseOrderService {
         line.setRemainingQuantity(line.getOrderedQuantity().subtract(line.getReceivedQuantity()));
 
         StockMovement movement = stockMovementRepository.save(
-                receiptMovement(order, line, sparePart, quantity, receiptDate, documentNumber, responsible)
+                receiptMovement(order, line, sparePart, quantity, receiptDate, documentNumber, responsible, lineRequest)
         );
-        postCoreStockReceipt(order, line, movement, quantity);
+        postCoreStockReceipt(order, line, movement, quantity, lineRequest);
         legacyStockProjectionService.sync(order.getWarehouseId(), sparePart.getId());
         inventoryCostService.applyReceiptCost(sparePart, previousTotalQuantity, quantity, line.getUnitPrice());
-        inventoryTransactionRepository.save(receiptTransaction(order, line, sparePart, quantity, receiptDate, documentNumber, responsible));
+        inventoryTransactionRepository.save(receiptTransaction(order, line, sparePart, quantity, receiptDate, documentNumber, responsible, lineRequest));
     }
 
     private void postCoreStockReceipt(PurchaseOrder order,
                                       PurchaseOrderLine line,
                                       StockMovement movement,
-                                      BigDecimal quantity) {
+                                      BigDecimal quantity,
+                                      PurchaseOrderReceiveLineRequest lineRequest) {
         toirStockService.postReceipt(new StockReceiptCommand(
                 order.getWarehouseId(),
                 line.getSparePartId(),
-                null,
+                lineRequest.binId(),
                 quantity,
                 line.getUnitPrice(),
-                null,
-                null,
-                null,
+                trimToNull(lineRequest.lotNumber()),
+                trimToNull(lineRequest.serialNumber()),
+                lineRequest.expiryDate(),
+                lineRequest.effectiveStatus(),
                 "PURCHASE_ORDER",
                 order.getId(),
                 movement.getDocumentNumber(),
@@ -307,7 +328,14 @@ public class PurchaseOrderService {
         ));
     }
 
-    private StockMovement receiptMovement(PurchaseOrder order, PurchaseOrderLine line, SparePart sparePart, BigDecimal quantity, LocalDate receiptDate, String documentNumber, Employee responsible) {
+    private StockMovement receiptMovement(PurchaseOrder order,
+                                          PurchaseOrderLine line,
+                                          SparePart sparePart,
+                                          BigDecimal quantity,
+                                          LocalDate receiptDate,
+                                          String documentNumber,
+                                          Employee responsible,
+                                          PurchaseOrderReceiveLineRequest lineRequest) {
         StockMovement movement = new StockMovement();
         movement.setWarehouseId(order.getWarehouseId());
         movement.setSparePartId(sparePart.getId());
@@ -325,10 +353,18 @@ public class PurchaseOrderService {
         movement.setSourceId(order.getId());
         movement.setSourceLineId(line.getId());
         movement.setNotes("Purchase order receipt: " + order.getNumber());
+        applyMovementIdentity(movement, lineRequest);
         return movement;
     }
 
-    private InventoryTransaction receiptTransaction(PurchaseOrder order, PurchaseOrderLine line, SparePart sparePart, BigDecimal quantity, LocalDate receiptDate, String documentNumber, Employee responsible) {
+    private InventoryTransaction receiptTransaction(PurchaseOrder order,
+                                                    PurchaseOrderLine line,
+                                                    SparePart sparePart,
+                                                    BigDecimal quantity,
+                                                    LocalDate receiptDate,
+                                                    String documentNumber,
+                                                    Employee responsible,
+                                                    PurchaseOrderReceiveLineRequest lineRequest) {
         Supplier supplier = supplierService.load(order.getSupplierId());
         InventoryTransaction transaction = new InventoryTransaction();
         transaction.setType(InventoryTransactionType.RECEIPT);
@@ -343,7 +379,36 @@ public class PurchaseOrderService {
         transaction.setTransactionDate(receiptDate);
         transaction.setDocumentNumber(trimToNull(documentNumber) == null ? order.getNumber() : trimToNull(documentNumber));
         transaction.setComment("Purchase order receipt: " + order.getNumber());
+        applyTransactionIdentity(transaction, order, lineRequest);
         return transaction;
+    }
+
+    private void applyMovementIdentity(StockMovement movement, PurchaseOrderReceiveLineRequest lineRequest) {
+        movement.setBinId(lineRequest.binId());
+        movement.setLotNumber(trimToNull(lineRequest.lotNumber()));
+        movement.setSerialNumber(trimToNull(lineRequest.serialNumber()));
+        movement.setExpiryDate(lineRequest.expiryDate());
+        movement.setStockStatus(lineRequest.effectiveStatus());
+    }
+
+    private void applyTransactionIdentity(InventoryTransaction transaction,
+                                          PurchaseOrder order,
+                                          PurchaseOrderReceiveLineRequest lineRequest) {
+        transaction.setBinId(lineRequest.binId());
+        transaction.setLotNumber(trimToNull(lineRequest.lotNumber()));
+        transaction.setSerialNumber(trimToNull(lineRequest.serialNumber()));
+        transaction.setExpiryDate(lineRequest.expiryDate());
+        transaction.setStockStatus(lineRequest.effectiveStatus());
+        transaction.setSourceType("PURCHASE_ORDER");
+        transaction.setSourceId(order.getId());
+    }
+
+    private boolean hasReceiptDiscrepancy(PurchaseOrderReceiveRequest request, Map<UUID, PurchaseOrderLine> linesById) {
+        return request.lines().stream()
+                .anyMatch(lineRequest -> {
+                    PurchaseOrderLine line = linesById.get(lineRequest.purchaseOrderLineId());
+                    return line != null && lineRequest.receivedQuantity().compareTo(line.getRemainingQuantity()) < 0;
+                });
     }
 
     private void recalcReceiptStatus(PurchaseOrder order, LocalDate receiptDate) {

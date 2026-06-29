@@ -2,10 +2,12 @@ package com.toir.dto.materialusage;
 
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.enums.InventoryItemKind;
+import com.toir.enums.WarehouseStockStatus;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record RepairMaterialUsageDto(
@@ -31,7 +33,12 @@ public record RepairMaterialUsageDto(
         UUID requirementId,
         UUID replacedSparePartId,
         String replacedSparePartName,
-        String replacedSparePartCode
+        String replacedSparePartCode,
+        UUID binId,
+        String lotNumber,
+        String serialNumber,
+        LocalDate expiryDate,
+        WarehouseStockStatus stockStatus
 ) {
     public RepairMaterialUsageDto(UUID id,
                                   UUID workOrderId,
@@ -41,7 +48,7 @@ public record RepairMaterialUsageDto(
                                   Double unitCost) {
         this(id, workOrderId, null, null, warehouseId, null, sparePartId, null, null, null,
                 quantity, unitCost, totalCost(quantity, unitCost), null, null, null, null, null, null,
-                null, null, null, null);
+                null, null, null, null, null, null, null, null, null);
     }
 
     public RepairMaterialUsageDto(
@@ -66,7 +73,39 @@ public record RepairMaterialUsageDto(
     ) {
         this(id, workOrderId, workOrderNumber, workOrderTitle, warehouseId, warehouseName, sparePartId,
                 sparePartName, sparePartCode, kind, quantity, unitCost, totalCost, issuedAt, issuedById,
-                issuedByName, stockMovementId, notes, null, null, null, null, null);
+                issuedByName, stockMovementId, notes, null, null, null, null, null,
+                null, null, null, null, null);
+    }
+
+    public RepairMaterialUsageDto(
+            UUID id,
+            UUID workOrderId,
+            String workOrderNumber,
+            String workOrderTitle,
+            @NotNull UUID warehouseId,
+            String warehouseName,
+            @NotNull UUID sparePartId,
+            String sparePartName,
+            String sparePartCode,
+            InventoryItemKind kind,
+            @Positive double quantity,
+            Double unitCost,
+            Double totalCost,
+            Instant issuedAt,
+            UUID issuedById,
+            String issuedByName,
+            UUID stockMovementId,
+            String notes,
+            String costWarning,
+            UUID requirementId,
+            UUID replacedSparePartId,
+            String replacedSparePartName,
+            String replacedSparePartCode
+    ) {
+        this(id, workOrderId, workOrderNumber, workOrderTitle, warehouseId, warehouseName, sparePartId,
+                sparePartName, sparePartCode, kind, quantity, unitCost, totalCost, issuedAt, issuedById,
+                issuedByName, stockMovementId, notes, costWarning, requirementId, replacedSparePartId,
+                replacedSparePartName, replacedSparePartCode, null, null, null, null, null);
     }
 
     public static RepairMaterialUsageDto from(RepairMaterialUsage u) {
@@ -86,7 +125,12 @@ public record RepairMaterialUsageDto(
                 costWarning(u.getUnitCost()),
                 u.getRequirementId(),
                 u.getReplacedSparePartId(),
-                null, null
+                null, null,
+                u.getBinId(),
+                u.getLotNumber(),
+                u.getSerialNumber(),
+                u.getExpiryDate(),
+                u.getStockStatus()
         );
     }
 
@@ -117,7 +161,12 @@ public record RepairMaterialUsageDto(
                 u.getRequirementId(),
                 u.getReplacedSparePartId(),
                 replacedSparePartName,
-                replacedSparePartCode
+                replacedSparePartCode,
+                u.getBinId(),
+                u.getLotNumber(),
+                u.getSerialNumber(),
+                u.getExpiryDate(),
+                u.getStockStatus()
         );
     }
 

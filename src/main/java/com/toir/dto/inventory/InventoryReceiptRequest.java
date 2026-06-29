@@ -1,5 +1,6 @@
 package com.toir.dto.inventory;
 
+import com.toir.enums.WarehouseStockStatus;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,6 +19,28 @@ public record InventoryReceiptRequest(
         String supplierName,
         @NotNull UUID responsiblePersonId,
         String documentNumber,
-        String comment
+        String comment,
+        UUID binId,
+        String lotNumber,
+        String serialNumber,
+        LocalDate expiryDate,
+        WarehouseStockStatus stockStatus
 ) {
+    public InventoryReceiptRequest(UUID warehouseId,
+                                   UUID sparePartId,
+                                   BigDecimal quantity,
+                                   String unit,
+                                   BigDecimal unitPrice,
+                                   LocalDate receiptDate,
+                                   String supplierName,
+                                   UUID responsiblePersonId,
+                                   String documentNumber,
+                                   String comment) {
+        this(warehouseId, sparePartId, quantity, unit, unitPrice, receiptDate, supplierName,
+                responsiblePersonId, documentNumber, comment, null, null, null, null, null);
+    }
+
+    public WarehouseStockStatus effectiveStatus() {
+        return stockStatus == null ? WarehouseStockStatus.AVAILABLE : stockStatus;
+    }
 }

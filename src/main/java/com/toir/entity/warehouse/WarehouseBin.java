@@ -1,8 +1,11 @@
 package com.toir.entity.warehouse;
 
 import com.toir.entity.BaseEntity;
+import com.toir.enums.WarehouseQualityZoneType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
@@ -34,6 +37,28 @@ public class WarehouseBin extends BaseEntity {
 
     @Column(name = "bin_type")
     private String binType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "quality_zone_type", nullable = false, length = 32)
+    private WarehouseQualityZoneType qualityZoneType = WarehouseQualityZoneType.STORAGE;
+
+    @Column(name = "temperature_zone", length = 64)
+    private String temperatureZone;
+
+    @Column(name = "hazard_class", length = 64)
+    private String hazardClass;
+
+    @Column(name = "allow_mixed_spare_parts", nullable = false)
+    private boolean allowMixedSpareParts = true;
+
+    @Column(name = "allow_mixed_lots", nullable = false)
+    private boolean allowMixedLots = true;
+
+    @Column(length = 128)
+    private String barcode;
+
+    @Column(name = "qr_payload", columnDefinition = "text")
+    private String qrPayload;
 
     @Column(name = "max_weight_kg", precision = 19, scale = 4)
     private BigDecimal maxWeightKg;

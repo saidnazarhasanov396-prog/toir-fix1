@@ -1,9 +1,11 @@
 package com.toir.entity;
 import com.toir.enums.ReservationStatus;
+import com.toir.enums.WarehouseStockStatus;
 
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -15,7 +17,7 @@ import java.util.UUID;
 @Builder
 public class Reservation extends BaseEntity {
 
-    @Column(name = "warehouse_stock_id", nullable = false)
+    @Column(name = "warehouse_stock_id")
     private UUID warehouseStockId;
 
     @Column(name = "warehouse_id")
@@ -27,6 +29,9 @@ public class Reservation extends BaseEntity {
     @Column(name = "bin_id")
     private UUID binId;
 
+    @Column(name = "requirement_id")
+    private UUID requirementId;
+
     @Column(name = "work_order_id")
     private UUID workOrderId;
 
@@ -35,6 +40,19 @@ public class Reservation extends BaseEntity {
 
     @Column(name = "reserved_by_id")
     private UUID reservedById;
+
+    @Column(name = "lot_number", length = 100)
+    private String lotNumber;
+
+    @Column(name = "serial_number", length = 128)
+    private String serialNumber;
+
+    @Column(name = "expiry_date")
+    private LocalDate expiryDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "stock_status", nullable = false, length = 32)
+    private WarehouseStockStatus stockStatus = WarehouseStockStatus.AVAILABLE;
 
     @Column(nullable = false)
     private double quantity;

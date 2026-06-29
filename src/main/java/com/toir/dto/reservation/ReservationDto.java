@@ -2,7 +2,9 @@ package com.toir.dto.reservation;
 
 import com.toir.entity.Reservation;
 import com.toir.enums.ReservationStatus;
+import com.toir.enums.WarehouseStockStatus;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record ReservationDto(
@@ -14,6 +16,11 @@ public record ReservationDto(
         UUID workOrderId,
         UUID repairRequestId,
         UUID reservedById,
+        UUID requirementId,
+        String lotNumber,
+        String serialNumber,
+        LocalDate expiryDate,
+        WarehouseStockStatus stockStatus,
         double quantity,
         ReservationStatus status
 ) {
@@ -27,12 +34,14 @@ public record ReservationDto(
             ReservationStatus status
     ) {
         this(id, warehouseStockId, null, null, null, workOrderId, repairRequestId,
-                reservedById, quantity, status);
+                reservedById, null, null, null, null, WarehouseStockStatus.AVAILABLE, quantity, status);
     }
 
     public static ReservationDto from(Reservation r) {
         return new ReservationDto(r.getId(), r.getWarehouseStockId(), r.getWarehouseId(),
                 r.getSparePartId(), r.getBinId(), r.getWorkOrderId(),
-                r.getRepairRequestId(), r.getReservedById(), r.getQuantity(), r.getStatus());
+                r.getRepairRequestId(), r.getReservedById(), r.getRequirementId(),
+                r.getLotNumber(), r.getSerialNumber(), r.getExpiryDate(), r.getStockStatus(),
+                r.getQuantity(), r.getStatus());
     }
 }

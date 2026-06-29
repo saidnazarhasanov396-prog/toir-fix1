@@ -36,4 +36,10 @@ public class WarehouseEquipmentItem extends BaseEntity {
 
     @Column(nullable = false)
     private boolean active = true;
+
+    @Column(name = "bin_id")
+    private UUID binId;
+
+    @Column(name = "qr_payload", columnDefinition = "text")
+    private String qrPayload;
 }

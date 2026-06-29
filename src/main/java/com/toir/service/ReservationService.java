@@ -9,6 +9,7 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.ReservationStatus;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ReservationRepository;
 import com.toir.repository.StockMovementRepository;
@@ -46,28 +47,33 @@ public class ReservationService {
     public ReservationDto reserve(ReservationRequest r) {
         validatePositiveQuantity(r.quantity());
 
-        WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(r.warehouseStockId())
-                .orElseThrow(() -> RestException.notFound("Stock not found: " + r.warehouseStockId()));
         Reservation reservation = new Reservation();
         reservation.setWarehouseStockId(r.warehouseStockId());
-        reservation.setWarehouseId(stock.getWarehouseId());
-        reservation.setSparePartId(stock.getSparePartId());
+        if (r.warehouseStockId() != null) {
+            WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(r.warehouseStockId())
+                    .orElseThrow(() -> RestException.notFound("Stock not found: " + r.warehouseStockId()));
+            reservation.setWarehouseId(stock.getWarehouseId());
+            reservation.setSparePartId(stock.getSparePartId());
+        } else {
+            if (r.warehouseId() == null || r.sparePartId() == null) {
+                throw RestException.badRequest("warehouseId and sparePartId are required for direct WMS reservation");
+            }
+            reservation.setWarehouseId(r.warehouseId());
+            reservation.setSparePartId(r.sparePartId());
+        }
+        reservation.setBinId(r.binId());
+        reservation.setRequirementId(r.requirementId());
+        reservation.setLotNumber(trimToNull(r.lotNumber()));
+        reservation.setSerialNumber(trimToNull(r.serialNumber()));
+        reservation.setExpiryDate(r.expiryDate());
+        reservation.setStockStatus(r.effectiveStatus());
         reservation.setWorkOrderId(r.workOrderId());
         reservation.setRepairRequestId(r.repairRequestId());
         reservation.setReservedById(r.reservedById());
         reservation.setQuantity(r.quantity());
         Reservation saved = repository.save(reservation);
-        toirStockService.reserve(
-                saved.getWarehouseId(),
-                saved.getSparePartId(),
-                saved.getBinId(),
-                quantity(saved.getQuantity()),
-                "RESERVATION",
-                saved.getId(),
-                null,
-                "reservation-reserve:" + saved.getId()
-        );
-        stock = legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
+        postCoreReserve(saved);
+        WarehouseStock stock = legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
         stockMovementRepository.save(buildMovement(saved, StockMovementType.RESERVATION));
 
         auditBuilderService.log(
@@ -94,16 +100,7 @@ public class ReservationService {
         reservation.setStatus(ReservationStatus.CANCELLED);
 
         Reservation saved = repository.save(reservation);
-        toirStockService.releaseReservation(
-                saved.getWarehouseId(),
-                saved.getSparePartId(),
-                saved.getBinId(),
-                quantity(saved.getQuantity()),
-                "RESERVATION",
-                saved.getId(),
-                null,
-                "reservation-cancel:" + saved.getId()
-        );
+        postCoreRelease(saved);
         legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
         stockMovementRepository.save(buildMovement(saved, StockMovementType.RELEASE));
 
@@ -132,16 +129,7 @@ public class ReservationService {
         reservation.setStatus(ReservationStatus.FULFILLED);
 
         Reservation saved = repository.save(reservation);
-        toirStockService.fulfillReservation(
-                saved.getWarehouseId(),
-                saved.getSparePartId(),
-                saved.getBinId(),
-                quantity(saved.getQuantity()),
-                "RESERVATION",
-                saved.getId(),
-                null,
-                "reservation-fulfill:" + saved.getId()
-        );
+        postCoreFulfill(saved);
         WarehouseStock stock = legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
         stockMovementRepository.save(buildMovement(saved, StockMovementType.ISSUE));
         lowStockRecommendationService.evaluateStockSafely(stock);
@@ -166,7 +154,13 @@ public class ReservationService {
 
     private void hydrateCoordinates(Reservation reservation) {
         if (reservation.getWarehouseId() != null && reservation.getSparePartId() != null) {
+            if (reservation.getStockStatus() == null) {
+                reservation.setStockStatus(WarehouseStockStatus.AVAILABLE);
+            }
             return;
+        }
+        if (reservation.getWarehouseStockId() == null) {
+            throw RestException.badRequest("Reservation warehouseId and sparePartId are required");
         }
         WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseStockId())
                 .orElseThrow(() -> RestException.notFound(
@@ -185,14 +179,129 @@ public class ReservationService {
         StockMovement movement = new StockMovement();
         movement.setWarehouseId(reservation.getWarehouseId());
         movement.setSparePartId(reservation.getSparePartId());
+        movement.setBinId(reservation.getBinId());
         movement.setWorkOrderId(reservation.getWorkOrderId());
         movement.setCreatedById(reservation.getReservedById());
         movement.setType(type);
         movement.setQuantity(reservation.getQuantity());
+        movement.setLotNumber(reservation.getLotNumber());
+        movement.setSerialNumber(reservation.getSerialNumber());
+        movement.setExpiryDate(reservation.getExpiryDate());
+        movement.setStockStatus(effectiveStatus(reservation.getStockStatus()));
         return movement;
+    }
+
+    private void postCoreReserve(Reservation reservation) {
+        if (usesDetailedIdentity(reservation)) {
+            toirStockService.reserve(
+                    reservation.getWarehouseId(),
+                    reservation.getSparePartId(),
+                    reservation.getBinId(),
+                    reservation.getLotNumber(),
+                    reservation.getSerialNumber(),
+                    reservation.getExpiryDate(),
+                    effectiveStatus(reservation.getStockStatus()),
+                    quantity(reservation.getQuantity()),
+                    "RESERVATION",
+                    reservation.getId(),
+                    null,
+                    "reservation-reserve:" + reservation.getId()
+            );
+            return;
+        }
+        toirStockService.reserve(
+                reservation.getWarehouseId(),
+                reservation.getSparePartId(),
+                reservation.getBinId(),
+                quantity(reservation.getQuantity()),
+                "RESERVATION",
+                reservation.getId(),
+                null,
+                "reservation-reserve:" + reservation.getId()
+        );
+    }
+
+    private void postCoreRelease(Reservation reservation) {
+        if (usesDetailedIdentity(reservation)) {
+            toirStockService.releaseReservation(
+                    reservation.getWarehouseId(),
+                    reservation.getSparePartId(),
+                    reservation.getBinId(),
+                    reservation.getLotNumber(),
+                    reservation.getSerialNumber(),
+                    reservation.getExpiryDate(),
+                    effectiveStatus(reservation.getStockStatus()),
+                    quantity(reservation.getQuantity()),
+                    "RESERVATION",
+                    reservation.getId(),
+                    null,
+                    "reservation-cancel:" + reservation.getId()
+            );
+            return;
+        }
+        toirStockService.releaseReservation(
+                reservation.getWarehouseId(),
+                reservation.getSparePartId(),
+                reservation.getBinId(),
+                quantity(reservation.getQuantity()),
+                "RESERVATION",
+                reservation.getId(),
+                null,
+                "reservation-cancel:" + reservation.getId()
+        );
+    }
+
+    private void postCoreFulfill(Reservation reservation) {
+        if (usesDetailedIdentity(reservation)) {
+            toirStockService.fulfillReservation(
+                    reservation.getWarehouseId(),
+                    reservation.getSparePartId(),
+                    reservation.getBinId(),
+                    reservation.getLotNumber(),
+                    reservation.getSerialNumber(),
+                    reservation.getExpiryDate(),
+                    effectiveStatus(reservation.getStockStatus()),
+                    quantity(reservation.getQuantity()),
+                    "RESERVATION",
+                    reservation.getId(),
+                    null,
+                    "reservation-fulfill:" + reservation.getId()
+            );
+            return;
+        }
+        toirStockService.fulfillReservation(
+                reservation.getWarehouseId(),
+                reservation.getSparePartId(),
+                reservation.getBinId(),
+                quantity(reservation.getQuantity()),
+                "RESERVATION",
+                reservation.getId(),
+                null,
+                "reservation-fulfill:" + reservation.getId()
+        );
+    }
+
+    private boolean usesDetailedIdentity(Reservation reservation) {
+        return reservation.getBinId() != null
+                || trimToNull(reservation.getLotNumber()) != null
+                || trimToNull(reservation.getSerialNumber()) != null
+                || reservation.getExpiryDate() != null
+                || (reservation.getStockStatus() != null && reservation.getStockStatus() != WarehouseStockStatus.AVAILABLE);
+    }
+
+    private WarehouseStockStatus effectiveStatus(WarehouseStockStatus status) {
+        return status == null ? WarehouseStockStatus.AVAILABLE : status;
     }
 
     private BigDecimal quantity(double value) {
         return BigDecimal.valueOf(value).stripTrailingZeros();
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

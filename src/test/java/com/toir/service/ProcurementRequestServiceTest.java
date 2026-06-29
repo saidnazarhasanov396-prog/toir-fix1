@@ -5,6 +5,8 @@ import com.toir.dto.procurement.ProcurementReceiptLineRequest;
 import com.toir.dto.procurement.ProcurementReceiptRequest;
 import com.toir.dto.procurement.ProcurementReceiptResponse;
 import com.toir.dto.procurement.ProcurementRequestRequest;
+import com.toir.dto.warehouse.StockReceiptCommand;
+import com.toir.dto.wms.WmsDocumentGroupRequest;
 import com.toir.entity.PprTask;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
@@ -29,6 +31,8 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.SupplierType;
+import com.toir.enums.WarehouseStockStatus;
+import com.toir.enums.WmsDocumentOperationType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
@@ -48,6 +52,8 @@ import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsDocumentPolicyService;
+import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,6 +70,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -126,6 +133,10 @@ class ProcurementRequestServiceTest {
     ToirStockService toirStockService;
     @Mock
     LegacyStockProjectionService legacyStockProjectionService;
+    @Mock
+    WmsStockCoordinateValidator coordinateValidator;
+    @Mock
+    WmsDocumentPolicyService documentPolicyService;
 
     ProcurementRequestService service;
 
@@ -150,7 +161,9 @@ class ProcurementRequestServiceTest {
                 costCategoryRepository,
                 supplierRepository,
                 toirStockService,
-                legacyStockProjectionService
+                legacyStockProjectionService,
+                coordinateValidator,
+                documentPolicyService
         );
     }
 
@@ -543,6 +556,100 @@ class ProcurementRequestServiceTest {
     }
 
     @Test
+    void partialSparePartReceiptPassesWmsIdentityToMovementAndCoreStock() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        LocalDate expiryDate = LocalDate.of(2027, 3, 15);
+        ProcurementRequestLine line = line(sparePartId, 10, 12.5);
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
+        WarehouseStock stock = stock(warehouseId, sparePartId, 6);
+        List<WmsDocumentGroupRequest> groups = List.of(documentGroup("Invoice", "INVOICE"));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenReturn(stock);
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProcurementReceiptResponse result = service.receiveStock(requestId, new ProcurementReceiptRequest(
+                List.of(new ProcurementReceiptLineRequest(
+                        line.getId(),
+                        4,
+                        binId,
+                        "LOT-7",
+                        "SN-8",
+                        expiryDate,
+                        WarehouseStockStatus.QUARANTINE
+                )),
+                LocalDate.of(2026, 6, 18),
+                "ACT-1",
+                null,
+                "partial receipt",
+                groups,
+                true
+        ));
+
+        assertThat(result.procurementRequest().status()).isEqualTo(ProcurementRequestStatus.PARTIALLY_RECEIVED);
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(stockMovementRepository).save(movementCaptor.capture());
+        StockMovement movement = movementCaptor.getValue();
+        assertThat(movement.getBinId()).isEqualTo(binId);
+        assertThat(movement.getLotNumber()).isEqualTo("LOT-7");
+        assertThat(movement.getSerialNumber()).isEqualTo("SN-8");
+        assertThat(movement.getExpiryDate()).isEqualTo(expiryDate);
+        assertThat(movement.getStockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
+
+        ArgumentCaptor<StockReceiptCommand> coreReceiptCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
+        verify(toirStockService).postReceipt(coreReceiptCaptor.capture());
+        StockReceiptCommand command = coreReceiptCaptor.getValue();
+        assertThat(command.binId()).isEqualTo(binId);
+        assertThat(command.lotNumber()).isEqualTo("LOT-7");
+        assertThat(command.serialNumber()).isEqualTo("SN-8");
+        assertThat(command.expiryDate()).isEqualTo(expiryDate);
+        assertThat(command.stockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
+        verify(coordinateValidator).assertCanReceiveOrMoveInto(warehouseId, binId, WarehouseStockStatus.QUARANTINE);
+        verify(documentPolicyService).validateReceiptDocuments(
+                eq(WmsDocumentOperationType.PROCUREMENT_RECEIPT),
+                eq(groups),
+                eq(true),
+                eq(false),
+                eq(true)
+        );
+    }
+
+    @Test
+    void receiptIntoBlockedBinIsRejectedBeforeMovementSave() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        ProcurementRequestLine line = line(sparePartId, 10, 12.5);
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
+        org.mockito.Mockito.doThrow(RestException.badRequest("blocked bin"))
+                .when(coordinateValidator)
+                .assertCanReceiveOrMoveInto(warehouseId, binId, WarehouseStockStatus.AVAILABLE);
+
+        assertThatThrownBy(() -> service.receiveStock(requestId, new ProcurementReceiptRequest(
+                List.of(new ProcurementReceiptLineRequest(line.getId(), 4, binId, null, null, null, null)),
+                LocalDate.of(2026, 6, 18),
+                "ACT-1",
+                null,
+                "blocked bin"
+        ))).isInstanceOf(RestException.class)
+                .hasMessageContaining("blocked bin");
+
+        verify(stockMovementRepository, never()).save(any());
+        verify(toirStockService, never()).postReceipt(any());
+    }
+
+    @Test
     void receivingEquipmentCreatesMovementEquipmentRecordsAndWarehouseItems() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
@@ -550,6 +657,7 @@ class ProcurementRequestServiceTest {
         UUID supplierId = UUID.randomUUID();
         UUID warrantySupplierId = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
         ProcurementRequestLine line = equipmentLine(equipmentTypeId, "CNS pump", 2, 5_000_000.0);
         line.setHasWarranty(true);
         line.setWarrantyStartDate(LocalDate.of(2026, 6, 18));
@@ -574,7 +682,7 @@ class ProcurementRequestServiceTest {
         when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ProcurementReceiptResponse result = service.receiveStock(requestId, new ProcurementReceiptRequest(
-                List.of(new ProcurementReceiptLineRequest(line.getId(), 2)),
+                List.of(new ProcurementReceiptLineRequest(line.getId(), 2, binId, null, null, null, null)),
                 LocalDate.of(2026, 6, 18),
                 "ACT-EQ-1",
                 null,
@@ -618,6 +726,7 @@ class ProcurementRequestServiceTest {
         assertThat(itemCaptor.getAllValues())
                 .allSatisfy(item -> {
                     assertThat(item.getWarehouseId()).isEqualTo(warehouseId);
+                    assertThat(item.getBinId()).isEqualTo(binId);
                     assertThat(item.getStatus()).isEqualTo(WarehouseEquipmentStatus.AVAILABLE);
                     assertThat(item.isActive()).isTrue();
                 });
@@ -959,5 +1068,9 @@ class ProcurementRequestServiceTest {
         task.setCode("PPR-TASK-1");
         task.setTitle(title);
         return task;
+    }
+
+    private WmsDocumentGroupRequest documentGroup(String name, String type) {
+        return new WmsDocumentGroupRequest(name, type, "DOC-1", LocalDate.of(2026, 6, 18), UUID.randomUUID());
     }
 }

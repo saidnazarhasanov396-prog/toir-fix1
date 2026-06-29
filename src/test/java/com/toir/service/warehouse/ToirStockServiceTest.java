@@ -6,6 +6,7 @@ import com.toir.entity.warehouse.WarehouseStockBalance;
 import com.toir.entity.warehouse.WarehouseStockLedger;
 import com.toir.entity.warehouse.WarehouseReservationLedger;
 import com.toir.enums.StockLedgerMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.repository.WarehouseStockLedgerRepository;
@@ -59,7 +60,9 @@ class ToirStockServiceTest {
                 sparePartId,
                 binId,
                 "lot-a",
-                "sn-1"
+                "sn-1",
+                LocalDate.of(2027, 1, 31),
+                WarehouseStockStatus.AVAILABLE
         );
 
         when(ledgerRepository.findByIdempotencyKeyAndIsDeletedFalse("receipt-1")).thenReturn(Optional.empty());
@@ -76,6 +79,7 @@ class ToirStockServiceTest {
                 "lot-a",
                 "sn-1",
                 LocalDate.of(2027, 1, 31),
+                WarehouseStockStatus.AVAILABLE,
                 "INVENTORY_TRANSACTION",
                 referenceId,
                 "RCV-1",
@@ -122,6 +126,8 @@ class ToirStockServiceTest {
                 new BigDecimal("6"),
                 null,
                 null,
+                null,
+                WarehouseStockStatus.AVAILABLE,
                 "STOCK_MOVEMENT",
                 UUID.randomUUID(),
                 "ISS-1",
@@ -158,6 +164,7 @@ class ToirStockServiceTest {
                 null,
                 null,
                 null,
+                WarehouseStockStatus.AVAILABLE,
                 "INVENTORY_TRANSACTION",
                 UUID.randomUUID(),
                 "ADJ-1",
@@ -190,6 +197,8 @@ class ToirStockServiceTest {
                 new BigDecimal("3"),
                 null,
                 null,
+                null,
+                WarehouseStockStatus.AVAILABLE,
                 "INVENTORY_TRANSACTION",
                 UUID.randomUUID(),
                 "ADJ-2",
@@ -314,6 +323,8 @@ class ToirStockServiceTest {
                 new BigDecimal("4"),
                 null,
                 null,
+                null,
+                WarehouseStockStatus.AVAILABLE,
                 "STOCK_MOVEMENT",
                 UUID.randomUUID(),
                 "ISS-2",
@@ -345,6 +356,7 @@ class ToirStockServiceTest {
                 null,
                 null,
                 null,
+                WarehouseStockStatus.AVAILABLE,
                 "INVENTORY_TRANSACTION",
                 UUID.randomUUID(),
                 "RCV-DUP",
@@ -356,6 +368,96 @@ class ToirStockServiceTest {
         verify(balanceRepository, never()).lockByIdentityKey(any());
         verify(balanceRepository, never()).save(any(WarehouseStockBalance.class));
         verify(ledgerRepository, never()).save(any(WarehouseStockLedger.class));
+    }
+
+    @Test
+    void receiptIdentitySeparatesSameLotByExpiryDateAndStockStatus() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        LocalDate expiryDate = LocalDate.parse("2027-01-31");
+        String availableKey = WarehouseStockBalance.buildIdentityKey(
+                warehouseId,
+                sparePartId,
+                binId,
+                "LOT-1",
+                "SN-1",
+                expiryDate,
+                WarehouseStockStatus.AVAILABLE
+        );
+
+        when(ledgerRepository.findByIdempotencyKeyAndIsDeletedFalse("receipt-status"))
+                .thenReturn(Optional.empty());
+        when(balanceRepository.lockByIdentityKey(availableKey)).thenReturn(Optional.empty());
+        when(balanceRepository.save(any(WarehouseStockBalance.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(ledgerRepository.save(any(WarehouseStockLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.postReceipt(new StockReceiptCommand(
+                warehouseId,
+                sparePartId,
+                binId,
+                new BigDecimal("2"),
+                BigDecimal.TEN,
+                "LOT-1",
+                "SN-1",
+                expiryDate,
+                WarehouseStockStatus.AVAILABLE,
+                "INVENTORY_TRANSACTION",
+                UUID.randomUUID(),
+                "RCV-STATUS",
+                "receipt",
+                "receipt-status"
+        ));
+
+        ArgumentCaptor<WarehouseStockBalance> captor = ArgumentCaptor.forClass(WarehouseStockBalance.class);
+        verify(balanceRepository).save(captor.capture());
+        assertThat(captor.getValue().getIdentityKey()).isEqualTo(availableKey);
+        assertThat(captor.getValue().getStockStatus()).isEqualTo(WarehouseStockStatus.AVAILABLE);
+        assertThat(captor.getValue().getExpiryDate()).isEqualTo(expiryDate);
+    }
+
+    @Test
+    void issueFromQuarantineIsRejectedForNormalIssue() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        String key = WarehouseStockBalance.buildIdentityKey(
+                warehouseId,
+                sparePartId,
+                null,
+                null,
+                null,
+                null,
+                WarehouseStockStatus.QUARANTINE
+        );
+        WarehouseStockBalance balance = balance(
+                warehouseId,
+                sparePartId,
+                BigDecimal.TEN,
+                BigDecimal.ZERO,
+                BigDecimal.ONE
+        );
+        balance.setStockStatus(WarehouseStockStatus.QUARANTINE);
+        balance.prepareForSave();
+
+        when(ledgerRepository.findByIdempotencyKeyAndIsDeletedFalse("issue-quarantine")).thenReturn(Optional.empty());
+        when(balanceRepository.lockByIdentityKey(key)).thenReturn(Optional.of(balance));
+
+        assertThatThrownBy(() -> service.postIssue(new StockIssueCommand(
+                warehouseId,
+                sparePartId,
+                null,
+                BigDecimal.ONE,
+                null,
+                null,
+                null,
+                WarehouseStockStatus.QUARANTINE,
+                "STOCK_MOVEMENT",
+                UUID.randomUUID(),
+                "ISS-Q",
+                "normal issue",
+                "issue-quarantine"
+        ))).isInstanceOf(RestException.class)
+                .hasMessageContaining("Only AVAILABLE stock can be issued");
     }
 
     private WarehouseStockBalance balance(UUID warehouseId,

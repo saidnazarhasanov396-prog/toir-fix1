@@ -2,6 +2,8 @@ package com.toir.entity.warehouse;
 
 import org.junit.jupiter.api.Test;
 
+import com.toir.enums.WarehouseStockStatus;
+
 import java.math.BigDecimal;
 import java.util.UUID;
 
@@ -20,6 +22,16 @@ class WarehouseStockBalanceTest {
     }
 
     @Test
+    void availableQtyIsZeroWhenStockIsNotAvailable() {
+        WarehouseStockBalance balance = new WarehouseStockBalance();
+        balance.setStockStatus(WarehouseStockStatus.QUARANTINE);
+        balance.setQtyOnHand(new BigDecimal("10.5000"));
+        balance.setQtyReserved(BigDecimal.ZERO);
+
+        assertThat(balance.getAvailableQty()).isEqualByComparingTo("0.0000");
+    }
+
+    @Test
     void prepareForSaveBuildsNormalizedIdentityKey() {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
@@ -34,7 +46,7 @@ class WarehouseStockBalanceTest {
         balance.prepareForSave();
 
         assertThat(balance.getIdentityKey()).isEqualTo(
-                warehouseId + "|" + sparePartId + "|" + binId + "|LOT-A|SN-7");
+                warehouseId + "|" + sparePartId + "|" + binId + "|LOT-A|SN-7||AVAILABLE");
     }
 
     @Test

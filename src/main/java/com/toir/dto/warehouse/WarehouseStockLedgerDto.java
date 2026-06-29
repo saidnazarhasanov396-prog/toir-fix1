@@ -1,9 +1,12 @@
 package com.toir.dto.warehouse;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.toir.entity.warehouse.WarehouseStockLedger;
 import com.toir.enums.StockLedgerMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record WarehouseStockLedgerDto(
@@ -13,6 +16,9 @@ public record WarehouseStockLedgerDto(
         UUID binId,
         String lotNumber,
         String serialNumber,
+        @JsonFormat(pattern = "yyyy-MM-dd")
+        LocalDate expiryDate,
+        WarehouseStockStatus stockStatus,
         StockLedgerMovementType movementType,
         BigDecimal quantity,
         BigDecimal unitCost,
@@ -31,6 +37,8 @@ public record WarehouseStockLedgerDto(
                 ledger.getBinId(),
                 ledger.getLotNumber(),
                 ledger.getSerialNumber(),
+                ledger.getExpiryDate(),
+                ledger.getStockStatus(),
                 ledger.getMovementType(),
                 ledger.getQuantity(),
                 ledger.getUnitCost(),

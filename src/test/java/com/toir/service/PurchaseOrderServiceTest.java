@@ -6,6 +6,7 @@ import com.toir.dto.purchaseorder.PurchaseOrderReceiveLineRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderReceiveRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderRequest;
 import com.toir.dto.warehouse.StockReceiptCommand;
+import com.toir.dto.wms.WmsDocumentGroupRequest;
 import com.toir.entity.InventoryTransaction;
 import com.toir.entity.PurchaseOrder;
 import com.toir.entity.PurchaseOrderLine;
@@ -22,6 +23,8 @@ import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.PurchaseOrderStatus;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.SupplierType;
+import com.toir.enums.WarehouseStockStatus;
+import com.toir.enums.WmsDocumentOperationType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -33,6 +36,8 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsDocumentPolicyService;
+import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -71,6 +76,8 @@ class PurchaseOrderServiceTest {
     @Mock InventoryCostService inventoryCostService;
     @Mock ToirStockService toirStockService;
     @Mock LegacyStockProjectionService legacyStockProjectionService;
+    @Mock WmsStockCoordinateValidator coordinateValidator;
+    @Mock WmsDocumentPolicyService documentPolicyService;
 
     PurchaseOrderService service;
 
@@ -88,7 +95,9 @@ class PurchaseOrderServiceTest {
                 scopeAccessService,
                 inventoryCostService,
                 toirStockService,
-                legacyStockProjectionService
+                legacyStockProjectionService,
+                coordinateValidator,
+                documentPolicyService
         );
     }
 
@@ -210,6 +219,9 @@ class PurchaseOrderServiceTest {
         UUID supplierId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
         UUID responsibleId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        LocalDate expiryDate = LocalDate.of(2027, 3, 15);
+        List<WmsDocumentGroupRequest> documentGroups = List.of(documentGroup("Invoice", "INVOICE"));
 
         PurchaseOrder order = purchaseOrder(orderId, orderLineId, procurementId, warehouseId, supplierId, sparePartId);
         ProcurementRequest procurement = procurement(procurementId, procurementLineId, warehouseId, sparePartId);
@@ -241,10 +253,20 @@ class PurchaseOrderServiceTest {
         when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(sparePart));
 
         var result = service.receive(orderId, new PurchaseOrderReceiveRequest(
-                List.of(new PurchaseOrderReceiveLineRequest(orderLineId, BigDecimal.valueOf(4))),
+                List.of(new PurchaseOrderReceiveLineRequest(
+                        orderLineId,
+                        BigDecimal.valueOf(4),
+                        binId,
+                        "LOT-7",
+                        "SN-8",
+                        expiryDate,
+                        WarehouseStockStatus.AVAILABLE
+                )),
                 LocalDate.of(2026, 6, 18),
                 "INV-1",
-                responsibleId
+                responsibleId,
+                documentGroups,
+                true
         ));
 
         assertThat(result.status()).isEqualTo(PurchaseOrderStatus.PARTIALLY_RECEIVED);
@@ -258,6 +280,10 @@ class PurchaseOrderServiceTest {
         assertThat(movement.getSourceType()).isEqualTo(StockMovementSourceType.PURCHASE_ORDER);
         assertThat(movement.getSourceId()).isEqualTo(orderId);
         assertThat(movement.getSourceLineId()).isEqualTo(orderLineId);
+        assertThat(movement.getBinId()).isEqualTo(binId);
+        assertThat(movement.getLotNumber()).isEqualTo("LOT-7");
+        assertThat(movement.getSerialNumber()).isEqualTo("SN-8");
+        assertThat(movement.getExpiryDate()).isEqualTo(expiryDate);
         assertThat(stock.getQuantity()).isEqualTo(7);
 
         ArgumentCaptor<StockReceiptCommand> coreReceiptCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
@@ -269,7 +295,19 @@ class PurchaseOrderServiceTest {
         assertThat(coreReceipt.unitCost()).isEqualByComparingTo("12");
         assertThat(coreReceipt.referenceType()).isEqualTo("PURCHASE_ORDER");
         assertThat(coreReceipt.referenceId()).isEqualTo(orderId);
+        assertThat(coreReceipt.binId()).isEqualTo(binId);
+        assertThat(coreReceipt.lotNumber()).isEqualTo("LOT-7");
+        assertThat(coreReceipt.serialNumber()).isEqualTo("SN-8");
+        assertThat(coreReceipt.expiryDate()).isEqualTo(expiryDate);
         assertThat(coreReceipt.idempotencyKey()).isEqualTo("purchase-order-receipt:" + movement.getId());
+        verify(coordinateValidator).assertCanReceiveOrMoveInto(warehouseId, binId, WarehouseStockStatus.AVAILABLE);
+        verify(documentPolicyService).validateReceiptDocuments(
+                eq(WmsDocumentOperationType.PURCHASE_ORDER_RECEIPT),
+                eq(documentGroups),
+                eq(true),
+                eq(false),
+                eq(true)
+        );
     }
 
     private PurchaseOrder purchaseOrder(UUID id,
@@ -357,5 +395,9 @@ class PurchaseOrderServiceTest {
         supplier.setName("Supplier");
         supplier.setActive(true);
         return supplier;
+    }
+
+    private WmsDocumentGroupRequest documentGroup(String name, String type) {
+        return new WmsDocumentGroupRequest(name, type, "DOC-1", LocalDate.of(2026, 6, 18), UUID.randomUUID());
     }
 }

@@ -26,6 +26,8 @@ import com.toir.service.LowStockRecommendationService;
 import com.toir.service.ProcurementRequestService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsDocumentPolicyService;
+import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -104,7 +106,9 @@ class ProcurementPbacScopeTest {
                 costCategoryRepository,
                 supplierRepository,
                 mock(ToirStockService.class),
-                mock(LegacyStockProjectionService.class)
+                mock(LegacyStockProjectionService.class),
+                mock(WmsStockCoordinateValidator.class),
+                mock(WmsDocumentPolicyService.class)
         );
     }
 

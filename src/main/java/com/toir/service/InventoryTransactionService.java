@@ -25,6 +25,7 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.InventoryTransactionType;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.SparePartRepository;
@@ -37,6 +38,7 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -75,6 +77,7 @@ public class InventoryTransactionService {
     private final InventoryCostService inventoryCostService;
     private final ToirStockService toirStockService;
     private final LegacyStockProjectionService legacyStockProjectionService;
+    private final WmsStockCoordinateValidator coordinateValidator;
 
     @Transactional
     public InventoryReceiptDto createReceipt(InventoryReceiptRequest request) {
@@ -90,6 +93,8 @@ public class InventoryTransactionService {
         BigDecimal totalAmount = request.quantity().multiply(request.unitPrice());
         LocalDate transactionDate = defaultDate(request.receiptDate());
         String unit = normalizeRequiredToken(request.unit(), "unit");
+        WarehouseStockStatus stockStatus = request.effectiveStatus();
+        coordinateValidator.assertCanReceiveOrMoveInto(warehouse.getId(), request.binId(), stockStatus);
 
         InventoryTransaction transaction = new InventoryTransaction();
         transaction.setType(InventoryTransactionType.RECEIPT);
@@ -104,6 +109,14 @@ public class InventoryTransactionService {
         transaction.setTransactionDate(transactionDate);
         transaction.setDocumentNumber(trimToNull(request.documentNumber()));
         transaction.setComment(trimToNull(request.comment()));
+        applySingleCoordinate(
+                transaction,
+                request.binId(),
+                request.lotNumber(),
+                request.serialNumber(),
+                request.expiryDate(),
+                stockStatus
+        );
         InventoryTransaction saved = repository.save(transaction);
         postCoreStockReceipt(saved);
         legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
@@ -124,6 +137,16 @@ public class InventoryTransactionService {
         movement.setDocumentNumber(trimToNull(request.documentNumber()));
         movement.setComment(trimToNull(request.comment()));
         movement.setNotes(trimToNull(request.comment()));
+        applyMovementCoordinate(
+                movement,
+                request.binId(),
+                null,
+                null,
+                request.lotNumber(),
+                request.serialNumber(),
+                request.expiryDate(),
+                stockStatus
+        );
         stockMovementRepository.save(movement);
 
         auditTransaction(saved, "Приход запасной части создан");
@@ -162,6 +185,8 @@ public class InventoryTransactionService {
 
         LocalDate transactionDate = defaultDate(request.issueDate());
         String unit = normalizeRequiredToken(request.unit(), "unit");
+        WarehouseStockStatus stockStatus = request.effectiveStatus();
+        coordinateValidator.assertCanReadFrom(warehouse.getId(), request.binId());
 
         InventoryTransaction transaction = new InventoryTransaction();
         transaction.setType(InventoryTransactionType.ISSUE);
@@ -176,6 +201,14 @@ public class InventoryTransactionService {
         transaction.setTransactionDate(transactionDate);
         transaction.setDocumentNumber(trimToNull(request.documentNumber()));
         transaction.setComment(trimToNull(request.comment()));
+        applySingleCoordinate(
+                transaction,
+                request.binId(),
+                request.lotNumber(),
+                request.serialNumber(),
+                request.expiryDate(),
+                stockStatus
+        );
         InventoryTransaction saved = repository.save(transaction);
         postCoreStockIssue(saved);
         WarehouseStock stock = legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
@@ -194,6 +227,16 @@ public class InventoryTransactionService {
         movement.setDocumentNumber(trimToNull(request.documentNumber()));
         movement.setComment(trimToNull(request.comment()));
         movement.setNotes(trimToNull(request.comment()));
+        applyMovementCoordinate(
+                movement,
+                request.binId(),
+                null,
+                null,
+                request.lotNumber(),
+                request.serialNumber(),
+                request.expiryDate(),
+                stockStatus
+        );
         stockMovementRepository.save(movement);
 
         lowStockRecommendationService.evaluateStockSafely(stock);
@@ -239,6 +282,9 @@ public class InventoryTransactionService {
 
         LocalDate transactionDate = defaultDate(request.transferDate());
         String unit = normalizeRequiredToken(request.unit(), "unit");
+        WarehouseStockStatus stockStatus = request.effectiveStatus();
+        coordinateValidator.assertCanReadFrom(source.getId(), request.sourceBinId());
+        coordinateValidator.assertCanReceiveOrMoveInto(destination.getId(), request.destinationBinId(), stockStatus);
         InventoryTransaction transaction = baseTransaction(
                 InventoryTransactionType.TRANSFER,
                 source.getId(),
@@ -251,6 +297,15 @@ public class InventoryTransactionService {
         );
         transaction.setDestinationWarehouseId(destination.getId());
         transaction.setResponsiblePersonId(responsible.getId());
+        applyTransferCoordinate(
+                transaction,
+                request.sourceBinId(),
+                request.destinationBinId(),
+                request.lotNumber(),
+                request.serialNumber(),
+                request.expiryDate(),
+                stockStatus
+        );
         InventoryTransaction saved = repository.save(transaction);
         postCoreStockTransfer(saved, sparePart);
         WarehouseStock sourceStock = legacyStockProjectionService.sync(source.getId(), sparePart.getId());
@@ -258,10 +313,14 @@ public class InventoryTransactionService {
 
         stockMovementRepository.save(movement(source.getId(), sparePart.getId(), StockMovementType.TRANSFER,
                 request.quantity().negate().doubleValue(), unit, transactionDate, responsible.getId(), null,
-                null, null, request.documentNumber(), request.comment()));
+                null, null, request.documentNumber(), request.comment(), request.sourceBinId(),
+                request.sourceBinId(), request.destinationBinId(), request.lotNumber(),
+                request.serialNumber(), request.expiryDate(), stockStatus));
         stockMovementRepository.save(movement(destination.getId(), sparePart.getId(), StockMovementType.TRANSFER,
                 request.quantity().doubleValue(), unit, transactionDate, responsible.getId(), null,
-                null, null, request.documentNumber(), request.comment()));
+                null, null, request.documentNumber(), request.comment(), request.destinationBinId(),
+                request.sourceBinId(), request.destinationBinId(), request.lotNumber(),
+                request.serialNumber(), request.expiryDate(), stockStatus));
         lowStockRecommendationService.evaluateStockSafely(sourceStock);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory transfer created");
@@ -304,6 +363,8 @@ public class InventoryTransactionService {
 
         LocalDate transactionDate = defaultDate(request.returnDate());
         String unit = normalizeRequiredToken(sparePart.getUnit(), "unit");
+        WarehouseStockStatus stockStatus = request.effectiveStatus();
+        coordinateValidator.assertCanReceiveOrMoveInto(warehouse.getId(), request.binId(), stockStatus);
         InventoryTransaction transaction = baseTransaction(
                 InventoryTransactionType.RETURN,
                 warehouse.getId(),
@@ -318,13 +379,23 @@ public class InventoryTransactionService {
         transaction.setResponsiblePersonId(responsible.getId());
         transaction.setDepartmentId(workOrder.getDepartmentId());
         transaction.setWorkOrderId(workOrder.getId());
+        applySingleCoordinate(
+                transaction,
+                request.binId(),
+                request.lotNumber(),
+                request.serialNumber(),
+                request.expiryDate(),
+                stockStatus
+        );
         InventoryTransaction saved = repository.save(transaction);
         postCoreStockReturn(saved, sparePart);
         legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
 
         stockMovementRepository.save(movement(warehouse.getId(), sparePart.getId(), StockMovementType.RETURN,
                 request.quantity().doubleValue(), unit, transactionDate, responsible.getId(), returnedBy.getId(),
-                workOrder.getDepartmentId(), workOrder.getId(), request.documentNumber(), request.comment()));
+                workOrder.getDepartmentId(), workOrder.getId(), request.documentNumber(), request.comment(),
+                request.binId(), null, null, request.lotNumber(), request.serialNumber(),
+                request.expiryDate(), stockStatus));
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory return created");
 
@@ -354,6 +425,12 @@ public class InventoryTransactionService {
         }
         BigDecimal systemQuantity = currentStock.qtyOnHand();
         BigDecimal variance = request.actualQuantity().subtract(systemQuantity);
+        WarehouseStockStatus stockStatus = request.effectiveStatus();
+        if (variance.signum() > 0) {
+            coordinateValidator.assertCanReceiveOrMoveInto(warehouse.getId(), request.binId(), stockStatus);
+        } else if (variance.signum() < 0) {
+            coordinateValidator.assertCanReadFrom(warehouse.getId(), request.binId());
+        }
 
         LocalDate transactionDate = defaultDate(request.adjustmentDate());
         String unit = normalizeRequiredToken(sparePart.getUnit(), "unit");
@@ -371,13 +448,22 @@ public class InventoryTransactionService {
         transaction.setVariance(variance);
         transaction.setAdjustmentReason(request.reason());
         transaction.setResponsiblePersonId(responsible.getId());
+        applySingleCoordinate(
+                transaction,
+                request.binId(),
+                request.lotNumber(),
+                request.serialNumber(),
+                request.expiryDate(),
+                stockStatus
+        );
         InventoryTransaction saved = repository.save(transaction);
         postCoreStockAdjustment(saved, sparePart);
         WarehouseStock stock = legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
 
         stockMovementRepository.save(movement(warehouse.getId(), sparePart.getId(), StockMovementType.ADJUSTMENT,
                 variance.doubleValue(), unit, transactionDate, responsible.getId(), null,
-                null, null, request.documentNumber(), request.comment()));
+                null, null, request.documentNumber(), request.comment(), request.binId(), null, null,
+                request.lotNumber(), request.serialNumber(), request.expiryDate(), stockStatus));
         lowStockRecommendationService.evaluateStockSafely(stock);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory adjustment created");
@@ -551,7 +637,16 @@ public class InventoryTransactionService {
                 tx.getDocumentNumber(),
                 tx.getComment(),
                 tx.getCreatedAt(),
-                tx.getCreatedBy()
+                tx.getCreatedBy(),
+                tx.getBinId(),
+                tx.getSourceBinId(),
+                tx.getDestinationBinId(),
+                tx.getLotNumber(),
+                tx.getSerialNumber(),
+                tx.getExpiryDate(),
+                tx.getStockStatus(),
+                tx.getSourceType(),
+                tx.getSourceId()
         );
     }
 
@@ -607,6 +702,32 @@ public class InventoryTransactionService {
             String documentNumber,
             String comment
     ) {
+        return movement(warehouseId, sparePartId, type, quantity, unit, movementDate, responsiblePersonId,
+                takenById, departmentId, workOrderId, documentNumber, comment,
+                null, null, null, null, null, null, null);
+    }
+
+    private StockMovement movement(
+            UUID warehouseId,
+            UUID sparePartId,
+            StockMovementType type,
+            double quantity,
+            String unit,
+            LocalDate movementDate,
+            UUID responsiblePersonId,
+            UUID takenById,
+            UUID departmentId,
+            UUID workOrderId,
+            String documentNumber,
+            String comment,
+            UUID binId,
+            UUID sourceBinId,
+            UUID destinationBinId,
+            String lotNumber,
+            String serialNumber,
+            LocalDate expiryDate,
+            WarehouseStockStatus stockStatus
+    ) {
         StockMovement movement = new StockMovement();
         movement.setWarehouseId(warehouseId);
         movement.setSparePartId(sparePartId);
@@ -621,7 +742,53 @@ public class InventoryTransactionService {
         movement.setDocumentNumber(trimToNull(documentNumber));
         movement.setComment(trimToNull(comment));
         movement.setNotes(trimToNull(comment));
+        applyMovementCoordinate(movement, binId, sourceBinId, destinationBinId, lotNumber, serialNumber, expiryDate, stockStatus);
         return movement;
+    }
+
+    private void applySingleCoordinate(InventoryTransaction transaction,
+                                       UUID binId,
+                                       String lotNumber,
+                                       String serialNumber,
+                                       LocalDate expiryDate,
+                                       WarehouseStockStatus stockStatus) {
+        transaction.setBinId(binId);
+        transaction.setLotNumber(trimToNull(lotNumber));
+        transaction.setSerialNumber(trimToNull(serialNumber));
+        transaction.setExpiryDate(expiryDate);
+        transaction.setStockStatus(effectiveStatus(stockStatus));
+    }
+
+    private void applyTransferCoordinate(InventoryTransaction transaction,
+                                         UUID sourceBinId,
+                                         UUID destinationBinId,
+                                         String lotNumber,
+                                         String serialNumber,
+                                         LocalDate expiryDate,
+                                         WarehouseStockStatus stockStatus) {
+        transaction.setSourceBinId(sourceBinId);
+        transaction.setDestinationBinId(destinationBinId);
+        transaction.setLotNumber(trimToNull(lotNumber));
+        transaction.setSerialNumber(trimToNull(serialNumber));
+        transaction.setExpiryDate(expiryDate);
+        transaction.setStockStatus(effectiveStatus(stockStatus));
+    }
+
+    private void applyMovementCoordinate(StockMovement movement,
+                                         UUID binId,
+                                         UUID sourceBinId,
+                                         UUID destinationBinId,
+                                         String lotNumber,
+                                         String serialNumber,
+                                         LocalDate expiryDate,
+                                         WarehouseStockStatus stockStatus) {
+        movement.setBinId(binId);
+        movement.setSourceBinId(sourceBinId);
+        movement.setDestinationBinId(destinationBinId);
+        movement.setLotNumber(trimToNull(lotNumber));
+        movement.setSerialNumber(trimToNull(serialNumber));
+        movement.setExpiryDate(expiryDate);
+        movement.setStockStatus(effectiveStatus(stockStatus));
     }
 
     private List<UUID> accessibleWarehouseIds() {
@@ -641,12 +808,13 @@ public class InventoryTransactionService {
         toirStockService.postReceipt(new StockReceiptCommand(
                 saved.getWarehouseId(),
                 saved.getSparePartId(),
-                null,
+                saved.getBinId(),
                 saved.getQuantity(),
                 saved.getUnitPrice(),
-                null,
-                null,
-                null,
+                saved.getLotNumber(),
+                saved.getSerialNumber(),
+                saved.getExpiryDate(),
+                saved.getStockStatus(),
                 "INVENTORY_TRANSACTION",
                 saved.getId(),
                 saved.getDocumentNumber(),
@@ -659,10 +827,12 @@ public class InventoryTransactionService {
         toirStockService.postIssue(new StockIssueCommand(
                 saved.getWarehouseId(),
                 saved.getSparePartId(),
-                null,
+                saved.getBinId(),
                 saved.getQuantity(),
-                null,
-                null,
+                saved.getLotNumber(),
+                saved.getSerialNumber(),
+                saved.getExpiryDate(),
+                saved.getStockStatus(),
                 "INVENTORY_TRANSACTION",
                 saved.getId(),
                 saved.getDocumentNumber(),
@@ -675,10 +845,12 @@ public class InventoryTransactionService {
         toirStockService.postDecrease(new StockIssueCommand(
                 saved.getWarehouseId(),
                 saved.getSparePartId(),
-                null,
+                saved.getSourceBinId(),
                 saved.getQuantity(),
-                null,
-                null,
+                saved.getLotNumber(),
+                saved.getSerialNumber(),
+                saved.getExpiryDate(),
+                saved.getStockStatus(),
                 "INVENTORY_TRANSACTION",
                 saved.getId(),
                 saved.getDocumentNumber(),
@@ -688,12 +860,13 @@ public class InventoryTransactionService {
         toirStockService.postIncrease(new StockReceiptCommand(
                 saved.getDestinationWarehouseId(),
                 saved.getSparePartId(),
-                null,
+                saved.getDestinationBinId(),
                 saved.getQuantity(),
                 averageCost(sparePart),
-                null,
-                null,
-                null,
+                saved.getLotNumber(),
+                saved.getSerialNumber(),
+                saved.getExpiryDate(),
+                saved.getStockStatus(),
                 "INVENTORY_TRANSACTION",
                 saved.getId(),
                 saved.getDocumentNumber(),
@@ -706,12 +879,13 @@ public class InventoryTransactionService {
         toirStockService.postIncrease(new StockReceiptCommand(
                 saved.getWarehouseId(),
                 saved.getSparePartId(),
-                null,
+                saved.getBinId(),
                 saved.getQuantity(),
                 averageCost(sparePart),
-                null,
-                null,
-                null,
+                saved.getLotNumber(),
+                saved.getSerialNumber(),
+                saved.getExpiryDate(),
+                saved.getStockStatus(),
                 "INVENTORY_TRANSACTION",
                 saved.getId(),
                 saved.getDocumentNumber(),
@@ -729,12 +903,13 @@ public class InventoryTransactionService {
             toirStockService.postIncrease(new StockReceiptCommand(
                     saved.getWarehouseId(),
                     saved.getSparePartId(),
-                    null,
+                    saved.getBinId(),
                     variance,
                     averageCost(sparePart),
-                    null,
-                    null,
-                    null,
+                    saved.getLotNumber(),
+                    saved.getSerialNumber(),
+                    saved.getExpiryDate(),
+                    saved.getStockStatus(),
                     "INVENTORY_TRANSACTION",
                     saved.getId(),
                     saved.getDocumentNumber(),
@@ -745,10 +920,12 @@ public class InventoryTransactionService {
             toirStockService.postDecrease(new StockIssueCommand(
                     saved.getWarehouseId(),
                     saved.getSparePartId(),
-                    null,
+                    saved.getBinId(),
                     variance.abs(),
-                    null,
-                    null,
+                    saved.getLotNumber(),
+                    saved.getSerialNumber(),
+                    saved.getExpiryDate(),
+                    saved.getStockStatus(),
                     "INVENTORY_TRANSACTION",
                     saved.getId(),
                     saved.getDocumentNumber(),
@@ -760,6 +937,10 @@ public class InventoryTransactionService {
 
     private BigDecimal averageCost(SparePart sparePart) {
         return sparePart == null ? null : sparePart.getAverageCost();
+    }
+
+    private WarehouseStockStatus effectiveStatus(WarehouseStockStatus stockStatus) {
+        return stockStatus == null ? WarehouseStockStatus.AVAILABLE : stockStatus;
     }
 
     private Warehouse warehouseOrThrow(UUID id) {

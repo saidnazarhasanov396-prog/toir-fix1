@@ -11,6 +11,8 @@ public enum StockLedgerMovementType {
     WRITEOFF,
     MOVE_IN,
     MOVE_OUT,
+    STATUS_TRANSFER_OUT,
+    STATUS_TRANSFER_IN,
     RESERVE,
     RELEASE,
     CANCEL

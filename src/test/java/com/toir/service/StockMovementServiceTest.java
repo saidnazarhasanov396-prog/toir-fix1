@@ -21,6 +21,7 @@ import com.toir.enums.SparePartType;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementFileRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -336,6 +337,56 @@ class StockMovementServiceTest {
         assertThat(stockCommand.referenceId()).isEqualTo(result.id());
         assertThat(stockCommand.referenceDocNo()).isEqualTo("PRX-2026-0001");
         assertThat(stockCommand.idempotencyKey()).isEqualTo("stock-movement-receipt:" + result.id());
+    }
+
+    @Test
+    void receiptEndpointPreservesWmsIdentityInMovementAndCoreCommand() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        LocalDate expiryDate = LocalDate.of(2027, 3, 15);
+        WarehouseStock stock = stock(warehouseId, sparePartId, 10, 0);
+
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(15);
+            return stock;
+        });
+        when(repository.save(any(StockMovement.class)))
+                .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
+
+        service.receipt(new StockMovementReceiptRequest(
+                sparePartId,
+                warehouseId,
+                5,
+                "PCS",
+                BigDecimal.valueOf(100),
+                LocalDate.of(2026, 6, 13),
+                null,
+                null,
+                "DOC-1",
+                "identity receipt",
+                binId,
+                "LOT-7",
+                "SN-8",
+                expiryDate,
+                WarehouseStockStatus.QUARANTINE
+        ));
+
+        ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
+        verify(repository).save(movementCaptor.capture());
+        assertThat(movementCaptor.getValue().getBinId()).isEqualTo(binId);
+        assertThat(movementCaptor.getValue().getLotNumber()).isEqualTo("LOT-7");
+        assertThat(movementCaptor.getValue().getSerialNumber()).isEqualTo("SN-8");
+        assertThat(movementCaptor.getValue().getExpiryDate()).isEqualTo(expiryDate);
+        assertThat(movementCaptor.getValue().getStockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
+
+        ArgumentCaptor<StockReceiptCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
+        verify(toirStockService).postReceipt(stockCommandCaptor.capture());
+        assertThat(stockCommandCaptor.getValue().binId()).isEqualTo(binId);
+        assertThat(stockCommandCaptor.getValue().lotNumber()).isEqualTo("LOT-7");
+        assertThat(stockCommandCaptor.getValue().serialNumber()).isEqualTo("SN-8");
+        assertThat(stockCommandCaptor.getValue().expiryDate()).isEqualTo(expiryDate);
+        assertThat(stockCommandCaptor.getValue().stockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
     }
 
     @Test

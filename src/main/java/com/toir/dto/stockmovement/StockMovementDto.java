@@ -4,6 +4,7 @@ import com.toir.entity.StockMovement;
 import com.toir.enums.SparePartType;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.repository.StockMovementListRow;
 
 import java.math.BigDecimal;
@@ -45,7 +46,18 @@ public record StockMovementDto(
         String comment,
         int fileCount,
         UUID equipmentTypeId,
-        String equipmentTypeName
+        String equipmentTypeName,
+        UUID binId,
+        UUID fromBinId,
+        UUID toBinId,
+        UUID sourceBinId,
+        UUID destinationBinId,
+        String lotNumber,
+        String serialNumber,
+        LocalDate expiryDate,
+        WarehouseStockStatus stockStatus,
+        String sourceDocumentNo,
+        LocalDate sourceDocumentDate
 ) {
     public StockMovementDto(
             UUID id,
@@ -81,7 +93,7 @@ public record StockMovementDto(
                 workOrderNumber, workOrderName, type, quantity, unit, unitCost, unitPrice, totalAmount,
                 documentNumber, null, null, null, createdById, createdByFullName, responsiblePersonId, responsiblePersonName,
                 takenById, takenByName, departmentId, supplierName, movementDate, occurredAt, notes, comment, 0,
-                null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public StockMovementDto(
@@ -106,7 +118,8 @@ public record StockMovementDto(
                 workOrderNumber, workOrderName, type, quantity, null, unitCost,
                 unitPriceFromLegacy(unitCost), totalAmount(quantity, unitPriceFromLegacy(unitCost), null),
                 documentNumber, null, null, null, createdById, createdByFullName, null, null, null, null,
-                null, null, null, occurredAt, notes, notes, 0, null, null);
+                null, null, null, occurredAt, notes, notes, 0, null, null,
+                null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public static StockMovementDto from(StockMovement m) {
@@ -145,7 +158,18 @@ public record StockMovementDto(
                 m.getComment() != null ? m.getComment() : m.getNotes(),
                 0,
                 m.getEquipmentTypeId(),
-                null
+                null,
+                m.getBinId(),
+                m.getFromBinId(),
+                m.getToBinId(),
+                m.getSourceBinId(),
+                m.getDestinationBinId(),
+                m.getLotNumber(),
+                m.getSerialNumber(),
+                m.getExpiryDate(),
+                m.getStockStatus(),
+                m.getSourceDocumentNo(),
+                m.getSourceDocumentDate()
         );
     }
 
@@ -185,7 +209,18 @@ public record StockMovementDto(
                 row.getComment() != null ? row.getComment() : row.getNotes(),
                 Math.toIntExact(row.getFileCount()),
                 row.getEquipmentTypeId(),
-                row.getEquipmentTypeName()
+                row.getEquipmentTypeName(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
         );
     }
 

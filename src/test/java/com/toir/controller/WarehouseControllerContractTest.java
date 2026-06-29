@@ -6,6 +6,7 @@ import com.toir.dto.warehouse.WarehouseStockLedgerDto;
 import com.toir.dto.warehouse.WarehouseStockReconciliationDto;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.WarehouseEquipmentStatus;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
@@ -126,33 +127,60 @@ class WarehouseControllerContractTest {
         UUID warehouseId = UUID.randomUUID();
         UUID balanceId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        UUID checkedById = UUID.randomUUID();
         WarehouseStockBalanceDto balance = new WarehouseStockBalanceDto(
                 balanceId,
                 warehouseId,
                 sparePartId,
-                null,
+                binId,
                 "LOT-1",
-                null,
+                "SN-1",
                 LocalDate.parse("2026-06-13"),
+                WarehouseStockStatus.AVAILABLE,
+                "released",
+                Instant.parse("2026-06-13T09:00:00Z"),
+                checkedById,
                 BigDecimal.valueOf(10),
                 BigDecimal.valueOf(3),
                 BigDecimal.valueOf(7),
                 BigDecimal.valueOf(1500),
                 Instant.parse("2026-06-13T10:00:00Z")
         );
-        when(warehouseQueryService.stockBalances(warehouseId, 1, 5))
+        when(warehouseQueryService.stockBalances(
+                warehouseId,
+                binId,
+                sparePartId,
+                WarehouseStockStatus.AVAILABLE,
+                "LOT-1",
+                "SN-1",
+                1,
+                5
+        ))
                 .thenReturn(new PageImpl<>(List.of(balance), PageRequest.of(1, 5), 1));
 
         mockMvc.perform(get("/api/v1/warehouses/{warehouseId}/stock-balances", warehouseId)
+                        .param("binId", binId.toString())
+                        .param("sparePartId", sparePartId.toString())
+                        .param("stockStatus", "AVAILABLE")
+                        .param("lotNumber", "LOT-1")
+                        .param("serialNumber", "SN-1")
                         .param("page", "1")
                         .param("size", "5"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(balanceId.toString()))
                 .andExpect(jsonPath("$.content[0].warehouseId").value(warehouseId.toString()))
                 .andExpect(jsonPath("$.content[0].sparePartId").value(sparePartId.toString()))
+                .andExpect(jsonPath("$.content[0].binId").value(binId.toString()))
+                .andExpect(jsonPath("$.content[0].lotNumber").value("LOT-1"))
+                .andExpect(jsonPath("$.content[0].serialNumber").value("SN-1"))
+                .andExpect(jsonPath("$.content[0].expiryDate").value("2026-06-13"))
+                .andExpect(jsonPath("$.content[0].stockStatus").value("AVAILABLE"))
                 .andExpect(jsonPath("$.content[0].qtyOnHand").value(10))
                 .andExpect(jsonPath("$.content[0].qtyReserved").value(3))
-                .andExpect(jsonPath("$.content[0].availableQty").value(7));
+                .andExpect(jsonPath("$.content[0].availableQty").value(7))
+                .andExpect(jsonPath("$.content[0].qualityHoldReason").value("released"))
+                .andExpect(jsonPath("$.content[0].qualityCheckedById").value(checkedById.toString()));
     }
 
     @Test
@@ -167,6 +195,8 @@ class WarehouseControllerContractTest {
                 null,
                 null,
                 null,
+                LocalDate.parse("2028-12-31"),
+                WarehouseStockStatus.AVAILABLE,
                 StockLedgerMovementType.RECEIPT,
                 BigDecimal.valueOf(4),
                 BigDecimal.valueOf(25),
@@ -185,6 +215,8 @@ class WarehouseControllerContractTest {
                 .andExpect(jsonPath("$.content[0].id").value(ledgerId.toString()))
                 .andExpect(jsonPath("$.content[0].warehouseId").value(warehouseId.toString()))
                 .andExpect(jsonPath("$.content[0].sparePartId").value(sparePartId.toString()))
+                .andExpect(jsonPath("$.content[0].expiryDate").value("2028-12-31"))
+                .andExpect(jsonPath("$.content[0].stockStatus").value("AVAILABLE"))
                 .andExpect(jsonPath("$.content[0].movementType").value("RECEIPT"))
                 .andExpect(jsonPath("$.content[0].quantity").value(4))
                 .andExpect(jsonPath("$.content[0].referenceDocNo").value("SM-1"));
@@ -197,6 +229,9 @@ class WarehouseControllerContractTest {
         WarehouseStockReconciliationDto row = new WarehouseStockReconciliationDto(
                 warehouseId,
                 sparePartId,
+                WarehouseStockStatus.AVAILABLE,
+                null,
+                true,
                 true,
                 true,
                 BigDecimal.TEN,
@@ -216,6 +251,9 @@ class WarehouseControllerContractTest {
         mockMvc.perform(get("/api/v1/warehouses/{warehouseId}/stock-reconciliation", warehouseId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sparePartId").value(sparePartId.toString()))
+                .andExpect(jsonPath("$[0].stockStatus").value("AVAILABLE"))
+                .andExpect(jsonPath("$[0].legacyBinId").doesNotExist())
+                .andExpect(jsonPath("$[0].legacyBinless").value(true))
                 .andExpect(jsonPath("$[0].legacyQtyOnHand").value(10))
                 .andExpect(jsonPath("$[0].wmsQtyOnHand").value(8))
                 .andExpect(jsonPath("$[0].legacyOnHandDrift").value(-2))
