@@ -87,7 +87,17 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
                  WHERE sp.is_deleted = false
                    AND (cast(:typeId as uuid) IS NULL OR sp.type_id = cast(:typeId as uuid))
                    AND (cast(:itemType as varchar) IS NULL OR sp.kind = cast(:itemType as varchar))
-                   AND (cast(:unit as varchar) IS NULL OR upper(sp.unit) = upper(cast(:unit as varchar)))
+                   AND (cast(:unitId as varchar) IS NULL OR EXISTS (
+                       SELECT 1 FROM units_of_measurement uom
+                        WHERE uom.id = cast(:unitId as uuid)
+                          AND uom.is_deleted = false
+                          AND (
+                               upper(sp.unit) = upper(uom.code)
+                            OR upper(sp.unit) = upper(uom.name)
+                            OR (uom.name_en IS NOT NULL AND upper(sp.unit) = upper(uom.name_en))
+                            OR (uom.name_uz IS NOT NULL AND upper(sp.unit) = upper(uom.name_uz))
+                       )
+                   ))
                    AND (cast(:search as varchar) IS NULL
                        OR lower(sp.code) LIKE lower(concat('%', cast(:search as varchar), '%'))
                        OR lower(sp.name) LIKE lower(concat('%', cast(:search as varchar), '%'))
@@ -146,7 +156,7 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
             @Param("search") String search,
             @Param("typeId") UUID typeId,
             @Param("itemType") String itemType,
-            @Param("unit") String unit
+            @Param("unitId") UUID unitId
     );
 
     @Query(value = """
@@ -156,7 +166,17 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
                  WHERE sp.is_deleted = false
                    AND (cast(:typeId as uuid) IS NULL OR sp.type_id = cast(:typeId as uuid))
                    AND (cast(:itemType as varchar) IS NULL OR sp.kind = cast(:itemType as varchar))
-                   AND (cast(:unit as varchar) IS NULL OR upper(sp.unit) = upper(cast(:unit as varchar)))
+                   AND (cast(:unitId as varchar) IS NULL OR EXISTS (
+                       SELECT 1 FROM units_of_measurement uom
+                        WHERE uom.id = cast(:unitId as uuid)
+                          AND uom.is_deleted = false
+                          AND (
+                               upper(sp.unit) = upper(uom.code)
+                            OR upper(sp.unit) = upper(uom.name)
+                            OR (uom.name_en IS NOT NULL AND upper(sp.unit) = upper(uom.name_en))
+                            OR (uom.name_uz IS NOT NULL AND upper(sp.unit) = upper(uom.name_uz))
+                       )
+                   ))
                    AND (cast(:search as varchar) IS NULL
                        OR lower(sp.code) LIKE lower(concat('%', cast(:search as varchar), '%'))
                        OR lower(sp.name) LIKE lower(concat('%', cast(:search as varchar), '%'))
@@ -220,6 +240,6 @@ public interface WarehouseStockRepository extends JpaRepository<WarehouseStock, 
             @Param("search") String search,
             @Param("typeId") UUID typeId,
             @Param("itemType") String itemType,
-            @Param("unit") String unit
+            @Param("unitId") UUID unitId
     );
 }

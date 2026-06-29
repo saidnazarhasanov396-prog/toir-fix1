@@ -1,9 +1,11 @@
 package com.toir.service;
 
 import com.toir.dto.warehouse.SparePartsWarehouseStatsResponse;
+import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartsWarehouseStatsProjection;
+import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -22,6 +25,7 @@ public class WarehouseSparePartsStatsService {
     private final WarehouseStockRepository stockRepository;
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
+    private final UnitOfMeasurementRepository unitOfMeasurementRepository;
 
     @Transactional(readOnly = true)
     public SparePartsWarehouseStatsResponse getStats(
@@ -33,17 +37,17 @@ public class WarehouseSparePartsStatsService {
     ) {
         String normalizedSearch = (search == null || search.isBlank()) ? null : search.trim();
         String normalizedItemType = (itemType == null || itemType.isBlank()) ? null : itemType.trim();
-        String normalizedUnit = (unit == null || unit.isBlank()) ? null : unit.trim();
+        UUID unitId = resolveUnitFilter(unit);
 
         if (warehouseId != null) {
             assertCanAccessWarehouseId(warehouseId);
             return toResponse(stockRepository.getSparePartsWarehouseStatsByWarehouseIds(
-                    List.of(warehouseId), normalizedSearch, typeId, normalizedItemType, normalizedUnit));
+                    List.of(warehouseId), normalizedSearch, typeId, normalizedItemType, unitId));
         }
 
         if (scopeAccessService.isScopeAdmin()) {
             return toResponse(stockRepository.getSparePartsWarehouseStats(
-                    normalizedSearch, typeId, normalizedItemType, normalizedUnit));
+                    normalizedSearch, typeId, normalizedItemType, unitId));
         }
 
         List<UUID> accessibleWarehouseIds = warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -55,7 +59,32 @@ public class WarehouseSparePartsStatsService {
         }
 
         return toResponse(stockRepository.getSparePartsWarehouseStatsByWarehouseIds(
-                accessibleWarehouseIds, normalizedSearch, typeId, normalizedItemType, normalizedUnit));
+                accessibleWarehouseIds, normalizedSearch, typeId, normalizedItemType, unitId));
+    }
+
+    private UUID resolveUnitFilter(String unit) {
+        if (unit == null || unit.isBlank()) {
+            return null;
+        }
+        String token = unit.trim();
+        Optional<UUID> parsedId = parseUuid(token);
+        if (parsedId.isPresent()) {
+            return unitOfMeasurementRepository.existsByIdAndIsDeletedFalse(parsedId.get())
+                    ? parsedId.get()
+                    : null;
+        }
+        return unitOfMeasurementRepository.findByTokenIgnoreCase(token).stream()
+                .findFirst()
+                .map(UnitOfMeasurement::getId)
+                .orElse(null);
+    }
+
+    private Optional<UUID> parseUuid(String value) {
+        try {
+            return Optional.of(UUID.fromString(value));
+        } catch (IllegalArgumentException ex) {
+            return Optional.empty();
+        }
     }
 
     private SparePartsWarehouseStatsResponse toResponse(SparePartsWarehouseStatsProjection projection) {
