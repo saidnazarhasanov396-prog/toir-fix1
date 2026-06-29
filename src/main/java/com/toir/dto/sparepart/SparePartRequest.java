@@ -25,8 +25,32 @@ public record SparePartRequest(
         BigDecimal lastPurchasePrice,
         BigDecimal averageCost,
         BigDecimal lastPurchaseCost,
-        CriticalityLevel criticality
+        CriticalityLevel criticality,
+        UUID mxikId
 ) {
+    public SparePartRequest(
+            String code,
+            @NotBlank String name,
+            String sku,
+            InventoryItemKind kind,
+            UUID typeId,
+            SparePartType type,
+            String unit,
+            String specification,
+            String manufacturer,
+            @PositiveOrZero double minStock,
+            UUID preferredSupplierId,
+            Integer leadTimeDays,
+            BigDecimal lastPurchasePrice,
+            BigDecimal averageCost,
+            BigDecimal lastPurchaseCost,
+            CriticalityLevel criticality
+    ) {
+        this(code, name, sku, kind, typeId, type, unit, specification, manufacturer, minStock,
+                preferredSupplierId, leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, criticality,
+                null);
+    }
+
     public SparePartRequest(
             String code,
             @NotBlank String name,
@@ -37,7 +61,7 @@ public record SparePartRequest(
             String manufacturer,
             @PositiveOrZero double minStock
     ) {
-        this(code, name, sku, kind, null, null, unit, specification, manufacturer, minStock, null, null, null, null, null, null);
+        this(code, name, sku, kind, null, null, unit, specification, manufacturer, minStock, null, null, null, null, null, null, null);
     }
 
     public SparePartRequest(
@@ -51,6 +75,6 @@ public record SparePartRequest(
             String manufacturer,
             @PositiveOrZero double minStock
     ) {
-        this(code, name, sku, kind, null, type, unit, specification, manufacturer, minStock, null, null, null, null, null, null);
+        this(code, name, sku, kind, null, type, unit, specification, manufacturer, minStock, null, null, null, null, null, null, null);
     }
 }

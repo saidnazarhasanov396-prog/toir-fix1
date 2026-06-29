@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.sparepart.SparePartDto;
+import com.toir.entity.Mxik;
 import com.toir.entity.SparePart;
 import com.toir.entity.Department;
 import com.toir.entity.Location;
@@ -17,6 +18,7 @@ import com.toir.enums.SparePartType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.LocationRepository;
+import com.toir.repository.MxikRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.SparePartTypeRepository;
 import com.toir.repository.StockMovementRepository;
@@ -74,6 +76,9 @@ class SparePartServiceTest {
     SupplierRepository supplierRepository;
 
     @Mock
+    MxikRepository mxikRepository;
+
+    @Mock
     InventoryTransactionRepository inventoryTransactionRepository;
 
     @Mock
@@ -119,6 +124,7 @@ class SparePartServiceTest {
                 repository,
                 typeRepository,
                 supplierRepository,
+                mxikRepository,
                 inventoryTransactionRepository,
                 stockRepository,
                 stockMovementRepository,
@@ -444,6 +450,18 @@ class SparePartServiceTest {
     }
 
     @Test
+    void mxikFilterUsesMxikAwareRepositoryQuery() {
+        UUID mxikId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilterWithMxik(isNull(), isNull(), isNull(), eq(mxikId), isNull(), any()))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        service.findAll(20, 0, null, null, null, null, "", null, mxikId, null, "asc");
+
+        verify(repository).findAllByFilterWithMxik(isNull(), isNull(), isNull(), eq(mxikId), isNull(), any());
+    }
+
+    @Test
     void unitFilterUnknownUuidPassesNull() {
         UUID unknownId = UUID.randomUUID();
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
@@ -551,6 +569,50 @@ class SparePartServiceTest {
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getType()).isEqualTo(otherType);
         assertThat(captor.getValue().getUnit()).isEqualTo("PCS");
+    }
+
+    @Test
+    void createStoresMxikReference() {
+        String codePrefix = "SP-" + java.time.Year.now().getValue() + "-";
+        UUID mxikId = UUID.randomUUID();
+        Mxik mxik = mxik(mxikId, "8482", "Bearing");
+        com.toir.entity.SparePartType otherType = sparePartType(UUID.randomUUID(), "OTHER", "Other", "PCS");
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(codePrefix + "0001")).thenReturn(false);
+        when(typeRepository.findByCodeIgnoreCaseAndActiveTrue("OTHER")).thenReturn(Optional.of(otherType));
+        when(mxikRepository.findByIdAndIsDeletedFalse(mxikId)).thenReturn(Optional.of(mxik));
+        when(repository.save(any(SparePart.class))).thenAnswer(invocation -> {
+            SparePart saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        SparePartDto result = service.create(new com.toir.dto.sparepart.SparePartRequest(
+                null,
+                "Bearing",
+                "BR-001",
+                InventoryItemKind.SPARE_PART,
+                null,
+                null,
+                "PCS",
+                null,
+                "SKF",
+                0,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                mxikId
+        ));
+
+        ArgumentCaptor<SparePart> captor = ArgumentCaptor.forClass(SparePart.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getMxikId()).isEqualTo(mxikId);
+        assertThat(result.mxikId()).isEqualTo(mxikId);
+        assertThat(result.mxik()).isNotNull();
+        assertThat(result.mxik().kod()).isEqualTo("8482");
     }
 
     @Test
@@ -763,6 +825,15 @@ class SparePartServiceTest {
         sparePart.setUnit("PCS");
         sparePart.setMinStock(0);
         return sparePart;
+    }
+
+    private Mxik mxik(UUID id, String kod, String name) {
+        Mxik mxik = new Mxik();
+        mxik.setId(id);
+        mxik.setKod(kod);
+        mxik.setName(name);
+        mxik.setType("SPARE_PART");
+        return mxik;
     }
 
     private Warehouse warehouse(UUID id, UUID departmentId, UUID responsibleId) {
