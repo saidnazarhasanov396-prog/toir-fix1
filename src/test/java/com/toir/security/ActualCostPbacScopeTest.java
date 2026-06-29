@@ -11,7 +11,9 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostAllocationEventRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -41,6 +43,8 @@ import static org.mockito.Mockito.when;
 class ActualCostPbacScopeTest {
 
     ActualCostRepository repository;
+    ActualCostAllocationEventRepository allocationEventRepository;
+    ActualCostReviewEventRepository reviewEventRepository;
     AuditBuilderService auditBuilderService;
     WorkOrderRepository workOrderRepository;
     RepairRequestRepository repairRequestRepository;
@@ -55,6 +59,8 @@ class ActualCostPbacScopeTest {
     @BeforeEach
     void setUp() {
         repository = mock(ActualCostRepository.class);
+        allocationEventRepository = mock(ActualCostAllocationEventRepository.class);
+        reviewEventRepository = mock(ActualCostReviewEventRepository.class);
         auditBuilderService = mock(AuditBuilderService.class);
         workOrderRepository = mock(WorkOrderRepository.class);
         repairRequestRepository = mock(RepairRequestRepository.class);
@@ -74,6 +80,8 @@ class ActualCostPbacScopeTest {
         );
         service = new ActualCostService(
                 repository,
+                allocationEventRepository,
+                reviewEventRepository,
                 workOrderRepository,
                 repairRequestRepository,
                 contractorWorkRepository,

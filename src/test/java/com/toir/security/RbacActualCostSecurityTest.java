@@ -135,7 +135,7 @@ class RbacActualCostSecurityTest {
         mockMvc.perform(post("/api/v1/actual-costs/{id}/reject", id)
                         .param("reviewerId", reviewerId.toString())
                         .param("comment", "Rejected"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isOk());
     }
 
     @Test

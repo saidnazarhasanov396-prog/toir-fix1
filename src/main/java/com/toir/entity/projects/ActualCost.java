@@ -53,6 +53,18 @@ public class ActualCost extends BaseEntity {
     @Column(name = "review_comment", columnDefinition = "text")
     private String reviewComment;
 
+    @Column(name = "correction_reason", columnDefinition = "text")
+    private String correctionReason;
+
+    @Column(name = "allocation_comment", columnDefinition = "text")
+    private String allocationComment;
+
+    @Column(name = "allocated_by_id")
+    private UUID allocatedById;
+
+    @Column(name = "allocated_at")
+    private Instant allocatedAt;
+
     @Column(nullable = false)
     private double amount;
 
