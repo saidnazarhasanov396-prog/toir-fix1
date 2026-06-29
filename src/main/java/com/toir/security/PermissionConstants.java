@@ -121,13 +121,20 @@ public final class PermissionConstants {
     public static final String BUDGET_CREATE = "BUDGET_CREATE";
     public static final String BUDGET_UPDATE = "BUDGET_UPDATE";
     public static final String BUDGET_APPROVE = "BUDGET_APPROVE";
+    public static final String BUDGET_CLOSE = "BUDGET_CLOSE";
+    public static final String BUDGET_REOPEN = "BUDGET_REOPEN";
+    public static final String BUDGET_TRANSFER = "BUDGET_TRANSFER";
+    public static final String BUDGET_REVISE = "BUDGET_REVISE";
     public static final String ACTUAL_COST_READ = "ACTUAL_COST_READ";
     public static final String ACTUAL_COST_CREATE = "ACTUAL_COST_CREATE";
     public static final String ACTUAL_COST_APPROVE = "ACTUAL_COST_APPROVE";
     public static final String ACTUAL_COST_REJECT = "ACTUAL_COST_REJECT";
+    public static final String ACTUAL_COST_ALLOCATE = "ACTUAL_COST_ALLOCATE";
+    public static final String ACTUAL_COST_REQUEST_CORRECTION = "ACTUAL_COST_REQUEST_CORRECTION";
     public static final String FINANCE_ROUTE_OVERRIDE_READ = "FINANCE_ROUTE_OVERRIDE_READ";
     public static final String FINANCE_ROUTE_OVERRIDE_APPLY = "FINANCE_ROUTE_OVERRIDE_APPLY";
     public static final String FINANCE_ROUTE_OVERRIDE_CLEAR = "FINANCE_ROUTE_OVERRIDE_CLEAR";
+    public static final String FINANCE_REPORT_EXPORT = "FINANCE_REPORT_EXPORT";
 
     public static final String EQUIPMENT_READ = "EQUIPMENT_READ";
     public static final String EQUIPMENT_CREATE = "EQUIPMENT_CREATE";

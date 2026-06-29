@@ -67,10 +67,6 @@ Production must run with the `prod` profile and provide `TOIR_DB_URL`, `TOIR_DB_
 
 ### Firebase Cloud Messaging
 
-FCM push is additive to the existing in-app notification store. Firebase Admin is initialized on startup from `classpath:firebase-service-account.json`, matching the simple bootstrap style used by the Tinder backend.
-
-The service account file currently lives at `src/main/resources/firebase-service-account.json` and is packaged into the application artifact.
-
 DB schema source of truth is Flyway migrations under `db/migration`.
 - `spring.flyway.enabled=true`
 - `spring.flyway.validate-on-migrate=true`

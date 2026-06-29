@@ -240,6 +240,7 @@ public class BudgetSummaryController {
             @RequestParam(required = false) String dateTo,
             @RequestParam(required = false) UUID actualCostId,
             @RequestParam(required = false) String actualCostIds,
+            @RequestParam(required = false) String allocationStatus,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         List<ActualCostReviewItem> items = filterReviewItems(
@@ -256,7 +257,8 @@ public class BudgetSummaryController {
                 parseDateEnd(dateTo),
                 actualCostId,
                 actualCostIds,
-                null
+                null,
+                allocationStatus
         );
         items = sortReviewItems(items, sortBy, sortDir);
         return ResponseEntity.ok(PageResponseWithSummary.of(
@@ -277,7 +279,7 @@ public class BudgetSummaryController {
             String dateTo,
             UUID actualCostId,
             String actualCostIds) {
-        return actualCostRegister(page, size, search, status, costCategoryId, null, null, dateFrom, dateTo, actualCostId, actualCostIds, null, "desc");
+        return actualCostRegister(page, size, search, status, costCategoryId, null, null, dateFrom, dateTo, actualCostId, actualCostIds, null, null, "desc");
     }
 
     @GetMapping("/actual-costs/review-queue")
@@ -296,6 +298,7 @@ public class BudgetSummaryController {
             @RequestParam(required = false) UUID contractorId,
             @RequestParam(required = false) UUID actualCostId,
             @RequestParam(required = false) String actualCostIds,
+            @RequestParam(required = false) String allocationStatus,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         List<ActualCostReviewItem> pending = filterReviewItems(
@@ -312,7 +315,8 @@ public class BudgetSummaryController {
                 null,
                 actualCostId,
                 actualCostIds,
-                myQueue
+                myQueue,
+                allocationStatus
         );
         pending = sortReviewItems(pending, sortBy, sortDir);
         return ResponseEntity.ok(PageResponse.of(
@@ -708,7 +712,8 @@ public class BudgetSummaryController {
                                                          Instant dateTo,
                                                          UUID actualCostId,
                                                          String actualCostIds,
-                                                         Boolean myQueue) {
+                                                         Boolean myQueue,
+                                                         String allocationStatus) {
         Set<UUID> scopedIds = parseActualCostIds(actualCostId, actualCostIds);
         return items.stream()
                 .filter(item -> status == null || status.isBlank() || "ALL".equalsIgnoreCase(status)
@@ -724,7 +729,21 @@ public class BudgetSummaryController {
                 .filter(item -> dateTo == null || item.costDate() == null || item.costDate().isBefore(dateTo))
                 .filter(item -> scopedIds.isEmpty() || scopedIds.contains(item.id()))
                 .filter(item -> !Boolean.TRUE.equals(myQueue) || matchesCurrentReviewQueue(item))
+                .filter(item -> matchesAllocationStatus(item, allocationStatus))
                 .toList();
+    }
+
+    private boolean matchesAllocationStatus(ActualCostReviewItem item, String allocationStatus) {
+        if (allocationStatus == null || allocationStatus.isBlank() || "ALL".equalsIgnoreCase(allocationStatus)) {
+            return true;
+        }
+        if ("UNALLOCATED".equalsIgnoreCase(allocationStatus)) {
+            return item.budgetLine() == null;
+        }
+        if ("ALLOCATED".equalsIgnoreCase(allocationStatus)) {
+            return item.budgetLine() != null;
+        }
+        throw RestException.badRequest("Unsupported allocationStatus: " + allocationStatus);
     }
 
     private List<ActualCostReviewActivityItem> filterActivityItems(List<ActualCostReviewActivityItem> items,

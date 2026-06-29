@@ -4,6 +4,8 @@ import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.ActualCostAllocationEvent;
+import com.toir.entity.projects.ActualCostReviewEvent;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairRequest;
@@ -15,7 +17,9 @@ import com.toir.enums.BudgetStatus;
 import com.toir.enums.NotificationSeverity;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostAllocationEventRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
+import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -41,6 +45,8 @@ public class ActualCostService {
     private static final double EPSILON = 0.000001d;
 
     private final ActualCostRepository repository;
+    private final ActualCostAllocationEventRepository allocationEventRepository;
+    private final ActualCostReviewEventRepository reviewEventRepository;
     private final WorkOrderRepository workOrderRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final ContractorWorkRepository contractorWorkRepository;
@@ -164,6 +170,68 @@ public class ActualCostService {
         return ActualCostDto.from(saved);
     }
 
+    @Transactional
+    public ActualCostDto allocateBudgetLine(UUID id, UUID budgetLineId, UUID actorUserId, String comment) {
+        if (comment == null || comment.isBlank()) {
+            throw RestException.badRequest("Allocation comment is required");
+        }
+        ActualCost cost = repository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Actual cost not found: " + id));
+        financeScopeService.assertCanMutateActualCost(cost);
+        if (cost.getStatus() != ActualCostStatus.PENDING && cost.getStatus() != ActualCostStatus.REJECTED) {
+            throw RestException.badRequest("Only PENDING or REJECTED actual costs can be allocated");
+        }
+
+        BudgetLine line = requireBudgetLine(budgetLineId);
+        assertBudgetLineUsable(line);
+        assertAllocationCostCategoryCompatible(cost, line);
+        assertAllocationDepartmentCompatible(cost, line);
+
+        UUID oldBudgetLineId = cost.getBudgetLineId();
+        String normalizedComment = comment.trim();
+        cost.setBudgetLineId(budgetLineId);
+        cost.setAllocationComment(normalizedComment);
+        cost.setAllocatedById(actorUserId);
+        cost.setAllocatedAt(Instant.now());
+
+        ActualCost saved = repository.save(cost);
+        ActualCostAllocationEvent event = new ActualCostAllocationEvent();
+        event.setActualCostId(saved.getId());
+        event.setOldBudgetLineId(oldBudgetLineId);
+        event.setNewBudgetLineId(budgetLineId);
+        event.setActorUserId(actorUserId);
+        event.setComment(normalizedComment);
+        event.setOccurredAt(Instant.now());
+        allocationEventRepository.save(event);
+        recordReviewEvent(saved.getId(), actorUserId, "ALLOCATION", "ALLOCATED",
+                "Actual cost allocated to budget line", normalizedComment, saved.getStatus().name());
+        return ActualCostDto.from(saved);
+    }
+
+    @Transactional
+    public ActualCostDto requestCorrection(UUID id, UUID actorUserId, String comment) {
+        if (comment == null || comment.isBlank()) {
+            throw RestException.badRequest("Correction comment is required");
+        }
+        ActualCost cost = repository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Actual cost not found: " + id));
+        financeScopeService.assertCanMutateActualCost(cost);
+        if (cost.getStatus() != ActualCostStatus.PENDING && cost.getStatus() != ActualCostStatus.REJECTED) {
+            throw RestException.badRequest("Only PENDING or REJECTED actual costs can be sent for correction");
+        }
+
+        String normalizedComment = comment.trim();
+        cost.setStatus(ActualCostStatus.REJECTED);
+        cost.setCorrectionReason(normalizedComment);
+        cost.setReviewComment(normalizedComment);
+        cost.setReviewedById(actorUserId);
+        cost.setReviewedAt(Instant.now());
+        ActualCost saved = repository.save(cost);
+        recordReviewEvent(saved.getId(), actorUserId, "REVIEW", "CORRECTION_REQUESTED",
+                "Actual cost correction requested", normalizedComment, saved.getStatus().name());
+        return ActualCostDto.from(saved);
+    }
+
     private void assertCanCreateActualCost(ActualCostDto request,
                                            WorkOrder workOrder,
                                            RepairRequest repairRequest,
@@ -270,6 +338,46 @@ public class ActualCostService {
         }
     }
 
+    private void assertAllocationCostCategoryCompatible(ActualCost cost, BudgetLine line) {
+        if (cost.getCostCategoryId() != null
+                && line.getCostCategoryId() != null
+                && !cost.getCostCategoryId().equals(line.getCostCategoryId())) {
+            throw RestException.badRequest("Cost category is not compatible with the selected budget line");
+        }
+    }
+
+    private void assertAllocationDepartmentCompatible(ActualCost cost, BudgetLine line) {
+        MaintenanceBudget budget = line.getBudget();
+        if (budget == null || budget.getDepartmentId() == null) {
+            return;
+        }
+        UUID sourceDepartmentId = resolveActualCostDepartment(cost);
+        if (sourceDepartmentId != null && !budget.getDepartmentId().equals(sourceDepartmentId)) {
+            throw RestException.badRequest("Budget line department does not match actual cost source department");
+        }
+    }
+
+    private UUID resolveActualCostDepartment(ActualCost cost) {
+        if (cost.getWorkOrderId() != null) {
+            return workOrderRepository.findByIdAndIsDeletedFalse(cost.getWorkOrderId())
+                    .map(WorkOrder::getDepartmentId)
+                    .orElse(null);
+        }
+        if (cost.getRepairRequestId() != null) {
+            return repairRequestRepository.findByIdAndIsDeletedFalse(cost.getRepairRequestId())
+                    .map(RepairRequest::getDepartmentId)
+                    .orElse(null);
+        }
+        if (cost.getContractorWorkId() != null) {
+            return contractorWorkRepository.findByIdAndIsDeletedFalse(cost.getContractorWorkId())
+                    .map(ContractorWork::getWorkOrderId)
+                    .flatMap(workOrderRepository::findByIdAndIsDeletedFalse)
+                    .map(WorkOrder::getDepartmentId)
+                    .orElse(null);
+        }
+        return null;
+    }
+
     private void assertBudgetRemaining(BudgetLine line, double amount) {
         double alreadyApproved = repository.sumAmountByBudgetLineIdAndStatusAndIsDeletedFalse(
                 line.getId(), ActualCostStatus.APPROVED);
@@ -349,5 +457,25 @@ public class ActualCostService {
     private BudgetLine requireBudgetLine(UUID budgetLineId) {
         return budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)
                 .orElseThrow(() -> RestException.notFound("Budget line not found: " + budgetLineId));
+    }
+
+    private void recordReviewEvent(UUID actualCostId,
+                                   UUID actorUserId,
+                                   String eventGroup,
+                                   String eventCode,
+                                   String title,
+                                   String description,
+                                   String status) {
+        ActualCostReviewEvent event = new ActualCostReviewEvent();
+        event.setActualCostId(actualCostId);
+        event.setActorUserId(actorUserId);
+        event.setSource("SYSTEM");
+        event.setEventGroup(eventGroup);
+        event.setEventCode(eventCode);
+        event.setTitle(title);
+        event.setDescription(description);
+        event.setStatus(status);
+        event.setOccurredAt(Instant.now());
+        reviewEventRepository.save(event);
     }
 }
