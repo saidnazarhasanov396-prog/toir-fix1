@@ -18,6 +18,9 @@ class RolePermissionMatrixTest {
     private static final Path MIGRATION = Path.of(
             "src/main/resources/db/migration/V20260519_3__seed_granular_role_permissions.sql"
     );
+    private static final Path FINANCE_PERMISSION_REPAIR_MIGRATION = Path.of(
+            "src/main/resources/db/migration/V20260627_11__finance_permission_seed_repair.sql"
+    );
 
     @Test
     void migrationSeedsConservativePermissionsForBuiltInRoles() throws Exception {
@@ -221,7 +224,8 @@ class RolePermissionMatrixTest {
     @Test
     void optionalRolesAreUpdatedOnlyIfRowsAlreadyExist() throws Exception {
         Map<String, Set<String>> matrix = migrationMatrix();
-        String sql = Files.readString(MIGRATION).toLowerCase();
+        String sql = (Files.readString(MIGRATION) + "\n" + Files.readString(FINANCE_PERMISSION_REPAIR_MIGRATION))
+                .toLowerCase();
 
         assertThat(matrix.get("FINANCE_MANAGER")).contains(
                 PermissionConstants.ACTUAL_COST_APPROVE,
@@ -254,7 +258,7 @@ class RolePermissionMatrixTest {
     }
 
     private Map<String, Set<String>> migrationMatrix() throws Exception {
-        String sql = Files.readString(MIGRATION);
+        String sql = Files.readString(MIGRATION) + "\n" + Files.readString(FINANCE_PERMISSION_REPAIR_MIGRATION);
         Pattern callPattern = Pattern.compile(
                 "append_role_permissions\\('([^']+)',\\s*ARRAY\\[(.*?)\\]\\)",
                 Pattern.CASE_INSENSITIVE | Pattern.DOTALL
@@ -263,13 +267,12 @@ class RolePermissionMatrixTest {
         java.util.LinkedHashMap<String, Set<String>> matrix = new java.util.LinkedHashMap<>();
         while (matcher.find()) {
             String roleCode = matcher.group(1);
-            Set<String> permissions = new LinkedHashSet<>();
+            Set<String> permissions = matrix.computeIfAbsent(roleCode, ignored -> new LinkedHashSet<>());
             Arrays.stream(matcher.group(2).split(","))
                     .map(String::trim)
                     .map(value -> value.replace("'", ""))
                     .filter(value -> !value.isBlank())
                     .forEach(permissions::add);
-            matrix.put(roleCode, permissions);
         }
         return matrix;
     }

@@ -13,12 +13,12 @@ class FirebaseConfigTest {
             .withUserConfiguration(FirebaseConfig.class);
 
     @Test
-    void initializesFirebaseMessagingFromClasspathServiceAccount() {
+    void doesNotInitializeFirebaseMessagingWithoutEnabledCredentials() {
         contextRunner
                 .run(context -> {
                     assertThat(context).hasNotFailed();
-                    assertThat(context).hasSingleBean(FirebaseApp.class);
-                    assertThat(context).hasSingleBean(FirebaseMessaging.class);
+                    assertThat(context).doesNotHaveBean(FirebaseApp.class);
+                    assertThat(context).doesNotHaveBean(FirebaseMessaging.class);
                 });
     }
 }
