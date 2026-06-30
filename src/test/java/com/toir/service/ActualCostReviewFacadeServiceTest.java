@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.entity.Counteragent;
 import com.toir.entity.Department;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
@@ -7,6 +8,7 @@ import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.FinancialApprovalRule;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.CounteragentStatus;
 import com.toir.enums.ContractorWorkStatus;
 import com.toir.enums.NotificationSeverity;
 import com.toir.dto.notification.NotificationDto;
@@ -64,6 +66,8 @@ class ActualCostReviewFacadeServiceTest {
     CostCategoryRepository costCategoryRepository;
     @Mock
     FinancialApprovalRuleRepository financialApprovalRuleRepository;
+    @Mock
+    CounteragentService counteragentService;
 
     @InjectMocks
     ActualCostReviewFacadeService service;
@@ -72,7 +76,7 @@ class ActualCostReviewFacadeServiceTest {
     void actualCostRegisterEnrichesDepartmentContractorWorkOrderAndCostCategoryRefs() {
         UUID actualCostId = UUID.randomUUID();
         UUID contractorWorkId = UUID.randomUUID();
-        UUID contractorId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         UUID workOrderId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         UUID costCategoryId = UUID.randomUUID();
@@ -88,7 +92,7 @@ class ActualCostReviewFacadeServiceTest {
 
         ContractorWork contractorWork = new ContractorWork();
         ReflectionTestUtils.setField(contractorWork, "id", contractorWorkId);
-        contractorWork.setContractorId(contractorId);
+        contractorWork.setCounteragentId(counteragentId);
         contractorWork.setWorkOrderId(workOrderId);
         contractorWork.setDescription("Pump contractor work");
         contractorWork.setStatus(ContractorWorkStatus.IN_PROGRESS);
@@ -119,15 +123,25 @@ class ActualCostReviewFacadeServiceTest {
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department));
         when(costCategoryRepository.findByIdAndIsDeletedFalse(costCategoryId)).thenReturn(Optional.of(costCategory));
+        when(counteragentService.load(counteragentId)).thenReturn(counteragent(counteragentId, "CA-1", "Counteragent"));
 
         var item = service.actualCostRegister("pump").getFirst();
 
         assertThat(item.department()).hasFieldOrPropertyWithValue("id", departmentId);
         assertThat(item.workOrder()).hasFieldOrPropertyWithValue("id", workOrderId);
         assertThat(item.costCategory()).hasFieldOrPropertyWithValue("id", costCategoryId);
-        assertThat(item.contractorWork()).hasFieldOrPropertyWithValue("id", contractorWorkId);
-        Object contractor = ((com.toir.dto.financialreview.ActualCostReviewItem.ContractorWorkRef) item.contractorWork()).contractor();
-        assertThat(contractor).hasFieldOrPropertyWithValue("id", contractorId);
+        assertThat(item.counteragentWork()).hasFieldOrPropertyWithValue("id", contractorWorkId);
+        Object counteragent = ((com.toir.dto.financialreview.ActualCostReviewItem.CounteragentWorkRef) item.counteragentWork()).counteragent();
+        assertThat(counteragent).hasFieldOrPropertyWithValue("id", counteragentId);
+    }
+
+    private Counteragent counteragent(UUID id, String code, String name) {
+        Counteragent counteragent = new Counteragent();
+        ReflectionTestUtils.setField(counteragent, "id", id);
+        counteragent.setCode(code);
+        counteragent.setName(name);
+        counteragent.setStatus(CounteragentStatus.ACTIVE);
+        return counteragent;
     }
 
     @Test

@@ -11,7 +11,6 @@ import com.toir.enums.BudgetStatus;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
-import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
@@ -20,6 +19,7 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.ApprovalService;
+import com.toir.service.CounteragentService;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.FinanceReportService;
 import com.toir.service.ReportsService;
@@ -97,7 +97,7 @@ class RbacBudgetSecurityTest {
     ContractorWorkRepository contractorWorkRepository;
 
     @MockBean
-    ContractorRepository contractorRepository;
+    CounteragentService counteragentService;
 
     @MockBean
     WorkOrderRepository workOrderRepository;

@@ -25,8 +25,8 @@ public record ProcurementRequestDto(
         UUID approvedBy,
         UUID responsibleId,
         PriorityLevel priority,
-        UUID supplierId,
-        String supplierName,
+        UUID counteragentId,
+        String counteragentName,
         ProcurementRequestType type,
         UUID sourceDefectId,
         String sourceDefectTitle,
@@ -152,13 +152,13 @@ public record ProcurementRequestDto(
                                              String departmentName,
                                              String warehouseName,
                                              Map<UUID, SparePart> sparePartsById,
-                                             Map<UUID, String> supplierNamesById,
-                                             Map<UUID, String> warrantySupplierNamesById) {
+                                             Map<UUID, String> counteragentNamesById,
+                                             Map<UUID, String> warrantyCounteragentNamesById) {
         Map<UUID, SparePart> safeSparePartsById = sparePartsById == null ? Map.of() : sparePartsById;
-        Map<UUID, String> safeSupplierNamesById = supplierNamesById == null ? Map.of() : supplierNamesById;
-        Map<UUID, String> safeWarrantySupplierNamesById = warrantySupplierNamesById == null
+        Map<UUID, String> safeCounteragentNamesById = counteragentNamesById == null ? Map.of() : counteragentNamesById;
+        Map<UUID, String> safeWarrantyCounteragentNamesById = warrantyCounteragentNamesById == null
                 ? Map.of()
-                : warrantySupplierNamesById;
+                : warrantyCounteragentNamesById;
         return new ProcurementRequestDto(
                 r.getId(),
                 r.getNumber(),
@@ -172,8 +172,8 @@ public record ProcurementRequestDto(
                 r.getApprovedBy(),
                 r.getResponsibleId(),
                 r.getPriority() == null ? PriorityLevel.MEDIUM : r.getPriority(),
-                r.getSupplierId(),
-                r.getSupplierId() == null ? null : safeSupplierNamesById.get(r.getSupplierId()),
+                r.getCounteragentId(),
+                r.getCounteragentId() == null ? null : safeCounteragentNamesById.get(r.getCounteragentId()),
                 r.getType() == null ? ProcurementRequestType.SPARE_PART : r.getType(),
                 r.getSourceDefectId(),
                 r.getSourceDefectTitle(),
@@ -192,9 +192,9 @@ public record ProcurementRequestDto(
                         .map(line -> ProcurementRequestLineDto.from(
                                 line,
                                 line.getSparePartId() == null ? null : safeSparePartsById.get(line.getSparePartId()),
-                                line.getWarrantySupplierId() == null
+                                line.getWarrantyCounteragentId() == null
                                         ? null
-                                        : safeWarrantySupplierNamesById.get(line.getWarrantySupplierId())
+                                        : safeWarrantyCounteragentNamesById.get(line.getWarrantyCounteragentId())
                         ))
                         .toList()
         );

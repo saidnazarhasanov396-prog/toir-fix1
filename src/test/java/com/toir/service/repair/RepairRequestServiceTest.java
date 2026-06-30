@@ -23,7 +23,7 @@ import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
-import com.toir.entity.Supplier;
+import com.toir.entity.Counteragent;
 import com.toir.entity.users.User;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.DefectStatus;
@@ -39,6 +39,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WarrantyHandling;
+import com.toir.enums.CounteragentStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.UserStatus;
@@ -47,7 +48,6 @@ import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.MeterReadingRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -65,6 +65,7 @@ import com.toir.repository.repair.RepairRequestTemplateRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.MeterService;
+import com.toir.service.CounteragentService;
 import com.toir.service.NotificationService;
 import com.toir.service.OperationalIssueLifecycleSyncService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
@@ -113,7 +114,7 @@ class RepairRequestServiceTest {
     EquipmentRepository equipmentRepository;
 
     @Mock
-    SupplierRepository supplierRepository;
+    CounteragentService counteragentService;
 
     @Mock
     DepartmentRepository departmentRepository;
@@ -406,22 +407,22 @@ class RepairRequestServiceTest {
     }
 
     @Test
-    void warrantyPreviewReturnsActiveWarrantySupplierContact() {
+    void warrantyPreviewReturnsActiveWarrantyCounteragentContact() {
         UUID equipmentId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         LocalDate warrantyStart = LocalDate.now().minusDays(2);
         LocalDate warrantyEnd = LocalDate.now().plusMonths(6);
         Equipment equipment = equipment(equipmentId, UUID.randomUUID());
         equipment.setHasWarranty(true);
         equipment.setWarrantyStartDate(warrantyStart);
         equipment.setWarrantyEndDate(warrantyEnd);
-        equipment.setWarrantySupplierId(supplierId);
-        Supplier supplier = supplier(supplierId, "KSB Service");
-        supplier.setContactPerson("Ali Valiyev");
-        supplier.setPhone("+998901234567");
-        supplier.setEmail("service@ksb.example");
+        equipment.setWarrantyCounteragentId(counteragentId);
+        Counteragent counteragent = counteragent(counteragentId, "KSB Service");
+        counteragent.setContactPerson("Ali Valiyev");
+        counteragent.setPhone("+998901234567");
+        counteragent.setEmail("service@ksb.example");
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId)).thenReturn(Optional.of(supplier));
+        when(counteragentService.load(counteragentId)).thenReturn(counteragent);
 
         WarrantyPreviewResponse result = service.getWarrantyPreview(equipmentId);
 
@@ -429,19 +430,19 @@ class RepairRequestServiceTest {
         assertThat(result.currentlyActive()).isTrue();
         assertThat(result.warrantyStartDate()).isEqualTo(warrantyStart);
         assertThat(result.warrantyEndDate()).isEqualTo(warrantyEnd);
-        assertThat(result.warrantySupplierId()).isEqualTo(supplierId);
-        assertThat(result.warrantySupplierName()).isEqualTo("KSB Service");
-        assertThat(result.warrantySupplierContactPerson()).isEqualTo("Ali Valiyev");
-        assertThat(result.warrantySupplierPhone()).isEqualTo("+998901234567");
-        assertThat(result.warrantySupplierEmail()).isEqualTo("service@ksb.example");
+        assertThat(result.warrantyCounteragentId()).isEqualTo(counteragentId);
+        assertThat(result.warrantyCounteragentName()).isEqualTo("KSB Service");
+        assertThat(result.warrantyCounteragentContactPerson()).isEqualTo("Ali Valiyev");
+        assertThat(result.warrantyCounteragentPhone()).isEqualTo("+998901234567");
+        assertThat(result.warrantyCounteragentEmail()).isEqualTo("service@ksb.example");
     }
 
     @Test
-    void createStoresWarrantySupplierSnapshotWhenWarrantyActive() {
+    void createStoresWarrantyCounteragentSnapshotWhenWarrantyActive() {
         UUID equipmentId = UUID.randomUUID();
         UUID equipmentDepartmentId = UUID.randomUUID();
         UUID savedRequestId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         LocalDate warrantyStart = LocalDate.now().minusDays(1);
         LocalDate warrantyEnd = LocalDate.now().plusMonths(3);
         RepairRequestRequest request = createRequestWithoutDepartment(equipmentId);
@@ -449,15 +450,15 @@ class RepairRequestServiceTest {
         equipment.setHasWarranty(true);
         equipment.setWarrantyStartDate(warrantyStart);
         equipment.setWarrantyEndDate(warrantyEnd);
-        equipment.setWarrantySupplierId(supplierId);
-        Supplier supplier = supplier(supplierId, "Warranty Vendor");
-        supplier.setContactPerson("Nodir");
-        supplier.setPhone("+998971112233");
-        supplier.setEmail("warranty@example.com");
+        equipment.setWarrantyCounteragentId(counteragentId);
+        Counteragent counteragent = counteragent(counteragentId, "Warranty Vendor");
+        counteragent.setContactPerson("Nodir");
+        counteragent.setPhone("+998971112233");
+        counteragent.setEmail("warranty@example.com");
 
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId)).thenReturn(Optional.of(supplier));
+        when(counteragentService.load(counteragentId)).thenReturn(counteragent);
         when(repository.save(any(RepairRequest.class))).thenAnswer(invocation -> {
             RepairRequest saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", savedRequestId);
@@ -472,17 +473,17 @@ class RepairRequestServiceTest {
 
         RepairRequestDto result = service.create(request);
 
-        assertThat(result.warrantySupplierId()).isEqualTo(supplierId);
-        assertThat(result.warrantySupplierName()).isEqualTo("Warranty Vendor");
+        assertThat(result.warrantyCounteragentId()).isEqualTo(counteragentId);
+        assertThat(result.warrantyCounteragentName()).isEqualTo("Warranty Vendor");
         assertThat(result.warrantyStartDateAtCreation()).isEqualTo(warrantyStart);
         assertThat(result.warrantyEndDateAtCreation()).isEqualTo(warrantyEnd);
         verify(repository).save(argThat(saved ->
                 Boolean.TRUE.equals(saved.getWarrantyActiveAtCreation())
-                        && supplierId.equals(saved.getWarrantySupplierId())
-                        && "Warranty Vendor".equals(saved.getWarrantySupplierName())
-                        && "Nodir".equals(saved.getWarrantySupplierContactPerson())
-                        && "+998971112233".equals(saved.getWarrantySupplierPhone())
-                        && "warranty@example.com".equals(saved.getWarrantySupplierEmail())
+                        && counteragentId.equals(saved.getWarrantyCounteragentId())
+                        && "Warranty Vendor".equals(saved.getWarrantyCounteragentName())
+                        && "Nodir".equals(saved.getWarrantyCounteragentContactPerson())
+                        && "+998971112233".equals(saved.getWarrantyCounteragentPhone())
+                        && "warranty@example.com".equals(saved.getWarrantyCounteragentEmail())
                         && warrantyStart.equals(saved.getWarrantyStartDateAtCreation())
                         && warrantyEnd.equals(saved.getWarrantyEndDateAtCreation())
         ));
@@ -2173,13 +2174,13 @@ class RepairRequestServiceTest {
         return equipment;
     }
 
-    private Supplier supplier(UUID supplierId, String name) {
-        Supplier supplier = new Supplier();
-        supplier.setId(supplierId);
-        supplier.setCode("SUP-" + supplierId.toString().substring(0, 8));
-        supplier.setName(name);
-        supplier.setActive(true);
-        return supplier;
+    private Counteragent counteragent(UUID counteragentId, String name) {
+        Counteragent counteragent = new Counteragent();
+        counteragent.setId(counteragentId);
+        counteragent.setCode("CA-" + counteragentId.toString().substring(0, 8));
+        counteragent.setName(name);
+        counteragent.setStatus(CounteragentStatus.ACTIVE);
+        return counteragent;
     }
 
     private RepairRequestRequest createRequestWithoutDepartment(UUID equipmentId) {

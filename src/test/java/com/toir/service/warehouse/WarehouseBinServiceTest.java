@@ -2,6 +2,7 @@ package com.toir.service.warehouse;
 
 import com.toir.dto.warehouse.WarehouseBinRequest;
 import com.toir.dto.warehouse.WarehouseBinStatusRequest;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseBin;
 import com.toir.entity.warehouse.WarehouseStockBalance;
 import com.toir.enums.WarehouseQualityZoneType;
@@ -30,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -121,6 +123,8 @@ class WarehouseBinServiceTest {
                 eq(2),
                 eq(PageRequest.of(1, 5))
         )).thenReturn(new PageImpl<>(List.of(bin), PageRequest.of(1, 5), 6));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId)))
+                .thenReturn(List.of(warehouse(warehouseId, "Central Warehouse")));
 
         var result = service.list(
                 warehouseId,
@@ -143,7 +147,57 @@ class WarehouseBinServiceTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().getFirst().id()).isEqualTo(bin.getId());
+        assertThat(result.getContent().getFirst().warehouseName()).isEqualTo("Central Warehouse");
         assertThat(result.getTotalElements()).isEqualTo(6);
+    }
+
+    @Test
+    void listAllowsMissingWarehouseIdAndReturnsWarehouseName() {
+        UUID warehouseId = UUID.randomUUID();
+        WarehouseBin bin = bin(warehouseId, UUID.randomUUID());
+        when(binRepository.search(
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(PageRequest.of(0, 20))
+        )).thenReturn(new PageImpl<>(List.of(bin), PageRequest.of(0, 20), 1));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId)))
+                .thenReturn(List.of(warehouse(warehouseId, "Central Warehouse")));
+
+        var result = service.list(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                0,
+                20
+        );
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().warehouseId()).isEqualTo(warehouseId);
+        assertThat(result.getContent().getFirst().warehouseName()).isEqualTo("Central Warehouse");
+        verify(warehouseRepository, never()).existsByIdAndIsDeletedFalse(null);
     }
 
     @Test
@@ -235,5 +289,12 @@ class WarehouseBinServiceTest {
         bin.setCode("A-01-02-03");
         bin.setActive(true);
         return bin;
+    }
+
+    private Warehouse warehouse(UUID warehouseId, String name) {
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        warehouse.setName(name);
+        return warehouse;
     }
 }

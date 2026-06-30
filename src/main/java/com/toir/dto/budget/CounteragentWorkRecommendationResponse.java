@@ -2,8 +2,8 @@ package com.toir.dto.budget;
 
 import java.util.UUID;
 
-public record ContractorWorkRecommendationResponse(
-        ContractorWorkRef contractorWork,
+public record CounteragentWorkRecommendationResponse(
+        CounteragentWorkRef counteragentWork,
         double expectedAmount,
         double reflectedAmount,
         double submittedAmount,
@@ -16,17 +16,17 @@ public record ContractorWorkRecommendationResponse(
         BudgetRef recommendedBudget,
         BudgetLineRef recommendedBudgetLine
 ) {
-    public record ContractorWorkRef(
+    public record CounteragentWorkRef(
             UUID id,
             String description,
             String status,
             Double cost,
-            ContractorRef contractor,
+            CounteragentRef counteragent,
             WorkOrderRef workOrder
     ) {
     }
 
-    public record ContractorRef(UUID id, String code, String name) {
+    public record CounteragentRef(UUID id, String code, String name) {
     }
 
     public record WorkOrderRef(UUID id, String number, String title, UUID departmentId) {

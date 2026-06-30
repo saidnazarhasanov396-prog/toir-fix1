@@ -21,7 +21,7 @@ public record WorkOrderRequest(
         UUID defectId,
         UUID defectListId,
         UUID pprTaskId,
-        UUID contractorId,
+        UUID counteragentId,
         UUID performerId,
         @NotNull WorkOrderType type,
         WorkType workType,
@@ -52,7 +52,7 @@ public record WorkOrderRequest(
             UUID defectId,
             UUID defectListId,
             UUID pprTaskId,
-            UUID contractorId,
+            UUID counteragentId,
             UUID performerId,
             @NotNull WorkOrderType type,
             WorkType workType,
@@ -69,7 +69,7 @@ public record WorkOrderRequest(
             Boolean stoppageActRequired
     ) {
         this(number, title, equipmentId, equipmentNodeId, locationId, departmentId, workLocationNote,
-                repairRequestId, defectId, defectListId, pprTaskId, contractorId, performerId, type, workType,
+                repairRequestId, defectId, defectListId, pprTaskId, counteragentId, performerId, type, workType,
                 warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
                 summary, maintenanceDueEventId, cycleKey, repairActRequired, stoppageActRequired, null, null, null);
     }
@@ -86,7 +86,7 @@ public record WorkOrderRequest(
             UUID defectId,
             UUID defectListId,
             UUID pprTaskId,
-            UUID contractorId,
+            UUID counteragentId,
             UUID performerId,
             @NotNull WorkOrderType type,
             WorkType workType,
@@ -105,7 +105,7 @@ public record WorkOrderRequest(
             UUID repairCampaignStageId
     ) {
         this(number, title, equipmentId, equipmentNodeId, locationId, departmentId, workLocationNote,
-                repairRequestId, defectId, defectListId, pprTaskId, contractorId, performerId, type, workType,
+                repairRequestId, defectId, defectListId, pprTaskId, counteragentId, performerId, type, workType,
                 warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
                 summary, maintenanceDueEventId, cycleKey, repairActRequired, stoppageActRequired,
                 repairCampaignId, repairCampaignStageId, null);
@@ -123,7 +123,7 @@ public record WorkOrderRequest(
             UUID defectId,
             UUID defectListId,
             UUID pprTaskId,
-            UUID contractorId,
+            UUID counteragentId,
             UUID performerId,
             @NotNull WorkOrderType type,
             WorkType workType,
@@ -138,7 +138,7 @@ public record WorkOrderRequest(
             String cycleKey
     ) {
         this(number, title, equipmentId, equipmentNodeId, locationId, departmentId, workLocationNote,
-                repairRequestId, defectId, defectListId, pprTaskId, contractorId, performerId, type, workType,
+                repairRequestId, defectId, defectListId, pprTaskId, counteragentId, performerId, type, workType,
                 warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
                 summary, maintenanceDueEventId, cycleKey, null, null, null, null, null);
     }
@@ -152,7 +152,7 @@ public record WorkOrderRequest(
             UUID repairRequestId,
             UUID defectId,
             UUID pprTaskId,
-            UUID contractorId,
+            UUID counteragentId,
             UUID performerId,
             @NotNull WorkOrderType type,
             WorkType workType,
@@ -167,7 +167,7 @@ public record WorkOrderRequest(
             String cycleKey
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId,
-                null, pprTaskId, contractorId, performerId, type, workType, warehouseId, replacementEquipmentId, priority,
+                null, pprTaskId, counteragentId, performerId, type, workType, warehouseId, replacementEquipmentId, priority,
                 startPlannedAt, endPlannedAt, createdById, summary, maintenanceDueEventId, cycleKey,
                 null, null, null, null, null);
     }
@@ -181,7 +181,7 @@ public record WorkOrderRequest(
             UUID repairRequestId,
             UUID defectId,
             UUID pprTaskId,
-            UUID contractorId,
+            UUID counteragentId,
             @NotNull WorkOrderType type,
             WorkType workType,
             UUID warehouseId,
@@ -195,7 +195,7 @@ public record WorkOrderRequest(
             String cycleKey
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
-                contractorId, null, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
+                counteragentId, null, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
                 endPlannedAt, createdById, summary, maintenanceDueEventId, cycleKey,
                 null, null, null, null, null);
     }
@@ -209,7 +209,7 @@ public record WorkOrderRequest(
             UUID repairRequestId,
             UUID defectId,
             UUID pprTaskId,
-            UUID contractorId,
+            UUID counteragentId,
             @NotNull WorkOrderType type,
             WorkType workType,
             UUID warehouseId,
@@ -221,7 +221,7 @@ public record WorkOrderRequest(
             String summary
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
-                contractorId, null, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
+                counteragentId, null, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
                 endPlannedAt, createdById, summary, null, null, null, null, null, null, null);
     }
 
@@ -234,7 +234,7 @@ public record WorkOrderRequest(
             UUID repairRequestId,
             UUID defectId,
             UUID pprTaskId,
-            UUID contractorId,
+            UUID counteragentId,
             UUID performerId,
             @NotNull WorkOrderType type,
             WorkType workType,
@@ -247,7 +247,7 @@ public record WorkOrderRequest(
             String summary
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
-                contractorId, performerId, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
+                counteragentId, performerId, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
                 endPlannedAt, createdById, summary, null, null, null, null, null, null, null);
     }
 
@@ -258,7 +258,7 @@ public record WorkOrderRequest(
                             UUID repairRequestId,
                             UUID defectId,
                             UUID pprTaskId,
-                            UUID contractorId,
+                            UUID counteragentId,
                             @NotNull WorkOrderType type,
                             WorkType workType,
                             UUID warehouseId,
@@ -268,7 +268,7 @@ public record WorkOrderRequest(
                             Instant endPlannedAt,
                             UUID createdById,
                             String summary) {
-        this(number, title, equipmentId, null, null, departmentId, null, repairRequestId, defectId, null, pprTaskId, contractorId, null, type,
+        this(number, title, equipmentId, null, null, departmentId, null, repairRequestId, defectId, null, pprTaskId, counteragentId, null, type,
                 workType, warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
                 summary, null, null, null, null, null, null, null);
     }
@@ -286,7 +286,7 @@ public record WorkOrderRequest(
                 defectId,
                 defectListId,
                 pprTaskId,
-                contractorId,
+                counteragentId,
                 performerId,
                 type,
                 workType,

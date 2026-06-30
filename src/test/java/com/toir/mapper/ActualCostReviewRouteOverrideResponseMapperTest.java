@@ -67,7 +67,7 @@ class ActualCostReviewRouteOverrideResponseMapperTest {
         assertThat(response.actualCost().id()).isEqualTo(actualCostId);
         assertThat(response.actualCost().routeSource()).isEqualTo("OVERRIDE");
         assertThat(response.actualCost().department()).isNotNull();
-        assertThat(response.actualCost().contractorWork()).isNotNull();
+        assertThat(response.actualCost().counteragentWork()).isNotNull();
         assertThat(response.createdBy()).isNotNull();
         assertThat(response.deactivatedBy()).isNotNull();
     }
@@ -102,7 +102,7 @@ class ActualCostReviewRouteOverrideResponseMapperTest {
         assertThat(response.actualCost().costCategory()).isNotNull();
         assertThat(response.actualCost().approvalRule()).isNotNull();
         assertThat(response.actualCost().workOrder()).isNotNull();
-        assertThat(response.actualCost().contractorWork()).isNotNull();
+        assertThat(response.actualCost().counteragentWork()).isNotNull();
     }
 
     @Test
@@ -133,7 +133,7 @@ class ActualCostReviewRouteOverrideResponseMapperTest {
         assertThat(response.actualCost().approvalRule().code()).isEqualTo("");
         assertThat(response.actualCost().workOrder().number()).isEqualTo("");
         assertThat(response.actualCost().workOrder().title()).isEqualTo("");
-        assertThat(response.actualCost().contractorWork().description()).isEqualTo("");
-        assertThat(response.actualCost().contractorWork().contractor().code()).isEqualTo("");
+        assertThat(response.actualCost().counteragentWork().description()).isEqualTo("");
+        assertThat(response.actualCost().counteragentWork().counteragent().name()).isEqualTo("");
     }
 }

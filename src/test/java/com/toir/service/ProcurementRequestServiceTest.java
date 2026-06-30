@@ -7,10 +7,10 @@ import com.toir.dto.procurement.ProcurementReceiptResponse;
 import com.toir.dto.procurement.ProcurementRequestRequest;
 import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.dto.wms.WmsDocumentGroupRequest;
+import com.toir.entity.Counteragent;
 import com.toir.entity.PprTask;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
-import com.toir.entity.Supplier;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
@@ -30,7 +30,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementType;
-import com.toir.enums.SupplierType;
+import com.toir.enums.CounteragentStatus;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WmsDocumentOperationType;
 import com.toir.enums.WarehouseEquipmentStatus;
@@ -40,7 +40,6 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -115,7 +114,7 @@ class ProcurementRequestServiceTest {
     WarehouseRepository warehouseRepository;
 
     @Mock
-    SupplierRepository supplierRepository;
+    CounteragentService counteragentService;
 
     @Mock
     ScopeAccessService scopeAccessService;
@@ -159,7 +158,7 @@ class ProcurementRequestServiceTest {
                 lowStockRecommendationService,
                 actualCostRepository,
                 costCategoryRepository,
-                supplierRepository,
+                counteragentService,
                 toirStockService,
                 legacyStockProjectionService,
                 coordinateValidator,
@@ -289,19 +288,19 @@ class ProcurementRequestServiceTest {
     }
 
     @Test
-    void creatingDraftRequestCanStoreScopedSupplier() {
+    void creatingDraftRequestCanStoreScopedCounteragent() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID sparePartId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         SparePart sparePart = sparePart(sparePartId);
-        Supplier supplier = supplier(supplierId, SupplierType.SPARE_PART);
+        Counteragent counteragent = counteragent(counteragentId);
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
-        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId)).thenReturn(Optional.of(supplier));
-        when(supplierRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(supplier));
+        when(counteragentService.loadActive(eq(counteragentId), any())).thenReturn(counteragent);
+        when(counteragentService.load(counteragentId)).thenReturn(counteragent);
         when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var result = service.create(new ProcurementRequestRequest(
-                "Supplier procurement",
+                "Counteragent procurement",
                 null,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -312,18 +311,18 @@ class ProcurementRequestServiceTest {
                 null,
                 null,
                 PriorityLevel.MEDIUM,
-                supplierId
+                counteragentId
         ));
 
-        assertThat(result.supplierId()).isEqualTo(supplierId);
-        assertThat(result.supplierName()).isEqualTo("Supplier");
+        assertThat(result.counteragentId()).isEqualTo(counteragentId);
+        assertThat(result.counteragentName()).isEqualTo("Counteragent");
         ArgumentCaptor<ProcurementRequest> saved = ArgumentCaptor.forClass(ProcurementRequest.class);
         verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getSupplierId()).isEqualTo(supplierId);
+        assertThat(saved.getValue().getCounteragentId()).isEqualTo(counteragentId);
     }
 
     @Test
-    void orderingRequiresSupplierWhenRequestDoesNotHaveOne() {
+    void orderingRequiresCounteragentWhenRequestDoesNotHaveOne() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.APPROVED,
@@ -332,26 +331,26 @@ class ProcurementRequestServiceTest {
 
         assertThatThrownBy(() -> service.markOrdered(requestId, new ProcurementOrderRequest(null, null, null, List.of())))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Supplier is required");
+                .hasMessageContaining("Counteragent is required");
 
         verify(repository, never()).save(any());
     }
 
     @Test
-    void orderingValidatesSupplierScopeForProcurementType() {
+    void orderingRejectsInactiveCounteragent() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.APPROVED,
                 List.of(equipmentLine(UUID.randomUUID(), "CNS pump", 1, null)));
         request.setType(ProcurementRequestType.EQUIPMENT);
         when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
-        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
-                .thenReturn(Optional.of(supplier(supplierId, SupplierType.SPARE_PART)));
+        when(counteragentService.loadActive(eq(counteragentId), any()))
+                .thenThrow(RestException.badRequest("Inactive counteragents cannot be selected for procurement counteragent"));
 
-        assertThatThrownBy(() -> service.markOrdered(requestId, new ProcurementOrderRequest(supplierId, null, null, List.of())))
+        assertThatThrownBy(() -> service.markOrdered(requestId, new ProcurementOrderRequest(counteragentId, null, null, List.of())))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("EQUIPMENT");
+                .hasMessageContaining("Inactive counteragents");
 
         verify(repository, never()).save(any());
     }
@@ -360,18 +359,18 @@ class ProcurementRequestServiceTest {
     void orderingAppliesEquipmentLineWarrantyDefaults() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
         ProcurementRequestLine line = equipmentLine(equipmentTypeId, "CNS pump", 1, null);
         ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.APPROVED, List.of(line));
         request.setType(ProcurementRequestType.EQUIPMENT);
         when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
-        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
-                .thenReturn(Optional.of(supplier(supplierId, SupplierType.EQUIPMENT)));
+        when(counteragentService.loadActive(eq(counteragentId), any())).thenReturn(counteragent(counteragentId));
+        when(counteragentService.load(counteragentId)).thenReturn(counteragent(counteragentId));
         when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var result = service.markOrdered(requestId, new ProcurementOrderRequest(
-                supplierId,
+                counteragentId,
                 null,
                 null,
                 List.of(new EquipmentWarrantyLineRequest(
@@ -385,9 +384,9 @@ class ProcurementRequestServiceTest {
         ));
 
         assertThat(result.status()).isEqualTo(ProcurementRequestStatus.ORDERED);
-        assertThat(result.supplierId()).isEqualTo(supplierId);
+        assertThat(result.counteragentId()).isEqualTo(counteragentId);
         assertThat(result.lines().getFirst().hasWarranty()).isTrue();
-        assertThat(result.lines().getFirst().warrantySupplierId()).isEqualTo(supplierId);
+        assertThat(result.lines().getFirst().warrantyCounteragentId()).isEqualTo(counteragentId);
         assertThat(result.lines().getFirst().warrantyStartDate()).isEqualTo(LocalDate.of(2026, 6, 25));
         assertThat(result.lines().getFirst().warrantyEndDate()).isEqualTo(LocalDate.of(2027, 6, 25));
     }
@@ -654,18 +653,18 @@ class ProcurementRequestServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
-        UUID warrantySupplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
+        UUID warrantyCounteragentId = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
         UUID binId = UUID.randomUUID();
         ProcurementRequestLine line = equipmentLine(equipmentTypeId, "CNS pump", 2, 5_000_000.0);
         line.setHasWarranty(true);
         line.setWarrantyStartDate(LocalDate.of(2026, 6, 18));
         line.setWarrantyEndDate(LocalDate.of(2027, 6, 18));
-        line.setWarrantySupplierId(warrantySupplierId);
+        line.setWarrantyCounteragentId(warrantyCounteragentId);
         ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
         request.setType(ProcurementRequestType.EQUIPMENT);
-        request.setSupplierId(supplierId);
+        request.setCounteragentId(counteragentId);
         when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
@@ -714,9 +713,9 @@ class ProcurementRequestServiceTest {
                     assertThat(equipment.getProcurementRequestId()).isEqualTo(requestId);
                     assertThat(equipment.getProcurementRequestLineId()).isEqualTo(line.getId());
                     assertThat(equipment.getProcurementStockMovementId()).isEqualTo(movement.getId());
-                    assertThat(equipment.getSupplierId()).isEqualTo(supplierId);
+                    assertThat(equipment.getCounteragentId()).isEqualTo(counteragentId);
                     assertThat(equipment.getHasWarranty()).isTrue();
-                    assertThat(equipment.getWarrantySupplierId()).isEqualTo(warrantySupplierId);
+                    assertThat(equipment.getWarrantyCounteragentId()).isEqualTo(warrantyCounteragentId);
                     assertThat(equipment.getWarrantyStartDate()).isEqualTo(LocalDate.of(2026, 6, 18));
                     assertThat(equipment.getWarrantyEndDate()).isEqualTo(LocalDate.of(2027, 6, 18));
                 });
@@ -1033,14 +1032,13 @@ class ProcurementRequestServiceTest {
         return sparePart;
     }
 
-    private Supplier supplier(UUID supplierId, SupplierType supplierType) {
-        Supplier supplier = new Supplier();
-        supplier.setId(supplierId);
-        supplier.setCode("SUP-1");
-        supplier.setName("Supplier");
-        supplier.setActive(true);
-        supplier.setSupplierType(supplierType);
-        return supplier;
+    private Counteragent counteragent(UUID counteragentId) {
+        Counteragent counteragent = new Counteragent();
+        counteragent.setId(counteragentId);
+        counteragent.setCode("CA-1");
+        counteragent.setName("Counteragent");
+        counteragent.setStatus(CounteragentStatus.ACTIVE);
+        return counteragent;
     }
 
     private EquipmentType equipmentType(UUID id, String name) {

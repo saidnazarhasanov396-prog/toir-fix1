@@ -86,10 +86,10 @@ class FinancialReviewOverrideControllerContractTest {
                         null,
                         new DepartmentShortDto(null, null, null),
                         new WorkOrderShortDto(null, null, null),
-                        new ContractorWorkShortDto(
+                        new CounteragentWorkShortDto(
                                 null,
                                 null,
-                                new ContractorShortDto(null, null),
+                                new CounteragentShortDto(null, null),
                                 new WorkOrderShortDto(null, null, null)
                         )
                 ),

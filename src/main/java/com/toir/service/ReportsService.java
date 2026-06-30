@@ -234,7 +234,7 @@ public class ReportsService {
                 List.of("id", "number", "title", "equipmentId", "departmentId",
                         "type", "priority", "status", "createdById", "approvedById",
                         "startPlannedAt", "endPlannedAt", "startedAt", "completedAt",
-                        "result", "repairRequestId", "pprTaskId", "contractorId"),
+                        "result", "repairRequestId", "pprTaskId", "counteragentId"),
                 items,
                 List.of(
                         WorkOrder::getId,
@@ -254,7 +254,7 @@ public class ReportsService {
                         WorkOrder::getResult,
                         WorkOrder::getRepairRequestId,
                         WorkOrder::getPprTaskId,
-                        WorkOrder::getContractorId
+                        WorkOrder::getCounteragentId
                 ));
         return new CsvFile("work-orders.csv", csv);
     }

@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.CompletionAct;
 import com.toir.entity.CertificationType;
+import com.toir.entity.Counteragent;
 import com.toir.entity.Department;
 import com.toir.entity.FileAsset;
 import com.toir.entity.LaborEntry;
@@ -21,7 +22,6 @@ import com.toir.entity.PprTask;
 import com.toir.entity.Reservation;
 import com.toir.entity.SafetyPermit;
 import com.toir.entity.UploadedFile;
-import com.toir.entity.contractors.Contractor;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.equipment.Equipment;
@@ -45,6 +45,7 @@ import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.EquipmentNodeType;
 import com.toir.enums.AttachmentTargetType;
+import com.toir.enums.CounteragentStatus;
 import com.toir.enums.FileCategory;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
@@ -84,7 +85,6 @@ import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.WorkExecutionRepository;
-import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -215,7 +215,7 @@ class WorkOrderServiceTest {
     WorkExecutionRepository workExecutionRepository;
 
     @Mock
-    ContractorRepository contractorRepository;
+    CounteragentService counteragentService;
 
     @Mock
     RepairMaterialUsageRepository repairMaterialUsageRepository;
@@ -607,7 +607,7 @@ class WorkOrderServiceTest {
                 base.repairRequestId(),
                 base.defectId(),
                 base.pprTaskId(),
-                base.contractorId(),
+                base.counteragentId(),
                 base.type(),
                 base.workType(),
                 base.warehouseId(),
@@ -625,7 +625,7 @@ class WorkOrderServiceTest {
                 request.repairRequestId(),
                 request.defectId(),
                 request.pprTaskId(),
-                request.contractorId(),
+                request.counteragentId(),
                 request.type(),
                 request.workType(),
                 request.warehouseId(),
@@ -701,7 +701,7 @@ class WorkOrderServiceTest {
                 base.defectId(),
                 base.defectListId(),
                 base.pprTaskId(),
-                base.contractorId(),
+                base.counteragentId(),
                 base.performerId(),
                 base.type(),
                 base.workType(),
@@ -1511,22 +1511,22 @@ class WorkOrderServiceTest {
     }
 
     @Test
-    void findByIdReturnsAssignedContractorReference() {
+    void findByIdReturnsAssignedCounteragentReference() {
         UUID workOrderId = UUID.randomUUID();
-        UUID contractorId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
-        workOrder.setContractorId(contractorId);
-        Contractor contractor = contractor(contractorId, "CTR-2026-0007", "Tashkent Service LLC");
+        workOrder.setCounteragentId(counteragentId);
+        Counteragent counteragent = counteragent(counteragentId, "CA-2026-0007", "Tashkent Service LLC");
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(contractorRepository.findByIdAndIsDeletedFalse(contractorId)).thenReturn(Optional.of(contractor));
+        when(counteragentService.load(counteragentId)).thenReturn(counteragent);
         stubLifecycleDtoLookups(workOrder);
 
         WorkOrderDto response = service.findById(workOrderId);
 
-        assertThat(response.contractor()).isNotNull();
-        assertThat(response.contractor().id()).isEqualTo(contractorId);
-        assertThat(response.contractor().code()).isEqualTo("CTR-2026-0007");
-        assertThat(response.contractor().name()).isEqualTo("Tashkent Service LLC");
+        assertThat(response.counteragent()).isNotNull();
+        assertThat(response.counteragent().id()).isEqualTo(counteragentId);
+        assertThat(response.counteragent().code()).isEqualTo("CA-2026-0007");
+        assertThat(response.counteragent().name()).isEqualTo("Tashkent Service LLC");
     }
 
     @Test
@@ -3803,7 +3803,7 @@ class WorkOrderServiceTest {
                 repairRequestId,
                 defectId,
                 base.pprTaskId(),
-                base.contractorId(),
+                base.counteragentId(),
                 base.type(),
                 base.workType(),
                 base.warehouseId(),
@@ -3826,7 +3826,7 @@ class WorkOrderServiceTest {
                 base.repairRequestId(),
                 base.defectId(),
                 base.pprTaskId(),
-                base.contractorId(),
+                base.counteragentId(),
                 base.type(),
                 base.workType(),
                 base.warehouseId(),
@@ -3849,7 +3849,7 @@ class WorkOrderServiceTest {
                 base.repairRequestId(),
                 base.defectId(),
                 pprTaskId,
-                base.contractorId(),
+                base.counteragentId(),
                 base.type(),
                 base.workType(),
                 base.warehouseId(),
@@ -3876,7 +3876,7 @@ class WorkOrderServiceTest {
                 base.defectId(),
                 base.defectListId(),
                 base.pprTaskId(),
-                base.contractorId(),
+                base.counteragentId(),
                 base.performerId(),
                 base.type(),
                 base.workType(),
@@ -3903,7 +3903,7 @@ class WorkOrderServiceTest {
                 base.repairRequestId(),
                 base.defectId(),
                 base.pprTaskId(),
-                base.contractorId(),
+                base.counteragentId(),
                 base.type(),
                 base.workType(),
                 base.warehouseId(),
@@ -3936,7 +3936,7 @@ class WorkOrderServiceTest {
                 base.repairRequestId(),
                 base.defectId(),
                 base.pprTaskId(),
-                base.contractorId(),
+                base.counteragentId(),
                 performerId,
                 base.type(),
                 base.workType(),
@@ -3964,7 +3964,7 @@ class WorkOrderServiceTest {
                 base.defectId(),
                 defectListId,
                 base.pprTaskId(),
-                base.contractorId(),
+                base.counteragentId(),
                 base.performerId(),
                 type,
                 base.workType(),
@@ -4160,12 +4160,13 @@ class WorkOrderServiceTest {
         return user;
     }
 
-    private Contractor contractor(UUID id, String code, String name) {
-        Contractor contractor = new Contractor();
-        contractor.setId(id);
-        contractor.setCode(code);
-        contractor.setName(name);
-        return contractor;
+    private Counteragent counteragent(UUID id, String code, String name) {
+        Counteragent counteragent = new Counteragent();
+        counteragent.setId(id);
+        counteragent.setCode(code);
+        counteragent.setName(name);
+        counteragent.setStatus(CounteragentStatus.ACTIVE);
+        return counteragent;
     }
 
     private void mockSuccessfulCreateDependencies(WorkOrderRequest request) {

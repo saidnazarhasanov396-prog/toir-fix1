@@ -109,13 +109,10 @@ public final class PermissionConstants {
     public static final String PROCUREMENT_ORDER = "PROCUREMENT_ORDER";
     public static final String PROCUREMENT_RECEIVE = "PROCUREMENT_RECEIVE";
     public static final String PROCUREMENT_CANCEL = "PROCUREMENT_CANCEL";
-    public static final String CONTRACTOR_READ = "CONTRACTOR_READ";
-    public static final String CONTRACTOR_CREATE = "CONTRACTOR_CREATE";
-    public static final String CONTRACTOR_UPDATE = "CONTRACTOR_UPDATE";
-    public static final String CONTRACTOR_DELETE = "CONTRACTOR_DELETE";
-    public static final String SUPPLIER_READ = "SUPPLIER_READ";
-    public static final String SUPPLIER_CREATE = "SUPPLIER_CREATE";
-    public static final String SUPPLIER_UPDATE = "SUPPLIER_UPDATE";
+    public static final String COUNTERAGENT_READ = "COUNTERAGENT_READ";
+    public static final String COUNTERAGENT_CREATE = "COUNTERAGENT_CREATE";
+    public static final String COUNTERAGENT_UPDATE = "COUNTERAGENT_UPDATE";
+    public static final String COUNTERAGENT_DELETE = "COUNTERAGENT_DELETE";
     public static final String PURCHASE_ORDER_READ = "PURCHASE_ORDER_READ";
     public static final String PURCHASE_ORDER_CREATE = "PURCHASE_ORDER_CREATE";
     public static final String PURCHASE_ORDER_APPROVE = "PURCHASE_ORDER_APPROVE";

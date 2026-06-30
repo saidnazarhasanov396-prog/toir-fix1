@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.UUID;
 
 public record PurchaseOrderRequest(
-        @NotNull UUID supplierId,
+        @NotNull UUID counteragentId,
         @NotNull UUID warehouseId,
         LocalDate expectedDeliveryDate,
         String comment,

@@ -25,8 +25,8 @@ public record ProcurementRequestLineDto(
         LocalDate warrantyStartDate,
         LocalDate warrantyEndDate,
         Integer warrantyDurationMonths,
-        UUID warrantySupplierId,
-        String warrantySupplierName
+        UUID warrantyCounteragentId,
+        String warrantyCounteragentName
 ) {
     public ProcurementRequestLineDto(UUID id,
                                      UUID requestId,
@@ -51,19 +51,19 @@ public record ProcurementRequestLineDto(
         return from(l, sparePart, null);
     }
 
-    public static ProcurementRequestLineDto from(ProcurementRequestLine l, SparePart sparePart, String warrantySupplierName) {
+    public static ProcurementRequestLineDto from(ProcurementRequestLine l, SparePart sparePart, String warrantyCounteragentName) {
         return from(
                 l,
                 sparePart == null ? null : sparePart.getCode(),
                 sparePart == null ? null : sparePart.getName(),
-                warrantySupplierName
+                warrantyCounteragentName
         );
     }
 
     private static ProcurementRequestLineDto from(ProcurementRequestLine l,
                                                   String sparePartCode,
                                                   String sparePartName,
-                                                  String warrantySupplierName) {
+                                                  String warrantyCounteragentName) {
         return new ProcurementRequestLineDto(
                 l.getId(),
                 l.getRequest() != null ? l.getRequest().getId() : null,
@@ -83,8 +83,8 @@ public record ProcurementRequestLineDto(
                 l.getWarrantyStartDate(),
                 l.getWarrantyEndDate(),
                 l.getWarrantyDurationMonths(),
-                l.getWarrantySupplierId(),
-                warrantySupplierName
+                l.getWarrantyCounteragentId(),
+                warrantyCounteragentName
         );
     }
 }

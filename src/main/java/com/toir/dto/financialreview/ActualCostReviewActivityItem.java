@@ -26,7 +26,7 @@ public record ActualCostReviewActivityItem(
         String status,
         Object department,
         Object contractor,
-        Object contractorWork,
+        Object counteragentWork,
         Object workOrder,
         String historyPath,
         String actionPath

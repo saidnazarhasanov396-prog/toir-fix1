@@ -7,11 +7,10 @@ import com.toir.dto.sparepartforecast.SparePartForecastSummaryDto;
 import com.toir.dto.warehouse.InventoryReplenishmentReason;
 import com.toir.dto.warehouse.InventoryReplenishmentRecommendationDto;
 import com.toir.dto.warehouse.ReorderSuggestionDto;
+import com.toir.entity.Counteragent;
 import com.toir.entity.SparePart;
-import com.toir.entity.Supplier;
 import com.toir.enums.NotificationSeverity;
 import com.toir.repository.SparePartRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.service.maintanance.SparePartForecastService;
 import com.toir.util.PaginationUtils;
 import java.time.Instant;
@@ -36,7 +35,7 @@ public class InventoryReplenishmentRecommendationService {
     private final WarehouseReorderService reorderService;
     private final SparePartForecastService forecastService;
     private final SparePartRepository sparePartRepository;
-    private final SupplierRepository supplierRepository;
+    private final CounteragentService counteragentService;
 
     @Transactional(readOnly = true)
     public Page<InventoryReplenishmentRecommendationDto> recommendations(Integer days,
@@ -197,7 +196,7 @@ public class InventoryReplenishmentRecommendationService {
         NotificationSeverity severity = severity(availableStock, minStock, maintenanceDemandQty,
                 maintenanceShortageQty, totalShortageQty, reorderUrgency);
         List<SparePartForecastSourceDto> sources = forecastSources == null ? List.of() : List.copyOf(forecastSources);
-        SupplierRecommendation supplier = supplierRecommendation(sparePartId);
+        CounteragentRecommendation counteragent = counteragentRecommendation(sparePartId);
 
         return new InventoryReplenishmentRecommendationDto(
                 sparePartId,
@@ -216,9 +215,9 @@ public class InventoryReplenishmentRecommendationService {
                 projectedBalance,
                 totalShortageQty,
                 suggestedOrderQty,
-                supplier.supplierId(),
-                supplier.supplierName(),
-                supplier.expectedDeliveryDate(),
+                counteragent.counteragentId(),
+                counteragent.counteragentName(),
+                counteragent.expectedDeliveryDate(),
                 severity,
                 reason,
                 sources.size(),
@@ -227,23 +226,23 @@ public class InventoryReplenishmentRecommendationService {
         );
     }
 
-    private SupplierRecommendation supplierRecommendation(UUID sparePartId) {
+    private CounteragentRecommendation counteragentRecommendation(UUID sparePartId) {
         if (sparePartId == null) {
-            return new SupplierRecommendation(null, null, null);
+            return new CounteragentRecommendation(null, null, null);
         }
         SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(sparePartId).orElse(null);
         if (sparePart == null) {
-            return new SupplierRecommendation(null, null, null);
+            return new CounteragentRecommendation(null, null, null);
         }
-        Supplier supplier = sparePart.getPreferredSupplierId() == null
+        Counteragent counteragent = sparePart.getPreferredCounteragentId() == null
                 ? null
-                : supplierRepository.findByIdAndIsDeletedFalse(sparePart.getPreferredSupplierId()).orElse(null);
+                : counteragentService.load(sparePart.getPreferredCounteragentId());
         LocalDate expectedDeliveryDate = sparePart.getLeadTimeDays() == null
                 ? null
                 : LocalDate.now(ZoneOffset.UTC).plusDays(sparePart.getLeadTimeDays());
-        return new SupplierRecommendation(
-                sparePart.getPreferredSupplierId(),
-                supplier == null ? null : supplier.getName(),
+        return new CounteragentRecommendation(
+                sparePart.getPreferredCounteragentId(),
+                counteragent == null ? null : counteragent.getName(),
                 expectedDeliveryDate
         );
     }
@@ -320,6 +319,6 @@ public class InventoryReplenishmentRecommendationService {
     private record RecommendationKey(UUID sparePartId, UUID warehouseId) {
     }
 
-    private record SupplierRecommendation(UUID supplierId, String supplierName, LocalDate expectedDeliveryDate) {
+    private record CounteragentRecommendation(UUID counteragentId, String counteragentName, LocalDate expectedDeliveryDate) {
     }
 }

@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/warehouses/{warehouseId}/bins")
+@RequestMapping("/api/v1/warehouses")
 @Tag(name = "warehouse-bins")
 @RequiresSensitiveAccess
 @RequiredArgsConstructor
@@ -35,7 +35,7 @@ public class WarehouseBinController {
 
     private final WarehouseBinService service;
 
-    @GetMapping
+    @GetMapping("/{warehouseId}/bins")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_READ') or hasAuthority('WAREHOUSE_READ') or hasAuthority('STOCK_READ')")
     public ResponseEntity<Page<WarehouseBinDto>> list(@PathVariable UUID warehouseId,
                                                       @RequestParam(required = false) String search,
@@ -73,13 +73,51 @@ public class WarehouseBinController {
         ));
     }
 
-    @GetMapping("/{binId}")
+    @GetMapping("/bins")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_READ') or hasAuthority('WAREHOUSE_READ') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<Page<WarehouseBinDto>> listAll(@RequestParam(required = false) UUID warehouseId,
+                                                         @RequestParam(required = false) String search,
+                                                         @RequestParam(required = false) String zone,
+                                                         @RequestParam(required = false) String aisle,
+                                                         @RequestParam(required = false) String rack,
+                                                         @RequestParam(required = false) String shelfLevel,
+                                                         @RequestParam(required = false) String binType,
+                                                         @RequestParam(required = false) WarehouseQualityZoneType qualityZoneType,
+                                                         @RequestParam(required = false) String temperatureZone,
+                                                         @RequestParam(required = false) String hazardClass,
+                                                         @RequestParam(required = false) Boolean active,
+                                                         @RequestParam(required = false) Boolean blocked,
+                                                         @RequestParam(required = false) Boolean frozen,
+                                                         @RequestParam(required = false) Integer binLevel,
+                                                         @RequestParam(defaultValue = "0") int page,
+                                                         @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(service.list(
+                warehouseId,
+                search,
+                zone,
+                aisle,
+                rack,
+                shelfLevel,
+                binType,
+                qualityZoneType,
+                temperatureZone,
+                hazardClass,
+                active,
+                blocked,
+                frozen,
+                binLevel,
+                page,
+                size
+        ));
+    }
+
+    @GetMapping("/{warehouseId}/bins/{binId}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_READ') or hasAuthority('WAREHOUSE_READ') or hasAuthority('STOCK_READ')")
     public ResponseEntity<WarehouseBinDto> get(@PathVariable UUID warehouseId, @PathVariable UUID binId) {
         return ResponseEntity.ok(service.get(warehouseId, binId));
     }
 
-    @PostMapping
+    @PostMapping("/{warehouseId}/bins")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_MANAGE')")
     public ResponseEntity<WarehouseBinDto> create(
             @PathVariable UUID warehouseId,
@@ -88,7 +126,7 @@ public class WarehouseBinController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(warehouseId, request));
     }
 
-    @PutMapping("/{binId}")
+    @PutMapping("/{warehouseId}/bins/{binId}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_MANAGE')")
     public ResponseEntity<WarehouseBinDto> update(
             @PathVariable UUID warehouseId,
@@ -98,7 +136,7 @@ public class WarehouseBinController {
         return ResponseEntity.ok(service.update(warehouseId, binId, request));
     }
 
-    @PostMapping("/{binId}/block")
+    @PostMapping("/{warehouseId}/bins/{binId}/block")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_MANAGE')")
     public ResponseEntity<WarehouseBinDto> block(
             @PathVariable UUID warehouseId,
@@ -108,13 +146,13 @@ public class WarehouseBinController {
         return ResponseEntity.ok(service.block(warehouseId, binId, request));
     }
 
-    @PostMapping("/{binId}/unblock")
+    @PostMapping("/{warehouseId}/bins/{binId}/unblock")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_MANAGE')")
     public ResponseEntity<WarehouseBinDto> unblock(@PathVariable UUID warehouseId, @PathVariable UUID binId) {
         return ResponseEntity.ok(service.unblock(warehouseId, binId));
     }
 
-    @PostMapping("/{binId}/freeze")
+    @PostMapping("/{warehouseId}/bins/{binId}/freeze")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_MANAGE')")
     public ResponseEntity<WarehouseBinDto> freeze(
             @PathVariable UUID warehouseId,
@@ -124,13 +162,13 @@ public class WarehouseBinController {
         return ResponseEntity.ok(service.freeze(warehouseId, binId, request));
     }
 
-    @PostMapping("/{binId}/unfreeze")
+    @PostMapping("/{warehouseId}/bins/{binId}/unfreeze")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_MANAGE')")
     public ResponseEntity<WarehouseBinDto> unfreeze(@PathVariable UUID warehouseId, @PathVariable UUID binId) {
         return ResponseEntity.ok(service.unfreeze(warehouseId, binId));
     }
 
-    @GetMapping("/{binId}/stock-balances")
+    @GetMapping("/{warehouseId}/bins/{binId}/stock-balances")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_READ') or hasAuthority('WAREHOUSE_READ') or hasAuthority('STOCK_READ')")
     public ResponseEntity<List<WarehouseStockBalanceDto>> stockBalances(
             @PathVariable UUID warehouseId,

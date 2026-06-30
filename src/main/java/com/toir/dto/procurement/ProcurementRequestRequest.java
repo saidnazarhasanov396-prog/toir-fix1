@@ -22,7 +22,7 @@ public record ProcurementRequestRequest(
         UUID sourcePprTaskId,
         UUID responsibleId,
         PriorityLevel priority,
-        UUID supplierId
+        UUID counteragentId
 ) {
     public ProcurementRequestRequest(@NotBlank String title,
                                      String description,

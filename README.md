@@ -117,7 +117,7 @@ Warning: universal `truncate`/`drop` operations are for local/demo reset only an
 | `repairrequest`, `defect`, `defectcategory`, `defectseverity`, `failurereason`, `rootcause` | Requests, defects and their classifiers |
 | `workorder`, `workexecution`, `laborentry`, `safetypermit`, `completionact`, `materialusage` | Work orders and execution flow |
 | `sparepart`, `material`, `warehouse`, `stockmovement`, `reservation` | Inventory, stock, reservations, write-offs |
-| `contractor`, `contractorcontract`, `contractorwork` | Contractors, contracts, accepted works |
+| `counteragent`, `counteragentcontract`, `counteragentwork` | Counteragents, contracts, accepted works |
 | `budget`, `actualcost`, `costcategory` | Budgets, lines, actual costs with review |
 | `downtime`, `reliability` | Downtime events, MTBF/MTTR metrics |
 | `notification` | User notifications |

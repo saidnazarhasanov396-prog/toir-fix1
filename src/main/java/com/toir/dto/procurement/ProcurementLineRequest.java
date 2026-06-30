@@ -16,7 +16,7 @@ public record ProcurementLineRequest(
         LocalDate warrantyStartDate,
         LocalDate warrantyEndDate,
         Integer warrantyDurationMonths,
-        UUID warrantySupplierId
+        UUID warrantyCounteragentId
 ) {
     public ProcurementLineRequest(UUID sparePartId,
                                   @Positive double quantity,

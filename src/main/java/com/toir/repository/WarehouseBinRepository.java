@@ -22,7 +22,7 @@ public interface WarehouseBinRepository extends JpaRepository<WarehouseBin, UUID
     @Query("""
             select b
             from WarehouseBin b
-            where b.warehouseId = :warehouseId
+            where (:warehouseId is null or b.warehouseId = :warehouseId)
               and b.isDeleted = false
               and (cast(:search as string) is null
                    or lower(coalesce(b.code, '')) like lower(concat('%', cast(:search as string), '%'))

@@ -1,6 +1,6 @@
 package com.toir.entity;
 
-import com.toir.enums.SupplierType;
+import com.toir.enums.CounteragentStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,19 +13,25 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "suppliers")
+@Table(name = "counteragents")
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class Supplier extends BaseEntity {
+public class Counteragent extends BaseEntity {
 
     @Column(nullable = false, unique = true, length = 100)
     private String code;
 
     @Column(nullable = false)
     private String name;
+
+    @Column(name = "tax_number")
+    private String taxNumber;
+
+    @Column(name = "base_inn")
+    private String baseInn;
 
     @Column(name = "contact_person")
     private String contactPerson;
@@ -37,11 +43,7 @@ public class Supplier extends BaseEntity {
     @Column(columnDefinition = "text")
     private String address;
 
-    @Column(name = "tax_number")
-    private String taxNumber;
-
-    @Column(name = "base_inn")
-    private String baseInn;
+    private String specialization;
 
     @Column(name = "director_name")
     private String directorName;
@@ -52,14 +54,9 @@ public class Supplier extends BaseEntity {
     @Column(name = "bank_account")
     private String bankAccount;
 
-    @Column(name = "mfo")
     private String mfo;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "supplier_type", nullable = false, length = 32)
-    @Builder.Default
-    private SupplierType supplierType = SupplierType.BOTH;
-
-    @Column(nullable = false)
-    private Boolean active = true;
+    @Column(nullable = false, length = 32)
+    private CounteragentStatus status = CounteragentStatus.ACTIVE;
 }

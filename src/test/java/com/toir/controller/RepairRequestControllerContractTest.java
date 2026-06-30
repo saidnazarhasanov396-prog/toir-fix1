@@ -220,10 +220,10 @@ class RepairRequestControllerContractTest {
     }
 
     @Test
-    void warrantyPreviewReturnsSupplierSnapshotShapeAndChecksScope() throws Exception {
+    void warrantyPreviewReturnsCounteragentSnapshotShapeAndChecksScope() throws Exception {
         UUID equipmentId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(service.resolveDepartmentIdForEquipment(equipmentId)).thenReturn(departmentId);
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
@@ -232,7 +232,7 @@ class RepairRequestControllerContractTest {
                 true,
                 LocalDate.of(2026, 6, 1),
                 LocalDate.of(2027, 6, 1),
-                supplierId,
+                counteragentId,
                 "KSB Service",
                 "Ali Valiyev",
                 "+998901234567",
@@ -244,11 +244,11 @@ class RepairRequestControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.equipmentId").value(equipmentId.toString()))
                 .andExpect(jsonPath("$.currentlyActive").value(true))
-                .andExpect(jsonPath("$.warrantySupplierId").value(supplierId.toString()))
-                .andExpect(jsonPath("$.warrantySupplierName").value("KSB Service"))
-                .andExpect(jsonPath("$.warrantySupplierContactPerson").value("Ali Valiyev"))
-                .andExpect(jsonPath("$.warrantySupplierPhone").value("+998901234567"))
-                .andExpect(jsonPath("$.warrantySupplierEmail").value("service@ksb.example"));
+                .andExpect(jsonPath("$.warrantyCounteragentId").value(counteragentId.toString()))
+                .andExpect(jsonPath("$.warrantyCounteragentName").value("KSB Service"))
+                .andExpect(jsonPath("$.warrantyCounteragentContactPerson").value("Ali Valiyev"))
+                .andExpect(jsonPath("$.warrantyCounteragentPhone").value("+998901234567"))
+                .andExpect(jsonPath("$.warrantyCounteragentEmail").value("service@ksb.example"));
 
         verify(service).resolveDepartmentIdForEquipment(equipmentId);
         verify(service).getWarrantyPreview(equipmentId);

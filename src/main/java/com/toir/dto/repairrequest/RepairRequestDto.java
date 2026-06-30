@@ -51,11 +51,11 @@ public record RepairRequestDto(
         Instant supplierContactedAt,
         String supplierResponse,
         String emergencyReason,
-        UUID warrantySupplierId,
-        String warrantySupplierName,
-        String warrantySupplierContactPerson,
-        String warrantySupplierPhone,
-        String warrantySupplierEmail,
+        UUID warrantyCounteragentId,
+        String warrantyCounteragentName,
+        String warrantyCounteragentContactPerson,
+        String warrantyCounteragentPhone,
+        String warrantyCounteragentEmail,
         LocalDate warrantyStartDateAtCreation,
         LocalDate warrantyEndDateAtCreation
 ) {

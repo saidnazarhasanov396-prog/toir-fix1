@@ -4,6 +4,7 @@ import com.toir.dto.warehouse.WarehouseBinDto;
 import com.toir.dto.warehouse.WarehouseBinRequest;
 import com.toir.dto.warehouse.WarehouseBinStatusRequest;
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseBin;
 import com.toir.enums.WarehouseQualityZoneType;
 import com.toir.exception.RestException;
@@ -21,8 +22,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -51,8 +54,10 @@ public class WarehouseBinService {
                                       Integer binLevel,
                                       int page,
                                       int size) {
-        assertWarehouseExists(warehouseId);
-        return binRepository.search(
+        if (warehouseId != null) {
+            assertWarehouseExists(warehouseId);
+        }
+        Page<WarehouseBin> bins = binRepository.search(
                 warehouseId,
                 trimToNull(search),
                 trimToNull(zone),
@@ -68,7 +73,9 @@ public class WarehouseBinService {
                 frozen,
                 binLevel,
                 PaginationUtils.pageRequest(page, size)
-        ).map(WarehouseBinDto::from);
+        );
+        Map<UUID, String> warehouseNames = warehouseNamesById(bins.getContent());
+        return bins.map(bin -> WarehouseBinDto.from(bin, warehouseNames.get(bin.getWarehouseId())));
     }
 
     @Transactional(readOnly = true)
@@ -204,6 +211,20 @@ public class WarehouseBinService {
         if (warehouseId == null || !warehouseRepository.existsByIdAndIsDeletedFalse(warehouseId)) {
             throw RestException.notFound("Warehouse not found: " + warehouseId);
         }
+    }
+
+    private Map<UUID, String> warehouseNamesById(List<WarehouseBin> bins) {
+        List<UUID> warehouseIds = bins.stream()
+                .map(WarehouseBin::getWarehouseId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (warehouseIds.isEmpty()) {
+            return Map.of();
+        }
+        return warehouseRepository.findAllByIdInAndIsDeletedFalse(warehouseIds)
+                .stream()
+                .collect(Collectors.toMap(Warehouse::getId, Warehouse::getName, (first, second) -> first));
     }
 
     private void assertCodeAvailable(UUID warehouseId, String code, String currentCode) {

@@ -9,7 +9,6 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -59,7 +58,7 @@ class ProcurementRequestSearchTest {
     @Mock LowStockRecommendationService lowStockRecommendationService;
     @Mock ActualCostRepository actualCostRepository;
     @Mock CostCategoryRepository costCategoryRepository;
-    @Mock SupplierRepository supplierRepository;
+    @Mock CounteragentService counteragentService;
     @Mock ToirStockService toirStockService;
     @Mock LegacyStockProjectionService legacyStockProjectionService;
     @Mock WmsStockCoordinateValidator coordinateValidator;
@@ -86,7 +85,7 @@ class ProcurementRequestSearchTest {
                 lowStockRecommendationService,
                 actualCostRepository,
                 costCategoryRepository,
-                supplierRepository,
+                counteragentService,
                 toirStockService,
                 legacyStockProjectionService,
                 coordinateValidator,

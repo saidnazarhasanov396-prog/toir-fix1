@@ -17,8 +17,8 @@ import java.util.UUID;
 @Builder
 public class ContractorContract extends BaseEntity {
 
-    @Column(name = "contractor_id", nullable = false)
-    private UUID contractorId;
+    @Column(name = "counteragent_id")
+    private UUID counteragentId;
 
     @Column(nullable = false, unique = true)
     private String number;

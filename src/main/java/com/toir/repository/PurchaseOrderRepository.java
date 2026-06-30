@@ -22,7 +22,7 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, UU
 
     long countByIsDeletedFalse();
 
-    List<PurchaseOrder> findAllBySupplierIdAndIsDeletedFalse(UUID supplierId);
+    List<PurchaseOrder> findAllByCounteragentIdAndIsDeletedFalse(UUID counteragentId);
 
     List<PurchaseOrder> findAllByProcurementRequestIdAndIsDeletedFalse(UUID procurementRequestId);
 
@@ -30,7 +30,7 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, UU
             select po
             from PurchaseOrder po
             where po.isDeleted = false
-              and (:supplierId is null or po.supplierId = :supplierId)
+              and (:counteragentId is null or po.counteragentId = :counteragentId)
               and (:status is null or po.status = :status)
               and (:warehouseId is null or po.warehouseId = :warehouseId)
               and (:fromDate is null or po.orderDate >= :fromDate)
@@ -39,7 +39,7 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, UU
             order by po.updatedAt desc
             """)
     List<PurchaseOrder> search(
-            @Param("supplierId") UUID supplierId,
+            @Param("counteragentId") UUID counteragentId,
             @Param("status") PurchaseOrderStatus status,
             @Param("warehouseId") UUID warehouseId,
             @Param("fromDate") LocalDate fromDate,

@@ -51,6 +51,9 @@ public class SparePart extends BaseEntity {
     @Column(name = "preferred_supplier_id")
     private UUID preferredSupplierId;
 
+    @Column(name = "preferred_counteragent_id")
+    private UUID preferredCounteragentId;
+
     @Column(name = "lead_time_days")
     private Integer leadTimeDays;
 

@@ -222,11 +222,11 @@ class WorkOrderPbacScopeTest {
     }
 
     @Test
-    void contractorIdDoesNotBypassDepartmentScopeWithoutUserMapping() throws Exception {
+    void counteragentIdDoesNotBypassDepartmentScopeWithoutUserMapping() throws Exception {
         UUID workOrderId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         WorkOrder workOrder = workOrder(workOrderId, departmentId);
-        workOrder.setContractorId(UUID.randomUUID());
+        workOrder.setCounteragentId(UUID.randomUUID());
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         doDenyDepartment(departmentId);
 

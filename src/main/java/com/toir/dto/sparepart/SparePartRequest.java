@@ -20,7 +20,7 @@ public record SparePartRequest(
         String specification,
         String manufacturer,
         @PositiveOrZero double minStock,
-        UUID preferredSupplierId,
+        UUID preferredCounteragentId,
         Integer leadTimeDays,
         BigDecimal lastPurchasePrice,
         BigDecimal averageCost,
@@ -39,7 +39,7 @@ public record SparePartRequest(
             String specification,
             String manufacturer,
             @PositiveOrZero double minStock,
-            UUID preferredSupplierId,
+            UUID preferredCounteragentId,
             Integer leadTimeDays,
             BigDecimal lastPurchasePrice,
             BigDecimal averageCost,
@@ -47,7 +47,7 @@ public record SparePartRequest(
             CriticalityLevel criticality
     ) {
         this(code, name, sku, kind, typeId, type, unit, specification, manufacturer, minStock,
-                preferredSupplierId, leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, criticality,
+                preferredCounteragentId, leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, criticality,
                 null);
     }
 

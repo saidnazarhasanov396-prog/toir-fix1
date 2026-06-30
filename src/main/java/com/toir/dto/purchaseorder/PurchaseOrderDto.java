@@ -12,8 +12,8 @@ import java.util.UUID;
 public record PurchaseOrderDto(
         UUID id,
         String number,
-        UUID supplierId,
-        String supplierName,
+        UUID counteragentId,
+        String counteragentName,
         UUID warehouseId,
         String warehouseName,
         UUID procurementRequestId,
@@ -29,15 +29,15 @@ public record PurchaseOrderDto(
 ) {
     public static PurchaseOrderDto from(
             PurchaseOrder order,
-            String supplierName,
+            String counteragentName,
             String warehouseName,
             List<PurchaseOrderLineDto> lines
     ) {
         return new PurchaseOrderDto(
                 order.getId(),
                 order.getNumber(),
-                order.getSupplierId(),
-                supplierName,
+                order.getCounteragentId(),
+                counteragentName,
                 order.getWarehouseId(),
                 warehouseName,
                 order.getProcurementRequestId(),

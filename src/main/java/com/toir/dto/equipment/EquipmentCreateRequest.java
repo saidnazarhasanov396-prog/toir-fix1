@@ -55,8 +55,8 @@ public record EquipmentCreateRequest(
         @PositiveOrZero Double lifetimeBaselineValue,
         @Positive Double lifetimeWarningPercent,
         @Positive Double averageDailyUsage,
-        UUID supplierId,
-        UUID warrantySupplierId,
+        UUID counteragentId,
+        UUID warrantyCounteragentId,
         UUID mxikId
 ) {
         public EquipmentCreateRequest(
@@ -98,8 +98,8 @@ public record EquipmentCreateRequest(
                 @PositiveOrZero Double lifetimeBaselineValue,
                 @Positive Double lifetimeWarningPercent,
                 @Positive Double averageDailyUsage,
-                UUID supplierId,
-                UUID warrantySupplierId
+                UUID counteragentId,
+                UUID warrantyCounteragentId
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, producedYear, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
@@ -107,7 +107,7 @@ public record EquipmentCreateRequest(
                         warrantyAttachmentId, warrantyStartDate, warrantyEndDate, description, operationStartDate,
                         expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, attributes,
                         manualAttributes, location, lifetimeCounterType, lifetimeMeterId, lifetimeLimitValue,
-                        lifetimeBaselineValue, lifetimeWarningPercent, averageDailyUsage, supplierId, warrantySupplierId,
+                        lifetimeBaselineValue, lifetimeWarningPercent, averageDailyUsage, counteragentId, warrantyCounteragentId,
                         null);
         }
 
@@ -234,15 +234,15 @@ public record EquipmentCreateRequest(
                 List<EquipmentAttributeValueRequest> attributes,
                 List<EquipmentManualAttributeRequest> manualAttributes,
                 EquipmentLocationRequest location,
-                UUID supplierId,
-                UUID warrantySupplierId
+                UUID counteragentId,
+                UUID warrantyCounteragentId
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, null, equipmentTypeId,
                         departmentId, warehouseId, locationId, parentId, criticalityClassId, responsibleId,
                         manufacturer, status, category, commissionedAt, arrivalDate, warrantyUntil, hasWarranty,
                         warrantyAttachmentId, warrantyStartDate, warrantyEndDate, description, operationStartDate,
                         expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, attributes,
-                        manualAttributes, location, null, null, null, null, null, null, supplierId, warrantySupplierId);
+                        manualAttributes, location, null, null, null, null, null, null, counteragentId, warrantyCounteragentId);
         }
 
         public EquipmentCreateRequest(

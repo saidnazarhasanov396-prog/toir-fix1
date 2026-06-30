@@ -13,7 +13,6 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -23,6 +22,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.service.LowStockRecommendationService;
+import com.toir.service.CounteragentService;
 import com.toir.service.ProcurementRequestService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
@@ -65,7 +65,7 @@ class ProcurementPbacScopeTest {
     LowStockRecommendationService lowStockRecommendationService;
     ActualCostRepository actualCostRepository;
     CostCategoryRepository costCategoryRepository;
-    SupplierRepository supplierRepository;
+    CounteragentService counteragentService;
     ProcurementRequestService service;
 
     @BeforeEach
@@ -86,7 +86,7 @@ class ProcurementPbacScopeTest {
         lowStockRecommendationService = mock(LowStockRecommendationService.class);
         actualCostRepository = mock(ActualCostRepository.class);
         costCategoryRepository = mock(CostCategoryRepository.class);
-        supplierRepository = mock(SupplierRepository.class);
+        counteragentService = mock(CounteragentService.class);
         service = new ProcurementRequestService(
                 repository,
                 sparePartRepository,
@@ -104,7 +104,7 @@ class ProcurementPbacScopeTest {
                 lowStockRecommendationService,
                 actualCostRepository,
                 costCategoryRepository,
-                supplierRepository,
+                counteragentService,
                 mock(ToirStockService.class),
                 mock(LegacyStockProjectionService.class),
                 mock(WmsStockCoordinateValidator.class),

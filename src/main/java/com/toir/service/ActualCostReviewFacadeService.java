@@ -9,6 +9,7 @@ import com.toir.dto.budget.ActualCostReviewActivitySummary;
 import com.toir.dto.budget.BudgetSummaryResponse;
 import com.toir.dto.financialreview.*;
 import com.toir.dto.notification.NotificationDto;
+import com.toir.entity.Counteragent;
 import com.toir.entity.Department;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
@@ -64,6 +65,7 @@ public class ActualCostReviewFacadeService {
     private final DepartmentRepository departmentRepository;
     private final CostCategoryRepository costCategoryRepository;
     private final FinancialApprovalRuleRepository financialApprovalRuleRepository;
+    private final CounteragentService counteragentService;
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewItem> reviewQueue(String search) {
@@ -445,7 +447,7 @@ public class ActualCostReviewFacadeService {
                 null,
                 cost.getReviewedById() != null ? new ActualCostReviewItem.UserRef(cost.getReviewedById(), null) : null,
                 cost.getReviewComment(),
-                toContractorWorkRef(context.contractorWork(), context.workOrder()),
+                toCounteragentWorkRef(context.counteragentWork(), context.workOrder()),
                 toWorkOrderRef(context.workOrder(), context.department()),
                 cost.getRepairRequestId() != null ? new ActualCostReviewItem.RepairRequestRef(cost.getRepairRequestId(), "") : null,
                 cost.getBudgetLineId() != null ? new ActualCostReviewItem.BudgetLineRef(cost.getBudgetLineId(), null, null, null) : null,
@@ -525,8 +527,8 @@ public class ActualCostReviewFacadeService {
                 event.getSeverity(),
                 event.getStatus(),
                 toDepartmentRef(context.department()),
-                toContractorRef(context.contractorWork()),
-                toContractorWorkRef(context.contractorWork(), context.workOrder()),
+                toCounteragentRef(context.counteragentWork()),
+                toCounteragentWorkRef(context.counteragentWork(), context.workOrder()),
                 toWorkOrderRef(context.workOrder(), context.department()),
                 "/financial-review/history/" + event.getActualCostId(),
                 "/financial-review?actualCostId=" + event.getActualCostId()
@@ -542,8 +544,8 @@ public class ActualCostReviewFacadeService {
                 cost != null && cost.getStatus() != null ? cost.getStatus().name() : event.getStatus(),
                 cost != null ? cost.getAmount() : 0,
                 toDepartmentRef(context.department()),
-                toContractorRef(context.contractorWork()),
-                toContractorWorkRef(context.contractorWork(), context.workOrder()),
+                toCounteragentRef(context.counteragentWork()),
+                toCounteragentWorkRef(context.counteragentWork(), context.workOrder()),
                 toWorkOrderRef(context.workOrder(), context.department()),
                 null,
                 event.getNotificationId(),
@@ -679,7 +681,7 @@ public class ActualCostReviewFacadeService {
 
     private String contextType(ActualCost cost) {
         if (cost.getContractorWorkId() != null) {
-            return "CONTRACTOR";
+            return "COUNTERAGENT_WORK";
         }
         if (cost.getWorkOrderId() != null) {
             return "WORK_ORDER";
@@ -692,7 +694,7 @@ public class ActualCostReviewFacadeService {
 
     private String sourceLink(ActualCost cost) {
         if (cost.getContractorWorkId() != null) {
-            return "/contractors?contractorWorkId=" + cost.getContractorWorkId();
+            return "/counteragent-works?workId=" + cost.getContractorWorkId();
         }
         if (cost.getWorkOrderId() != null) {
             return "/work-orders/" + cost.getWorkOrderId();
@@ -749,11 +751,16 @@ public class ActualCostReviewFacadeService {
         return new ActualCostReviewItem.Ref(costCategory.getId(), safeText(costCategory.getCode()), safeText(costCategory.getName()));
     }
 
-    private ActualCostReviewItem.Ref toContractorRef(ContractorWork contractorWork) {
-        if (contractorWork == null || contractorWork.getContractorId() == null) {
+    private ActualCostReviewItem.Ref toCounteragentRef(ContractorWork contractorWork) {
+        if (contractorWork == null || contractorWork.getCounteragentId() == null) {
             return null;
         }
-        return new ActualCostReviewItem.Ref(contractorWork.getContractorId(), "", "");
+        Counteragent counteragent = counteragentService.load(contractorWork.getCounteragentId());
+        return new ActualCostReviewItem.Ref(
+                counteragent.getId(),
+                safeText(counteragent.getCode()),
+                safeText(counteragent.getName())
+        );
     }
 
     private ActualCostReviewItem.WorkOrderRef toWorkOrderRef(WorkOrder workOrder, Department department) {
@@ -768,16 +775,16 @@ public class ActualCostReviewFacadeService {
         );
     }
 
-    private ActualCostReviewItem.ContractorWorkRef toContractorWorkRef(ContractorWork contractorWork, WorkOrder workOrder) {
+    private ActualCostReviewItem.CounteragentWorkRef toCounteragentWorkRef(ContractorWork contractorWork, WorkOrder workOrder) {
         if (contractorWork == null) {
             return null;
         }
-        return new ActualCostReviewItem.ContractorWorkRef(
+        return new ActualCostReviewItem.CounteragentWorkRef(
                 contractorWork.getId(),
                 safeText(contractorWork.getDescription()),
                 contractorWork.getStatus() != null ? contractorWork.getStatus().name() : null,
                 contractorWork.getCost(),
-                toContractorRef(contractorWork),
+                toCounteragentRef(contractorWork),
                 toWorkOrderRef(workOrder, null)
         );
     }
@@ -792,7 +799,7 @@ public class ActualCostReviewFacadeService {
 
     private record ActualCostContext(
             WorkOrder workOrder,
-            ContractorWork contractorWork,
+            ContractorWork counteragentWork,
             Department department,
             CostCategory costCategory
     ) {

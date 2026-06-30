@@ -71,8 +71,8 @@ public class WorkOrder extends ActorStampedEntity {
     @Column(name = "cycle_key")
     private String cycleKey;
 
-    @Column(name = "contractor_id")
-    private UUID contractorId;
+    @Column(name = "counteragent_id")
+    private UUID counteragentId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "brigade_member_id")

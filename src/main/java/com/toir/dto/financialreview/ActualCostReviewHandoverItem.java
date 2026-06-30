@@ -11,7 +11,7 @@ public record ActualCostReviewHandoverItem(
         double amount,
         Object department,
         Object contractor,
-        Object contractorWork,
+        Object counteragentWork,
         Object workOrder,
         String actorName,
         UUID notificationId,

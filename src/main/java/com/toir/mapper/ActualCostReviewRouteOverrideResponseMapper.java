@@ -83,7 +83,7 @@ public class ActualCostReviewRouteOverrideResponseMapper {
                     null,
                     toDepartmentShort(department),
                     toWorkOrderShort(workOrder),
-                    emptyContractorWork()
+                    emptyCounteragentWork()
             );
         }
 
@@ -124,7 +124,7 @@ public class ActualCostReviewRouteOverrideResponseMapper {
                 null,
                 toDepartmentShort(department),
                 toWorkOrderShort(workOrder),
-                toContractorWorkShort(contractorWork, contractorWorkOrder)
+                toCounteragentWorkShort(contractorWork, contractorWorkOrder)
         );
     }
 
@@ -227,18 +227,18 @@ public class ActualCostReviewRouteOverrideResponseMapper {
         );
     }
 
-    private ContractorWorkShortDto toContractorWorkShort(
+    private CounteragentWorkShortDto toCounteragentWorkShort(
             ContractorWork contractorWork,
             WorkOrder contractorWorkOrder
     ) {
         if (contractorWork == null) {
-            return emptyContractorWork();
+            return emptyCounteragentWork();
         }
 
-        return new ContractorWorkShortDto(
+        return new CounteragentWorkShortDto(
                 contractorWork.getId(),
                 safeText(contractorWork.getDescription()),
-                new ContractorShortDto(contractorWork.getContractorId(), ""),
+                new CounteragentShortDto(contractorWork.getCounteragentId(), ""),
                 toWorkOrderShort(contractorWorkOrder)
         );
     }
@@ -298,11 +298,11 @@ public class ActualCostReviewRouteOverrideResponseMapper {
         return new WorkOrderShortDto(null, "", "");
     }
 
-    private ContractorWorkShortDto emptyContractorWork() {
-        return new ContractorWorkShortDto(
+    private CounteragentWorkShortDto emptyCounteragentWork() {
+        return new CounteragentWorkShortDto(
                 null,
                 "",
-                new ContractorShortDto(null, ""),
+                new CounteragentShortDto(null, ""),
                 emptyWorkOrder()
         );
     }

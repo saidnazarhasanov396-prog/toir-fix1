@@ -10,11 +10,11 @@ import com.toir.dto.purchaseorder.PurchaseOrderReceiveRequest;
 import com.toir.dto.purchaseorder.PurchaseOrderRequest;
 import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.InventoryTransaction;
+import com.toir.entity.Counteragent;
 import com.toir.entity.PurchaseOrder;
 import com.toir.entity.PurchaseOrderLine;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
-import com.toir.entity.Supplier;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.users.Employee;
@@ -26,7 +26,6 @@ import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.PurchaseOrderStatus;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
-import com.toir.enums.SupplierType;
 import com.toir.enums.WmsDocumentOperationType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
@@ -65,7 +64,7 @@ public class PurchaseOrderService {
 
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final ProcurementRequestRepository procurementRequestRepository;
-    private final SupplierService supplierService;
+    private final CounteragentService counteragentService;
     private final SparePartRepository sparePartRepository;
     private final WarehouseRepository warehouseRepository;
     private final StockMovementRepository stockMovementRepository;
@@ -80,10 +79,10 @@ public class PurchaseOrderService {
 
     @Transactional
     public PurchaseOrderDto create(PurchaseOrderRequest request) {
-        Supplier supplier = supplierService.loadActiveForType(request.supplierId(), SupplierType.SPARE_PART, "purchase orders");
+        Counteragent counteragent = counteragentService.loadActive(request.counteragentId(), "purchase orders");
         Warehouse warehouse = warehouseOrThrow(request.warehouseId());
         assertCanAccessWarehouse(warehouse);
-        PurchaseOrder order = newOrder(supplier.getId(), warehouse.getId(), request.expectedDeliveryDate(), request.comment());
+        PurchaseOrder order = newOrder(counteragent.getId(), warehouse.getId(), request.expectedDeliveryDate(), request.comment());
         for (PurchaseOrderLineRequest lineRequest : request.lines()) {
             order.getLines().add(buildLine(order, lineRequest.sparePartId(), lineRequest.quantity(), lineRequest.unitPrice()));
         }
@@ -92,13 +91,13 @@ public class PurchaseOrderService {
     }
 
     @Transactional(readOnly = true)
-    public List<PurchaseOrderDto> findAll(UUID supplierId, PurchaseOrderStatus status, UUID warehouseId, LocalDate from, LocalDate to) {
+    public List<PurchaseOrderDto> findAll(UUID counteragentId, PurchaseOrderStatus status, UUID warehouseId, LocalDate from, LocalDate to) {
         List<UUID> warehouseScope = scopedWarehouseIds(warehouseId);
         if (!scopeAccessService.isScopeAdmin() && warehouseScope.isEmpty()) {
             return List.of();
         }
         return purchaseOrderRepository.search(
-                        supplierId,
+                        counteragentId,
                         status,
                         warehouseId,
                         from,
@@ -162,15 +161,15 @@ public class PurchaseOrderService {
         }
         Warehouse warehouse = warehouseOrThrow(procurement.getWarehouseId());
         assertCanAccessWarehouse(warehouse);
-        UUID supplierId = request.supplierId() != null
-                ? request.supplierId()
-                : procurement.getSupplierId();
-        if (supplierId == null) {
-            supplierId = preferredSupplierId(procurement);
+        UUID counteragentId = request.counteragentId() != null
+                ? request.counteragentId()
+                : procurement.getCounteragentId();
+        if (counteragentId == null) {
+            counteragentId = preferredCounteragentId(procurement);
         }
-        Supplier supplier = supplierService.loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders");
-        procurement.setSupplierId(supplier.getId());
-        PurchaseOrder order = newOrder(supplier.getId(), warehouse.getId(), request.expectedDeliveryDate(), request.comment());
+        Counteragent counteragent = counteragentService.loadActive(counteragentId, "purchase orders");
+        procurement.setCounteragentId(counteragent.getId());
+        PurchaseOrder order = newOrder(counteragent.getId(), warehouse.getId(), request.expectedDeliveryDate(), request.comment());
         order.setProcurementRequestId(procurement.getId());
         for (ProcurementRequestLine line : procurement.getLines()) {
             if (!line.isDeleted()) {
@@ -249,10 +248,10 @@ public class PurchaseOrderService {
         return new ProcurementDashboardDto(open, pending, partial, overdue, expectedThisWeek, total);
     }
 
-    private PurchaseOrder newOrder(UUID supplierId, UUID warehouseId, LocalDate expectedDeliveryDate, String comment) {
+    private PurchaseOrder newOrder(UUID counteragentId, UUID warehouseId, LocalDate expectedDeliveryDate, String comment) {
         PurchaseOrder order = new PurchaseOrder();
         order.setNumber(nextNumber());
-        order.setSupplierId(supplierId);
+        order.setCounteragentId(counteragentId);
         order.setWarehouseId(warehouseId);
         order.setStatus(PurchaseOrderStatus.DRAFT);
         order.setOrderDate(LocalDate.now(ZoneOffset.UTC));
@@ -347,7 +346,7 @@ public class PurchaseOrderService {
         movement.setTotalAmount(quantity.multiply(line.getUnitPrice()));
         movement.setMovementDate(receiptDate);
         movement.setResponsiblePersonId(responsible.getId());
-        movement.setSupplierName(supplierService.load(order.getSupplierId()).getName());
+        movement.setSupplierName(counteragentService.load(order.getCounteragentId()).getName());
         movement.setDocumentNumber(trimToNull(documentNumber) == null ? order.getNumber() : trimToNull(documentNumber));
         movement.setSourceType(StockMovementSourceType.PURCHASE_ORDER);
         movement.setSourceId(order.getId());
@@ -365,7 +364,7 @@ public class PurchaseOrderService {
                                                     String documentNumber,
                                                     Employee responsible,
                                                     PurchaseOrderReceiveLineRequest lineRequest) {
-        Supplier supplier = supplierService.load(order.getSupplierId());
+        Counteragent counteragent = counteragentService.load(order.getCounteragentId());
         InventoryTransaction transaction = new InventoryTransaction();
         transaction.setType(InventoryTransactionType.RECEIPT);
         transaction.setWarehouseId(order.getWarehouseId());
@@ -374,7 +373,7 @@ public class PurchaseOrderService {
         transaction.setUnit(sparePart.getUnit());
         transaction.setUnitPrice(line.getUnitPrice());
         transaction.setTotalAmount(quantity.multiply(line.getUnitPrice()));
-        transaction.setSupplierName(supplier.getName());
+        transaction.setSupplierName(counteragent.getName());
         transaction.setResponsiblePersonId(responsible.getId());
         transaction.setTransactionDate(receiptDate);
         transaction.setDocumentNumber(trimToNull(documentNumber) == null ? order.getNumber() : trimToNull(documentNumber));
@@ -511,24 +510,24 @@ public class PurchaseOrderService {
     }
 
     private PurchaseOrderDto toDto(PurchaseOrder order) {
-        Supplier supplier = supplierService.load(order.getSupplierId());
+        Counteragent counteragent = counteragentService.load(order.getCounteragentId());
         Warehouse warehouse = warehouseOrThrow(order.getWarehouseId());
         Map<UUID, SparePart> spareParts = sparePartsById(order.getLines().stream().map(PurchaseOrderLine::getSparePartId).toList());
         List<PurchaseOrderLineDto> lines = order.getLines().stream()
                 .filter(line -> !line.isDeleted())
                 .map(line -> PurchaseOrderLineDto.from(line, spareParts.get(line.getSparePartId()) == null ? null : spareParts.get(line.getSparePartId()).getName()))
                 .toList();
-        return PurchaseOrderDto.from(order, supplier.getName(), warehouse.getName(), lines);
+        return PurchaseOrderDto.from(order, counteragent.getName(), warehouse.getName(), lines);
     }
 
-    private UUID preferredSupplierId(ProcurementRequest procurement) {
+    private UUID preferredCounteragentId(ProcurementRequest procurement) {
         for (ProcurementRequestLine line : procurement.getLines()) {
             SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(line.getSparePartId()).orElse(null);
-            if (sparePart != null && sparePart.getPreferredSupplierId() != null) {
-                return sparePart.getPreferredSupplierId();
+            if (sparePart != null && sparePart.getPreferredCounteragentId() != null) {
+                return sparePart.getPreferredCounteragentId();
             }
         }
-        throw RestException.badRequest("Supplier is required when procurement lines have no preferred supplier");
+        throw RestException.badRequest("Counteragent is required when procurement lines have no preferred counteragent");
     }
 
     private BigDecimal totalStockQuantity(UUID sparePartId) {

@@ -1,17 +1,17 @@
 package com.toir.service;
 
 import com.toir.dto.sparepart.SparePartDto;
+import com.toir.entity.Counteragent;
 import com.toir.entity.Mxik;
 import com.toir.entity.SparePart;
 import com.toir.entity.Department;
 import com.toir.entity.Location;
 import com.toir.entity.StockMovement;
-import com.toir.entity.Supplier;
 import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
-import com.toir.enums.SupplierType;
+import com.toir.enums.CounteragentStatus;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.InventoryItemKind;
 import com.toir.enums.SparePartType;
@@ -22,7 +22,6 @@ import com.toir.repository.MxikRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.SparePartTypeRepository;
 import com.toir.repository.StockMovementRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -73,7 +72,7 @@ class SparePartServiceTest {
     SparePartTypeRepository typeRepository;
 
     @Mock
-    SupplierRepository supplierRepository;
+    CounteragentService counteragentService;
 
     @Mock
     MxikRepository mxikRepository;
@@ -123,7 +122,7 @@ class SparePartServiceTest {
         service = new SparePartService(
                 repository,
                 typeRepository,
-                supplierRepository,
+                counteragentService,
                 mxikRepository,
                 inventoryTransactionRepository,
                 stockRepository,
@@ -616,15 +615,15 @@ class SparePartServiceTest {
     }
 
     @Test
-    void createRejectsPreferredSupplierThatDoesNotSupportSpareParts() {
+    void createRejectsInactivePreferredCounteragent() {
         String codePrefix = "SP-" + java.time.Year.now().getValue() + "-";
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         com.toir.entity.SparePartType otherType = sparePartType(UUID.randomUUID(), "OTHER", "Other", "PCS");
         when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
         when(repository.existsByCodeAndIsDeletedFalse(codePrefix + "0001")).thenReturn(false);
         when(typeRepository.findByCodeIgnoreCaseAndActiveTrue("OTHER")).thenReturn(Optional.of(otherType));
-        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
-                .thenReturn(Optional.of(supplier(supplierId, "Equipment Supplier", SupplierType.EQUIPMENT)));
+        when(counteragentService.loadActive(eq(counteragentId), any()))
+                .thenThrow(RestException.badRequest("Inactive counteragents cannot be selected for preferred counteragent"));
 
         assertThatThrownBy(() -> service.create(new com.toir.dto.sparepart.SparePartRequest(
                 null,
@@ -637,7 +636,7 @@ class SparePartServiceTest {
                 null,
                 null,
                 0,
-                supplierId,
+                counteragentId,
                 null,
                 null,
                 null,
@@ -646,7 +645,7 @@ class SparePartServiceTest {
         )))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("SPARE_PART");
+                    assertThat(ex.getMessage()).contains("Inactive counteragents");
                 });
 
         verify(repository, never()).save(any());
@@ -906,13 +905,12 @@ class SparePartServiceTest {
         return unit;
     }
 
-    private Supplier supplier(UUID id, String name, SupplierType supplierType) {
-        Supplier supplier = new Supplier();
-        supplier.setId(id);
-        supplier.setCode("SUP-" + id.toString().substring(0, 8));
-        supplier.setName(name);
-        supplier.setActive(true);
-        supplier.setSupplierType(supplierType);
-        return supplier;
+    private Counteragent counteragent(UUID id, String name) {
+        Counteragent counteragent = new Counteragent();
+        counteragent.setId(id);
+        counteragent.setCode("CA-" + id.toString().substring(0, 8));
+        counteragent.setName(name);
+        counteragent.setStatus(CounteragentStatus.ACTIVE);
+        return counteragent;
     }
 }

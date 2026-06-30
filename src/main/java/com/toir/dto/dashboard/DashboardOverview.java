@@ -13,10 +13,10 @@ public record DashboardOverview(
         List<DowntimeByEquipment> downtimeByEquipment,
         List<LatestDowntime> latestDowntimes,
         List<LatestStockMovement> latestStockMovements,
-        List<ContractorLoad> contractorLoad,
+        List<CounteragentLoad> counteragentLoad,
         List<FinancialWorkloadByRole> financialReviewWorkloadByRole,
         List<FinancialWorkloadByDepartment> financialReviewWorkloadByDepartment,
-        List<ContractorReconciliation> contractorReconciliation,
+        List<CounteragentReconciliation> counteragentReconciliation,
         List<LowStockItem> lowStockItems,
         List<RepeatedDefectsEquipment> repeatedDefectsEquipment,
         List<MaintenanceKpiRow> maintenanceKpis,
@@ -31,17 +31,17 @@ public record DashboardOverview(
             List<DowntimeByEquipment> downtimeByEquipment,
             List<LatestDowntime> latestDowntimes,
             List<LatestStockMovement> latestStockMovements,
-            List<ContractorLoad> contractorLoad,
+            List<CounteragentLoad> counteragentLoad,
             List<FinancialWorkloadByRole> financialReviewWorkloadByRole,
             List<FinancialWorkloadByDepartment> financialReviewWorkloadByDepartment,
-            List<ContractorReconciliation> contractorReconciliation,
+            List<CounteragentReconciliation> counteragentReconciliation,
             List<LowStockItem> lowStockItems,
             List<RepeatedDefectsEquipment> repeatedDefectsEquipment,
             List<MaintenanceKpiRow> maintenanceKpis
     ) {
         this(counters, planFact, kpis, topProblemEquipment, downtimeByEquipment, latestDowntimes,
-                latestStockMovements, contractorLoad, financialReviewWorkloadByRole,
-                financialReviewWorkloadByDepartment, contractorReconciliation, lowStockItems,
+                latestStockMovements, counteragentLoad, financialReviewWorkloadByRole,
+                financialReviewWorkloadByDepartment, counteragentReconciliation, lowStockItems,
                 repeatedDefectsEquipment, maintenanceKpis, new MaintenanceDueCounts(0, 0, 0, 0, 0),
                 List.of());
     }
@@ -63,7 +63,7 @@ public record DashboardOverview(
             long pendingActualCosts,
             long dueSoonActualCosts,
             long overdueActualCosts,
-            long contractorAwaitingReflection,
+            long counteragentWorkAwaitingReflection,
             long conditionAlarms,
             long expiringCertifications,
             long dueCalibrations
@@ -108,7 +108,7 @@ public record DashboardOverview(
             Instant occurredAt
     ) {}
 
-    public record ContractorLoad(UUID id, String code, String name, long activeContracts, long activeWorkOrders) {}
+    public record CounteragentLoad(UUID id, String code, String name, long activeContracts, long activeWorkOrders) {}
 
     public record FinancialWorkloadByRole(
             String roleCode,
@@ -130,9 +130,9 @@ public record DashboardOverview(
             long overdueCount
     ) {}
 
-    public record ContractorReconciliation(
+    public record CounteragentReconciliation(
             UUID id,
-            ContractorRef contractor,
+            CounteragentRef counteragent,
             String description,
             WorkOrderRef workOrder,
             double expectedAmount,
@@ -186,7 +186,7 @@ public record DashboardOverview(
 
     public record EquipmentRef(UUID id, String code, String name) {}
     public record DepartmentRef(UUID id, String code, String name) {}
-    public record ContractorRef(UUID id, String code, String name) {}
+    public record CounteragentRef(UUID id, String code, String name) {}
     public record WorkOrderRef(UUID id, String number, String title) {}
     public record CatalogItemRef(UUID id, String code, String name) {}
     public record WarehouseRef(UUID id, String code, String name) {}
