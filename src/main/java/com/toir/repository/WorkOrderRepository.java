@@ -140,7 +140,10 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
                 nullif(to_jsonb(w)->>'repair_campaign_stage_id', '')::uuid as repair_campaign_stage_id,
                 nullif(to_jsonb(w)->>'budget_line_id', '')::uuid as budget_line_id,
                 to_jsonb(w)->>'cycle_key' as cycle_key,
-                w.contractor_id,
+                coalesce(
+                    nullif(to_jsonb(w)->>'counteragent_id', '')::uuid,
+                    nullif(to_jsonb(w)->>'contractor_id', '')::uuid
+                ) as counteragent_id,
                 nullif(to_jsonb(w)->>'brigade_member_id', '')::uuid as brigade_member_id,
                 nullif(to_jsonb(w)->>'warehouse_id', '')::uuid as warehouse_id,
                 nullif(to_jsonb(w)->>'replacement_equipment_id', '')::uuid as replacement_equipment_id,

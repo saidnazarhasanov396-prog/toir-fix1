@@ -90,6 +90,21 @@ class WorkOrderRepositoryQueryContractTest {
     }
 
     @Test
+    void searchPaginatedQueryMustProjectCounteragentIdForEntityMapping() {
+        Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchPaginated") && m.getAnnotation(Query.class) != null)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+
+        String sql = query.value().toLowerCase();
+        assertThat(sql).contains("to_jsonb(w)->>'counteragent_id'");
+        assertThat(sql).contains("as counteragent_id");
+    }
+
+    @Test
     void searchPaginatedQueryMustProjectActRolloutColumnsForEntityMapping() {
         Method method = Arrays.stream(WorkOrderRepository.class.getMethods())
                 .filter(m -> m.getName().equals("searchPaginated") && m.getAnnotation(Query.class) != null)
