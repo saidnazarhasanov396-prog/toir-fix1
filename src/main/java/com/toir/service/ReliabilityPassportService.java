@@ -44,6 +44,7 @@ public class ReliabilityPassportService {
             "totalDowntimeMinutes",
             "mtbfHours",
             "mttrHours",
+            "availability",
             "availabilityPct"
     );
 
@@ -141,7 +142,7 @@ public class ReliabilityPassportService {
                     ReliabilityPassport::mttrHours,
                     Comparator.nullsLast(Comparator.naturalOrder())
             );
-            case "availabilityPct" -> Comparator.comparingDouble(ReliabilityPassport::availabilityPct);
+            case "availability", "availabilityPct" -> Comparator.comparingDouble(ReliabilityPassport::availability);
             default -> throw RestException.badRequest("Unsupported reliability passport sort: " + sortBy);
         };
         return "desc".equalsIgnoreCase(sortDir) ? comparator.reversed() : comparator;
@@ -305,6 +306,8 @@ public class ReliabilityPassportService {
                 .limit(10)
                 .toList();
 
+        double availabilityPercent = availabilityFromMtbfMttr(reliability);
+
         return new ReliabilityPassport(
                 equipment.getId(),
                 equipment.getCode(),
@@ -318,7 +321,8 @@ public class ReliabilityPassportService {
                 metricExplanationService.formatDurationHours(lang, reliability.mtbfHours()),
                 reliability.mttrHours(),
                 metricExplanationService.formatDurationHours(lang, reliability.mttrHours()),
-                reliability.availabilityPct(),
+                availabilityPercent,
+                availabilityPercent,
                 topCauses,
                 now,
                 metricExplanationService.availability(
@@ -326,7 +330,7 @@ public class ReliabilityPassportService {
                         reliability.observedHours(),
                         downtimeHours,
                         reliability.operatingHours(),
-                        reliability.availabilityPct()
+                        availabilityPercent
                 )
         );
     }
@@ -336,8 +340,31 @@ public class ReliabilityPassportService {
                                    List<WorkOrder> workOrders,
                                    List<RepairRequest> repairRequests,
                                    Instant now) {
-        return ReliabilityDowntimeCalculator.calculate(equipment, downtimes, workOrders, repairRequests, now)
-                .availabilityPct();
+        return availabilityFromMtbfMttr(ReliabilityDowntimeCalculator.calculate(
+                equipment, downtimes, workOrders, repairRequests, now));
+    }
+
+    private static double availabilityFromMtbfMttr(ReliabilityDowntimeCalculator.EquipmentReliability reliability) {
+        if (reliability.mtbfHours() != null
+                && reliability.mtbfHours() > 0
+                && reliability.mttrHours() != null
+                && reliability.mttrHours() >= 0) {
+            double denominator = reliability.mtbfHours() + reliability.mttrHours();
+            if (denominator > 0) {
+                return clampPercent(reliability.mtbfHours() / denominator * 100.0);
+            }
+        }
+        if (reliability.failureEvents() == 0 && reliability.mtbfHours() == null && reliability.mttrHours() == null) {
+            return 100.0;
+        }
+        return clampPercent(reliability.availabilityPct());
+    }
+
+    private static double clampPercent(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return 0.0;
+        }
+        return Math.min(100.0, Math.max(0.0, value));
     }
 
     private AvailabilityBand bandOf(double availabilityPct) {

@@ -51,7 +51,9 @@ public class ReliabilityPassportController {
             Double mttrHours,
             @Schema(description = "Localized human-readable MTTR duration")
             String mttrDuration,
-            @Schema(description = "Operating time divided by observed time, as percent")
+            @Schema(description = "Availability percent calculated from MTBF and MTTR, capped at 100")
+            double availability,
+            @Schema(description = "Backward-compatible availability percent alias")
             double availabilityPct,
             @Schema(description = "Top causes from non-cancelled defect rootCause/failureReason fields")
             List<TopCause> topRootCauses,
@@ -75,7 +77,7 @@ public class ReliabilityPassportController {
                 Instant generatedAt
         ) {
             this(equipmentId, equipmentCode, equipmentName, totalDefects, openDefects, totalDowntimeEvents,
-                    totalDowntimeMinutes, null, mtbfHours, null, mttrHours, null, availabilityPct,
+                    totalDowntimeMinutes, null, mtbfHours, null, mttrHours, null, availabilityPct, availabilityPct,
                     topRootCauses, generatedAt, null);
         }
     }

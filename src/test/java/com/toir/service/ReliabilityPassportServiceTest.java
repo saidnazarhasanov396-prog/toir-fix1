@@ -95,6 +95,74 @@ class ReliabilityPassportServiceTest {
     }
 
     @Test
+    void passportReturnsAvailabilityPercentFromMtbfAndMttr() {
+        UUID equipmentId = UUID.randomUUID();
+        Instant now = Instant.now();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setCreatedAt(now.minus(Duration.ofHours(150)));
+        DowntimeEvent downtime = downtime(now.minus(Duration.ofHours(30)), (int) Duration.ofHours(30).toMinutes(), DowntimeType.UNPLANNED);
+
+        stubPassport(equipment, List.of(), List.of(downtime));
+
+        ReliabilityPassport result = service.passport(equipmentId);
+
+        assertThat(result.mtbfHours()).isCloseTo(120.0, org.assertj.core.data.Offset.offset(0.1));
+        assertThat(result.mttrHours()).isEqualTo(30.0);
+        assertThat(result.availability()).isCloseTo(80.0, org.assertj.core.data.Offset.offset(0.1));
+        assertThat(result.availabilityPct()).isCloseTo(80.0, org.assertj.core.data.Offset.offset(0.1));
+    }
+
+    @Test
+    void passportCapsMtbfMttrAvailabilityAtOneHundredPercent() {
+        UUID equipmentId = UUID.randomUUID();
+        Instant now = Instant.now();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setCreatedAt(now.minus(Duration.ofHours(100)));
+        DowntimeEvent zeroMinuteFailure = downtime(now.minus(Duration.ofHours(1)), 0, DowntimeType.UNPLANNED);
+
+        stubPassport(equipment, List.of(), List.of(zeroMinuteFailure));
+
+        ReliabilityPassport result = service.passport(equipmentId);
+
+        assertThat(result.availability()).isEqualTo(100.0);
+        assertThat(result.availabilityPct()).isEqualTo(100.0);
+    }
+
+    @Test
+    void listSortsByAvailabilityAliasBeforePagination() {
+        Instant now = Instant.now();
+        Equipment better = equipment(UUID.randomUUID(), "EQ-BETTER", null);
+        Equipment worse = equipment(UUID.randomUUID(), "EQ-WORSE", null);
+        better.setCreatedAt(now.minus(Duration.ofHours(150)));
+        worse.setCreatedAt(now.minus(Duration.ofHours(150)));
+        List<Equipment> equipment = List.of(better, worse);
+        List<UUID> ids = equipment.stream().map(Equipment::getId).toList();
+        DowntimeEvent betterDowntime = downtime(
+                better.getId(),
+                now.minus(Duration.ofHours(30)),
+                (int) Duration.ofHours(30).toMinutes(),
+                DowntimeType.UNPLANNED);
+        DowntimeEvent worseDowntime = downtime(
+                worse.getId(),
+                now.minus(Duration.ofHours(75)),
+                (int) Duration.ofHours(75).toMinutes(),
+                DowntimeType.UNPLANNED);
+
+        when(equipmentRepository.searchAllForPassport(null, null)).thenReturn(equipment);
+        when(defectRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+        when(downtimeRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids))
+                .thenReturn(List.of(betterDowntime, worseDowntime));
+        when(workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(ids)).thenReturn(List.of());
+
+        Page<ReliabilityPassport> result = service.list(null, null, null, 0, 2, "availability", "desc");
+
+        assertThat(result.getContent()).extracting(ReliabilityPassport::equipmentId)
+                .containsExactly(better.getId(), worse.getId());
+        assertThat(result.getContent().getFirst().availability()).isGreaterThan(result.getContent().get(1).availability());
+    }
+
+    @Test
     void passportIncludesLocalizedRussianAvailabilityExplanation() {
         UUID equipmentId = UUID.randomUUID();
         Instant now = Instant.now();
