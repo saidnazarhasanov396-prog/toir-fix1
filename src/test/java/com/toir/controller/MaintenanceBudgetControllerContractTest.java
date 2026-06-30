@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.controller.maintenance.MaintenanceBudgetController;
+import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.GlobalExceptionHandler;
@@ -24,7 +25,9 @@ import java.util.UUID;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,6 +49,31 @@ class MaintenanceBudgetControllerContractTest {
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void listReturnsBudgetLinesWithCostCategoryName() throws Exception {
+        UUID budgetId = UUID.randomUUID();
+        UUID categoryId = UUID.randomUUID();
+        MaintenanceBudgetDto dto = new MaintenanceBudgetDto(
+                budgetId,
+                2026,
+                6,
+                UUID.randomUUID(),
+                "Finance",
+                BudgetStatus.DRAFT,
+                1_000,
+                100,
+                List.of(new BudgetLineDto(UUID.randomUUID(), categoryId, "Materials", "Pump materials", 250, 0))
+        );
+        when(service.findFiltered(2026, 6, null, null, "desc")).thenReturn(List.of(dto));
+
+        mockMvc.perform(get("/api/v1/budgets")
+                        .param("year", "2026")
+                        .param("month", "6"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].lines[0].costCategoryId").value(categoryId.toString()))
+                .andExpect(jsonPath("$.content[0].lines[0].costCategoryName").value("Materials"));
     }
 
     @Test

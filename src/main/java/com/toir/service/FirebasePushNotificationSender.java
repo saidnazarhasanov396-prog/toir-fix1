@@ -1,9 +1,16 @@
 package com.toir.service;
 
+import com.google.firebase.messaging.AndroidConfig;
+import com.google.firebase.messaging.AndroidNotification;
+import com.google.firebase.messaging.ApnsConfig;
+import com.google.firebase.messaging.Aps;
+import com.google.firebase.messaging.ApsAlert;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MessagingErrorCode;
+import com.google.firebase.messaging.WebpushConfig;
+import com.google.firebase.messaging.WebpushNotification;
 import com.toir.config.FirebaseDiagnostics;
 import com.toir.config.FirebaseProperties;
 import com.toir.dto.notification.NotificationDto;
@@ -72,10 +79,7 @@ public class FirebasePushNotificationSender {
                              NotificationDto notification,
                              Map<String, String> data) {
         try {
-            Message message = Message.builder()
-                    .setToken(token.getToken())
-                    .putAllData(data)
-                    .build();
+            Message message = buildMessage(token, notification, data);
             String messageId = firebaseMessaging.send(message);
             log.info("Firebase push sent notification {} to recipient {} token id {} messageId={}",
                     notification.id(), notification.recipientId(), token.getId(), messageId);
@@ -85,6 +89,61 @@ public class FirebasePushNotificationSender {
             log.warn("Unexpected Firebase push failure for notification {} recipient {} token id {}: {}",
                     notification.id(), notification.recipientId(), token.getId(), ex.getMessage());
         }
+    }
+
+    private Message buildMessage(UserFcmToken token,
+                                 NotificationDto notification,
+                                 Map<String, String> data) {
+        String title = value(notification.title());
+        String body = value(notification.message());
+
+        Message.Builder builder = Message.builder()
+                .setToken(token.getToken())
+                .putAllData(data);
+
+        switch (token.getPlatform()) {
+            case ANDROID -> builder.setAndroidConfig(
+                    AndroidConfig.builder()
+                            .setPriority(AndroidConfig.Priority.HIGH)
+                            .setNotification(
+                                    AndroidNotification.builder()
+                                            .setTitle(title)
+                                            .setBody(body)
+                                            .build()
+                            )
+                            .build()
+            );
+            case IOS -> builder.setApnsConfig(
+                    ApnsConfig.builder()
+                            .putHeader("apns-priority", "10")
+                            .putHeader("apns-push-type", "alert")
+                            .setAps(
+                                    Aps.builder()
+                                            .setAlert(
+                                                    ApsAlert.builder()
+                                                            .setTitle(title)
+                                                            .setBody(body)
+                                                            .build()
+                                            )
+                                            .setSound("default")
+                                            .setContentAvailable(true)
+                                            .build()
+                            )
+                            .build()
+            );
+            case WEB -> builder.setWebpushConfig(
+                    WebpushConfig.builder()
+                            .setNotification(
+                                    WebpushNotification.builder()
+                                            .setTitle(title)
+                                            .setBody(body)
+                                            .build()
+                            )
+                            .build()
+            );
+        }
+
+        return builder.build();
     }
 
     private void handleFirebaseFailure(UserFcmToken token, NotificationDto notification, FirebaseMessagingException ex) {

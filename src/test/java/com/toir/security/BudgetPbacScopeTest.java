@@ -2,9 +2,12 @@ package com.toir.security;
 
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.budget.MaintenanceBudgetDto;
+import com.toir.entity.projects.BudgetLine;
+import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetEventRepository;
@@ -32,6 +35,7 @@ class BudgetPbacScopeTest {
     MaintenanceBudgetRepository repository;
     BudgetLineRepository lineRepository;
     DepartmentRepository departmentRepository;
+    CostCategoryRepository costCategoryRepository;
     AuditBuilderService auditBuilderService;
     ScopeAccessService scopeAccessService;
     MaintenanceBudgetService service;
@@ -41,12 +45,14 @@ class BudgetPbacScopeTest {
         repository = mock(MaintenanceBudgetRepository.class);
         lineRepository = mock(BudgetLineRepository.class);
         departmentRepository = mock(DepartmentRepository.class);
+        costCategoryRepository = mock(CostCategoryRepository.class);
         auditBuilderService = mock(AuditBuilderService.class);
         scopeAccessService = mock(ScopeAccessService.class);
         service = new MaintenanceBudgetService(
                 repository,
                 lineRepository,
                 departmentRepository,
+                costCategoryRepository,
                 auditBuilderService,
                 scopeAccessService,
                 mock(BudgetEventRepository.class));
@@ -105,6 +111,37 @@ class BudgetPbacScopeTest {
 
         assertThat(result).extracting(MaintenanceBudgetDto::id)
                 .containsExactly(larger.getId(), smaller.getId());
+    }
+
+    @Test
+    void listReturnsCostCategoryNameForBudgetLines() {
+        UUID departmentId = UUID.randomUUID();
+        UUID categoryId = UUID.randomUUID();
+        MaintenanceBudget budget = budget(UUID.randomUUID(), departmentId, BudgetStatus.DRAFT);
+        BudgetLine line = new BudgetLine();
+        line.setId(UUID.randomUUID());
+        line.setBudget(budget);
+        line.setCostCategoryId(categoryId);
+        line.setDescription("Pump materials");
+        line.setPlannedAmount(250);
+        budget.getLines().add(line);
+
+        CostCategory category = new CostCategory();
+        category.setId(categoryId);
+        category.setCode("MAT");
+        category.setName("Materials");
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(budget));
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+        when(costCategoryRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(category));
+
+        var result = service.findFiltered(2026, 5, departmentId, null, "asc");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().lines()).hasSize(1);
+        assertThat(result.getFirst().lines().getFirst().costCategoryId()).isEqualTo(categoryId);
+        assertThat(result.getFirst().lines().getFirst().costCategoryName()).isEqualTo("Materials");
     }
 
     @Test
