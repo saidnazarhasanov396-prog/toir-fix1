@@ -24,7 +24,6 @@ import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
-import com.toir.enums.ReservationStatus;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -50,6 +49,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -127,17 +127,14 @@ public class DashboardService {
                 .collect(Collectors.toMap(User::getId, u -> u));
 
         List<RepairRequest> allRequests = repairRequestRepository.search(null, departmentId, null);
-        
+
         long openRequests = allRequests.stream()
-                .filter(r -> r.getStatus() == RequestStatus.OPEN)
+                .filter(DashboardService::isActiveRepairRequest)
                 .count();
         long activeEmergencyRequests = allRequests.stream()
                 .filter(IndustrialKpiAggregations::isActiveEmergencyRequest)
                 .count();
-        long totalEmergencyRequests = allRequests.stream()
-                .filter(IndustrialKpiAggregations::isEmergencyRequest)
-                .count();
-        
+
         long overduePpr = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(t -> isPprTaskOverdue(t, now))
                 .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
@@ -146,6 +143,10 @@ public class DashboardService {
         List<WorkOrder> allWorkOrders = workOrderRepository.search(null, departmentId, null);
         Map<UUID, WorkOrder> workOrderById = allWorkOrders.stream()
                 .collect(Collectors.toMap(WorkOrder::getId, workOrder -> workOrder));
+        List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(d -> departmentId == null || departmentId.equals(d.getDepartmentId()))
+                .toList();
+        long totalEmergencyRequests = totalEmergencyEvents(allRequests, allWorkOrders, allDowntimes, workOrderById);
 
         List<ActualCost> pendingActualCostList = actualCostRepository
                 .findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
@@ -306,21 +307,13 @@ public class DashboardService {
                 .filter(w -> w.getStatus() == WorkOrderStatus.CLOSED)
                 .count();
 
-        long activeReservations = reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ReservationStatus.ACTIVE).size();
-        // Since reservations don't have department directly, we'd need to link them to WorkOrders or Equipment
-        // For simplicity, we might skip filtering this if it's too complex, but let's try to be consistent
-        if (departmentId != null) {
-            activeReservations = reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ReservationStatus.ACTIVE).stream()
-                    .filter(res -> {
-                        if (res.getWorkOrderId() != null) {
-                            return workOrderRepository.findById(res.getWorkOrderId())
-                                    .map(wo -> departmentId.equals(wo.getDepartmentId()))
-                                    .orElse(false);
-                        }
-                        return false;
-                    })
-                    .count();
-        }
+        SparePartsWarehouseStatsProjection warehouseStats = warehouseStatsForDashboard(departmentId, whById);
+        long activeReservations = warehouseStats != null && warehouseStats.getActiveReservations() != null
+                ? warehouseStats.getActiveReservations()
+                : 0L;
+        long lowStockItemsCount = warehouseStats != null && warehouseStats.getLowStockItems() != null
+                ? warehouseStats.getLowStockItems()
+                : 0L;
 
         List<WarehouseStock> allStocks = warehouseStockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(s -> departmentId == null || (whById.containsKey(s.getWarehouseId()) && departmentId.equals(whById.get(s.getWarehouseId()).getDepartmentId())))
@@ -396,7 +389,7 @@ public class DashboardService {
                 completedRepairs,
                 closedWorkOrders,
                 activeReservations,
-                lowStocks.size(),
+                lowStockItemsCount,
                 materialIssuedThisMonth,
                 totalSparePartsCost,
                 sparePartsCostThisMonth,
@@ -419,32 +412,62 @@ public class DashboardService {
                 .count();
         PlanFact planFact = new PlanFact(plannedTasks, completedTasks, completedRepairs);
 
+        List<Equipment> scopedEquipment = equipById.values().stream()
+                .filter(e -> departmentId == null || departmentId.equals(e.getDepartmentId()))
+                .toList();
         List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(m -> departmentId == null || (equipById.containsKey(m.getEquipmentId()) && departmentId.equals(equipById.get(m.getEquipmentId()).getDepartmentId())))
                 .toList();
-        List<ReliabilityMetric> latestMetrics = IndustrialKpiAggregations.latestReliabilityMetrics(allMetrics);
-        double mtbfAvg = latestMetrics.stream().map(ReliabilityMetric::getMtbfHours)
-                .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
-        double mttrAvg = latestMetrics.stream().map(ReliabilityMetric::getMttrHours)
-                .filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
-        
+        Map<UUID, ReliabilityMetric> latestMetricByEquipment = IndustrialKpiAggregations.latestReliabilityMetrics(allMetrics).stream()
+                .collect(Collectors.toMap(ReliabilityMetric::getEquipmentId, metric -> metric));
+        Map<UUID, List<RepairRequest>> requestsByEquipment = allRequests.stream()
+                .filter(r -> r.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(RepairRequest::getEquipmentId));
+        Map<UUID, List<WorkOrder>> workOrdersByEquipment = allWorkOrders.stream()
+                .filter(w -> w.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(WorkOrder::getEquipmentId));
+        Map<UUID, List<DowntimeEvent>> downtimesByEquipment = allDowntimes.stream()
+                .filter(d -> d.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(DowntimeEvent::getEquipmentId));
+        Instant reliabilityNow = Instant.now();
+        Map<UUID, ReliabilityDowntimeCalculator.EquipmentReliability> calculatedReliabilityByEquipment = scopedEquipment.stream()
+                .collect(Collectors.toMap(
+                        Equipment::getId,
+                        equipment -> ReliabilityDowntimeCalculator.calculate(
+                                equipment,
+                                downtimesByEquipment.getOrDefault(equipment.getId(), List.of()),
+                                workOrdersByEquipment.getOrDefault(equipment.getId(), List.of()),
+                                requestsByEquipment.getOrDefault(equipment.getId(), List.of()),
+                                reliabilityNow)));
+        double mtbfAvg = scopedEquipment.stream()
+                .map(e -> reliabilityHours(latestMetricByEquipment.get(e.getId()),
+                        calculatedReliabilityByEquipment.get(e.getId()), true))
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0);
+        double mttrAvg = scopedEquipment.stream()
+                .map(e -> reliabilityHours(latestMetricByEquipment.get(e.getId()),
+                        calculatedReliabilityByEquipment.get(e.getId()), false))
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0);
+
         long totalWO = allWorkOrders.size();
         long unplannedWO = allWorkOrders.stream()
                 .filter(w -> w.getType() == WorkOrderType.EMERGENCY || w.getType() == WorkOrderType.DEFECT)
                 .count();
         double unplannedShare = totalWO > 0 ? (double) unplannedWO / totalWO * 100 : 0;
         
-        List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(d -> departmentId == null || departmentId.equals(d.getDepartmentId()))
-                .toList();
-        double downtimeTotalHours = allDowntimes.stream()
-                .mapToLong(IndustrialKpiAggregations::downtimeMinutes)
+        double downtimeTotalHours = calculatedReliabilityByEquipment.values().stream()
+                .mapToLong(ReliabilityDowntimeCalculator.EquipmentReliability::totalDowntimeMinutes)
                 .sum() / 60.0;
-        long downtimeEventsCount = allDowntimes.size();
-        double downtimeThisMonth = allDowntimes.stream()
-                .filter(d -> d.getStartAt() != null && !d.getStartAt().isBefore(currentMonthStart))
-                .mapToLong(IndustrialKpiAggregations::downtimeMinutes)
-                .sum() / 60.0;
+        long downtimeEventsCount = calculatedReliabilityByEquipment.values().stream()
+                .mapToLong(ReliabilityDowntimeCalculator.EquipmentReliability::failureEvents)
+                .sum();
+        double downtimeThisMonth = downtimeMinutesInPeriod(
+                calculatedReliabilityByEquipment, currentMonthStart, reliabilityNow) / 60.0;
 
         // Reaction/resolution times from closed repair requests
         List<RepairRequest> closedRequests = allRequests.stream()
@@ -728,6 +751,134 @@ public class DashboardService {
         throw RestException.badRequest("Unsupported dashboard work order statusScope: " + statusScope);
     }
 
+    private SparePartsWarehouseStatsProjection warehouseStatsForDashboard(
+            UUID departmentId,
+            Map<UUID, Warehouse> warehouses
+    ) {
+        if (departmentId == null) {
+            return warehouseStockRepository.getSparePartsWarehouseStats(null, null, null, null);
+        }
+        List<UUID> warehouseIds = warehouses.values().stream()
+                .filter(warehouse -> departmentId.equals(warehouse.getDepartmentId()))
+                .map(Warehouse::getId)
+                .toList();
+        if (warehouseIds.isEmpty()) {
+            return null;
+        }
+        return warehouseStockRepository.getSparePartsWarehouseStatsByWarehouseIds(
+                warehouseIds, null, null, null, null);
+    }
+
+    private static boolean isActiveRepairRequest(RepairRequest request) {
+        if (request == null || request.getStatus() == null) {
+            return false;
+        }
+        return request.getStatus() == RequestStatus.OPEN
+                || request.getStatus() == RequestStatus.REGISTERED
+                || request.getStatus() == RequestStatus.IN_REVIEW
+                || request.getStatus() == RequestStatus.NEEDS_CLARIFICATION
+                || request.getStatus() == RequestStatus.APPROVED
+                || request.getStatus() == RequestStatus.ASSIGNED
+                || request.getStatus() == RequestStatus.IN_PROGRESS;
+    }
+
+    private static long totalEmergencyEvents(
+            List<RepairRequest> requests,
+            List<WorkOrder> workOrders,
+            List<DowntimeEvent> downtimes,
+            Map<UUID, WorkOrder> workOrderById
+    ) {
+        Set<String> emergencyKeys = new HashSet<>();
+        requests.stream()
+                .filter(IndustrialKpiAggregations::isEmergencyRequest)
+                .map(request -> request.getId() != null ? "rr:" + request.getId() : null)
+                .filter(Objects::nonNull)
+                .forEach(emergencyKeys::add);
+        workOrders.stream()
+                .filter(workOrder -> workOrder.getType() == WorkOrderType.EMERGENCY)
+                .map(DashboardService::emergencyKeyForWorkOrder)
+                .filter(Objects::nonNull)
+                .forEach(emergencyKeys::add);
+        downtimes.stream()
+                .filter(downtime -> downtime.getType() == com.toir.enums.DowntimeType.EMERGENCY)
+                .map(downtime -> emergencyKeyForDowntime(downtime, workOrderById))
+                .filter(Objects::nonNull)
+                .forEach(emergencyKeys::add);
+        return emergencyKeys.size();
+    }
+
+    private static String emergencyKeyForWorkOrder(WorkOrder workOrder) {
+        if (workOrder.getRepairRequestId() != null) {
+            return "rr:" + workOrder.getRepairRequestId();
+        }
+        return workOrder.getId() != null ? "wo:" + workOrder.getId() : null;
+    }
+
+    private static String emergencyKeyForDowntime(DowntimeEvent downtime, Map<UUID, WorkOrder> workOrderById) {
+        if (downtime.getWorkOrderId() != null) {
+            WorkOrder workOrder = workOrderById.get(downtime.getWorkOrderId());
+            if (workOrder != null) {
+                return emergencyKeyForWorkOrder(workOrder);
+            }
+            return "wo:" + downtime.getWorkOrderId();
+        }
+        return downtime.getId() != null ? "dt:" + downtime.getId() : null;
+    }
+
+    private static Double reliabilityHours(
+            ReliabilityMetric storedMetric,
+            ReliabilityDowntimeCalculator.EquipmentReliability calculated,
+            boolean mtbf
+    ) {
+        Double stored = storedMetric != null
+                ? (mtbf ? storedMetric.getMtbfHours() : storedMetric.getMttrHours())
+                : null;
+        if (stored != null) {
+            return stored;
+        }
+        if (calculated == null || calculated.failureEvents() <= 0) {
+            return null;
+        }
+        return mtbf ? calculated.mtbfHours() : calculated.mttrHours();
+    }
+
+    private static long downtimeMinutesInPeriod(
+            Map<UUID, ReliabilityDowntimeCalculator.EquipmentReliability> reliabilityByEquipment,
+            Instant periodStart,
+            Instant periodEnd
+    ) {
+        return reliabilityByEquipment.values().stream()
+                .mapToLong(reliability -> {
+                    List<ReliabilityDowntimeCalculator.DowntimeSlice> slices = reliability.failureSlices().stream()
+                            .map(slice -> clipSliceToPeriod(slice, periodStart, periodEnd))
+                            .filter(slice -> slice.durationMinutes() > 0)
+                            .toList();
+                    return ReliabilityDowntimeCalculator.mergedDowntimeMinutes(slices);
+                })
+                .sum();
+    }
+
+    private static ReliabilityDowntimeCalculator.DowntimeSlice clipSliceToPeriod(
+            ReliabilityDowntimeCalculator.DowntimeSlice slice,
+            Instant periodStart,
+            Instant periodEnd
+    ) {
+        Instant start = slice.start().isAfter(periodStart) ? slice.start() : periodStart;
+        Instant end = slice.end().isBefore(periodEnd) ? slice.end() : periodEnd;
+        if (!end.isAfter(start)) {
+            return new ReliabilityDowntimeCalculator.DowntimeSlice(
+                    slice.equipmentId(), slice.departmentId(), slice.causeKey(), start, start, 0, slice.completed());
+        }
+        return new ReliabilityDowntimeCalculator.DowntimeSlice(
+                slice.equipmentId(),
+                slice.departmentId(),
+                slice.causeKey(),
+                start,
+                end,
+                Duration.between(start, end).toMinutes(),
+                slice.completed());
+    }
+
     private MaintenanceDueCounts maintenanceDueCounts(UUID departmentId) {
         return new MaintenanceDueCounts(
                 maintenanceDueEventRepository.countByDueStatusAndDepartment(MaintenanceDueStatus.UPCOMING, departmentId),
@@ -750,13 +901,19 @@ public class DashboardService {
     }
 
     private boolean isPprTaskOverdue(PprTask task, LocalDateTime now) {
-        if (task.getDueDate() == null) {
+        if (task.getStatus() == PprTaskStatus.COMPLETED
+                || task.getStatus() == PprTaskStatus.CANCELLED
+                || task.getStatus() == PprTaskStatus.POSTPONED) {
             return false;
         }
-        if (task.getStatus() == PprTaskStatus.COMPLETED || task.getStatus() == PprTaskStatus.CANCELLED) {
-            return false;
+        if (task.getStatus() == PprTaskStatus.OVERDUE) {
+            return true;
         }
-        return task.getStatus() == PprTaskStatus.OVERDUE || task.getDueDate().isBefore(now);
+        return task.getDueDate() != null
+                && task.getDueDate().isBefore(now)
+                && (task.getStatus() == PprTaskStatus.PLANNED
+                || task.getStatus() == PprTaskStatus.APPROVED
+                || task.getStatus() == PprTaskStatus.IN_PROGRESS);
     }
 
     private UUID stockMovementDepartment(
