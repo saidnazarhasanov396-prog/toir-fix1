@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.Message;
 import com.toir.config.FirebaseProperties;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.entity.UserFcmToken;
@@ -18,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -61,6 +63,81 @@ class FirebasePushNotificationSenderTest {
         sender.sendToUser(notification(userId));
 
         verify(tokenRepository).findAllByUserIdAndActiveTrueAndIsDeletedFalseOrderByLastSeenAtDesc(userId);
+    }
+
+    @Test
+    void sendToUserBuildsAndroidMessageWithNotificationPayload() throws Exception {
+        FirebasePushNotificationSender sender = new FirebasePushNotificationSender(
+                firebaseMessagingProvider, tokenRepository, new FirebaseProperties());
+        FirebaseMessaging messaging = mock(FirebaseMessaging.class);
+        UUID userId = UUID.randomUUID();
+
+        UserFcmToken token = new UserFcmToken();
+        token.setId(UUID.randomUUID());
+        token.setUserId(userId);
+        token.setToken("android-token-1");
+        token.setPlatform(FcmDevicePlatform.ANDROID);
+        token.setLastSeenAt(Instant.now());
+
+        when(firebaseMessagingProvider.getIfAvailable()).thenReturn(messaging);
+        when(tokenRepository.findAllByUserIdAndActiveTrueAndIsDeletedFalseOrderByLastSeenAtDesc(userId))
+                .thenReturn(List.of(token));
+        when(messaging.send(org.mockito.ArgumentMatchers.any(Message.class)))
+                .thenReturn("projects/test/messages/android-msg-1");
+
+        sender.sendToUser(notification(userId));
+
+        verify(messaging).send(org.mockito.ArgumentMatchers.any(Message.class));
+    }
+
+    @Test
+    void sendToUserBuildsIosMessageWithNotificationPayload() throws Exception {
+        FirebasePushNotificationSender sender = new FirebasePushNotificationSender(
+                firebaseMessagingProvider, tokenRepository, new FirebaseProperties());
+        FirebaseMessaging messaging = mock(FirebaseMessaging.class);
+        UUID userId = UUID.randomUUID();
+
+        UserFcmToken token = new UserFcmToken();
+        token.setId(UUID.randomUUID());
+        token.setUserId(userId);
+        token.setToken("ios-token-1");
+        token.setPlatform(FcmDevicePlatform.IOS);
+        token.setLastSeenAt(Instant.now());
+
+        when(firebaseMessagingProvider.getIfAvailable()).thenReturn(messaging);
+        when(tokenRepository.findAllByUserIdAndActiveTrueAndIsDeletedFalseOrderByLastSeenAtDesc(userId))
+                .thenReturn(List.of(token));
+        when(messaging.send(org.mockito.ArgumentMatchers.any(Message.class)))
+                .thenReturn("projects/test/messages/ios-msg-1");
+
+        sender.sendToUser(notification(userId));
+
+        verify(messaging).send(org.mockito.ArgumentMatchers.any(Message.class));
+    }
+
+    @Test
+    void sendToUserBuildsWebMessageWithNotificationPayload() throws Exception {
+        FirebasePushNotificationSender sender = new FirebasePushNotificationSender(
+                firebaseMessagingProvider, tokenRepository, new FirebaseProperties());
+        FirebaseMessaging messaging = mock(FirebaseMessaging.class);
+        UUID userId = UUID.randomUUID();
+
+        UserFcmToken token = new UserFcmToken();
+        token.setId(UUID.randomUUID());
+        token.setUserId(userId);
+        token.setToken("web-token-1");
+        token.setPlatform(FcmDevicePlatform.WEB);
+        token.setLastSeenAt(Instant.now());
+
+        when(firebaseMessagingProvider.getIfAvailable()).thenReturn(messaging);
+        when(tokenRepository.findAllByUserIdAndActiveTrueAndIsDeletedFalseOrderByLastSeenAtDesc(userId))
+                .thenReturn(List.of(token));
+        when(messaging.send(org.mockito.ArgumentMatchers.any(Message.class)))
+                .thenReturn("projects/test/messages/web-msg-1");
+
+        sender.sendToUser(notification(userId));
+
+        verify(messaging).send(org.mockito.ArgumentMatchers.any(Message.class));
     }
 
     private NotificationDto notification(UUID userId) {
