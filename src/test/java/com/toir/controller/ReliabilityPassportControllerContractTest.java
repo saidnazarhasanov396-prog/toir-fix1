@@ -61,6 +61,7 @@ class ReliabilityPassportControllerContractTest {
                 0.5,
                 "30 minutes",
                 98.5,
+                98.5,
                 List.of(new TopCause("Wear", 3), new TopCause("Overload", 2)),
                 now,
                 null
@@ -83,6 +84,7 @@ class ReliabilityPassportControllerContractTest {
                 .andExpect(jsonPath("$.content[0].mtbfDuration").value("120 hours"))
                 .andExpect(jsonPath("$.content[0].mttrHours").value(0.5))
                 .andExpect(jsonPath("$.content[0].mttrDuration").value("30 minutes"))
+                .andExpect(jsonPath("$.content[0].availability").value(98.5))
                 .andExpect(jsonPath("$.content[0].availabilityPct").value(98.5))
                 .andExpect(jsonPath("$.content[0].topRootCauses[0].cause").value("Wear"))
                 .andExpect(jsonPath("$.content[0].topRootCauses[0].count").value(3))
@@ -240,6 +242,7 @@ class ReliabilityPassportControllerContractTest {
                 .andExpect(jsonPath("$.content[0].totalDowntimeEvents").value(0))
                 .andExpect(jsonPath("$.content[0].mtbfHours").doesNotExist())
                 .andExpect(jsonPath("$.content[0].mttrHours").doesNotExist())
+                .andExpect(jsonPath("$.content[0].availability").value(100.0))
                 .andExpect(jsonPath("$.content[0].availabilityPct").value(100.0))
                 .andExpect(jsonPath("$.content[0].topRootCauses").isArray())
                 .andExpect(jsonPath("$.content[0].topRootCauses").isEmpty());
