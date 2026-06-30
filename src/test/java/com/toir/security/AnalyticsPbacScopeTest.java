@@ -246,7 +246,7 @@ class AnalyticsPbacScopeTest {
     }
 
     @Test
-    void dashboardOpenRequestsCountsOnlyOpenRepairRequestsInScopedDepartment() {
+    void dashboardOpenRequestsCountsActiveRepairRequestsInScopedDepartment() {
         UUID departmentId = UUID.randomUUID();
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repairRequestRepository.search(null, departmentId, null)).thenReturn(List.of(
@@ -257,7 +257,7 @@ class AnalyticsPbacScopeTest {
 
         var overview = dashboardService.overview(departmentId);
 
-        assertThat(overview.counters().openRequests()).isEqualTo(2);
+        assertThat(overview.counters().openRequests()).isEqualTo(3);
         verify(repairRequestRepository).search(null, departmentId, null);
     }
 
