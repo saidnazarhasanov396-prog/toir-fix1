@@ -96,20 +96,20 @@ public class RepairRequest extends BaseEntity {
     @Column(name = "warranty_decision_comment", columnDefinition = "text")
     private String warrantyDecisionComment;
 
-    @Column(name = "warranty_supplier_id")
-    private UUID warrantySupplierId;
+    @Column(name = "warranty_counteragent_id")
+    private UUID warrantyCounteragentId;
 
     @Column(name = "warranty_supplier_name")
-    private String warrantySupplierName;
+    private String warrantyCounteragentName;
 
     @Column(name = "warranty_supplier_contact_person")
-    private String warrantySupplierContactPerson;
+    private String warrantyCounteragentContactPerson;
 
     @Column(name = "warranty_supplier_phone")
-    private String warrantySupplierPhone;
+    private String warrantyCounteragentPhone;
 
     @Column(name = "warranty_supplier_email")
-    private String warrantySupplierEmail;
+    private String warrantyCounteragentEmail;
 
     @Column(name = "warranty_start_date_at_creation")
     private LocalDate warrantyStartDateAtCreation;

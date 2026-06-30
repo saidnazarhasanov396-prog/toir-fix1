@@ -1,9 +1,9 @@
 package com.toir.controller;
 
-import com.toir.controller.contractor.ContractorWorkController;
-import com.toir.dto.contractorwork.ContractorWorkDto;
+import com.toir.controller.counteragent.CounteragentWorkController;
+import com.toir.dto.counteragent.CounteragentWorkDto;
 import com.toir.enums.ContractorWorkStatus;
-import com.toir.service.contactor.ContractorWorkService;
+import com.toir.service.counteragent.CounteragentWorkService;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -22,55 +22,55 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
-class ContractorWorkControllerContractTest {
+class CounteragentWorkControllerContractTest {
 
     @Mock
-    ContractorWorkService service;
+    CounteragentWorkService service;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new ContractorWorkController(service)).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(new CounteragentWorkController(service)).build();
     }
 
     @Test
-    void shouldReturnAllContractorWorksWhenContractorIdNotProvided() throws Exception {
-        ContractorWorkDto first = dto(UUID.randomUUID(), UUID.randomUUID());
-        ContractorWorkDto second = dto(UUID.randomUUID(), UUID.randomUUID());
-        when(service.findByContractor(null)).thenReturn(List.of(first, second));
+    void shouldReturnAllCounteragentWorksWhenCounteragentIdNotProvided() throws Exception {
+        CounteragentWorkDto first = dto(UUID.randomUUID(), UUID.randomUUID());
+        CounteragentWorkDto second = dto(UUID.randomUUID(), UUID.randomUUID());
+        when(service.findByCounteragent(null)).thenReturn(List.of(first, second));
 
-        mockMvc.perform(get("/api/v1/contractor-works"))
+        mockMvc.perform(get("/api/v1/counteragent-works"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content[0].id").value(first.id().toString()))
                 .andExpect(jsonPath("$.content[1].id").value(second.id().toString()));
 
-        verify(service).findByContractor(null);
+        verify(service).findByCounteragent(null);
     }
 
     @Test
-    void shouldFilterByContractorWhenContractorIdProvided() throws Exception {
-        UUID contractorId = UUID.randomUUID();
-        ContractorWorkDto work = dto(UUID.randomUUID(), contractorId);
-        when(service.findByContractor(contractorId)).thenReturn(List.of(work));
+    void shouldFilterByCounteragentWhenCounteragentIdProvided() throws Exception {
+        UUID counteragentId = UUID.randomUUID();
+        CounteragentWorkDto work = dto(UUID.randomUUID(), counteragentId);
+        when(service.findByCounteragent(counteragentId)).thenReturn(List.of(work));
 
-        mockMvc.perform(get("/api/v1/contractor-works")
-                        .param("contractorId", contractorId.toString()))
+        mockMvc.perform(get("/api/v1/counteragent-works")
+                        .param("counteragentId", counteragentId.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].contractorId").value(contractorId.toString()));
+                .andExpect(jsonPath("$.content[0].counteragentId").value(counteragentId.toString()));
 
-        verify(service).findByContractor(contractorId);
+        verify(service).findByCounteragent(counteragentId);
     }
 
     @Test
-    void verifyPaginationStillWorksWithoutContractorId() throws Exception {
-        ContractorWorkDto first = dto(UUID.randomUUID(), UUID.randomUUID());
-        ContractorWorkDto second = dto(UUID.randomUUID(), UUID.randomUUID());
-        ContractorWorkDto third = dto(UUID.randomUUID(), UUID.randomUUID());
-        when(service.findByContractor(null)).thenReturn(List.of(first, second, third));
+    void verifyPaginationStillWorksWithoutCounteragentId() throws Exception {
+        CounteragentWorkDto first = dto(UUID.randomUUID(), UUID.randomUUID());
+        CounteragentWorkDto second = dto(UUID.randomUUID(), UUID.randomUUID());
+        CounteragentWorkDto third = dto(UUID.randomUUID(), UUID.randomUUID());
+        when(service.findByCounteragent(null)).thenReturn(List.of(first, second, third));
 
-        mockMvc.perform(get("/api/v1/contractor-works")
+        mockMvc.perform(get("/api/v1/counteragent-works")
                         .param("page", "1")
                         .param("size", "1"))
                 .andExpect(status().isOk())
@@ -81,12 +81,12 @@ class ContractorWorkControllerContractTest {
                 .andExpect(jsonPath("$.size").value(1));
     }
 
-    private ContractorWorkDto dto(UUID id, UUID contractorId) {
-        return new ContractorWorkDto(
+    private CounteragentWorkDto dto(UUID id, UUID counteragentId) {
+        return new CounteragentWorkDto(
                 id,
-                contractorId,
+                counteragentId,
                 UUID.randomUUID(),
-                "Contractor maintenance work",
+                "Counteragent maintenance work",
                 ContractorWorkStatus.DRAFT,
                 Instant.parse("2026-05-01T00:00:00Z"),
                 null,

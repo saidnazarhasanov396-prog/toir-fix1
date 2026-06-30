@@ -17,8 +17,8 @@ import java.util.UUID;
 @Builder
 public class ContractorWork extends ActorStampedEntity {
 
-    @Column(name = "contractor_id", nullable = false)
-    private UUID contractorId;
+    @Column(name = "counteragent_id")
+    private UUID counteragentId;
 
     @Column(name = "work_order_id")
     private UUID workOrderId;

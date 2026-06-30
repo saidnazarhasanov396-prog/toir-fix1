@@ -130,7 +130,7 @@ public class EquipmentCostDrilldownService {
             if (cost.getContractorWorkId() != null) {
                 ids.add(cost.getContractorWorkId());
             }
-            if (cost.getSourceType() == ActualCostSourceType.CONTRACTOR_WORK && cost.getSourceId() != null) {
+            if (isCounteragentWorkSource(cost.getSourceType()) && cost.getSourceId() != null) {
                 ids.add(cost.getSourceId());
             }
         }
@@ -251,8 +251,8 @@ public class EquipmentCostDrilldownService {
                                                                  UUID workOrderId,
                                                                  UUID repairRequestId,
                                                                  UUID contractorWorkId) {
-        if (cost.getSourceType() == ActualCostSourceType.CONTRACTOR_WORK && contractorWorkId != null) {
-            return new EquipmentCostDrilldownResponse.SourceLink("CONTRACTOR_WORK", contractorWorkId, "/contractors?workId=" + contractorWorkId);
+        if (isCounteragentWorkSource(cost.getSourceType()) && contractorWorkId != null) {
+            return new EquipmentCostDrilldownResponse.SourceLink("COUNTERAGENT_WORK", contractorWorkId, "/counteragent-works?workId=" + contractorWorkId);
         }
         if (cost.getSourceType() == ActualCostSourceType.REPAIR_REQUEST && repairRequestId != null) {
             return new EquipmentCostDrilldownResponse.SourceLink("REPAIR_REQUEST", repairRequestId, "/repair-requests/" + repairRequestId);
@@ -269,7 +269,7 @@ public class EquipmentCostDrilldownService {
             return new EquipmentCostDrilldownResponse.SourceLink("REPAIR_REQUEST", repairRequestId, "/repair-requests/" + repairRequestId);
         }
         if (contractorWorkId != null) {
-            return new EquipmentCostDrilldownResponse.SourceLink("CONTRACTOR_WORK", contractorWorkId, "/contractors?workId=" + contractorWorkId);
+            return new EquipmentCostDrilldownResponse.SourceLink("COUNTERAGENT_WORK", contractorWorkId, "/counteragent-works?workId=" + contractorWorkId);
         }
         if (cost.getSourceId() != null && cost.getSourceType() != null) {
             return new EquipmentCostDrilldownResponse.SourceLink(cost.getSourceType().name(), cost.getSourceId(), null);
@@ -286,7 +286,7 @@ public class EquipmentCostDrilldownService {
                                  Map<UUID, ContractorWork> contractorWorks) {
         if (contractorWorkId != null && contractorWorks.containsKey(contractorWorkId)) {
             ContractorWork contractorWork = contractorWorks.get(contractorWorkId);
-            return joinNonBlank("Contractor work", contractorWork.getDescription());
+            return joinNonBlank("Counteragent work", contractorWork.getDescription());
         }
         if (cost.getSourceType() == ActualCostSourceType.MATERIAL_ISSUE) {
             return workOrderId != null && workOrders.containsKey(workOrderId)
@@ -345,10 +345,15 @@ public class EquipmentCostDrilldownService {
         if (cost.getContractorWorkId() != null) {
             return cost.getContractorWorkId();
         }
-        if (cost.getSourceType() == ActualCostSourceType.CONTRACTOR_WORK && cost.getSourceId() != null) {
+        if (isCounteragentWorkSource(cost.getSourceType()) && cost.getSourceId() != null) {
             return cost.getSourceId();
         }
         return null;
+    }
+
+    private boolean isCounteragentWorkSource(ActualCostSourceType sourceType) {
+        return sourceType == ActualCostSourceType.COUNTERAGENT_WORK
+                || sourceType == ActualCostSourceType.CONTRACTOR_WORK;
     }
 
     private List<EquipmentCostDrilldownResponse.Bucket> buckets(List<EquipmentCostDrilldownResponse.Row> rows,
@@ -393,7 +398,7 @@ public class EquipmentCostDrilldownService {
         return switch (sourceType) {
             case WORK_ORDER -> "Work order";
             case REPAIR_REQUEST -> "Repair request";
-            case CONTRACTOR_WORK -> "Contractor work";
+            case COUNTERAGENT_WORK, CONTRACTOR_WORK -> "Counteragent work";
             case MATERIAL_ISSUE -> "Material issue";
             case LABOR_ENTRY -> "Labor entry";
             case PROCUREMENT_RECEIPT -> "Procurement receipt";

@@ -7,7 +7,7 @@ public record ActualCostReviewItem(
         UUID id,
         UUID workOrderId,
         UUID repairRequestId,
-        UUID contractorWorkId,
+        UUID counteragentWorkId,
         UUID costCategoryId,
         String status,
         double amount,
@@ -18,7 +18,7 @@ public record ActualCostReviewItem(
         String reviewedByName,
         UserRef reviewedBy,
         String reviewComment,
-        Object contractorWork,
+        Object counteragentWork,
         Object workOrder,
         Object repairRequest,
         Object budgetLine,
@@ -49,7 +49,7 @@ public record ActualCostReviewItem(
     public ActualCostReviewItem(UUID id,
                                 UUID workOrderId,
                                 UUID repairRequestId,
-                                UUID contractorWorkId,
+                                UUID counteragentWorkId,
                                 UUID costCategoryId,
                                 String status,
                                 double amount,
@@ -60,7 +60,7 @@ public record ActualCostReviewItem(
                                 String reviewedByName,
                                 UserRef reviewedBy,
                                 String reviewComment,
-                                Object contractorWork,
+                                Object counteragentWork,
                                 Object workOrder,
                                 Object repairRequest,
                                 Object budgetLine,
@@ -82,8 +82,8 @@ public record ActualCostReviewItem(
                                 String budgetActionPath,
                                 String reviewActionPath,
                                 String sourceLink) {
-        this(id, workOrderId, repairRequestId, contractorWorkId, costCategoryId, status, amount, costDate, notes,
-                reviewedAt, reviewedById, reviewedByName, reviewedBy, reviewComment, contractorWork, workOrder,
+        this(id, workOrderId, repairRequestId, counteragentWorkId, costCategoryId, status, amount, costDate, notes,
+                reviewedAt, reviewedById, reviewedByName, reviewedBy, reviewComment, counteragentWork, workOrder,
                 repairRequest, budgetLine, department, costCategory, ageHours, isOverdue, actionPath, approvalRule,
                 approvalRoleCode, escalationRoleCode, hoursToOverdue, routeSource, reviewRouteOverride, canReview,
                 reviewAccessReason, effectiveReviewRoleCode, contextType, budgetActionPath, reviewActionPath,
@@ -100,7 +100,7 @@ public record ActualCostReviewItem(
     public record WorkOrderRef(UUID id, String number, String title, Object department) {
     }
 
-    public record ContractorWorkRef(UUID id, String description, String status, Double cost, Object contractor, Object workOrder) {
+    public record CounteragentWorkRef(UUID id, String description, String status, Double cost, Object counteragent, Object workOrder) {
     }
 
     public record RepairRequestRef(UUID id, String number) {

@@ -10,6 +10,7 @@ import java.util.UUID;
 public record WarehouseBinDto(
         UUID id,
         UUID warehouseId,
+        String warehouseName,
         String code,
         String zone,
         String aisle,
@@ -34,10 +35,47 @@ public record WarehouseBinDto(
         String qrPayload,
         Instant updatedAt
 ) {
+    public WarehouseBinDto(
+            UUID id,
+            UUID warehouseId,
+            String code,
+            String zone,
+            String aisle,
+            String rack,
+            String shelfLevel,
+            String binType,
+            BigDecimal maxWeightKg,
+            BigDecimal maxVolumeM3,
+            WarehouseQualityZoneType qualityZoneType,
+            String temperatureZone,
+            String hazardClass,
+            boolean allowMixedSpareParts,
+            boolean allowMixedLots,
+            boolean blocked,
+            String blockReason,
+            Instant blockedAt,
+            boolean frozen,
+            boolean active,
+            Integer travelSequence,
+            Integer binLevel,
+            String barcode,
+            String qrPayload,
+            Instant updatedAt
+    ) {
+        this(id, warehouseId, null, code, zone, aisle, rack, shelfLevel, binType, maxWeightKg, maxVolumeM3,
+                qualityZoneType, temperatureZone, hazardClass, allowMixedSpareParts, allowMixedLots, blocked,
+                blockReason, blockedAt, frozen, active, travelSequence, binLevel, barcode, qrPayload, updatedAt);
+    }
+
     public static WarehouseBinDto from(WarehouseBin bin) {
+        return from(bin, null);
+    }
+
+    public static WarehouseBinDto from(WarehouseBin bin, String warehouseName) {
         return new WarehouseBinDto(
                 bin.getId(),
                 bin.getWarehouseId(),
+                warehouseName,
                 bin.getCode(),
                 bin.getZone(),
                 bin.getAisle(),

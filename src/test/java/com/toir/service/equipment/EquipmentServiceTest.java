@@ -19,7 +19,7 @@ import com.toir.entity.DowntimeEvent;
 import com.toir.entity.FileAsset;
 import com.toir.entity.Location;
 import com.toir.entity.Mxik;
-import com.toir.entity.Supplier;
+import com.toir.entity.Counteragent;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
@@ -46,7 +46,7 @@ import com.toir.enums.MeterType;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
 import com.toir.enums.RequestStatus;
-import com.toir.enums.SupplierType;
+import com.toir.enums.CounteragentStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -59,10 +59,10 @@ import com.toir.repository.FileAssetRepository;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.equipment.EquipmentDocumentRepository;
 import com.toir.repository.equipment.EquipmentCommissioningActRepository;
+import com.toir.service.CounteragentService;
 import com.toir.service.file_management.FileService;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.MxikRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -169,7 +169,7 @@ class EquipmentServiceTest {
     WarehouseRepository warehouseRepository;
 
     @Mock
-    SupplierRepository supplierRepository;
+    CounteragentService counteragentService;
 
     @Mock
     MxikRepository mxikRepository;
@@ -1985,7 +1985,7 @@ class EquipmentServiceTest {
     @Test
     void createPersistsWarrantyPeriodWhenWarrantyEnabled() {
         UUID departmentId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         EquipmentCreateRequest request = new EquipmentCreateRequest(
                 null,
                 "Pump P-103",
@@ -2018,13 +2018,13 @@ class EquipmentServiceTest {
                 null,
                 null,
                 null,
-                supplierId,
+                counteragentId,
                 null
         );
         stubCreateFlowWithoutEnrichment("INV-P-103");
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
-        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
-                .thenReturn(Optional.of(supplier(supplierId, "Equipment Vendor", SupplierType.EQUIPMENT)));
+        when(counteragentService.loadActive(eq(counteragentId), any()))
+                .thenReturn(counteragent(counteragentId, "Equipment Vendor", CounteragentStatus.ACTIVE));
 
         EquipmentDto created = service.create(request);
 
@@ -2035,13 +2035,13 @@ class EquipmentServiceTest {
         verify(repository).save(entityCaptor.capture());
         assertThat(entityCaptor.getValue().getWarrantyStartDate()).isEqualTo(LocalDate.of(2026, 6, 1));
         assertThat(entityCaptor.getValue().getWarrantyEndDate()).isEqualTo(LocalDate.of(2027, 6, 1));
-        assertThat(entityCaptor.getValue().getWarrantySupplierId()).isEqualTo(supplierId);
+        assertThat(entityCaptor.getValue().getWarrantyCounteragentId()).isEqualTo(counteragentId);
     }
 
     @Test
-    void createDefaultsWarrantySupplierToPurchaseSupplierWhenWarrantyEnabled() {
+    void createDefaultsWarrantyCounteragentToPurchaseCounteragentWhenWarrantyEnabled() {
         UUID departmentId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         EquipmentCreateRequest request = new EquipmentCreateRequest(
                 null,
                 "Pump P-105",
@@ -2074,24 +2074,24 @@ class EquipmentServiceTest {
                 null,
                 null,
                 null,
-                supplierId,
+                counteragentId,
                 null
         );
         stubCreateFlowWithoutEnrichment("INV-P-105");
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
-        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
-                .thenReturn(Optional.of(supplier(supplierId, "Equipment Vendor", SupplierType.EQUIPMENT)));
+        when(counteragentService.loadActive(eq(counteragentId), any()))
+                .thenReturn(counteragent(counteragentId, "Equipment Vendor", CounteragentStatus.ACTIVE));
 
         service.create(request);
 
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
-        assertThat(entityCaptor.getValue().getSupplierId()).isEqualTo(supplierId);
-        assertThat(entityCaptor.getValue().getWarrantySupplierId()).isEqualTo(supplierId);
+        assertThat(entityCaptor.getValue().getCounteragentId()).isEqualTo(counteragentId);
+        assertThat(entityCaptor.getValue().getWarrantyCounteragentId()).isEqualTo(counteragentId);
     }
 
     @Test
-    void createRejectsWarrantyEnabledWithoutAnySupplier() {
+    void createRejectsWarrantyEnabledWithoutAnyCounteragent() {
         EquipmentCreateRequest request = new EquipmentCreateRequest(
                 null,
                 "Pump P-106",
@@ -2131,13 +2131,13 @@ class EquipmentServiceTest {
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("Warranty supplier is required");
+                    assertThat(ex.getMessage()).contains("Warranty counteragent is required");
                 });
     }
 
     @Test
-    void createRejectsSupplierThatDoesNotSupportEquipment() {
-        UUID supplierId = UUID.randomUUID();
+    void createRejectsInactiveCounteragent() {
+        UUID counteragentId = UUID.randomUUID();
         EquipmentCreateRequest request = new EquipmentCreateRequest(
                 null,
                 "Pump P-107",
@@ -2170,16 +2170,16 @@ class EquipmentServiceTest {
                 null,
                 null,
                 null,
-                supplierId,
+                counteragentId,
                 null
         );
-        when(supplierRepository.findByIdAndIsDeletedFalse(supplierId))
-                .thenReturn(Optional.of(supplier(supplierId, "Spare Vendor", SupplierType.SPARE_PART)));
+        when(counteragentService.loadActive(eq(counteragentId), any()))
+                .thenThrow(RestException.badRequest("Inactive counteragents cannot be selected for equipment counteragent"));
 
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("EQUIPMENT");
+                    assertThat(ex.getMessage()).contains("Inactive counteragents");
                 });
     }
 
@@ -3402,14 +3402,13 @@ class EquipmentServiceTest {
         return equipment;
     }
 
-    private Supplier supplier(UUID id, String name, SupplierType supplierType) {
-        Supplier supplier = new Supplier();
-        supplier.setId(id);
-        supplier.setCode("SUP-" + id.toString().substring(0, 8));
-        supplier.setName(name);
-        supplier.setActive(true);
-        supplier.setSupplierType(supplierType);
-        return supplier;
+    private Counteragent counteragent(UUID id, String name, CounteragentStatus status) {
+        Counteragent counteragent = new Counteragent();
+        counteragent.setId(id);
+        counteragent.setCode("CA-" + id.toString().substring(0, 8));
+        counteragent.setName(name);
+        counteragent.setStatus(status);
+        return counteragent;
     }
 
     private RepairRequest repairRequest(UUID equipmentId, RequestStatus status) {

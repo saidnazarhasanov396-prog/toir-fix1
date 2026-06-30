@@ -33,19 +33,19 @@ public interface ContractorContractRepository extends JpaRepository<ContractorCo
     @Query(value = "SELECT EXISTS(SELECT 1 FROM contractor_contracts WHERE number = :number AND is_deleted = false)", nativeQuery = true)
     boolean existsByNumberAndIsDeletedFalse(@Param("number") String number);
 
-    @Query(value = "SELECT * FROM contractor_contracts WHERE contractor_id = :contractorId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<ContractorContract> findAllByContractorIdAndIsDeletedFalse(@Param("contractorId") UUID contractorId);
+    @Query(value = "SELECT * FROM contractor_contracts WHERE counteragent_id = :counteragentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<ContractorContract> findAllByCounteragentIdAndIsDeletedFalse(@Param("counteragentId") UUID counteragentId);
 
     @Query(value = """
             SELECT *
             FROM contractor_contracts
-            WHERE contractor_id = :contractorId
+            WHERE counteragent_id = :counteragentId
               AND status = cast(:status as varchar)
               AND is_deleted = false
             ORDER BY updated_at DESC
             """, nativeQuery = true)
-    List<ContractorContract> findAllByContractorIdAndStatusAndIsDeletedFalse(
-            @Param("contractorId") UUID contractorId,
+    List<ContractorContract> findAllByCounteragentIdAndStatusAndIsDeletedFalse(
+            @Param("counteragentId") UUID counteragentId,
             @Param("status") ContractStatus status
     );
 
@@ -53,7 +53,7 @@ public interface ContractorContractRepository extends JpaRepository<ContractorCo
             SELECT EXISTS(
                 SELECT 1
                 FROM contractor_contracts
-                WHERE contractor_id = cast(:contractorId as uuid)
+                WHERE counteragent_id = cast(:counteragentId as uuid)
                   AND status = 'ACTIVE'
                   AND is_deleted = false
                   AND start_date <= :date
@@ -61,7 +61,23 @@ public interface ContractorContractRepository extends JpaRepository<ContractorCo
             )
             """, nativeQuery = true)
     boolean existsActiveContractValidOn(
-            @Param("contractorId") UUID contractorId,
+            @Param("counteragentId") UUID counteragentId,
+            @Param("date") LocalDate date
+    );
+
+    @Query(value = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM contractor_contracts
+                WHERE counteragent_id = cast(:counteragentId as uuid)
+                  AND status = 'ACTIVE'
+                  AND is_deleted = false
+                  AND start_date <= :date
+                  AND (end_date IS NULL OR end_date >= :date)
+            )
+            """, nativeQuery = true)
+    boolean existsActiveCounteragentContractValidOn(
+            @Param("counteragentId") UUID counteragentId,
             @Param("date") LocalDate date
     );
 }

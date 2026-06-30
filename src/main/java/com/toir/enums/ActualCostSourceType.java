@@ -3,6 +3,7 @@ package com.toir.enums;
 public enum ActualCostSourceType {
     WORK_ORDER,
     REPAIR_REQUEST,
+    COUNTERAGENT_WORK,
     CONTRACTOR_WORK,
     MATERIAL_ISSUE,
     LABOR_ENTRY,

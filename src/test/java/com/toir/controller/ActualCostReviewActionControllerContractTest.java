@@ -45,22 +45,22 @@ class ActualCostReviewActionControllerContractTest {
     @Test
     void exportReviewQueueAppliesFrontendFiltersBeforeBuildingCsv() throws Exception {
         UUID departmentId = UUID.randomUUID();
-        UUID contractorId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         UUID categoryId = UUID.randomUUID();
         ActualCostReviewItem matching = reviewItem(
-                UUID.randomUUID(), departmentId, contractorId, categoryId, "PENDING",
+                UUID.randomUUID(), departmentId, counteragentId, categoryId, "PENDING",
                 "FINANCE_MANAGER", Instant.parse("2026-06-15T09:00:00Z"), false, 2, false);
         ActualCostReviewItem wrongDepartment = reviewItem(
-                UUID.randomUUID(), UUID.randomUUID(), contractorId, categoryId, "PENDING",
+                UUID.randomUUID(), UUID.randomUUID(), counteragentId, categoryId, "PENDING",
                 "FINANCE_MANAGER", Instant.parse("2026-06-15T09:00:00Z"), false, 2, false);
         ActualCostReviewItem wrongRole = reviewItem(
-                UUID.randomUUID(), departmentId, contractorId, categoryId, "PENDING",
+                UUID.randomUUID(), departmentId, counteragentId, categoryId, "PENDING",
                 "ACCOUNTANT", Instant.parse("2026-06-15T09:00:00Z"), false, 2, false);
         ActualCostReviewItem overdue = reviewItem(
-                UUID.randomUUID(), departmentId, contractorId, categoryId, "PENDING",
+                UUID.randomUUID(), departmentId, counteragentId, categoryId, "PENDING",
                 "FINANCE_MANAGER", Instant.parse("2026-06-15T09:00:00Z"), true, 0, false);
         ActualCostReviewItem allocated = reviewItem(
-                UUID.randomUUID(), departmentId, contractorId, categoryId, "PENDING",
+                UUID.randomUUID(), departmentId, counteragentId, categoryId, "PENDING",
                 "FINANCE_MANAGER", Instant.parse("2026-06-15T09:00:00Z"), false, 2, true);
 
         when(service.reviewQueue("pump"))
@@ -72,7 +72,7 @@ class ActualCostReviewActionControllerContractTest {
                         .param("search", "pump")
                         .param("status", "PENDING")
                         .param("departmentId", departmentId.toString())
-                        .param("contractorId", contractorId.toString())
+                        .param("counteragentId", counteragentId.toString())
                         .param("approvalRoleCode", "FINANCE_MANAGER")
                         .param("attentionMode", "DUE_SOON")
                         .param("reminderWindowHours", "4")
@@ -88,22 +88,22 @@ class ActualCostReviewActionControllerContractTest {
     @Test
     void exportActualCostsAppliesRegisterFiltersBeforeBuildingCsv() throws Exception {
         UUID departmentId = UUID.randomUUID();
-        UUID contractorId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         UUID categoryId = UUID.randomUUID();
         ActualCostReviewItem matching = reviewItem(
-                UUID.randomUUID(), departmentId, contractorId, categoryId, "APPROVED",
+                UUID.randomUUID(), departmentId, counteragentId, categoryId, "APPROVED",
                 "FINANCE_MANAGER", Instant.parse("2026-06-15T09:00:00Z"), false, 12, true);
         ActualCostReviewItem wrongStatus = reviewItem(
-                UUID.randomUUID(), departmentId, contractorId, categoryId, "PENDING",
+                UUID.randomUUID(), departmentId, counteragentId, categoryId, "PENDING",
                 "FINANCE_MANAGER", Instant.parse("2026-06-15T09:00:00Z"), false, 12, true);
         ActualCostReviewItem wrongDate = reviewItem(
-                UUID.randomUUID(), departmentId, contractorId, categoryId, "APPROVED",
+                UUID.randomUUID(), departmentId, counteragentId, categoryId, "APPROVED",
                 "FINANCE_MANAGER", Instant.parse("2026-05-31T23:00:00Z"), false, 12, true);
         ActualCostReviewItem wrongCategory = reviewItem(
-                UUID.randomUUID(), departmentId, contractorId, UUID.randomUUID(), "APPROVED",
+                UUID.randomUUID(), departmentId, counteragentId, UUID.randomUUID(), "APPROVED",
                 "FINANCE_MANAGER", Instant.parse("2026-06-15T09:00:00Z"), false, 12, true);
         ActualCostReviewItem unallocated = reviewItem(
-                UUID.randomUUID(), departmentId, contractorId, categoryId, "APPROVED",
+                UUID.randomUUID(), departmentId, counteragentId, categoryId, "APPROVED",
                 "FINANCE_MANAGER", Instant.parse("2026-06-15T09:00:00Z"), false, 12, false);
 
         when(service.actualCostRegister("valve"))
@@ -115,7 +115,7 @@ class ActualCostReviewActionControllerContractTest {
                         .param("search", "valve")
                         .param("status", "APPROVED")
                         .param("departmentId", departmentId.toString())
-                        .param("contractorId", contractorId.toString())
+                        .param("counteragentId", counteragentId.toString())
                         .param("costCategoryId", categoryId.toString())
                         .param("dateFrom", "2026-06-01")
                         .param("dateTo", "2026-06-30")
@@ -205,7 +205,7 @@ class ActualCostReviewActionControllerContractTest {
 
     private ActualCostReviewItem reviewItem(UUID id,
                                             UUID departmentId,
-                                            UUID contractorId,
+                                            UUID counteragentId,
                                             UUID costCategoryId,
                                             String status,
                                             String approvalRoleCode,
@@ -230,12 +230,12 @@ class ActualCostReviewActionControllerContractTest {
                 null,
                 null,
                 null,
-                new ActualCostReviewItem.ContractorWorkRef(
+                new ActualCostReviewItem.CounteragentWorkRef(
                         contractorWorkId,
-                        "Contractor work",
+                        "Counteragent work",
                         "IN_PROGRESS",
                         100.0,
-                        new ActualCostReviewItem.Ref(contractorId, "C-1", "Contractor"),
+                        new ActualCostReviewItem.Ref(counteragentId, "CA-1", "Counteragent"),
                         null
                 ),
                 new ActualCostReviewItem.WorkOrderRef(UUID.randomUUID(), "WO-1", "Pump", null),

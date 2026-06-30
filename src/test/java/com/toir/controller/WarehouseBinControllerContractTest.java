@@ -120,6 +120,64 @@ class WarehouseBinControllerContractTest {
     }
 
     @Test
+    void listBinsAllowsOptionalWarehouseIdAndReturnsWarehouseName() throws Exception {
+        UUID warehouseId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        when(service.list(
+                eq(warehouseId),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(0),
+                eq(20)
+        )).thenReturn(new PageImpl<>(List.of(binDto(warehouseId, binId, "Central Warehouse")), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/warehouses/bins")
+                        .param("warehouseId", warehouseId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(binId.toString()))
+                .andExpect(jsonPath("$.content[0].warehouseId").value(warehouseId.toString()))
+                .andExpect(jsonPath("$.content[0].warehouseName").value("Central Warehouse"));
+    }
+
+    @Test
+    void listBinsCanBeCalledWithoutWarehouseId() throws Exception {
+        when(service.list(
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(0),
+                eq(20)
+        )).thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/warehouses/bins"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
     void createBinReturnsCreatedDto() throws Exception {
         UUID warehouseId = UUID.randomUUID();
         UUID binId = UUID.randomUUID();
@@ -171,9 +229,14 @@ class WarehouseBinControllerContractTest {
     }
 
     private WarehouseBinDto binDto(UUID warehouseId, UUID binId) {
+        return binDto(warehouseId, binId, null);
+    }
+
+    private WarehouseBinDto binDto(UUID warehouseId, UUID binId, String warehouseName) {
         return new WarehouseBinDto(
                 binId,
                 warehouseId,
+                warehouseName,
                 "A-01-02-03",
                 null,
                 "A",

@@ -201,7 +201,7 @@ public class ActualCostReviewActionController {
                                                     @RequestParam(required = false) Integer reminderWindowHours,
                                                     @RequestParam(required = false) String approvalRoleCode,
                                                     @RequestParam(required = false) UUID departmentId,
-                                                    @RequestParam(required = false) UUID contractorId,
+                                                    @RequestParam(required = false) UUID counteragentId,
                                                     @RequestParam(required = false) UUID actualCostId,
                                                     @RequestParam(required = false) String actualCostIds,
                                                     @RequestParam(required = false) String allocationStatus) {
@@ -213,7 +213,7 @@ public class ActualCostReviewActionController {
                         approvalRoleCode,
                         null,
                         departmentId,
-                        contractorId,
+                        counteragentId,
                         attentionMode,
                         reminderWindowHours,
                         null,
@@ -231,7 +231,7 @@ public class ActualCostReviewActionController {
                                                           @RequestParam(required = false) String status,
                                                           @RequestParam(required = false) UUID costCategoryId,
                                                           @RequestParam(required = false) UUID departmentId,
-                                                          @RequestParam(required = false) UUID contractorId,
+                                                          @RequestParam(required = false) UUID counteragentId,
                                                           @RequestParam(required = false) String dateFrom,
                                                           @RequestParam(required = false) String dateTo,
                                                           @RequestParam(required = false) UUID actualCostId,
@@ -245,7 +245,7 @@ public class ActualCostReviewActionController {
                         null,
                         costCategoryId,
                         departmentId,
-                        contractorId,
+                        counteragentId,
                         null,
                         null,
                         parseDateStart(dateFrom),
@@ -267,7 +267,7 @@ public class ActualCostReviewActionController {
                                                      @RequestParam(required = false) Integer reminderWindowHours,
                                                      @RequestParam(required = false) String approvalRoleCode,
                                                      @RequestParam(required = false) UUID departmentId,
-                                                     @RequestParam(required = false) UUID contractorId,
+                                                     @RequestParam(required = false) UUID counteragentId,
                                                      @RequestParam(required = false) UUID actualCostId,
                                                      @RequestParam(required = false) String actualCostIds,
                                                      @RequestParam(required = false) String allocationStatus) {
@@ -279,7 +279,7 @@ public class ActualCostReviewActionController {
                         approvalRoleCode,
                         null,
                         departmentId,
-                        contractorId,
+                        counteragentId,
                         attentionMode,
                         reminderWindowHours,
                         null,
@@ -331,7 +331,7 @@ public class ActualCostReviewActionController {
                                                     @RequestParam(required = false) String status,
                                                     @RequestParam(required = false) UUID costCategoryId,
                                                     @RequestParam(required = false) UUID departmentId,
-                                                    @RequestParam(required = false) UUID contractorId,
+                                                    @RequestParam(required = false) UUID counteragentId,
                                                     @RequestParam(required = false) String dateFrom,
                                                     @RequestParam(required = false) String dateTo,
                                                     @RequestParam(required = false) UUID actualCostId,
@@ -345,7 +345,7 @@ public class ActualCostReviewActionController {
                         null,
                         costCategoryId,
                         departmentId,
-                        contractorId,
+                        counteragentId,
                         null,
                         null,
                         parseDateStart(dateFrom),
@@ -380,7 +380,7 @@ public class ActualCostReviewActionController {
                                                          String approvalRoleCode,
                                                          UUID costCategoryId,
                                                          UUID departmentId,
-                                                         UUID contractorId,
+                                                         UUID counteragentId,
                                                          String attentionMode,
                                                          Integer reminderWindowHours,
                                                          Instant dateFrom,
@@ -398,7 +398,7 @@ public class ActualCostReviewActionController {
                         || approvalRoleCode.equalsIgnoreCase(item.approvalRoleCode()))
                 .filter(item -> costCategoryId == null || costCategoryId.equals(item.costCategoryId()))
                 .filter(item -> departmentId == null || matchesDepartment(item.department(), item.workOrder(), departmentId))
-                .filter(item -> contractorId == null || contractorId.equals(contractorId(item)))
+                .filter(item -> counteragentId == null || counteragentId.equals(counteragentId(item)))
                 .filter(item -> matchesAttention(item, attentionMode, reminderWindowHours))
                 .filter(item -> dateFrom == null || item.costDate() == null || !item.costDate().isBefore(dateFrom))
                 .filter(item -> dateTo == null || item.costDate() == null || item.costDate().isBefore(dateTo))
@@ -476,10 +476,10 @@ public class ActualCostReviewActionController {
         return departmentId.equals(objectId(workOrderDepartment));
     }
 
-    private UUID contractorId(ActualCostReviewItem item) {
-        Object contractorWork = item.contractorWork();
-        Object contractor = objectProperty(contractorWork, "contractor");
-        return objectId(contractor);
+    private UUID counteragentId(ActualCostReviewItem item) {
+        Object counteragentWork = item.counteragentWork();
+        Object counteragent = objectProperty(counteragentWork, "counteragent");
+        return objectId(counteragent);
     }
 
     private UUID objectId(Object value) {

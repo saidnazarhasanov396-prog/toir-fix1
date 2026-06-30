@@ -13,7 +13,6 @@ import com.toir.entity.Department;
 import com.toir.entity.PprTask;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
-import com.toir.entity.Supplier;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
@@ -36,7 +35,6 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
-import com.toir.enums.SupplierType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WmsDocumentOperationType;
@@ -46,7 +44,6 @@ import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -96,7 +93,7 @@ public class ProcurementRequestService {
     private final LowStockRecommendationService lowStockRecommendationService;
     private final ActualCostRepository actualCostRepository;
     private final CostCategoryRepository costCategoryRepository;
-    private final SupplierRepository supplierRepository;
+    private final CounteragentService counteragentService;
     private final ToirStockService toirStockService;
     private final LegacyStockProjectionService legacyStockProjectionService;
     private final WmsStockCoordinateValidator coordinateValidator;
@@ -189,7 +186,7 @@ public class ProcurementRequestService {
         p.setResponsibleId(r.responsibleId());
         p.setPriority(normalizePriority(r.priority()));
         p.setType(normalizeType(r.type()));
-        p.setSupplierId(validatedSupplierIdOrNull(r.supplierId(), requestType(p), "procurement requests"));
+        p.setCounteragentId(validatedCounteragentIdOrNull(r.counteragentId(), "procurement requests"));
         applySourceTrace(p, r.sourceDefectId(), r.sourcePprTaskId());
         p.setStatus(ProcurementRequestStatus.DRAFT);
         p.setSource("MANUAL");
@@ -339,11 +336,11 @@ public class ProcurementRequestService {
         ProcurementOrderRequest effectiveRequest = orderRequest == null
                 ? new ProcurementOrderRequest(null, null, null, List.of())
                 : orderRequest;
-        UUID supplierId = firstNonNull(effectiveRequest.supplierId(), p.getSupplierId());
-        if (supplierId == null) {
-            throw RestException.badRequest("Supplier is required before procurement request can be ordered");
+        UUID counteragentId = firstNonNull(effectiveRequest.counteragentId(), p.getCounteragentId());
+        if (counteragentId == null) {
+            throw RestException.badRequest("Counteragent is required before procurement request can be ordered");
         }
-        p.setSupplierId(validatedSupplierIdOrNull(supplierId, requestType(p), "procurement requests"));
+        p.setCounteragentId(validatedCounteragentIdOrNull(counteragentId, "procurement requests"));
         if (effectiveRequest.expectedDeliveryDate() != null) {
             p.setRequiredBy(effectiveRequest.expectedDeliveryDate());
         }
@@ -384,21 +381,21 @@ public class ProcurementRequestService {
                     throw RestException.badRequest("Equipment warranty line does not belong to this procurement request: "
                             + warrantyLine.procurementLineId());
                 }
-                applyEquipmentWarrantyLine(line, warrantyLine, request.getSupplierId());
+                applyEquipmentWarrantyLine(line, warrantyLine, request.getCounteragentId());
             }
         }
         if (request.getLines() != null) {
             request.getLines().stream()
                     .filter(line -> !line.isDeleted())
-                    .forEach(line -> normalizeEquipmentWarrantyLine(line, request.getSupplierId()));
+                    .forEach(line -> normalizeEquipmentWarrantyLine(line, request.getCounteragentId()));
         }
     }
 
     private void applyEquipmentWarrantyLine(ProcurementRequestLine line,
                                             EquipmentWarrantyLineRequest request,
-                                            UUID procurementSupplierId) {
+                                            UUID procurementCounteragentId) {
         boolean hasWarranty = Boolean.TRUE.equals(request.hasWarranty())
-                || request.warrantySupplierId() != null
+                || request.warrantyCounteragentId() != null
                 || request.warrantyStartDate() != null
                 || request.warrantyEndDate() != null
                 || request.warrantyDurationMonths() != null;
@@ -409,7 +406,7 @@ public class ProcurementRequestService {
         line.setHasWarranty(true);
         line.setWarrantyStartDate(request.warrantyStartDate());
         line.setWarrantyDurationMonths(request.warrantyDurationMonths());
-        line.setWarrantySupplierId(firstNonNull(request.warrantySupplierId(), procurementSupplierId));
+        line.setWarrantyCounteragentId(firstNonNull(request.warrantyCounteragentId(), procurementCounteragentId));
         if (request.warrantyEndDate() != null) {
             line.setWarrantyEndDate(request.warrantyEndDate());
         } else if (request.warrantyStartDate() != null && request.warrantyDurationMonths() != null) {
@@ -419,18 +416,18 @@ public class ProcurementRequestService {
         }
     }
 
-    private void normalizeEquipmentWarrantyLine(ProcurementRequestLine line, UUID procurementSupplierId) {
+    private void normalizeEquipmentWarrantyLine(ProcurementRequestLine line, UUID procurementCounteragentId) {
         if (!Boolean.TRUE.equals(line.getHasWarranty())) {
             clearWarranty(line);
             return;
         }
-        if (line.getWarrantySupplierId() == null) {
-            line.setWarrantySupplierId(procurementSupplierId);
+        if (line.getWarrantyCounteragentId() == null) {
+            line.setWarrantyCounteragentId(procurementCounteragentId);
         }
-        if (line.getWarrantySupplierId() == null) {
-            throw RestException.badRequest("Warranty supplier is required when equipment procurement warranty is enabled");
+        if (line.getWarrantyCounteragentId() == null) {
+            throw RestException.badRequest("Warranty counteragent is required when equipment procurement warranty is enabled");
         }
-        validatedSupplierIdOrNull(line.getWarrantySupplierId(), SupplierType.EQUIPMENT, "equipment procurement warranty");
+        validatedCounteragentIdOrNull(line.getWarrantyCounteragentId(), "equipment procurement warranty");
         if (line.getWarrantyEndDate() == null && line.getWarrantyDurationMonths() == null) {
             throw RestException.badRequest("Warranty end date or warranty duration is required when equipment procurement warranty is enabled");
         }
@@ -454,7 +451,7 @@ public class ProcurementRequestService {
         line.setWarrantyStartDate(null);
         line.setWarrantyEndDate(null);
         line.setWarrantyDurationMonths(null);
-        line.setWarrantySupplierId(null);
+        line.setWarrantyCounteragentId(null);
     }
 
     @Transactional
@@ -815,7 +812,7 @@ public class ProcurementRequestService {
         equipment.setStatus(EquipmentStatus.STANDBY);
         equipment.setCategory(EquipmentCategory.PRODUCTION_EQUIPMENT);
         equipment.setArrivalDate(receiptDate == null ? LocalDate.now(ZoneOffset.UTC) : receiptDate);
-        equipment.setSupplierId(request.getSupplierId());
+        equipment.setCounteragentId(request.getCounteragentId());
         applyEquipmentReceiptWarranty(equipment, request, line, receiptDate);
         equipment.setProcurementRequestId(request.getId());
         equipment.setProcurementRequestLineId(line.getId());
@@ -832,7 +829,7 @@ public class ProcurementRequestService {
             equipment.setWarrantyStartDate(null);
             equipment.setWarrantyEndDate(null);
             equipment.setWarrantyUntil(null);
-            equipment.setWarrantySupplierId(null);
+            equipment.setWarrantyCounteragentId(null);
             return;
         }
         LocalDate startDate = line.getWarrantyStartDate() != null
@@ -846,7 +843,7 @@ public class ProcurementRequestService {
         equipment.setWarrantyStartDate(startDate);
         equipment.setWarrantyEndDate(endDate);
         equipment.setWarrantyUntil(endDate);
-        equipment.setWarrantySupplierId(firstNonNull(line.getWarrantySupplierId(), request.getSupplierId()));
+        equipment.setWarrantyCounteragentId(firstNonNull(line.getWarrantyCounteragentId(), request.getCounteragentId()));
     }
 
     private WarehouseEquipmentItem warehouseEquipmentItem(ProcurementRequest request, Equipment equipment, ReceiptLine receiptLine) {
@@ -929,30 +926,11 @@ public class ProcurementRequestService {
         return first != null ? first : fallback;
     }
 
-    private UUID validatedSupplierIdOrNull(UUID supplierId, ProcurementRequestType procurementType, String context) {
-        if (supplierId == null) {
+    private UUID validatedCounteragentIdOrNull(UUID counteragentId, String context) {
+        if (counteragentId == null) {
             return null;
         }
-        SupplierType requiredType = procurementType == ProcurementRequestType.EQUIPMENT
-                ? SupplierType.EQUIPMENT
-                : SupplierType.SPARE_PART;
-        return validatedSupplierIdOrNull(supplierId, requiredType, context);
-    }
-
-    private UUID validatedSupplierIdOrNull(UUID supplierId, SupplierType requiredType, String context) {
-        if (supplierId == null) {
-            return null;
-        }
-        Supplier supplier = supplierRepository.findByIdAndIsDeletedFalse(supplierId)
-                .orElseThrow(() -> RestException.notFound("Supplier not found: " + supplierId));
-        if (!Boolean.TRUE.equals(supplier.getActive())) {
-            throw RestException.badRequest("Inactive suppliers cannot be selected for " + context);
-        }
-        SupplierType actualType = supplier.getSupplierType() == null ? SupplierType.BOTH : supplier.getSupplierType();
-        if (!actualType.supports(requiredType)) {
-            throw RestException.badRequest("Supplier must support " + requiredType + " for " + context);
-        }
-        return supplier.getId();
+        return counteragentService.loadActive(counteragentId, context).getId();
     }
 
     private String trimToNull(String value) {
@@ -1121,7 +1099,7 @@ public class ProcurementRequestService {
                                                       ProcurementRequestLine line,
                                                       ProcurementLineRequest lineRequest) {
         boolean hasWarranty = Boolean.TRUE.equals(lineRequest.hasWarranty())
-                || lineRequest.warrantySupplierId() != null
+                || lineRequest.warrantyCounteragentId() != null
                 || lineRequest.warrantyStartDate() != null
                 || lineRequest.warrantyEndDate() != null
                 || lineRequest.warrantyDurationMonths() != null;
@@ -1137,12 +1115,12 @@ public class ProcurementRequestService {
                         lineRequest.warrantyStartDate(),
                         lineRequest.warrantyEndDate(),
                         lineRequest.warrantyDurationMonths(),
-                        lineRequest.warrantySupplierId()
+                        lineRequest.warrantyCounteragentId()
                 ),
-                request.getSupplierId()
+                request.getCounteragentId()
         );
-        if (line.getWarrantySupplierId() != null) {
-            validatedSupplierIdOrNull(line.getWarrantySupplierId(), SupplierType.EQUIPMENT, "equipment procurement warranty");
+        if (line.getWarrantyCounteragentId() != null) {
+            validatedCounteragentIdOrNull(line.getWarrantyCounteragentId(), "equipment procurement warranty");
         }
     }
 
@@ -1295,22 +1273,22 @@ public class ProcurementRequestService {
                 .map(ProcurementRequestLine::getSparePartId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Set<UUID> supplierIds = procurements.stream()
-                .map(ProcurementRequest::getSupplierId)
+        Set<UUID> counteragentIds = procurements.stream()
+                .map(ProcurementRequest::getCounteragentId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Set<UUID> warrantySupplierIds = procurements.stream()
+        Set<UUID> warrantyCounteragentIds = procurements.stream()
                 .filter(Objects::nonNull)
                 .flatMap(request -> request.getLines() == null ? java.util.stream.Stream.empty() : request.getLines().stream())
-                .map(ProcurementRequestLine::getWarrantySupplierId)
+                .map(ProcurementRequestLine::getWarrantyCounteragentId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
         Map<UUID, String> departmentNames = departmentNamesById(departmentIds);
         Map<UUID, String> warehouseNames = warehouseNamesById(warehouseIds);
         Map<UUID, SparePart> spareParts = sparePartsById(sparePartIds);
-        Map<UUID, String> supplierNames = supplierNamesById(supplierIds);
-        Map<UUID, String> warrantySupplierNames = supplierNamesById(warrantySupplierIds);
+        Map<UUID, String> counteragentNames = counteragentNamesById(counteragentIds);
+        Map<UUID, String> warrantyCounteragentNames = counteragentNamesById(warrantyCounteragentIds);
 
         return procurements.stream()
                 .map(request -> ProcurementRequestDto.from(
@@ -1318,8 +1296,8 @@ public class ProcurementRequestService {
                         nameById(departmentNames, request.getDepartmentId()),
                         nameById(warehouseNames, request.getWarehouseId()),
                         spareParts,
-                        supplierNames,
-                        warrantySupplierNames
+                        counteragentNames,
+                        warrantyCounteragentNames
                 ))
                 .toList();
     }
@@ -1371,17 +1349,20 @@ public class ProcurementRequestService {
                 .collect(Collectors.toMap(SparePart::getId, Function.identity(), (first, ignored) -> first));
     }
 
-    private Map<UUID, String> supplierNamesById(Set<UUID> ids) {
+    private Map<UUID, String> counteragentNamesById(Set<UUID> ids) {
         if (ids.isEmpty()) {
             return Map.of();
         }
-        List<Supplier> suppliers = supplierRepository.findAllByIdInAndIsDeletedFalse(ids);
-        if (suppliers == null) {
-            return Map.of();
-        }
-        return suppliers.stream()
-                .filter(supplier -> supplier.getId() != null)
-                .collect(Collectors.toMap(Supplier::getId, Supplier::getName, (first, ignored) -> first));
+        return ids.stream()
+                .map(id -> {
+                    try {
+                        return counteragentService.load(id);
+                    } catch (RestException ignored) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(com.toir.entity.Counteragent::getId, com.toir.entity.Counteragent::getName, (first, ignored) -> first));
     }
 
     private void recalcTotal(ProcurementRequest p) {

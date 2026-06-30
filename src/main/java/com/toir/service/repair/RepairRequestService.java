@@ -36,7 +36,6 @@ import com.toir.enums.NotificationSeverity;
 import com.toir.enums.UserStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.MeterReadingRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectRepository;
@@ -60,6 +59,7 @@ import com.toir.enums.AuditModule;
 import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.MeterService;
+import com.toir.service.CounteragentService;
 import com.toir.service.NotificationService;
 import com.toir.service.OperationalIssueLifecycleSyncService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
@@ -107,7 +107,7 @@ public class RepairRequestService {
 
     private final RepairRequestRepository repository;
     private final EquipmentRepository equipmentRepository;
-    private final SupplierRepository supplierRepository;
+    private final CounteragentService counteragentService;
     private final DepartmentRepository departmentRepository;
     private final LocationRepository locationRepository;
     private final UserRepository userRepository;
@@ -342,11 +342,11 @@ public class RepairRequestService {
                 entity.getSupplierContactedAt(),
                 entity.getSupplierResponse(),
                 entity.getEmergencyReason(),
-                entity.getWarrantySupplierId(),
-                entity.getWarrantySupplierName(),
-                entity.getWarrantySupplierContactPerson(),
-                entity.getWarrantySupplierPhone(),
-                entity.getWarrantySupplierEmail(),
+                entity.getWarrantyCounteragentId(),
+                entity.getWarrantyCounteragentName(),
+                entity.getWarrantyCounteragentContactPerson(),
+                entity.getWarrantyCounteragentPhone(),
+                entity.getWarrantyCounteragentEmail(),
                 entity.getWarrantyStartDateAtCreation(),
                 entity.getWarrantyEndDateAtCreation()
         );
@@ -1334,11 +1334,11 @@ public class RepairRequestService {
                 r.getSupplierContactedAt(),
                 r.getSupplierResponse(),
                 r.getEmergencyReason(),
-                r.getWarrantySupplierId(),
-                r.getWarrantySupplierName(),
-                r.getWarrantySupplierContactPerson(),
-                r.getWarrantySupplierPhone(),
-                r.getWarrantySupplierEmail(),
+                r.getWarrantyCounteragentId(),
+                r.getWarrantyCounteragentName(),
+                r.getWarrantyCounteragentContactPerson(),
+                r.getWarrantyCounteragentPhone(),
+                r.getWarrantyCounteragentEmail(),
                 r.getWarrantyStartDateAtCreation(),
                 r.getWarrantyEndDateAtCreation()
         );
@@ -1671,20 +1671,20 @@ public class RepairRequestService {
     private WarrantyPreviewResponse buildWarrantyPreview(Equipment equipment) {
         LocalDate warrantyStart = equipment.getWarrantyStartDate();
         LocalDate warrantyEnd = effectiveWarrantyEnd(equipment);
-        UUID supplierId = warrantySupplierId(equipment);
-        Supplier supplier = supplierId == null
+        UUID counteragentId = warrantyCounteragentId(equipment);
+        Counteragent counteragent = counteragentId == null
                 ? null
-                : supplierRepository.findByIdAndIsDeletedFalse(supplierId).orElse(null);
+                : counteragentService.load(counteragentId);
         return new WarrantyPreviewResponse(
                 equipment.getId(),
                 hasActiveWarranty(equipment),
                 warrantyStart,
                 warrantyEnd,
-                supplierId,
-                supplier == null ? null : supplier.getName(),
-                supplier == null ? null : supplier.getContactPerson(),
-                supplier == null ? null : supplier.getPhone(),
-                supplier == null ? null : supplier.getEmail()
+                counteragentId,
+                counteragent == null ? null : counteragent.getName(),
+                counteragent == null ? null : counteragent.getContactPerson(),
+                counteragent == null ? null : counteragent.getPhone(),
+                counteragent == null ? null : counteragent.getEmail()
         );
     }
 
@@ -1695,11 +1695,11 @@ public class RepairRequestService {
     private void applyWarrantySnapshot(RepairRequest entity, WarrantyPreviewResponse preview) {
         entity.setWarrantyActiveAtCreation(preview.currentlyActive());
         entity.setWarrantyHandling(preview.currentlyActive() ? null : WarrantyHandling.NO_WARRANTY_ISSUE);
-        entity.setWarrantySupplierId(preview.warrantySupplierId());
-        entity.setWarrantySupplierName(preview.warrantySupplierName());
-        entity.setWarrantySupplierContactPerson(preview.warrantySupplierContactPerson());
-        entity.setWarrantySupplierPhone(preview.warrantySupplierPhone());
-        entity.setWarrantySupplierEmail(preview.warrantySupplierEmail());
+        entity.setWarrantyCounteragentId(preview.warrantyCounteragentId());
+        entity.setWarrantyCounteragentName(preview.warrantyCounteragentName());
+        entity.setWarrantyCounteragentContactPerson(preview.warrantyCounteragentContactPerson());
+        entity.setWarrantyCounteragentPhone(preview.warrantyCounteragentPhone());
+        entity.setWarrantyCounteragentEmail(preview.warrantyCounteragentEmail());
         entity.setWarrantyStartDateAtCreation(preview.warrantyStartDate());
         entity.setWarrantyEndDateAtCreation(preview.warrantyEndDate());
     }
@@ -1710,10 +1710,10 @@ public class RepairRequestService {
                 : equipment.getDepartmentId();
     }
 
-    private UUID warrantySupplierId(Equipment equipment) {
-        return equipment.getWarrantySupplierId() != null
-                ? equipment.getWarrantySupplierId()
-                : equipment.getSupplierId();
+    private UUID warrantyCounteragentId(Equipment equipment) {
+        return equipment.getWarrantyCounteragentId() != null
+                ? equipment.getWarrantyCounteragentId()
+                : equipment.getCounteragentId();
     }
 
     private boolean isWarrantyActive(UUID equipmentId) {

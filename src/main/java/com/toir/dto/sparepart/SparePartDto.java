@@ -33,8 +33,8 @@ public record SparePartDto(
         String typeCode,
         String typeName,
         com.toir.enums.SparePartType type,
-        UUID preferredSupplierId,
-        String preferredSupplierName,
+        UUID preferredCounteragentId,
+        String preferredCounteragentName,
         Integer leadTimeDays,
         BigDecimal lastPurchasePrice,
         BigDecimal averageCost,
@@ -120,7 +120,7 @@ public record SparePartDto(
                 typeCode,
                 type == null ? null : type.getName(),
                 legacyType(typeCode),
-                s.getPreferredSupplierId(),
+                s.getPreferredCounteragentId(),
                 null,
                 s.getLeadTimeDays(),
                 s.getLastPurchasePrice(),
@@ -133,10 +133,10 @@ public record SparePartDto(
         );
     }
 
-    public SparePartDto withPreferredSupplierName(String preferredSupplierName) {
+    public SparePartDto withPreferredCounteragentName(String preferredCounteragentName) {
         return new SparePartDto(id, entityType, code, name, kind, unit, unitCode, unitName, manufacturer, sku,
                 specification, minStock, currentStock, reservedStock, availableStock, warehouseCount,
-                typeId, typeCode, typeName, type, preferredSupplierId, preferredSupplierName,
+                typeId, typeCode, typeName, type, preferredCounteragentId, preferredCounteragentName,
                 leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, inventoryValue, criticality,
                 mxikId, mxik);
     }

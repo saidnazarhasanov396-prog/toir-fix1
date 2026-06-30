@@ -1,7 +1,7 @@
 package com.toir.controller;
 
+import com.toir.entity.Counteragent;
 import com.toir.entity.projects.ActualCost;
-import com.toir.entity.contractors.Contractor;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.BudgetLine;
@@ -18,7 +18,6 @@ import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
-import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
@@ -26,6 +25,7 @@ import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.ActualCostReviewFacadeService;
+import com.toir.service.CounteragentService;
 import com.toir.service.FinanceScopeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -80,7 +80,7 @@ class BudgetSummaryControllerContractTest {
     ContractorWorkRepository contractorWorkRepository;
 
     @Mock
-    ContractorRepository contractorRepository;
+    CounteragentService counteragentService;
 
     @Mock
     WorkOrderRepository workOrderRepository;
@@ -104,7 +104,7 @@ class BudgetSummaryControllerContractTest {
                         userRepository,
                         employeeRepository,
                         contractorWorkRepository,
-                        contractorRepository,
+                        counteragentService,
                         workOrderRepository,
                         financeScopeService,
                         actualCostReviewFacadeService))
@@ -159,25 +159,25 @@ class BudgetSummaryControllerContractTest {
     }
 
     @Test
-    void actualCostRegisterAppliesFrontendDepartmentAndContractorFilters() throws Exception {
+    void actualCostRegisterAppliesFrontendDepartmentAndCounteragentFilters() throws Exception {
         UUID departmentId = UUID.randomUUID();
-        UUID contractorId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         ActualCostReviewItem matching = reviewItemWithContext(
-                UUID.randomUUID(), departmentId, contractorId, "APPROVED", "FINANCE_MANAGER", false, 18);
+                UUID.randomUUID(), departmentId, counteragentId, "APPROVED", "FINANCE_MANAGER", false, 18);
         ActualCostReviewItem wrongDepartment = reviewItemWithContext(
-                UUID.randomUUID(), UUID.randomUUID(), contractorId, "APPROVED", "FINANCE_MANAGER", false, 18);
-        ActualCostReviewItem wrongContractor = reviewItemWithContext(
+                UUID.randomUUID(), UUID.randomUUID(), counteragentId, "APPROVED", "FINANCE_MANAGER", false, 18);
+        ActualCostReviewItem wrongCounteragent = reviewItemWithContext(
                 UUID.randomUUID(), departmentId, UUID.randomUUID(), "APPROVED", "FINANCE_MANAGER", false, 18);
 
         when(actualCostReviewFacadeService.actualCostRegister("pump"))
-                .thenReturn(List.of(wrongDepartment, matching, wrongContractor));
+                .thenReturn(List.of(wrongDepartment, matching, wrongCounteragent));
         when(actualCostReviewFacadeService.registerSummary(any()))
                 .thenAnswer(invocation -> registerSummary(invocation.getArgument(0)));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/register")
                         .param("search", "pump")
                         .param("departmentId", departmentId.toString())
-                        .param("contractorId", contractorId.toString()))
+                        .param("counteragentId", counteragentId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].id").value(matching.id().toString()))
@@ -207,15 +207,15 @@ class BudgetSummaryControllerContractTest {
     }
 
     @Test
-    void reviewQueueAppliesFrontendDepartmentContractorAndAttentionFilters() throws Exception {
+    void reviewQueueAppliesFrontendDepartmentCounteragentAndAttentionFilters() throws Exception {
         UUID departmentId = UUID.randomUUID();
-        UUID contractorId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         ActualCostReviewItem matching = reviewItemWithContext(
-                UUID.randomUUID(), departmentId, contractorId, "PENDING", "FINANCE_MANAGER", false, 2);
+                UUID.randomUUID(), departmentId, counteragentId, "PENDING", "FINANCE_MANAGER", false, 2);
         ActualCostReviewItem overdue = reviewItemWithContext(
-                UUID.randomUUID(), departmentId, contractorId, "PENDING", "FINANCE_MANAGER", true, 0);
+                UUID.randomUUID(), departmentId, counteragentId, "PENDING", "FINANCE_MANAGER", true, 0);
         ActualCostReviewItem wrongRole = reviewItemWithContext(
-                UUID.randomUUID(), departmentId, contractorId, "PENDING", "ACCOUNTANT", false, 2);
+                UUID.randomUUID(), departmentId, counteragentId, "PENDING", "ACCOUNTANT", false, 2);
 
         when(actualCostReviewFacadeService.reviewQueue("pump"))
                 .thenReturn(List.of(overdue, matching, wrongRole));
@@ -223,7 +223,7 @@ class BudgetSummaryControllerContractTest {
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue")
                         .param("search", "pump")
                         .param("departmentId", departmentId.toString())
-                        .param("contractorId", contractorId.toString())
+                        .param("counteragentId", counteragentId.toString())
                         .param("approvalRoleCode", "FINANCE_MANAGER")
                         .param("attentionMode", "DUE_SOON")
                         .param("reminderWindowHours", "4"))
@@ -252,9 +252,9 @@ class BudgetSummaryControllerContractTest {
     }
 
     @Test
-    void contractorWorkRecommendationReturnsFrontendReflectionShape() throws Exception {
+    void counteragentWorkRecommendationReturnsFrontendReflectionShape() throws Exception {
         UUID contractorWorkId = UUID.randomUUID();
-        UUID contractorId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         UUID workOrderId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         UUID categoryId = UUID.randomUUID();
@@ -264,15 +264,15 @@ class BudgetSummaryControllerContractTest {
 
         ContractorWork contractorWork = new ContractorWork();
         ReflectionTestUtils.setField(contractorWork, "id", contractorWorkId);
-        contractorWork.setContractorId(contractorId);
+        contractorWork.setCounteragentId(counteragentId);
         contractorWork.setWorkOrderId(workOrderId);
         contractorWork.setDescription("Pump overhaul");
         contractorWork.setCost(500.0);
 
-        Contractor contractor = new Contractor();
-        ReflectionTestUtils.setField(contractor, "id", contractorId);
-        contractor.setCode("CTR-1");
-        contractor.setName("Contractor One");
+        Counteragent counteragent = new Counteragent();
+        ReflectionTestUtils.setField(counteragent, "id", counteragentId);
+        counteragent.setCode("CA-1");
+        counteragent.setName("Counteragent One");
 
         WorkOrder workOrder = new WorkOrder();
         ReflectionTestUtils.setField(workOrder, "id", workOrderId);
@@ -283,7 +283,7 @@ class BudgetSummaryControllerContractTest {
         CostCategory category = new CostCategory();
         ReflectionTestUtils.setField(category, "id", categoryId);
         category.setCode("CTR");
-        category.setName("Contractor");
+        category.setName("Counteragent");
 
         MaintenanceBudget budget = new MaintenanceBudget();
         ReflectionTestUtils.setField(budget, "id", budgetId);
@@ -296,7 +296,7 @@ class BudgetSummaryControllerContractTest {
         ReflectionTestUtils.setField(line, "id", budgetLineId);
         line.setBudget(budget);
         line.setCostCategoryId(categoryId);
-        line.setDescription("Contractor works");
+        line.setDescription("Counteragent works");
         line.setPlannedAmount(1000.0);
 
         ActualCost approved = actualCost(UUID.randomUUID());
@@ -315,7 +315,7 @@ class BudgetSummaryControllerContractTest {
         pending.setAmount(100.0);
 
         when(contractorWorkRepository.findByIdAndIsDeletedFalse(contractorWorkId)).thenReturn(Optional.of(contractorWork));
-        when(contractorRepository.findByIdAndIsDeletedFalse(contractorId)).thenReturn(Optional.of(contractor));
+        when(counteragentService.load(counteragentId)).thenReturn(counteragent);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(actualCostRepository.findAllByContractorWorkIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(contractorWorkId)))
                 .thenReturn(List.of(approved, pending));
@@ -327,10 +327,10 @@ class BudgetSummaryControllerContractTest {
         when(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(line));
         when(financeScopeService.filterBudgetLines(any())).thenReturn(List.of(line));
 
-        mockMvc.perform(get("/api/v1/budgets/contractor-works/{id}/recommendation", contractorWorkId))
+        mockMvc.perform(get("/api/v1/budgets/counteragent-works/{id}/recommendation", contractorWorkId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.contractorWork.id").value(contractorWorkId.toString()))
-                .andExpect(jsonPath("$.contractorWork.contractor.id").value(contractorId.toString()))
+                .andExpect(jsonPath("$.counteragentWork.id").value(contractorWorkId.toString()))
+                .andExpect(jsonPath("$.counteragentWork.counteragent.id").value(counteragentId.toString()))
                 .andExpect(jsonPath("$.expectedAmount").value(500.0))
                 .andExpect(jsonPath("$.reflectedAmount").value(200.0))
                 .andExpect(jsonPath("$.pendingAmount").value(100.0))
@@ -486,7 +486,7 @@ class BudgetSummaryControllerContractTest {
         );
     }
 
-    private ActualCostReviewItem reviewItemWithContext(UUID id, UUID departmentId, UUID contractorId,
+    private ActualCostReviewItem reviewItemWithContext(UUID id, UUID departmentId, UUID counteragentId,
                                                        String status, String approvalRoleCode,
                                                        boolean overdue, int hoursToOverdue) {
         UUID contractorWorkId = UUID.randomUUID();
@@ -506,12 +506,12 @@ class BudgetSummaryControllerContractTest {
                 null,
                 null,
                 null,
-                new ActualCostReviewItem.ContractorWorkRef(
+                new ActualCostReviewItem.CounteragentWorkRef(
                         contractorWorkId,
-                        "Contractor work",
+                        "Counteragent work",
                         "DRAFT",
                         100.0,
-                        new ActualCostReviewItem.Ref(contractorId, "C-1", "Contractor"),
+                        new ActualCostReviewItem.Ref(counteragentId, "CA-1", "Counteragent"),
                         null
                 ),
                 new ActualCostReviewItem.WorkOrderRef(UUID.randomUUID(), "WO-1", "Pump", null),

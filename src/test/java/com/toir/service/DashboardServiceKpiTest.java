@@ -30,7 +30,6 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.contarctor.ContractorContractRepository;
-import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -75,7 +74,6 @@ class DashboardServiceKpiTest {
     @Mock StockMovementRepository stockMovementRepository;
     @Mock DowntimeEventRepository downtimeEventRepository;
     @Mock ReliabilityMetricRepository reliabilityMetricRepository;
-    @Mock ContractorRepository contractorRepository;
     @Mock ContractorWorkRepository contractorWorkRepository;
     @Mock ReservationRepository reservationRepository;
     @Mock ActualCostRepository actualCostRepository;
@@ -88,6 +86,7 @@ class DashboardServiceKpiTest {
     @Mock UserRepository userRepository;
     @Mock ScopeAccessService scopeAccessService;
     @Mock LegacyStockProjectionService legacyStockProjectionService;
+    @Mock CounteragentService counteragentService;
 
     @InjectMocks DashboardService service;
 
@@ -118,7 +117,7 @@ class DashboardServiceKpiTest {
         when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(contractorRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(counteragentService.load(org.mockito.ArgumentMatchers.<java.util.Collection<UUID>>any())).thenReturn(List.of());
     }
 
     @Test

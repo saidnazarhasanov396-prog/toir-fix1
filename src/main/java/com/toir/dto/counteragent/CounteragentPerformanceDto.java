@@ -1,12 +1,12 @@
-package com.toir.dto.supplier;
+package com.toir.dto.counteragent;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
-public record SupplierPerformanceDto(
-        UUID supplierId,
+public record CounteragentPerformanceDto(
+        UUID counteragentId,
         long totalOrders,
-        long totalDelivered,
+        long deliveredOrders,
         long onTimeDeliveries,
         long lateDeliveries,
         double averageDeliveryDays,

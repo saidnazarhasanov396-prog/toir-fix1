@@ -60,8 +60,8 @@ public class ProcurementRequestLine extends BaseEntity {
     @Column(name = "warranty_duration_months")
     private Integer warrantyDurationMonths;
 
-    @Column(name = "warranty_supplier_id")
-    private UUID warrantySupplierId;
+    @Column(name = "warranty_counteragent_id")
+    private UUID warrantyCounteragentId;
 
     @Column(name = "notes", columnDefinition = "text")
     private String notes;

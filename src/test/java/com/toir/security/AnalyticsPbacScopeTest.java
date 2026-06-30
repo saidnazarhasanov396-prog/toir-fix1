@@ -27,7 +27,6 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.contarctor.ContractorContractRepository;
-import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -37,6 +36,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.AnalyticsService;
+import com.toir.service.CounteragentService;
 import com.toir.service.DashboardService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import org.junit.jupiter.api.BeforeEach;
@@ -77,7 +77,6 @@ class AnalyticsPbacScopeTest {
     StockMovementRepository stockMovementRepository;
     DowntimeEventRepository downtimeEventRepository;
     com.toir.repository.ReliabilityMetricRepository reliabilityMetricRepository;
-    ContractorRepository contractorRepository;
     ContractorWorkRepository contractorWorkRepository;
     ReservationRepository reservationRepository;
     ActualCostRepository actualCostRepository;
@@ -90,6 +89,7 @@ class AnalyticsPbacScopeTest {
     UserRepository userRepository;
     ScopeAccessService scopeAccessService;
     LegacyStockProjectionService legacyStockProjectionService;
+    CounteragentService counteragentService;
     DashboardService dashboardService;
     AnalyticsService analyticsService;
 
@@ -112,7 +112,6 @@ class AnalyticsPbacScopeTest {
         stockMovementRepository = mock(StockMovementRepository.class);
         downtimeEventRepository = mock(DowntimeEventRepository.class);
         reliabilityMetricRepository = mock(com.toir.repository.ReliabilityMetricRepository.class);
-        contractorRepository = mock(ContractorRepository.class);
         contractorWorkRepository = mock(ContractorWorkRepository.class);
         reservationRepository = mock(ReservationRepository.class);
         actualCostRepository = mock(ActualCostRepository.class);
@@ -125,6 +124,7 @@ class AnalyticsPbacScopeTest {
         userRepository = mock(UserRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
         legacyStockProjectionService = mock(LegacyStockProjectionService.class);
+        counteragentService = mock(CounteragentService.class);
         when(legacyStockProjectionService.currentAll()).thenReturn(java.util.Map.of());
 
         dashboardService = new DashboardService(
@@ -140,7 +140,6 @@ class AnalyticsPbacScopeTest {
                 stockMovementRepository,
                 downtimeEventRepository,
                 reliabilityMetricRepository,
-                contractorRepository,
                 contractorWorkRepository,
                 reservationRepository,
                 actualCostRepository,
@@ -149,6 +148,7 @@ class AnalyticsPbacScopeTest {
                 conditionReadingRepository,
                 userCertificationRepository,
                 calibrationRecordRepository,
+                counteragentService,
                 maintenanceDueEventRepository,
                 userRepository,
                 scopeAccessService,
@@ -435,7 +435,7 @@ class AnalyticsPbacScopeTest {
         when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(contractorRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(counteragentService.load(org.mockito.ArgumentMatchers.<java.util.Collection<UUID>>any())).thenReturn(List.of());
     }
 
     private Equipment equipment(UUID id, UUID departmentId) {

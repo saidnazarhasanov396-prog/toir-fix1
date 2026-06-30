@@ -9,6 +9,6 @@ public record EquipmentWarrantyLineRequest(
         LocalDate warrantyStartDate,
         LocalDate warrantyEndDate,
         Integer warrantyDurationMonths,
-        UUID warrantySupplierId
+        UUID warrantyCounteragentId
 ) {
 }

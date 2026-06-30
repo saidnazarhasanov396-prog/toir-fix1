@@ -1,12 +1,12 @@
 package com.toir.controller;
 
-import com.toir.dto.supplier.SupplierDto;
-import com.toir.dto.supplier.SupplierPerformanceDto;
-import com.toir.dto.supplier.SupplierRequest;
-import com.toir.enums.SupplierType;
+import com.toir.dto.counteragent.CounteragentDto;
+import com.toir.dto.counteragent.CounteragentPerformanceDto;
+import com.toir.dto.counteragent.CounteragentRequest;
+import com.toir.enums.CounteragentStatus;
 import com.toir.security.PermissionConstants;
 import com.toir.security.RequiresSensitiveAccess;
-import com.toir.service.SupplierService;
+import com.toir.service.CounteragentService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -28,54 +28,53 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/suppliers")
-@Tag(name = "suppliers")
+@RequestMapping("/api/v1/counteragents")
+@Tag(name = "counteragents")
 @RequiresSensitiveAccess
 @RequiredArgsConstructor
-public class SupplierController {
+public class CounteragentController {
 
-    private final SupplierService service;
+    private final CounteragentService service;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.SUPPLIER_READ + "')")
-    public ResponseEntity<Page<SupplierDto>> list(
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.COUNTERAGENT_READ + "')")
+    public ResponseEntity<Page<CounteragentDto>> list(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) Boolean active,
-            @RequestParam(required = false) SupplierType supplierType,
+            @RequestParam(required = false) CounteragentStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search, active, supplierType), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(search, status), page, size));
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.SUPPLIER_READ + "')")
-    public ResponseEntity<SupplierDto> get(@PathVariable UUID id) {
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.COUNTERAGENT_READ + "')")
+    public ResponseEntity<CounteragentDto> get(@PathVariable UUID id) {
         return ResponseEntity.ok(service.findById(id));
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.SUPPLIER_CREATE + "')")
-    public ResponseEntity<SupplierDto> create(@Valid @RequestBody SupplierRequest request) {
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.COUNTERAGENT_CREATE + "')")
+    public ResponseEntity<CounteragentDto> create(@Valid @RequestBody CounteragentRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.SUPPLIER_UPDATE + "')")
-    public ResponseEntity<SupplierDto> update(@PathVariable UUID id, @Valid @RequestBody SupplierRequest request) {
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.COUNTERAGENT_UPDATE + "')")
+    public ResponseEntity<CounteragentDto> update(@PathVariable UUID id, @Valid @RequestBody CounteragentRequest request) {
         return ResponseEntity.ok(service.update(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.SUPPLIER_UPDATE + "')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.COUNTERAGENT_DELETE + "')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/performance")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.SUPPLIER_READ + "')")
-    public ResponseEntity<SupplierPerformanceDto> performance(@PathVariable UUID id) {
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.COUNTERAGENT_READ + "')")
+    public ResponseEntity<CounteragentPerformanceDto> performance(@PathVariable UUID id) {
         return ResponseEntity.ok(service.performance(id));
     }
 }

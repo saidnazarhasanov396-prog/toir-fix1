@@ -8,11 +8,11 @@ import com.toir.dto.purchaseorder.PurchaseOrderRequest;
 import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.dto.wms.WmsDocumentGroupRequest;
 import com.toir.entity.InventoryTransaction;
+import com.toir.entity.Counteragent;
 import com.toir.entity.PurchaseOrder;
 import com.toir.entity.PurchaseOrderLine;
 import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
-import com.toir.entity.Supplier;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.users.Employee;
@@ -22,7 +22,6 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.PurchaseOrderStatus;
 import com.toir.enums.StockMovementSourceType;
-import com.toir.enums.SupplierType;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WmsDocumentOperationType;
 import com.toir.exception.RestException;
@@ -66,7 +65,7 @@ class PurchaseOrderServiceTest {
 
     @Mock PurchaseOrderRepository purchaseOrderRepository;
     @Mock ProcurementRequestRepository procurementRequestRepository;
-    @Mock SupplierService supplierService;
+    @Mock CounteragentService counteragentService;
     @Mock SparePartRepository sparePartRepository;
     @Mock WarehouseRepository warehouseRepository;
     @Mock StockMovementRepository stockMovementRepository;
@@ -86,7 +85,7 @@ class PurchaseOrderServiceTest {
         service = new PurchaseOrderService(
                 purchaseOrderRepository,
                 procurementRequestRepository,
-                supplierService,
+                counteragentService,
                 sparePartRepository,
                 warehouseRepository,
                 stockMovementRepository,
@@ -120,19 +119,19 @@ class PurchaseOrderServiceTest {
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Equipment procurement requests must be received through procurement receipt");
 
-        verifyNoInteractions(supplierService, sparePartRepository, warehouseRepository);
+        verifyNoInteractions(counteragentService, sparePartRepository, warehouseRepository);
     }
 
     @Test
-    void createRejectsSupplierThatDoesNotSupportSpareParts() {
-        UUID supplierId = UUID.randomUUID();
+    void createRejectsInactiveCounteragent() {
+        UUID counteragentId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
-        lenient().when(supplierService.loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders"))
-                .thenThrow(RestException.badRequest("Supplier must support SPARE_PART for purchase orders"));
+        lenient().when(counteragentService.loadActive(counteragentId, "purchase orders"))
+                .thenThrow(RestException.badRequest("Inactive counteragents cannot be selected for purchase orders"));
 
         assertThatThrownBy(() -> service.create(new PurchaseOrderRequest(
-                supplierId,
+                counteragentId,
                 warehouseId,
                 LocalDate.of(2026, 6, 30),
                 null,
@@ -140,30 +139,30 @@ class PurchaseOrderServiceTest {
         )))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("SPARE_PART");
+                    assertThat(ex.getMessage()).contains("Inactive counteragents");
                 });
 
-        verify(supplierService).loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders");
+        verify(counteragentService).loadActive(counteragentId, "purchase orders");
         verifyNoInteractions(warehouseRepository, sparePartRepository, purchaseOrderRepository);
     }
 
     @Test
-    void createFromProcurementRequestUsesSparePartSupplierScope() {
+    void createFromProcurementRequestUsesPreferredCounteragent() {
         UUID procurementId = UUID.randomUUID();
         UUID procurementLineId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
         ProcurementRequest procurement = procurement(procurementId, procurementLineId, warehouseId, sparePartId);
         procurement.setStatus(ProcurementRequestStatus.APPROVED);
         SparePart sparePart = sparePart(sparePartId);
-        sparePart.setPreferredSupplierId(supplierId);
+        sparePart.setPreferredCounteragentId(counteragentId);
         when(procurementRequestRepository.findByIdAndIsDeletedFalse(procurementId)).thenReturn(Optional.of(procurement));
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse(warehouseId)));
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
-        lenient().when(supplierService.loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders"))
-                .thenThrow(RestException.badRequest("Supplier must support SPARE_PART for purchase orders"));
+        lenient().when(counteragentService.loadActive(counteragentId, "purchase orders"))
+                .thenThrow(RestException.badRequest("Inactive counteragents cannot be selected for purchase orders"));
 
         assertThatThrownBy(() -> service.createFromProcurementRequest(
                 procurementId,
@@ -171,32 +170,32 @@ class PurchaseOrderServiceTest {
         ))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("SPARE_PART");
+                    assertThat(ex.getMessage()).contains("Inactive counteragents");
                 });
 
-        verify(supplierService).loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders");
+        verify(counteragentService).loadActive(counteragentId, "purchase orders");
         verify(purchaseOrderRepository, never()).save(any());
     }
 
     @Test
-    void createFromProcurementRequestDefaultsToRequestSupplier() {
+    void createFromProcurementRequestDefaultsToRequestCounteragent() {
         UUID procurementId = UUID.randomUUID();
         UUID procurementLineId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
         ProcurementRequest procurement = procurement(procurementId, procurementLineId, warehouseId, sparePartId);
         procurement.setStatus(ProcurementRequestStatus.APPROVED);
-        procurement.setSupplierId(supplierId);
+        procurement.setCounteragentId(counteragentId);
         SparePart sparePart = sparePart(sparePartId);
-        Supplier supplier = supplier(supplierId);
+        Counteragent counteragent = counteragent(counteragentId);
         when(procurementRequestRepository.findByIdAndIsDeletedFalse(procurementId)).thenReturn(Optional.of(procurement));
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse(warehouseId)));
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(supplierService.loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders")).thenReturn(supplier);
+        when(counteragentService.loadActive(counteragentId, "purchase orders")).thenReturn(counteragent);
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
         when(purchaseOrderRepository.save(any(PurchaseOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(supplierService.load(supplierId)).thenReturn(supplier);
+        when(counteragentService.load(counteragentId)).thenReturn(counteragent);
         when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(sparePart));
 
         var result = service.createFromProcurementRequest(
@@ -204,9 +203,9 @@ class PurchaseOrderServiceTest {
                 new ProcurementRequestPurchaseOrderRequest(null, null, null)
         );
 
-        assertThat(result.supplierId()).isEqualTo(supplierId);
-        assertThat(procurement.getSupplierId()).isEqualTo(supplierId);
-        verify(supplierService).loadActiveForType(supplierId, SupplierType.SPARE_PART, "purchase orders");
+        assertThat(result.counteragentId()).isEqualTo(counteragentId);
+        assertThat(procurement.getCounteragentId()).isEqualTo(counteragentId);
+        verify(counteragentService).loadActive(counteragentId, "purchase orders");
     }
 
     @Test
@@ -216,14 +215,14 @@ class PurchaseOrderServiceTest {
         UUID procurementId = UUID.randomUUID();
         UUID procurementLineId = UUID.randomUUID();
         UUID warehouseId = UUID.randomUUID();
-        UUID supplierId = UUID.randomUUID();
+        UUID counteragentId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
         UUID responsibleId = UUID.randomUUID();
         UUID binId = UUID.randomUUID();
         LocalDate expiryDate = LocalDate.of(2027, 3, 15);
         List<WmsDocumentGroupRequest> documentGroups = List.of(documentGroup("Invoice", "INVOICE"));
 
-        PurchaseOrder order = purchaseOrder(orderId, orderLineId, procurementId, warehouseId, supplierId, sparePartId);
+        PurchaseOrder order = purchaseOrder(orderId, orderLineId, procurementId, warehouseId, counteragentId, sparePartId);
         ProcurementRequest procurement = procurement(procurementId, procurementLineId, warehouseId, sparePartId);
         SparePart sparePart = sparePart(sparePartId);
         WarehouseStock stock = stock(warehouseId, sparePartId, 3);
@@ -249,7 +248,7 @@ class PurchaseOrderServiceTest {
         when(procurementRequestRepository.findByIdAndIsDeletedFalseForUpdate(procurementId)).thenReturn(Optional.of(procurement));
         when(purchaseOrderRepository.findAllByProcurementRequestIdAndIsDeletedFalse(procurementId)).thenReturn(List.of(order));
         when(procurementRequestRepository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(supplierService.load(supplierId)).thenReturn(supplier(supplierId));
+        when(counteragentService.load(counteragentId)).thenReturn(counteragent(counteragentId));
         when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(sparePart));
 
         var result = service.receive(orderId, new PurchaseOrderReceiveRequest(
@@ -314,14 +313,14 @@ class PurchaseOrderServiceTest {
                                         UUID lineId,
                                         UUID procurementId,
                                         UUID warehouseId,
-                                        UUID supplierId,
+                                        UUID counteragentId,
                                         UUID sparePartId) {
         PurchaseOrder order = new PurchaseOrder();
         order.setId(id);
         order.setNumber("PO-2026-0001");
         order.setProcurementRequestId(procurementId);
         order.setWarehouseId(warehouseId);
-        order.setSupplierId(supplierId);
+        order.setCounteragentId(counteragentId);
         order.setStatus(PurchaseOrderStatus.SENT);
         order.setOrderDate(LocalDate.of(2026, 6, 1));
         PurchaseOrderLine line = new PurchaseOrderLine();
@@ -388,13 +387,12 @@ class PurchaseOrderServiceTest {
         return employee;
     }
 
-    private Supplier supplier(UUID id) {
-        Supplier supplier = new Supplier();
-        supplier.setId(id);
-        supplier.setCode("SUP-1");
-        supplier.setName("Supplier");
-        supplier.setActive(true);
-        return supplier;
+    private Counteragent counteragent(UUID id) {
+        Counteragent counteragent = new Counteragent();
+        counteragent.setId(id);
+        counteragent.setCode("CA-1");
+        counteragent.setName("Counteragent");
+        return counteragent;
     }
 
     private WmsDocumentGroupRequest documentGroup(String name, String type) {

@@ -75,11 +75,11 @@ public class Equipment extends BaseEntity {
     @Column(name = "responsible_id")
     private UUID responsibleId;
 
-    @Column(name = "supplier_id")
-    private UUID supplierId;
+    @Column(name = "counteragent_id")
+    private UUID counteragentId;
 
-    @Column(name = "warranty_supplier_id")
-    private UUID warrantySupplierId;
+    @Column(name = "warranty_counteragent_id")
+    private UUID warrantyCounteragentId;
 
     @Column(name = "manufacturer")
     private String manufacturer;

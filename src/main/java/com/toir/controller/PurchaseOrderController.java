@@ -45,7 +45,7 @@ public class PurchaseOrderController {
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.PURCHASE_ORDER_READ + "')")
     public ResponseEntity<Page<PurchaseOrderDto>> list(
-            @RequestParam(required = false) UUID supplierId,
+            @RequestParam(required = false) UUID counteragentId,
             @RequestParam(required = false) PurchaseOrderStatus status,
             @RequestParam(required = false) UUID warehouseId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -53,7 +53,7 @@ public class PurchaseOrderController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findAll(supplierId, status, warehouseId, from, to), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(counteragentId, status, warehouseId, from, to), page, size));
     }
 
     @GetMapping("/{id}")

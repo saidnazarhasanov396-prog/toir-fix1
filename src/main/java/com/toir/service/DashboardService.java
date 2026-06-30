@@ -3,7 +3,6 @@ import com.toir.dto.dashboard.DashboardOverview;
 import com.toir.dto.dashboard.WorkOrdersByEquipmentTypeResponse;
 
 import com.toir.entity.*;
-import com.toir.entity.contractors.Contractor;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
@@ -32,7 +31,6 @@ import com.toir.exception.RestException;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.contarctor.ContractorContractRepository;
-import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -89,7 +87,6 @@ public class DashboardService {
     private final StockMovementRepository stockMovementRepository;
     private final DowntimeEventRepository downtimeEventRepository;
     private final ReliabilityMetricRepository reliabilityMetricRepository;
-    private final ContractorRepository contractorRepository;
     private final ContractorWorkRepository contractorWorkRepository;
     private final ReservationRepository reservationRepository;
     private final ActualCostRepository actualCostRepository;
@@ -98,6 +95,7 @@ public class DashboardService {
     private final ConditionReadingRepository conditionReadingRepository;
     private final UserCertificationRepository userCertificationRepository;
     private final CalibrationRecordRepository calibrationRecordRepository;
+    private final CounteragentService counteragentService;
     private final MaintenanceDueEventRepository maintenanceDueEventRepository;
     private final UserRepository userRepository;
     private final ScopeAccessService scopeAccessService;
@@ -357,7 +355,7 @@ public class DashboardService {
 
         List<ActualCost> allActualCosts = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
-        long contractorAwaitingReflection = contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+        long counteragentWorkAwaitingReflection = contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(w -> w.getStatus() == ContractorWorkStatus.COMPLETED || w.getStatus() == ContractorWorkStatus.ACCEPTED)
                 .filter(w -> w.getCost() != null && w.getCost() > 0)
                 .filter(w -> {
@@ -403,7 +401,7 @@ public class DashboardService {
                 pendingActualCosts,
                 dueSoonActualCosts,
                 overdueActualCosts,
-                contractorAwaitingReflection,
+                counteragentWorkAwaitingReflection,
                 conditionAlarms,
                 expiringCertifications,
                 dueCalibrations
@@ -570,34 +568,40 @@ public class DashboardService {
                 })
                 .toList();
 
-        Map<UUID, Contractor> contractorById = contractorRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .collect(Collectors.toMap(Contractor::getId, c -> c));
+        Set<UUID> counteragentIds = contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .map(ContractorWork::getCounteragentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, Counteragent> counteragentById = counteragentService.load(counteragentIds).stream()
+                .collect(Collectors.toMap(Counteragent::getId, c -> c));
 
-        Map<UUID, Long> activeContractsByContractor = contractorContractRepository
+        Map<UUID, Long> activeContractsByCounteragent = contractorContractRepository
                 .findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(c -> c.getStatus() == ContractStatus.ACTIVE)
+                .filter(c -> c.getCounteragentId() != null)
                 .collect(Collectors.groupingBy(
-                        com.toir.entity.contractors.ContractorContract::getContractorId,
+                        com.toir.entity.contractors.ContractorContract::getCounteragentId,
                         Collectors.counting()
                 ));
 
-        List<ContractorLoad> contractorLoad = contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+        List<CounteragentLoad> counteragentLoad = contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(w -> w.getStatus() == ContractorWorkStatus.IN_PROGRESS
                         || w.getStatus() == ContractorWorkStatus.DRAFT)
-                .collect(Collectors.groupingBy(ContractorWork::getContractorId, Collectors.counting()))
+                .filter(w -> w.getCounteragentId() != null)
+                .collect(Collectors.groupingBy(ContractorWork::getCounteragentId, Collectors.counting()))
                 .entrySet().stream()
                 .sorted(Map.Entry.<UUID, Long>comparingByValue().reversed())
                 .limit(5)
                 .map(e -> {
-                    Contractor c = contractorById.get(e.getKey());
+                    Counteragent c = counteragentById.get(e.getKey());
                     if (c == null) return null;
-                    long activeContracts = activeContractsByContractor.getOrDefault(e.getKey(), 0L);
-                    return new ContractorLoad(c.getId(), c.getCode(), c.getName(), activeContracts, e.getValue());
+                    long activeContracts = activeContractsByCounteragent.getOrDefault(e.getKey(), 0L);
+                    return new CounteragentLoad(c.getId(), c.getCode(), c.getName(), activeContracts, e.getValue());
                 })
                 .filter(Objects::nonNull)
                 .toList();
 
-        List<ContractorReconciliation> contractorReconciliation = contractorWorkRepository
+        List<CounteragentReconciliation> counteragentReconciliation = contractorWorkRepository
                 .findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(w -> w.getStatus() == ContractorWorkStatus.COMPLETED
                         || w.getStatus() == ContractorWorkStatus.ACCEPTED)
@@ -607,7 +611,7 @@ public class DashboardService {
                         && departmentId.equals(workOrderById.get(w.getWorkOrderId()).getDepartmentId())))
                 .limit(10)
                 .map(w -> {
-                    Contractor c = contractorById.get(w.getContractorId());
+                    Counteragent c = counteragentById.get(w.getCounteragentId());
                     WorkOrder wo = w.getWorkOrderId() != null ? workOrderById.get(w.getWorkOrderId()) : null;
                     double expected = w.getCost() != null ? w.getCost() : 0.0;
                     double reflected = allActualCosts.stream()
@@ -618,9 +622,9 @@ public class DashboardService {
                     String status = reflected >= expected ? "FULLY_REFLECTED"
                             : reflected > 0 ? "PARTIALLY_REFLECTED"
                             : "NOT_REFLECTED";
-                    return new ContractorReconciliation(
+                    return new CounteragentReconciliation(
                             w.getId(),
-                            c != null ? new ContractorRef(c.getId(), c.getCode(), c.getName()) : null,
+                            c != null ? new CounteragentRef(c.getId(), c.getCode(), c.getName()) : null,
                             w.getDescription(),
                             wo != null ? new WorkOrderRef(wo.getId(), wo.getNumber(), wo.getTitle()) : null,
                             expected,
@@ -680,8 +684,8 @@ public class DashboardService {
 
         return new DashboardOverview(
                 counters, planFact, kpis, topProblem, downtimeByEq, latestDowntimes, latestMovements,
-                contractorLoad, financialReviewWorkloadByRole, financialReviewWorkloadByDepartment,
-                contractorReconciliation, lowStockItems, repeatedDefects, maintenanceKpis, maintenanceDueCounts,
+                counteragentLoad, financialReviewWorkloadByRole, financialReviewWorkloadByDepartment,
+                counteragentReconciliation, lowStockItems, repeatedDefects, maintenanceKpis, maintenanceDueCounts,
                 problemDepartments);
     }
 

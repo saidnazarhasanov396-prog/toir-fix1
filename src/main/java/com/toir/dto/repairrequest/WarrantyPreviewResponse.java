@@ -8,9 +8,9 @@ public record WarrantyPreviewResponse(
         boolean currentlyActive,
         LocalDate warrantyStartDate,
         LocalDate warrantyEndDate,
-        UUID warrantySupplierId,
-        String warrantySupplierName,
-        String warrantySupplierContactPerson,
-        String warrantySupplierPhone,
-        String warrantySupplierEmail
+        UUID warrantyCounteragentId,
+        String warrantyCounteragentName,
+        String warrantyCounteragentContactPerson,
+        String warrantyCounteragentPhone,
+        String warrantyCounteragentEmail
 ) {}

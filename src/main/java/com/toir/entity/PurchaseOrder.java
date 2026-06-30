@@ -32,8 +32,8 @@ public class PurchaseOrder extends BaseEntity {
     @Column(nullable = false, unique = true, length = 100)
     private String number;
 
-    @Column(name = "supplier_id", nullable = false)
-    private UUID supplierId;
+    @Column(name = "counteragent_id")
+    private UUID counteragentId;
 
     @Column(name = "warehouse_id", nullable = false)
     private UUID warehouseId;

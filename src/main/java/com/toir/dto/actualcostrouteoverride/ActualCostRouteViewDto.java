@@ -21,6 +21,6 @@ public record ActualCostRouteViewDto(
         Object reviewRouteOverride,
         DepartmentShortDto department,
         WorkOrderShortDto workOrder,
-        ContractorWorkShortDto contractorWork
+        CounteragentWorkShortDto counteragentWork
 ) {
 }

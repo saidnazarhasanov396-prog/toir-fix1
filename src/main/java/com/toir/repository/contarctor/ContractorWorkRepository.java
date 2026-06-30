@@ -28,15 +28,15 @@ public interface ContractorWorkRepository extends JpaRepository<ContractorWork, 
     @Query(value = "SELECT COUNT(*) FROM contractor_works WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
-    default List<ContractorWork> findAllByOptionalContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(UUID contractorId) {
-        if (contractorId != null) {
-            return findAllByContractorIdAndIsDeletedFalse(contractorId);
+    default List<ContractorWork> findAllByOptionalCounteragentIdAndIsDeletedFalseOrderByUpdatedAtDesc(UUID counteragentId) {
+        if (counteragentId != null) {
+            return findAllByCounteragentIdAndIsDeletedFalse(counteragentId);
         }
         return findAllByIsDeletedFalseOrderByUpdatedAtDesc();
     }
 
-    @Query(value = "SELECT * FROM contractor_works WHERE contractor_id = :contractorId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<ContractorWork> findAllByContractorIdAndIsDeletedFalse(@Param("contractorId") UUID contractorId);
+    @Query(value = "SELECT * FROM contractor_works WHERE counteragent_id = :counteragentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    List<ContractorWork> findAllByCounteragentIdAndIsDeletedFalse(@Param("counteragentId") UUID counteragentId);
 
     @Query(value = "SELECT * FROM contractor_works WHERE work_order_id = :workOrderId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ContractorWork> findAllByWorkOrderIdAndIsDeletedFalse(@Param("workOrderId") UUID workOrderId);

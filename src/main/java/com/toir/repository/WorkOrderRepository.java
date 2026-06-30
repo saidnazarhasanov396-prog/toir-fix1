@@ -81,9 +81,6 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
     List<WorkOrder> findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(
             @Param("defectIds") Collection<UUID> defectIds);
 
-    @Query(value = "SELECT * FROM work_orders WHERE contractor_id = :contractorId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
-    List<WorkOrder> findAllByContractorIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("contractorId") UUID contractorId);
-
     @Query(value = "SELECT * FROM work_orders WHERE repair_campaign_id = cast(:campaignId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<WorkOrder> findAllByRepairCampaignIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("campaignId") UUID campaignId);
 

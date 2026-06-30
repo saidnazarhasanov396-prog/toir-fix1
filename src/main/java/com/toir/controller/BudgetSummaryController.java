@@ -5,14 +5,14 @@ import com.toir.dto.budget.ActualCostRegisterSummary;
 import com.toir.dto.budget.ActualCostReviewActivitySummary;
 import com.toir.dto.budget.ActualCostReviewHistoryResponse;
 import com.toir.dto.budget.BudgetSummaryResponse;
-import com.toir.dto.budget.ContractorWorkRecommendationResponse;
+import com.toir.dto.budget.CounteragentWorkRecommendationResponse;
 import com.toir.dto.common.PageResponse;
 import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.dto.costcategory.CostCategoryDto;
 import com.toir.dto.financialreview.ActualCostReviewActivityItem;
 import com.toir.dto.financialreview.ActualCostReviewHandoverItem;
 import com.toir.dto.financialreview.ActualCostReviewItem;
-import com.toir.entity.contractors.Contractor;
+import com.toir.entity.Counteragent;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.Department;
 import com.toir.entity.maintenance.WorkOrder;
@@ -28,7 +28,6 @@ import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
-import com.toir.repository.contarctor.ContractorRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BudgetLineRepository;
@@ -38,6 +37,7 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.ActualCostReviewFacadeService;
+import com.toir.service.CounteragentService;
 import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
@@ -87,7 +87,7 @@ public class BudgetSummaryController {
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
     private final ContractorWorkRepository contractorWorkRepository;
-    private final ContractorRepository contractorRepository;
+    private final CounteragentService counteragentService;
     private final WorkOrderRepository workOrderRepository;
     private final FinanceScopeService financeScopeService;
     private final ActualCostReviewFacadeService actualCostReviewFacadeService;
@@ -235,7 +235,7 @@ public class BudgetSummaryController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) UUID costCategoryId,
             @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) UUID contractorId,
+            @RequestParam(required = false) UUID counteragentId,
             @RequestParam(required = false) String dateFrom,
             @RequestParam(required = false) String dateTo,
             @RequestParam(required = false) UUID actualCostId,
@@ -250,7 +250,7 @@ public class BudgetSummaryController {
                 null,
                 costCategoryId,
                 departmentId,
-                contractorId,
+                counteragentId,
                 null,
                 null,
                 parseDateStart(dateFrom),
@@ -295,7 +295,7 @@ public class BudgetSummaryController {
             @RequestParam(required = false) Integer reminderWindowHours,
             @RequestParam(required = false) String approvalRoleCode,
             @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) UUID contractorId,
+            @RequestParam(required = false) UUID counteragentId,
             @RequestParam(required = false) UUID actualCostId,
             @RequestParam(required = false) String actualCostIds,
             @RequestParam(required = false) String allocationStatus,
@@ -308,7 +308,7 @@ public class BudgetSummaryController {
                 approvalRoleCode,
                 null,
                 departmentId,
-                contractorId,
+                counteragentId,
                 attentionMode,
                 reminderWindowHours,
                 null,
@@ -466,48 +466,48 @@ public class BudgetSummaryController {
         ));
     }
 
-    @GetMapping("/contractor-works/{id}/recommendation")
+    @GetMapping("/counteragent-works/{id}/recommendation")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
-    public ResponseEntity<ContractorWorkRecommendationResponse> contractorWorkRecommendation(@PathVariable UUID id) {
+    public ResponseEntity<CounteragentWorkRecommendationResponse> counteragentWorkRecommendation(@PathVariable UUID id) {
         ContractorWork contractorWork = contractorWorkRepository.findByIdAndIsDeletedFalse(id)
-                .orElseThrow(() -> RestException.notFound("Contractor work not found: " + id));
-        Contractor contractor = contractorWork.getContractorId() != null
-                ? contractorRepository.findByIdAndIsDeletedFalse(contractorWork.getContractorId()).orElse(null)
+                .orElseThrow(() -> RestException.notFound("Counteragent work not found: " + id));
+        Counteragent counteragent = contractorWork.getCounteragentId() != null
+                ? counteragentService.load(contractorWork.getCounteragentId())
                 : null;
         WorkOrder workOrder = contractorWork.getWorkOrderId() != null
                 ? workOrderRepository.findByIdAndIsDeletedFalse(contractorWork.getWorkOrderId()).orElse(null)
                 : null;
-        List<ActualCost> contractorActualCosts = nullSafe(actualCostRepository
+        List<ActualCost> counteragentActualCosts = nullSafe(actualCostRepository
                 .findAllByContractorWorkIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(contractorWork.getId())));
         double expected = contractorWork.getCost() != null ? contractorWork.getCost() : 0.0d;
-        double reflected = contractorActualCosts.stream()
+        double reflected = counteragentActualCosts.stream()
                 .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED)
                 .mapToDouble(ActualCost::getAmount)
                 .sum();
-        double pending = contractorActualCosts.stream()
+        double pending = counteragentActualCosts.stream()
                 .filter(cost -> cost.getStatus() == ActualCostStatus.PENDING)
                 .mapToDouble(ActualCost::getAmount)
                 .sum();
         double submitted = reflected + pending;
-        CostCategory recommendedCategory = recommendedContractorCostCategory(workOrder);
+        CostCategory recommendedCategory = recommendedCounteragentCostCategory(workOrder);
         BudgetLine recommendedLine = recommendedBudgetLine(workOrder, recommendedCategory);
         MaintenanceBudget recommendedBudget = recommendedLine != null ? recommendedLine.getBudget() : null;
 
-        return ResponseEntity.ok(new ContractorWorkRecommendationResponse(
-                new ContractorWorkRecommendationResponse.ContractorWorkRef(
+        return ResponseEntity.ok(new CounteragentWorkRecommendationResponse(
+                new CounteragentWorkRecommendationResponse.CounteragentWorkRef(
                         contractorWork.getId(),
                         contractorWork.getDescription(),
                         contractorWork.getStatus() != null ? contractorWork.getStatus().name() : null,
                         contractorWork.getCost(),
-                        contractor != null
-                                ? new ContractorWorkRecommendationResponse.ContractorRef(
-                                contractor.getId(),
-                                contractor.getCode(),
-                                contractor.getName()
+                        counteragent != null
+                                ? new CounteragentWorkRecommendationResponse.CounteragentRef(
+                                counteragent.getId(),
+                                counteragent.getCode(),
+                                counteragent.getName()
                         )
                                 : null,
                         workOrder != null
-                                ? new ContractorWorkRecommendationResponse.WorkOrderRef(
+                                ? new CounteragentWorkRecommendationResponse.WorkOrderRef(
                                 workOrder.getId(),
                                 workOrder.getNumber(),
                                 workOrder.getTitle(),
@@ -531,7 +531,7 @@ public class BudgetSummaryController {
                 )
                         : null,
                 recommendedBudget != null
-                        ? new ContractorWorkRecommendationResponse.BudgetRef(
+                        ? new CounteragentWorkRecommendationResponse.BudgetRef(
                         recommendedBudget.getId(),
                         recommendedBudget.getYear(),
                         recommendedBudget.getMonth(),
@@ -548,7 +548,7 @@ public class BudgetSummaryController {
                 )
                         : null,
                 recommendedLine != null
-                        ? new ContractorWorkRecommendationResponse.BudgetLineRef(
+                        ? new CounteragentWorkRecommendationResponse.BudgetLineRef(
                         recommendedLine.getId(),
                         recommendedLine.getBudget() != null ? recommendedLine.getBudget().getId() : null,
                         recommendedLine.getCostCategoryId(),
@@ -620,7 +620,7 @@ public class BudgetSummaryController {
         return line.getActualAmount();
     }
 
-    private CostCategory recommendedContractorCostCategory(WorkOrder workOrder) {
+    private CostCategory recommendedCounteragentCostCategory(WorkOrder workOrder) {
         if (workOrder != null && workOrder.getId() != null) {
             UUID latestCategoryId = nullSafe(actualCostRepository
                     .findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrder.getId()))
@@ -705,7 +705,7 @@ public class BudgetSummaryController {
                                                          String approvalRoleCode,
                                                          UUID costCategoryId,
                                                          UUID departmentId,
-                                                         UUID contractorId,
+                                                         UUID counteragentId,
                                                          String attentionMode,
                                                          Integer reminderWindowHours,
                                                          Instant dateFrom,
@@ -723,7 +723,7 @@ public class BudgetSummaryController {
                         || approvalRoleCode.equalsIgnoreCase(item.approvalRoleCode()))
                 .filter(item -> costCategoryId == null || costCategoryId.equals(item.costCategoryId()))
                 .filter(item -> departmentId == null || matchesDepartment(item.department(), item.workOrder(), departmentId))
-                .filter(item -> contractorId == null || contractorId.equals(contractorId(item)))
+                .filter(item -> counteragentId == null || counteragentId.equals(counteragentId(item)))
                 .filter(item -> matchesAttention(item, attentionMode, reminderWindowHours))
                 .filter(item -> dateFrom == null || item.costDate() == null || !item.costDate().isBefore(dateFrom))
                 .filter(item -> dateTo == null || item.costDate() == null || item.costDate().isBefore(dateTo))
@@ -801,10 +801,10 @@ public class BudgetSummaryController {
         return departmentId.equals(objectId(workOrderDepartment));
     }
 
-    private UUID contractorId(ActualCostReviewItem item) {
-        Object contractorWork = item.contractorWork();
-        Object contractor = objectProperty(contractorWork, "contractor");
-        return objectId(contractor);
+    private UUID counteragentId(ActualCostReviewItem item) {
+        Object counteragentWork = item.counteragentWork();
+        Object counteragent = objectProperty(counteragentWork, "counteragent");
+        return objectId(counteragent);
     }
 
     private UUID objectId(Object value) {

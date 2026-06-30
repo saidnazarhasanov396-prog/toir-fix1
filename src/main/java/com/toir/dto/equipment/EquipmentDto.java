@@ -1,8 +1,8 @@
 package com.toir.dto.equipment;
 
 import com.toir.dto.mxik.MxikRefDto;
+import com.toir.entity.Counteragent;
 import com.toir.entity.FileAsset;
-import com.toir.entity.Supplier;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.enums.EquipmentCategory;
@@ -80,10 +80,10 @@ public record EquipmentDto(
         Long forecastRemainingActiveDays,
         LocalDate forecastCalculatedAt,
         boolean isCreatedAct,
-        UUID supplierId,
-        String supplierName,
-        UUID warrantySupplierId,
-        String warrantySupplierName,
+        UUID counteragentId,
+        String counteragentName,
+        UUID warrantyCounteragentId,
+        String warrantyCounteragentName,
         UUID mxikId,
         MxikRefDto mxik
 ) {
@@ -436,10 +436,10 @@ public record EquipmentDto(
                                     EquipmentMeter lifetimeMeter,
                                     ResponsibleRef responsible,
                                     boolean isCreatedAct,
-                                    Supplier supplier,
-                                    Supplier warrantySupplier) {
+                                    Counteragent counteragent,
+                                    Counteragent warrantyCounteragent) {
         return from(e, department, location, equipmentType, parent, passport, placement, warrantyAttachment,
-                passportCompleteness, lifetimeMeter, responsible, isCreatedAct, supplier, warrantySupplier, null);
+                passportCompleteness, lifetimeMeter, responsible, isCreatedAct, counteragent, warrantyCounteragent, null);
     }
 
     public static EquipmentDto from(Equipment e,
@@ -454,8 +454,8 @@ public record EquipmentDto(
                                     EquipmentMeter lifetimeMeter,
                                     ResponsibleRef responsible,
                                     boolean isCreatedAct,
-                                    Supplier supplier,
-                                    Supplier warrantySupplier,
+                                    Counteragent counteragent,
+                                    Counteragent warrantyCounteragent,
                                     MxikRefDto mxik) {
         return new EquipmentDto(
                 e.getId(), e.getCode(), e.getName(), e.getInventoryNumber(), e.getTechnicalNumber(),
@@ -488,10 +488,10 @@ public record EquipmentDto(
                 e.getForecastRemainingActiveDays(),
                 e.getForecastCalculatedAt(),
                 isCreatedAct,
-                e.getSupplierId(),
-                supplier == null ? null : supplier.getName(),
-                e.getWarrantySupplierId(),
-                warrantySupplier == null ? null : warrantySupplier.getName(),
+                e.getCounteragentId(),
+                counteragent == null ? null : counteragent.getName(),
+                e.getWarrantyCounteragentId(),
+                warrantyCounteragent == null ? null : warrantyCounteragent.getName(),
                 e.getMxikId(),
                 mxik
         );

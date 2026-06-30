@@ -5,6 +5,7 @@ import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.file.UploadFileResponse;
 import com.toir.dto.mxik.MxikRefDto;
+import com.toir.entity.Counteragent;
 import com.toir.entity.FileAsset;
 import com.toir.entity.Mxik;
 import com.toir.entity.UploadedFile;
@@ -13,7 +14,6 @@ import com.toir.dto.warehouse.WarehouseEquipmentAssignRequest;
 import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.Location;
-import com.toir.entity.Supplier;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentAttributeDefinition;
@@ -42,7 +42,6 @@ import com.toir.enums.MeterType;
 import com.toir.enums.PlacementType;
 import com.toir.enums.PlacementTargetType;
 import com.toir.enums.RequestStatus;
-import com.toir.enums.SupplierType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
@@ -52,7 +51,6 @@ import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.EquipmentUsageSessionRepository;
 import com.toir.repository.FileAssetRepository;
 import com.toir.repository.MxikRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.LocationRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -76,6 +74,7 @@ import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.attachment.AttachmentGroupService;
+import com.toir.service.CounteragentService;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -111,7 +110,7 @@ public class EquipmentService {
     private final EquipmentAttributeValueRepository attributeValueRepository;
     private final EquipmentMeterRepository equipmentMeterRepository;
     private final WarehouseRepository warehouseRepository;
-    private final SupplierRepository supplierRepository;
+    private final CounteragentService counteragentService;
     private final MxikRepository mxikRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final EquipmentLocationHistoryRepository equipmentLocationHistoryRepository;
@@ -697,7 +696,7 @@ public class EquipmentService {
         validateParent(null, request.parentId());
         validateWarrantyDateRange(request.warrantyStartDate(), request.warrantyEndDate());
         validateWarrantyAttachment(request.hasWarranty(), request.warrantyAttachmentId());
-        validateSupplierReferences(request);
+        validateCounteragentReferences(request);
         validateMxik(request.mxikId());
         validateResponsibleEmployee(request.responsibleId());
         Equipment entity = new Equipment();
@@ -755,7 +754,7 @@ public class EquipmentService {
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
         validateWarrantyDateRangeForUpdate(entity, request);
         validateWarrantyAttachmentForUpdate(request);
-        validateSupplierReferencesForUpdate(entity, request);
+        validateCounteragentReferencesForUpdate(entity, request);
         validateMxik(request.mxikId());
         validateResponsibleEmployee(request.responsibleId());
 
@@ -879,8 +878,8 @@ public class EquipmentService {
         Set<UUID> parentIds = collectIds(items, Equipment::getParentId);
         Set<UUID> currentWarehouseIds = collectIds(items, Equipment::getCurrentWarehouseId);
         Set<UUID> warrantyAttachmentIds = collectIds(items, Equipment::getWarrantyAttachmentId);
-        Set<UUID> supplierIds = collectIds(items, Equipment::getSupplierId);
-        Set<UUID> warrantySupplierIds = collectIds(items, Equipment::getWarrantySupplierId);
+        Set<UUID> counteragentIds = collectIds(items, Equipment::getCounteragentId);
+        Set<UUID> warrantyCounteragentIds = collectIds(items, Equipment::getWarrantyCounteragentId);
         Set<UUID> mxikIds = collectIds(items, Equipment::getMxikId);
         Set<UUID> equipmentIds = items.stream().map(Equipment::getId).collect(Collectors.toSet());
         Set<UUID> equipmentIdsWithCreatedAct = new HashSet<>(
@@ -919,11 +918,11 @@ public class EquipmentService {
                 : byId(warehouseRepository.findAllByIdInAndIsDeletedFalse(warehouseIdsToLoad), Warehouse::getId);
         Map<UUID, EquipmentType> typeMap = byId(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(typeIds), EquipmentType::getId);
         Map<UUID, Equipment> parentMap = byId(repository.findAllByIdInAndIsDeletedFalse(parentIds), Equipment::getId);
-        Set<UUID> allSupplierIds = new HashSet<>(supplierIds);
-        allSupplierIds.addAll(warrantySupplierIds);
-        Map<UUID, Supplier> supplierMap = allSupplierIds.isEmpty()
+        Set<UUID> allCounteragentIds = new HashSet<>(counteragentIds);
+        allCounteragentIds.addAll(warrantyCounteragentIds);
+        Map<UUID, Counteragent> counteragentMap = allCounteragentIds.isEmpty()
                 ? Collections.emptyMap()
-                : byId(supplierRepository.findAllByIdInAndIsDeletedFalse(allSupplierIds), Supplier::getId);
+                : byId(counteragentService.load(allCounteragentIds), Counteragent::getId);
         Map<UUID, Mxik> mxikMap = mxikIds.isEmpty()
                 ? Collections.emptyMap()
                 : byId(mxikRepository.findAllByIdInAndIsDeletedFalse(mxikIds), Mxik::getId);
@@ -976,8 +975,8 @@ public class EquipmentService {
                             resolveLifetimeMeter(e, activeMetersByEquipment.getOrDefault(e.getId(), List.of())),
                             responsibleRef,
                             equipmentIdsWithCreatedAct.contains(e.getId()),
-                            supplierMap.get(e.getSupplierId()),
-                            supplierMap.get(e.getWarrantySupplierId()),
+                            counteragentMap.get(e.getCounteragentId()),
+                            counteragentMap.get(e.getWarrantyCounteragentId()),
                             MxikRefDto.from(mxikMap.get(e.getMxikId()))
                     );
                 })
@@ -1305,7 +1304,7 @@ public class EquipmentService {
         entity.setParentId(request.parentId());
         entity.setCriticalityClassId(request.criticalityClassId());
         entity.setResponsibleId(request.responsibleId());
-        entity.setSupplierId(request.supplierId());
+        entity.setCounteragentId(request.counteragentId());
         entity.setManufacturer(request.manufacturer());
         if (request.status() != null) entity.setStatus(request.status());
         entity.setCategory(request.category() != null ? request.category() : EquipmentCategory.PRODUCTION_EQUIPMENT);
@@ -1316,7 +1315,7 @@ public class EquipmentService {
         entity.setWarrantyAttachmentId(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyAttachmentId() : null);
         entity.setWarrantyStartDate(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyStartDate() : null);
         entity.setWarrantyEndDate(Boolean.TRUE.equals(request.hasWarranty()) ? request.warrantyEndDate() : null);
-        entity.setWarrantySupplierId(Boolean.TRUE.equals(request.hasWarranty()) ? effectiveWarrantySupplierId(request) : null);
+        entity.setWarrantyCounteragentId(Boolean.TRUE.equals(request.hasWarranty()) ? effectiveWarrantyCounteragentId(request) : null);
         entity.setOperationStartDate(request.operationStartDate());
         entity.setExpectedLifetimeMonths(request.expectedLifetimeMonths());
         entity.setExpectedLifetimeYears(request.expectedLifetimeYears());
@@ -1985,7 +1984,7 @@ public class EquipmentService {
         entity.setParentId(request.parentId());
         entity.setCriticalityClassId(request.criticalityClassId()  != null ? request.criticalityClassId() : entity.getCriticalityClassId());
         entity.setResponsibleId(request.responsibleId() != null ? request.responsibleId() : entity.getResponsibleId());
-        entity.setSupplierId(request.supplierId() != null ? request.supplierId() : entity.getSupplierId());
+        entity.setCounteragentId(request.counteragentId() != null ? request.counteragentId() : entity.getCounteragentId());
         entity.setManufacturer(request.manufacturer() != null ? request.manufacturer() : entity.getManufacturer());
         entity.setCategory(request.category() != null ? request.category() : entity.getCategory());
         entity.setCommissionedAt(request.commissionedAt() != null ? request.commissionedAt() : entity.getCommissionedAt());
@@ -2160,41 +2159,41 @@ public class EquipmentService {
         }
     }
 
-    private void validateSupplierReferences(EquipmentCreateRequest request) {
-        if (request.supplierId() != null) {
-            loadActiveEquipmentSupplier(request.supplierId(), "equipment supplier");
+    private void validateCounteragentReferences(EquipmentCreateRequest request) {
+        if (request.counteragentId() != null) {
+            loadActiveEquipmentCounteragent(request.counteragentId(), "equipment counteragent");
         }
-        UUID warrantySupplierId = effectiveWarrantySupplierId(request);
-        if (warrantySupplierId != null && !warrantySupplierId.equals(request.supplierId())) {
-            loadActiveEquipmentSupplier(warrantySupplierId, "equipment warranty supplier");
-        }
-    }
-
-    private void validateSupplierReferencesForUpdate(Equipment entity, EquipmentUpdateRequest request) {
-        if (request.supplierId() != null) {
-            loadActiveEquipmentSupplier(request.supplierId(), "equipment supplier");
-        }
-        UUID warrantySupplierId = effectiveWarrantySupplierIdForUpdate(entity, request);
-        if (warrantySupplierId != null
-                && !warrantySupplierId.equals(request.supplierId())) {
-            loadActiveEquipmentSupplier(warrantySupplierId, "equipment warranty supplier");
+        UUID warrantyCounteragentId = effectiveWarrantyCounteragentId(request);
+        if (warrantyCounteragentId != null && !warrantyCounteragentId.equals(request.counteragentId())) {
+            loadActiveEquipmentCounteragent(warrantyCounteragentId, "equipment warranty counteragent");
         }
     }
 
-    private UUID effectiveWarrantySupplierId(EquipmentCreateRequest request) {
+    private void validateCounteragentReferencesForUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        if (request.counteragentId() != null) {
+            loadActiveEquipmentCounteragent(request.counteragentId(), "equipment counteragent");
+        }
+        UUID warrantyCounteragentId = effectiveWarrantyCounteragentIdForUpdate(entity, request);
+        if (warrantyCounteragentId != null
+                && !warrantyCounteragentId.equals(request.counteragentId())) {
+            loadActiveEquipmentCounteragent(warrantyCounteragentId, "equipment warranty counteragent");
+        }
+    }
+
+    private UUID effectiveWarrantyCounteragentId(EquipmentCreateRequest request) {
         if (!Boolean.TRUE.equals(request.hasWarranty())) {
             return null;
         }
-        UUID supplierId = request.warrantySupplierId() != null
-                ? request.warrantySupplierId()
-                : request.supplierId();
-        if (supplierId == null) {
-            throw RestException.badRequest("Warranty supplier is required when warranty is enabled");
+        UUID counteragentId = request.warrantyCounteragentId() != null
+                ? request.warrantyCounteragentId()
+                : request.counteragentId();
+        if (counteragentId == null) {
+            throw RestException.badRequest("Warranty counteragent is required when warranty is enabled");
         }
-        return supplierId;
+        return counteragentId;
     }
 
-    private UUID effectiveWarrantySupplierIdForUpdate(Equipment entity, EquipmentUpdateRequest request) {
+    private UUID effectiveWarrantyCounteragentIdForUpdate(Equipment entity, EquipmentUpdateRequest request) {
         if (Boolean.FALSE.equals(request.hasWarranty())) {
             return null;
         }
@@ -2203,29 +2202,20 @@ public class EquipmentService {
         if (!warrantyEnabled) {
             return null;
         }
-        UUID supplierId = firstNonNull(
-                request.warrantySupplierId(),
-                entity.getWarrantySupplierId(),
-                request.supplierId(),
-                entity.getSupplierId()
+        UUID counteragentId = firstNonNull(
+                request.warrantyCounteragentId(),
+                entity.getWarrantyCounteragentId(),
+                request.counteragentId(),
+                entity.getCounteragentId()
         );
-        if (supplierId == null) {
-            throw RestException.badRequest("Warranty supplier is required when warranty is enabled");
+        if (counteragentId == null) {
+            throw RestException.badRequest("Warranty counteragent is required when warranty is enabled");
         }
-        return supplierId;
+        return counteragentId;
     }
 
-    private Supplier loadActiveEquipmentSupplier(UUID supplierId, String context) {
-        Supplier supplier = supplierRepository.findByIdAndIsDeletedFalse(supplierId)
-                .orElseThrow(() -> RestException.notFound("Supplier not found: " + supplierId));
-        if (!Boolean.TRUE.equals(supplier.getActive())) {
-            throw RestException.badRequest("Inactive supplier cannot be selected as " + context);
-        }
-        SupplierType supplierType = supplier.getSupplierType() == null ? SupplierType.BOTH : supplier.getSupplierType();
-        if (!supplierType.supports(SupplierType.EQUIPMENT)) {
-            throw RestException.badRequest("Supplier must support EQUIPMENT for " + context);
-        }
-        return supplier;
+    private Counteragent loadActiveEquipmentCounteragent(UUID counteragentId, String context) {
+        return counteragentService.loadActive(counteragentId, context);
     }
 
     private FileAsset getFileAssetOrThrow(UUID fileAssetId) {
@@ -2239,7 +2229,7 @@ public class EquipmentService {
             entity.setWarrantyAttachmentId(null);
             entity.setWarrantyStartDate(null);
             entity.setWarrantyEndDate(null);
-            entity.setWarrantySupplierId(null);
+            entity.setWarrantyCounteragentId(null);
             return;
         }
         if (Boolean.TRUE.equals(request.hasWarranty())) {
@@ -2255,10 +2245,10 @@ public class EquipmentService {
         if (request.warrantyEndDate() != null) {
             entity.setWarrantyEndDate(request.warrantyEndDate());
         }
-        if (request.warrantySupplierId() != null) {
-            entity.setWarrantySupplierId(request.warrantySupplierId());
-        } else if (Boolean.TRUE.equals(entity.getHasWarranty()) && entity.getWarrantySupplierId() == null) {
-            entity.setWarrantySupplierId(entity.getSupplierId());
+        if (request.warrantyCounteragentId() != null) {
+            entity.setWarrantyCounteragentId(request.warrantyCounteragentId());
+        } else if (Boolean.TRUE.equals(entity.getHasWarranty()) && entity.getWarrantyCounteragentId() == null) {
+            entity.setWarrantyCounteragentId(entity.getCounteragentId());
         }
     }
 

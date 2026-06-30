@@ -52,8 +52,8 @@ public record EquipmentUpdateRequest(
         @PositiveOrZero Double lifetimeBaselineValue,
         @Positive Double lifetimeWarningPercent,
         @Positive Double averageDailyUsage,
-        UUID supplierId,
-        UUID warrantySupplierId,
+        UUID counteragentId,
+        UUID warrantyCounteragentId,
         UUID mxikId
 ) {
         public EquipmentUpdateRequest(
@@ -94,8 +94,8 @@ public record EquipmentUpdateRequest(
                 @PositiveOrZero Double lifetimeBaselineValue,
                 @Positive Double lifetimeWarningPercent,
                 @Positive Double averageDailyUsage,
-                UUID supplierId,
-                UUID warrantySupplierId
+                UUID counteragentId,
+                UUID warrantyCounteragentId
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, producedYear, equipmentTypeId,
                         departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
@@ -103,8 +103,8 @@ public record EquipmentUpdateRequest(
                         warrantyAttachmentId, warrantyStartDate, warrantyEndDate, description, operationStartDate,
                         expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, attributes,
                         manualAttributes, location, lifetimeCounterType, lifetimeMeterId, lifetimeLimitValue,
-                        lifetimeBaselineValue, lifetimeWarningPercent, averageDailyUsage, supplierId,
-                        warrantySupplierId, null);
+                        lifetimeBaselineValue, lifetimeWarningPercent, averageDailyUsage, counteragentId,
+                        warrantyCounteragentId, null);
         }
 
         public EquipmentUpdateRequest(

@@ -13,7 +13,6 @@ import com.toir.entity.Mxik;
 import com.toir.entity.SparePart;
 import com.toir.entity.SparePartType;
 import com.toir.entity.StockMovement;
-import com.toir.entity.Supplier;
 import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.warehouse.Warehouse;
@@ -23,7 +22,6 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.InventoryItemKind;
 import com.toir.enums.InventoryTransactionType;
 import com.toir.enums.SparePartUnit;
-import com.toir.enums.SupplierType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.LocationRepository;
@@ -31,7 +29,6 @@ import com.toir.repository.MxikRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.SparePartTypeRepository;
 import com.toir.repository.StockMovementRepository;
-import com.toir.repository.SupplierRepository;
 import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -71,7 +68,7 @@ public class SparePartService {
 
     private final SparePartRepository repository;
     private final SparePartTypeRepository typeRepository;
-    private final SupplierRepository supplierRepository;
+    private final CounteragentService counteragentService;
     private final MxikRepository mxikRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final WarehouseStockRepository stockRepository;
@@ -317,7 +314,7 @@ public class SparePartService {
                     List<WarehouseStock> stocks = stocksByPart.getOrDefault(part.getId(), List.of());
                     double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
                     double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
-                    return enrichSupplier(SparePartDto.from(
+                    return enrichCounteragent(SparePartDto.from(
                             part,
                             currentStock,
                             reservedStock,
@@ -409,7 +406,7 @@ public class SparePartService {
         var stockSnapshots = legacyStockProjectionService.currentForSparePart(id);
         double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
         double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
-        return enrichSupplier(SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit()),
+        return enrichCounteragent(SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit()),
                 MxikRefDto.from(mxik(part.getMxikId()).orElse(null))));
     }
 
@@ -480,7 +477,7 @@ public class SparePartService {
                 saved
         );
 
-        return enrichSupplier(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()),
+        return enrichCounteragent(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()),
                 MxikRefDto.from(mxik(request.mxikId()).orElse(null))));
     }
 
@@ -502,7 +499,7 @@ public class SparePartService {
                 entity,
                 saved
         );
-        return enrichSupplier(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()),
+        return enrichCounteragent(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()),
                 MxikRefDto.from(mxik(request.mxikId()).orElse(null))));
     }
 
@@ -540,8 +537,8 @@ public class SparePartService {
         entity.setSpecification(request.specification());
         entity.setManufacturer(request.manufacturer());
         entity.setMinStock(request.minStock());
-        validatePreferredSupplier(request.preferredSupplierId());
-        entity.setPreferredSupplierId(request.preferredSupplierId());
+        validatePreferredCounteragent(request.preferredCounteragentId());
+        entity.setPreferredCounteragentId(request.preferredCounteragentId());
         entity.setLeadTimeDays(request.leadTimeDays());
         entity.setLastPurchasePrice(request.lastPurchasePrice());
         entity.setAverageCost(request.averageCost());
@@ -580,13 +577,15 @@ public class SparePartService {
                 .collect(Collectors.toMap(Mxik::getId, Function.identity(), (left, right) -> left));
     }
 
-    private SparePartDto enrichSupplier(SparePartDto dto) {
-        if (dto == null || dto.preferredSupplierId() == null) {
+    private SparePartDto enrichCounteragent(SparePartDto dto) {
+        if (dto == null || dto.preferredCounteragentId() == null) {
             return dto;
         }
-        return supplierRepository.findByIdAndIsDeletedFalse(dto.preferredSupplierId())
-                .map(supplier -> dto.withPreferredSupplierName(supplier.getName()))
-                .orElse(dto);
+        try {
+            return dto.withPreferredCounteragentName(counteragentService.load(dto.preferredCounteragentId()).getName());
+        } catch (RestException ignored) {
+            return dto;
+        }
     }
 
     private UUID resolveUnitFilter(String unit) {
@@ -614,19 +613,11 @@ public class SparePartService {
         }
     }
 
-    private void validatePreferredSupplier(UUID supplierId) {
-        if (supplierId == null) {
+    private void validatePreferredCounteragent(UUID counteragentId) {
+        if (counteragentId == null) {
             return;
         }
-        Supplier supplier = supplierRepository.findByIdAndIsDeletedFalse(supplierId)
-                .orElseThrow(() -> RestException.notFound("Supplier not found: " + supplierId));
-        if (!Boolean.TRUE.equals(supplier.getActive())) {
-            throw RestException.badRequest("Inactive suppliers cannot be selected for spare parts");
-        }
-        SupplierType actualType = supplier.getSupplierType() == null ? SupplierType.BOTH : supplier.getSupplierType();
-        if (!actualType.supports(SupplierType.SPARE_PART)) {
-            throw RestException.badRequest("Supplier must support SPARE_PART for spare parts");
-        }
+        counteragentService.loadActive(counteragentId, "spare parts");
     }
 
     private String resolveUnit(String rawUnit, SparePartType type) {

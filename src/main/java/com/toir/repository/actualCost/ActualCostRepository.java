@@ -88,14 +88,15 @@ public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
             LEFT JOIN work_orders wo ON wo.id = ac.work_order_id AND wo.is_deleted = false
             LEFT JOIN contractor_works cw ON cw.id = ac.contractor_work_id AND cw.is_deleted = false
             LEFT JOIN contractors c ON c.id = cw.contractor_id AND c.is_deleted = false
+            LEFT JOIN counteragents ca ON ca.id = cw.counteragent_id AND ca.is_deleted = false
             LEFT JOIN cost_categories cc ON cc.id = ac.cost_category_id AND cc.is_deleted = false
             WHERE ac.is_deleted = false
               AND (CAST(:workOrderId AS text) IS NULL OR ac.work_order_id = CAST(:workOrderId AS uuid))
               AND (CAST(:search AS text) IS NULL OR :search = '' OR
                    LOWER(COALESCE(wo.number, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
                    LOWER(COALESCE(wo.title, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
-                   LOWER(COALESCE(c.code, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
-                   LOWER(COALESCE(c.name, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(ca.code, c.code, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
+                   LOWER(COALESCE(ca.name, c.name, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
                    LOWER(COALESCE(cc.code, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
                    LOWER(COALESCE(cc.name, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
                    LOWER(COALESCE(ac.notes, '')) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')) OR
