@@ -692,7 +692,8 @@ public class BudgetSummaryController {
         }
         return authorities.contains(item.effectiveReviewRoleCode())
                 || authorities.contains(item.approvalRoleCode())
-                || authorities.contains("ACTUAL_COST_APPROVE");
+                || authorities.contains("ACTUAL_COST_APPROVE")
+                || authorities.contains("ACTUAL_COST_REJECT");
     }
 
     private <T> List<T> nullSafe(List<T> items) {

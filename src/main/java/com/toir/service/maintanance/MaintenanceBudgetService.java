@@ -5,11 +5,13 @@ import com.toir.dto.budget.MaintenanceBudgetDto;
 import com.toir.entity.Department;
 import com.toir.entity.projects.BudgetEvent;
 import com.toir.entity.projects.BudgetLine;
+import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetEventRepository;
@@ -38,6 +40,7 @@ public class MaintenanceBudgetService {
     private final MaintenanceBudgetRepository repository;
     private final BudgetLineRepository lineRepository;
     private final DepartmentRepository departmentRepository;
+    private final CostCategoryRepository costCategoryRepository;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
     private final BudgetEventRepository budgetEventRepository;
@@ -89,8 +92,9 @@ public class MaintenanceBudgetService {
                             Map<UUID, String> deptNames = deptIds.isEmpty() ? Map.of()
                                     : departmentRepository.findAllByIdInAndIsDeletedFalse(deptIds).stream()
                                             .collect(Collectors.toMap(Department::getId, Department::getName));
+                            Map<UUID, String> categoryNames = costCategoryNamesById(filtered);
                             return filtered.stream()
-                                    .map(b -> MaintenanceBudgetDto.from(b, deptNames.get(b.getDepartmentId())))
+                                    .map(b -> toDto(b, deptNames.get(b.getDepartmentId()), categoryNames))
                                     .toList();
                         }
                 ));
@@ -104,7 +108,7 @@ public class MaintenanceBudgetService {
                 ? departmentRepository.findByIdAndIsDeletedFalse(budget.getDepartmentId())
                         .map(Department::getName).orElse(null)
                 : null;
-        return MaintenanceBudgetDto.from(budget, deptName);
+        return toDto(budget, deptName, costCategoryNamesById(List.of(budget)));
     }
 
     @Transactional
@@ -349,6 +353,27 @@ public class MaintenanceBudgetService {
                 comment
         );
         return MaintenanceBudgetDto.from(saved);
+    }
+
+    private Map<UUID, String> costCategoryNamesById(List<MaintenanceBudget> budgets) {
+        Set<UUID> ids = budgets.stream()
+                .flatMap(budget -> budget.getLines().stream())
+                .map(BudgetLine::getCostCategoryId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return costCategoryRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
+                .collect(Collectors.toMap(CostCategory::getId, CostCategory::getName, (left, right) -> left));
+    }
+
+    private MaintenanceBudgetDto toDto(
+            MaintenanceBudget budget,
+            String departmentName,
+            Map<UUID, String> costCategoryNames
+    ) {
+        return MaintenanceBudgetDto.from(budget, departmentName, costCategoryNames);
     }
 
     private MaintenanceBudget getOrThrow(UUID id) {

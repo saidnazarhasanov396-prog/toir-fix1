@@ -6,6 +6,7 @@ import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetEventRepository;
@@ -40,6 +41,7 @@ class MaintenanceBudgetLifecycleServiceTest {
         repository = mock(MaintenanceBudgetRepository.class);
         lineRepository = mock(BudgetLineRepository.class);
         DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
+        CostCategoryRepository costCategoryRepository = mock(CostCategoryRepository.class);
         AuditBuilderService auditBuilderService = mock(AuditBuilderService.class);
         scopeAccessService = mock(ScopeAccessService.class);
         budgetEventRepository = mock(BudgetEventRepository.class);
@@ -47,6 +49,7 @@ class MaintenanceBudgetLifecycleServiceTest {
                 repository,
                 lineRepository,
                 departmentRepository,
+                costCategoryRepository,
                 auditBuilderService,
                 scopeAccessService,
                 budgetEventRepository

@@ -32,6 +32,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -95,6 +98,7 @@ class BudgetSummaryControllerContractTest {
 
     @BeforeEach
     void setUp() {
+        SecurityContextHolder.clearContext();
         mockMvc = MockMvcBuilders.standaloneSetup(new BudgetSummaryController(
                         budgetRepository,
                         lineRepository,
@@ -249,6 +253,25 @@ class BudgetSummaryControllerContractTest {
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].id").value(allocated.id().toString()))
                 .andExpect(jsonPath("$.content[0].allocationStatus").value("ALLOCATED"));
+    }
+
+    @Test
+    void reviewQueueTreatsRejectPermissionAsCurrentReviewQueueAccess() throws Exception {
+        UUID actualCostId = UUID.randomUUID();
+        ActualCostReviewItem item = reviewItemWithContext(
+                actualCostId, UUID.randomUUID(), UUID.randomUUID(), "PENDING", "FINANCE_MANAGER", false, 12);
+        SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(
+                "reject-reviewer",
+                "credentials",
+                List.of(new SimpleGrantedAuthority("ACTUAL_COST_REJECT"))
+        ));
+        when(actualCostReviewFacadeService.reviewQueue(null)).thenReturn(List.of(item));
+
+        mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue")
+                        .param("myQueue", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(actualCostId.toString()));
     }
 
     @Test
