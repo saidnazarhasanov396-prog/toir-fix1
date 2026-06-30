@@ -22,6 +22,8 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.UUID;
 
+import com.toir.security.AuthenticatedUser;
+
 @Service
 public class FileAssetService {
 
@@ -29,17 +31,20 @@ public class FileAssetService {
     private final AuditBuilderService auditBuilderService;
     private final LocalFileResourceResolver localFileResourceResolver;
     private final FileValidator fileValidator;
+    private final FileAssetAccessService accessService;
     private final Path storageRoot;
 
     public FileAssetService(FileAssetRepository repository,
                             AuditBuilderService auditBuilderService,
                             LocalFileResourceResolver localFileResourceResolver,
                             FileValidator fileValidator,
+                            FileAssetAccessService accessService,
                             @Value("${app.files.storage-path:uploads}") String storagePath) {
         this.repository = repository;
         this.auditBuilderService = auditBuilderService;
         this.localFileResourceResolver = localFileResourceResolver;
         this.fileValidator = fileValidator;
+        this.accessService = accessService;
         this.storageRoot = Paths.get(storagePath).toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.storageRoot);
@@ -49,18 +54,29 @@ public class FileAssetService {
     }
 
     @Transactional(readOnly = true)
-    public List<FileAssetDto> findByEntity(String entityType, String entityId) {
+    public List<FileAssetDto> findByEntity(String entityType, String entityId, AuthenticatedUser user) {
+        accessService.assertCanAccessEntityReference(entityType, entityId, user);
         return repository.findAllByEntityTypeAndEntityIdAndIsDeletedFalse(entityType, entityId).stream()
+                .filter(asset -> accessService.canAccess(asset, user))
                 .map(FileAssetDto::from).toList();
     }
 
     @Transactional(readOnly = true)
-    public FileAsset findAssetByEntity(String entityType, String entityId, UUID id) {
+    public List<FileAssetDto> findVisibleAssets(AuthenticatedUser user) {
+        return repository.findAllByIsDeletedFalseOrderByCreatedAtDesc().stream()
+                .filter(asset -> accessService.canAccess(asset, user))
+                .map(FileAssetDto::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public FileAsset findAssetByEntity(String entityType, String entityId, UUID id, AuthenticatedUser user) {
         FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("File not found: " + id));
         if (!matchesEntity(asset, entityType, entityId)) {
             throw RestException.notFound("File not found: " + id);
         }
+        accessService.assertCanAccess(asset, user);
         return asset;
     }
 
@@ -105,21 +121,23 @@ public class FileAssetService {
     }
 
     @Transactional(readOnly = true)
-    public Resource download(UUID id) {
+    public Resource download(UUID id, AuthenticatedUser user) {
         FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("File not found: " + id));
+        accessService.assertCanAccess(asset, user);
         return load(asset);
     }
 
     @Transactional(readOnly = true)
-    public Resource downloadForEntity(String entityType, String entityId, UUID id) {
-        return load(findAssetByEntity(entityType, entityId, id));
+    public Resource downloadForEntity(String entityType, String entityId, UUID id, AuthenticatedUser user) {
+        return load(findAssetByEntity(entityType, entityId, id, user));
     }
 
     @Transactional
-    public void delete(UUID id) {
+    public void delete(UUID id, AuthenticatedUser user) {
         FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("File not found: " + id));
+        accessService.assertCanAccess(asset, user);
         try {
             Files.deleteIfExists(Paths.get(asset.getStoragePath()));
         } catch (IOException ignored) {

@@ -42,9 +42,10 @@ public class RepairRequestPhotosController {
     @GetMapping
     public ResponseEntity<Page<FileAssetDto>> list(@PathVariable UUID requestId,
                                                    @RequestParam(defaultValue = "0") int page,
-                                                   @RequestParam(defaultValue = "20") int size) {
+                                                   @RequestParam(defaultValue = "20") int size,
+                                                   @CurrentUser AuthenticatedUser user) {
         ensureExists(requestId);
-        return ResponseEntity.ok(PaginationUtils.page(fileAssetService.findByEntity(ENTITY_TYPE, requestId.toString()), page, size)
+        return ResponseEntity.ok(PaginationUtils.page(fileAssetService.findByEntity(ENTITY_TYPE, requestId.toString(), user), page, size)
                 .map(asset -> asset.withDownloadUrl(photoDownloadUrl(requestId, asset.id()))));
     }
 
@@ -62,10 +63,11 @@ public class RepairRequestPhotosController {
 
     @GetMapping("/{photoId}/download")
     public ResponseEntity<Resource> download(@PathVariable UUID requestId,
-                                             @PathVariable UUID photoId) {
+                                             @PathVariable UUID photoId,
+                                             @CurrentUser AuthenticatedUser user) {
         ensureExists(requestId);
-        FileAsset asset = fileAssetService.findAssetByEntity(ENTITY_TYPE, requestId.toString(), photoId);
-        Resource resource = fileAssetService.downloadForEntity(ENTITY_TYPE, requestId.toString(), photoId);
+        FileAsset asset = fileAssetService.findAssetByEntity(ENTITY_TYPE, requestId.toString(), photoId, user);
+        Resource resource = fileAssetService.downloadForEntity(ENTITY_TYPE, requestId.toString(), photoId, user);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(asset.getMimeType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
