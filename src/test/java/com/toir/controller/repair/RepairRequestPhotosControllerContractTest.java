@@ -85,7 +85,7 @@ class RepairRequestPhotosControllerContractTest {
         UUID requestId = UUID.randomUUID();
         FileAsset asset = photoAsset(UUID.randomUUID(), requestId);
         when(repairRequestRepository.existsByIdAndIsDeletedFalse(requestId)).thenReturn(true);
-        when(fileAssetService.findByEntity("RepairRequest", requestId.toString()))
+        when(fileAssetService.findByEntity(eq("RepairRequest"), eq(requestId.toString()), any(AuthenticatedUser.class)))
                 .thenReturn(List.of(FileAssetDto.from(asset)));
 
         mockMvc.perform(get("/api/v1/repair-requests/{requestId}/photos", requestId))
@@ -100,9 +100,9 @@ class RepairRequestPhotosControllerContractTest {
         UUID requestId = UUID.randomUUID();
         FileAsset asset = photoAsset(UUID.randomUUID(), requestId);
         when(repairRequestRepository.existsByIdAndIsDeletedFalse(requestId)).thenReturn(true);
-        when(fileAssetService.findAssetByEntity("RepairRequest", requestId.toString(), asset.getId()))
+        when(fileAssetService.findAssetByEntity(eq("RepairRequest"), eq(requestId.toString()), eq(asset.getId()), any(AuthenticatedUser.class)))
                 .thenReturn(asset);
-        when(fileAssetService.downloadForEntity("RepairRequest", requestId.toString(), asset.getId()))
+        when(fileAssetService.downloadForEntity(eq("RepairRequest"), eq(requestId.toString()), eq(asset.getId()), any(AuthenticatedUser.class)))
                 .thenReturn(new ByteArrayResource("image-bytes".getBytes()));
 
         mockMvc.perform(get("/api/v1/repair-requests/{requestId}/photos/{photoId}/download", requestId, asset.getId()))
@@ -117,7 +117,7 @@ class RepairRequestPhotosControllerContractTest {
         UUID requestId = UUID.randomUUID();
         UUID photoId = UUID.randomUUID();
         when(repairRequestRepository.existsByIdAndIsDeletedFalse(requestId)).thenReturn(true);
-        when(fileAssetService.findAssetByEntity("RepairRequest", requestId.toString(), photoId))
+        when(fileAssetService.findAssetByEntity(eq("RepairRequest"), eq(requestId.toString()), eq(photoId), any(AuthenticatedUser.class)))
                 .thenThrow(RestException.notFound("File not found: " + photoId));
 
         mockMvc.perform(get("/api/v1/repair-requests/{requestId}/photos/{photoId}/download", requestId, photoId))

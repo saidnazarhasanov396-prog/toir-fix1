@@ -37,19 +37,20 @@ public class FileAssetController {
     private final TechnicalDocumentRepository technicalDocumentRepository;
 
     @GetMapping
-    public ResponseEntity<Page<FileAssetDto>> list(@RequestParam String entityType, @RequestParam String entityId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(service.findByEntity(entityType, entityId), page, size));
+    public ResponseEntity<Page<FileAssetDto>> list(@RequestParam String entityType, @RequestParam String entityId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size, @CurrentUser AuthenticatedUser user) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findByEntity(entityType, entityId, user), page, size));
     }
 
     @GetMapping("/assets")
     public ResponseEntity<Page<FileAssetDto>> legacyAssets(@RequestParam(required = false) String entityType,
                                            @RequestParam(required = false) String entityId,
                                            @RequestParam(defaultValue = "0") int page,
-                                           @RequestParam(defaultValue = "20") int size) {
+                                           @RequestParam(defaultValue = "20") int size,
+                                           @CurrentUser AuthenticatedUser user) {
         if (entityType != null && entityId != null) {
-            return ResponseEntity.ok(PaginationUtils.page(service.findByEntity(entityType, entityId), page, size));
+            return ResponseEntity.ok(PaginationUtils.page(service.findByEntity(entityType, entityId, user), page, size));
         }
-        return ResponseEntity.ok(PaginationUtils.page(repository.findAllByIsDeletedFalseOrderByCreatedAtDesc().stream().map(FileAssetDto::from).toList(), page, size));
+        return ResponseEntity.ok(PaginationUtils.page(service.findVisibleAssets(user), page, size));
     }
 
     @GetMapping("/documents")
@@ -88,10 +89,10 @@ public class FileAssetController {
     }
 
     @GetMapping("/assets/{id}/download")
-    public ResponseEntity<Resource> download(@PathVariable UUID id) {
+    public ResponseEntity<Resource> download(@PathVariable UUID id, @CurrentUser AuthenticatedUser user) {
         FileAsset asset = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> com.toir.exception.RestException.notFound("File not found: " + id));
-        Resource resource = service.download(id);
+        Resource resource = service.download(id, user);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(asset.getMimeType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
@@ -103,8 +104,8 @@ public class FileAssetController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        service.delete(id);
+    public ResponseEntity<Void> delete(@PathVariable UUID id, @CurrentUser AuthenticatedUser user) {
+        service.delete(id, user);
         return ResponseEntity.noContent().build();
     }
 }
