@@ -383,6 +383,9 @@ public class AnalyticsService {
         }
 
         ReliabilityMetric latest = metrics.isEmpty() ? null : metrics.get(0);
+        Instant now = Instant.now();
+        ReliabilityDowntimeCalculator.EquipmentReliability calculated = ReliabilityDowntimeCalculator.calculate(
+                equipment, downtimes, workOrders, requests, now);
         long downtimeMinutes = downtimes.stream()
                 .map(DowntimeEvent::getDurationMinutes)
                 .filter(Objects::nonNull)
@@ -409,21 +412,56 @@ public class AnalyticsService {
                 workOrders.size(),
                 downtimeHours,
                 totalCost,
-                latest != null && latest.getMtbfHours() != null ? latest.getMtbfHours() : 0,
-                latest != null && latest.getMttrHours() != null ? latest.getMttrHours() : 0,
-                latest != null && latest.getAvailability() != null ? latest.getAvailability() : 0,
+                metricOrCalculatedHours(latest != null ? latest.getMtbfHours() : null, calculated.mtbfHours()),
+                metricOrCalculatedHours(latest != null ? latest.getMttrHours() : null, calculated.mttrHours()),
+                metricOrCalculatedAvailability(latest, calculated),
                 downtimeMinutes,
                 metrics.stream()
                         .map(m -> new EquipmentAnalyticsResponse.HistoryRow(
                                 m.getMetricDate(),
                                 m.getMtbfHours() != null ? m.getMtbfHours() : 0,
                                 m.getMttrHours() != null ? m.getMttrHours() : 0,
-                                m.getAvailability() != null ? m.getAvailability() : 0
+                                historyAvailability(m.getAvailability(), calculated)
                         ))
                         .toList(),
                 downtimeRows,
                 downtimeRows
         );
+    }
+
+    private static double metricOrCalculatedAvailability(ReliabilityMetric stored,
+                                                       ReliabilityDowntimeCalculator.EquipmentReliability calculated) {
+        Double normalized = stored != null ? normalizeAvailabilityPercent(stored.getAvailability()) : null;
+        if (normalized != null) {
+            return normalized;
+        }
+        return calculated.availabilityPct();
+    }
+
+    private static double historyAvailability(Double storedAvailability,
+                                            ReliabilityDowntimeCalculator.EquipmentReliability calculated) {
+        Double normalized = normalizeAvailabilityPercent(storedAvailability);
+        if (normalized != null) {
+            return normalized;
+        }
+        return calculated.availabilityPct();
+    }
+
+    private static double metricOrCalculatedHours(Double storedValue, Double calculatedValue) {
+        if (storedValue != null) {
+            return storedValue;
+        }
+        return calculatedValue != null ? calculatedValue : 0.0;
+    }
+
+    private static Double normalizeAvailabilityPercent(Double availability) {
+        if (availability == null) {
+            return null;
+        }
+        if (availability > 0 && availability <= 1.0) {
+            return availability * 100.0;
+        }
+        return availability;
     }
 
     @Transactional

@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Setter
 @ConfigurationProperties(prefix = "app.firebase")
 public class FirebaseProperties {
-    private boolean enabled = false;
+    private boolean enabled;
     private String projectId;
     private String serviceAccountFile;
     private String serviceAccountJson;
