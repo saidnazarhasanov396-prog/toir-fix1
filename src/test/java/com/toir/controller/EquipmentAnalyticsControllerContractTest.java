@@ -1,5 +1,6 @@
 package com.toir.controller;
 
+import com.toir.controller.ReliabilityPassportController.ReliabilityPassport;
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
@@ -10,9 +11,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -109,6 +113,40 @@ class EquipmentAnalyticsControllerContractTest {
                 .andExpect(jsonPath("$.history").isArray())
                 .andExpect(jsonPath("$.downtimes").isArray())
                 .andExpect(jsonPath("$.events").isArray());
+    }
+
+    @Test
+    void analyticsReliabilityReturnsAvailabilityAlias() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        ReliabilityPassport passport = new ReliabilityPassport(
+                equipmentId,
+                "EQ-2026-0001",
+                "Compressor A",
+                0,
+                0,
+                1,
+                1800L,
+                null,
+                120.0,
+                null,
+                30.0,
+                null,
+                80.0,
+                80.0,
+                List.of(),
+                Instant.now(),
+                null
+        );
+        when(reliabilityPassportService.list(null, null, null, 0, 8))
+                .thenReturn(new PageImpl<>(List.of(passport), PageRequest.of(0, 8), 1));
+
+        mockMvc.perform(get("/api/v1/analytics/reliability"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.content[0].mtbfHours").value(120.0))
+                .andExpect(jsonPath("$.content[0].mttrHours").value(30.0))
+                .andExpect(jsonPath("$.content[0].availability").value(80.0))
+                .andExpect(jsonPath("$.content[0].availabilityPct").value(80.0));
     }
 
     @Test
