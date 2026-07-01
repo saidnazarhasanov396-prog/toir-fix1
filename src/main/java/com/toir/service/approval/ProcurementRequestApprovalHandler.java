@@ -9,6 +9,7 @@ import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ProcurementRequestRepository;
+import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class ProcurementRequestApprovalHandler implements ApprovalActionHandler {
 
     private final ProcurementRequestRepository procurementRequestRepository;
+    private final WarehouseTaskGenerationService taskGenerationService;
 
     @Override
     public boolean supports(ApprovalTargetType targetType, ApprovalActionType actionType) {
@@ -49,7 +51,8 @@ public class ProcurementRequestApprovalHandler implements ApprovalActionHandler 
         request.setStatus(ProcurementRequestStatus.APPROVED);
         request.setApprovedAt(Instant.now());
         request.setRejectionReason(null);
-        procurementRequestRepository.save(request);
+        ProcurementRequest saved = procurementRequestRepository.save(request);
+        taskGenerationService.generateReceiveForApprovedProcurement(saved);
     }
 
     private void reject(ProcurementRequest request, String comment) {
