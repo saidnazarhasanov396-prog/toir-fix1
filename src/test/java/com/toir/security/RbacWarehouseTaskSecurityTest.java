@@ -162,7 +162,10 @@ class RbacWarehouseTaskSecurityTest {
                 null,
                 List.of(),
                 Instant.now(),
-                Instant.now()
+                Instant.now(),
+                null,
+                null,
+                null
         );
     }
 }
