@@ -1,6 +1,7 @@
 package com.toir.repository;
 
 import com.toir.entity.warehouse.WarehouseBin;
+import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +20,8 @@ public interface WarehouseBinRepository extends JpaRepository<WarehouseBin, UUID
 
     List<WarehouseBin> findAllByWarehouseIdAndIsDeletedFalseOrderByTravelSequenceAscCodeAsc(UUID warehouseId);
 
+    long countByWarehouseIdAndIsDeletedFalse(UUID warehouseId);
+
     @Query("""
             select b
             from WarehouseBin b
@@ -30,13 +33,13 @@ public interface WarehouseBinRepository extends JpaRepository<WarehouseBin, UUID
                    or lower(coalesce(b.aisle, '')) like lower(concat('%', cast(:search as string), '%'))
                    or lower(coalesce(b.rack, '')) like lower(concat('%', cast(:search as string), '%'))
                    or lower(coalesce(b.shelfLevel, '')) like lower(concat('%', cast(:search as string), '%'))
-                   or lower(coalesce(b.binType, '')) like lower(concat('%', cast(:search as string), '%'))
+                   or lower(coalesce(cast(b.binType as string), '')) like lower(concat('%', cast(:search as string), '%'))
                    or lower(coalesce(b.barcode, '')) like lower(concat('%', cast(:search as string), '%')))
               and (cast(:zone as string) is null or lower(coalesce(b.zone, '')) = lower(cast(:zone as string)))
               and (cast(:aisle as string) is null or lower(coalesce(b.aisle, '')) = lower(cast(:aisle as string)))
               and (cast(:rack as string) is null or lower(coalesce(b.rack, '')) = lower(cast(:rack as string)))
               and (cast(:shelfLevel as string) is null or lower(coalesce(b.shelfLevel, '')) = lower(cast(:shelfLevel as string)))
-              and (cast(:binType as string) is null or lower(coalesce(b.binType, '')) = lower(cast(:binType as string)))
+              and (:binType is null or b.binType = :binType)
               and (:qualityZoneType is null or b.qualityZoneType = :qualityZoneType)
               and (cast(:temperatureZone as string) is null or lower(coalesce(b.temperatureZone, '')) = lower(cast(:temperatureZone as string)))
               and (cast(:hazardClass as string) is null or lower(coalesce(b.hazardClass, '')) = lower(cast(:hazardClass as string)))
@@ -52,7 +55,7 @@ public interface WarehouseBinRepository extends JpaRepository<WarehouseBin, UUID
                               @Param("aisle") String aisle,
                               @Param("rack") String rack,
                               @Param("shelfLevel") String shelfLevel,
-                              @Param("binType") String binType,
+                              @Param("binType") WarehouseBinType binType,
                               @Param("qualityZoneType") WarehouseQualityZoneType qualityZoneType,
                               @Param("temperatureZone") String temperatureZone,
                               @Param("hazardClass") String hazardClass,

@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.dto.warehouse.WarehouseBinDto;
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
+import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.GlobalExceptionHandler;
@@ -86,7 +87,7 @@ class WarehouseBinControllerContractTest {
                 eq("A"),
                 eq("01"),
                 eq("02"),
-                eq("PALLET"),
+                eq(WarehouseBinType.PALLET),
                 eq(WarehouseQualityZoneType.STORAGE),
                 eq("AMBIENT"),
                 eq("NONE"),
@@ -187,7 +188,6 @@ class WarehouseBinControllerContractTest {
                         .contentType("application/json")
                         .content("""
                                 {
-                                  "code": "A-01-02-03",
                                   "qualityZoneType": "STORAGE",
                                   "active": true
                                 }
@@ -242,7 +242,7 @@ class WarehouseBinControllerContractTest {
                 "A",
                 "01",
                 "02",
-                "PALLET",
+                WarehouseBinType.PALLET,
                 null,
                 null,
                 WarehouseQualityZoneType.STORAGE,

@@ -18,6 +18,10 @@ public interface WarehouseTaskRepository extends JpaRepository<WarehouseTask, UU
 
     Optional<WarehouseTask> findByIdAndIsDeletedFalse(UUID id);
 
+    Optional<WarehouseTask> findByGenerationKeyAndIsDeletedFalse(String generationKey);
+
+    boolean existsByGenerationKeyAndIsDeletedFalse(String generationKey);
+
     long countByIsDeletedFalse();
 
     @Query("""

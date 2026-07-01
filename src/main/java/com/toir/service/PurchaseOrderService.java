@@ -26,6 +26,7 @@ import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.PurchaseOrderStatus;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseTaskSourceType;
 import com.toir.enums.WmsDocumentOperationType;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
@@ -38,6 +39,7 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +78,7 @@ public class PurchaseOrderService {
     private final LegacyStockProjectionService legacyStockProjectionService;
     private final WmsStockCoordinateValidator coordinateValidator;
     private final WmsDocumentPolicyService documentPolicyService;
+    private final WarehouseTaskGenerationService taskGenerationService;
 
     @Transactional
     public PurchaseOrderDto create(PurchaseOrderRequest request) {
@@ -299,9 +302,33 @@ public class PurchaseOrderService {
                 receiptMovement(order, line, sparePart, quantity, receiptDate, documentNumber, responsible, lineRequest)
         );
         postCoreStockReceipt(order, line, movement, quantity, lineRequest);
+        generatePutawayTask(order, line, sparePart, movement, quantity, lineRequest);
         legacyStockProjectionService.sync(order.getWarehouseId(), sparePart.getId());
         inventoryCostService.applyReceiptCost(sparePart, previousTotalQuantity, quantity, line.getUnitPrice());
         inventoryTransactionRepository.save(receiptTransaction(order, line, sparePart, quantity, receiptDate, documentNumber, responsible, lineRequest));
+    }
+
+    private void generatePutawayTask(PurchaseOrder order,
+                                     PurchaseOrderLine line,
+                                     SparePart sparePart,
+                                     StockMovement movement,
+                                     BigDecimal quantity,
+                                     PurchaseOrderReceiveLineRequest lineRequest) {
+        taskGenerationService.generatePutawayForReceipt(new WarehouseTaskGenerationService.ReceiptPutawayCommand(
+                "purchase-order-putaway:" + movement.getId(),
+                order.getWarehouseId(),
+                sparePart.getId(),
+                lineRequest.binId(),
+                quantity,
+                sparePart.getUnit(),
+                trimToNull(lineRequest.lotNumber()),
+                trimToNull(lineRequest.serialNumber()),
+                lineRequest.expiryDate(),
+                lineRequest.effectiveStatus(),
+                WarehouseTaskSourceType.PURCHASE_ORDER,
+                order.getId(),
+                "Putaway for purchase order receipt: " + order.getNumber() + " line " + line.getId()
+        ));
     }
 
     private void postCoreStockReceipt(PurchaseOrder order,

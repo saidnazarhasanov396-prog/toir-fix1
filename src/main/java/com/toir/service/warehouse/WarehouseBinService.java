@@ -6,12 +6,14 @@ import com.toir.dto.warehouse.WarehouseBinStatusRequest;
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseBin;
+import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 import com.toir.exception.RestException;
 import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.util.CodeGenerationUtils;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -20,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Year;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -44,7 +47,7 @@ public class WarehouseBinService {
                                       String aisle,
                                       String rack,
                                       String shelfLevel,
-                                      String binType,
+                                      WarehouseBinType binType,
                                       WarehouseQualityZoneType qualityZoneType,
                                       String temperatureZone,
                                       String hazardClass,
@@ -64,7 +67,7 @@ public class WarehouseBinService {
                 trimToNull(aisle),
                 trimToNull(rack),
                 trimToNull(shelfLevel),
-                trimToNull(binType),
+                binType,
                 qualityZoneType,
                 trimToNull(temperatureZone),
                 trimToNull(hazardClass),
@@ -86,9 +89,9 @@ public class WarehouseBinService {
 
     @Transactional
     public WarehouseBinDto create(UUID warehouseId, WarehouseBinRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         assertWarehouseExists(warehouseId);
-        String code = normalizeRequiredCode(request.code());
-        assertCodeAvailable(warehouseId, code, null);
+        String code = nextCode(warehouseId);
         String barcode = normalizeBarcode(request.barcode());
         assertBarcodeAvailable(barcode, null);
 
@@ -100,10 +103,9 @@ public class WarehouseBinService {
 
     @Transactional
     public WarehouseBinDto update(UUID warehouseId, UUID binId, WarehouseBinRequest request) {
+        CodeGenerationUtils.rejectClientProvidedCode(request.code());
         assertWarehouseExists(warehouseId);
         WarehouseBin bin = loadOwnedBin(warehouseId, binId);
-        String code = normalizeRequiredCode(request.code());
-        assertCodeAvailable(warehouseId, code, bin.getCode());
         String barcode = normalizeBarcode(request.barcode());
         assertBarcodeAvailable(barcode, bin.getBarcode());
 
@@ -111,7 +113,7 @@ public class WarehouseBinService {
         if (!requestedActive && bin.isActive() && hasStock(warehouseId, binId)) {
             throw RestException.badRequest("Cannot deactivate bin with stock");
         }
-        apply(bin, request, code, barcode, false);
+        apply(bin, request, bin.getCode(), barcode, false);
         return WarehouseBinDto.from(binRepository.save(bin));
     }
 
@@ -171,7 +173,7 @@ public class WarehouseBinService {
         bin.setAisle(trimToNull(request.aisle()));
         bin.setRack(trimToNull(request.rack()));
         bin.setShelfLevel(trimToNull(request.shelfLevel()));
-        bin.setBinType(trimToNull(request.binType()));
+        bin.setBinType(request.binType());
         bin.setMaxWeightKg(request.maxWeightKg());
         bin.setMaxVolumeM3(request.maxVolumeM3());
         bin.setQualityZoneType(request.qualityZoneType() == null ? WarehouseQualityZoneType.STORAGE : request.qualityZoneType());
@@ -227,15 +229,6 @@ public class WarehouseBinService {
                 .collect(Collectors.toMap(Warehouse::getId, Warehouse::getName, (first, second) -> first));
     }
 
-    private void assertCodeAvailable(UUID warehouseId, String code, String currentCode) {
-        if (currentCode != null && currentCode.equalsIgnoreCase(code)) {
-            return;
-        }
-        if (binRepository.existsByWarehouseIdAndCodeIgnoreCaseAndIsDeletedFalse(warehouseId, code)) {
-            throw RestException.badRequest("Warehouse bin code already exists");
-        }
-    }
-
     private void assertBarcodeAvailable(String barcode, String currentBarcode) {
         if (barcode == null) {
             return;
@@ -256,17 +249,22 @@ public class WarehouseBinService {
         );
     }
 
-    private String normalizeRequiredCode(String code) {
-        String normalized = trimToNull(code);
-        if (normalized == null) {
-            throw RestException.badRequest("code is required");
-        }
-        return normalized;
-    }
-
     private String normalizeBarcode(String barcode) {
         String normalized = trimToNull(barcode);
         return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private String nextCode(UUID warehouseId) {
+        int year = Year.now().getValue();
+        String codePrefix = "BIN-" + year + "-";
+        long sequence = binRepository.countByWarehouseIdAndIsDeletedFalse(warehouseId) + 1;
+        for (int attempt = 0; attempt < CodeGenerationUtils.DEFAULT_MAX_ATTEMPTS; attempt++) {
+            String code = "%s%04d".formatted(codePrefix, sequence + attempt);
+            if (!binRepository.existsByWarehouseIdAndCodeIgnoreCaseAndIsDeletedFalse(warehouseId, code)) {
+                return code;
+            }
+        }
+        throw RestException.conflict("Could not generate unique warehouse bin code");
     }
 
     private String trimToNull(String value) {

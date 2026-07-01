@@ -1,6 +1,7 @@
 package com.toir.dto.warehouse;
 
 import com.toir.entity.warehouse.WarehouseBin;
+import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 
 import java.math.BigDecimal;
@@ -16,7 +17,7 @@ public record WarehouseBinDto(
         String aisle,
         String rack,
         String shelfLevel,
-        String binType,
+        WarehouseBinType binType,
         BigDecimal maxWeightKg,
         BigDecimal maxVolumeM3,
         WarehouseQualityZoneType qualityZoneType,
@@ -43,7 +44,7 @@ public record WarehouseBinDto(
             String aisle,
             String rack,
             String shelfLevel,
-            String binType,
+            WarehouseBinType binType,
             BigDecimal maxWeightKg,
             BigDecimal maxVolumeM3,
             WarehouseQualityZoneType qualityZoneType,
