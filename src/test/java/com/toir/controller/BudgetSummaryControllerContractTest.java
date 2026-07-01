@@ -54,6 +54,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class BudgetSummaryControllerContractTest {
@@ -95,23 +96,25 @@ class BudgetSummaryControllerContractTest {
     ActualCostReviewFacadeService actualCostReviewFacadeService;
 
     private MockMvc mockMvc;
+    private BudgetSummaryController controller;
 
     @BeforeEach
     void setUp() {
         SecurityContextHolder.clearContext();
-        mockMvc = MockMvcBuilders.standaloneSetup(new BudgetSummaryController(
-                        budgetRepository,
-                        lineRepository,
-                        actualCostRepository,
-                        costCategoryRepository,
-                        departmentRepository,
-                        userRepository,
-                        employeeRepository,
-                        contractorWorkRepository,
-                        counteragentService,
-                        workOrderRepository,
-                        financeScopeService,
-                        actualCostReviewFacadeService))
+        controller = new BudgetSummaryController(
+                budgetRepository,
+                lineRepository,
+                actualCostRepository,
+                costCategoryRepository,
+                departmentRepository,
+                userRepository,
+                employeeRepository,
+                contractorWorkRepository,
+                counteragentService,
+                workOrderRepository,
+                financeScopeService,
+                actualCostReviewFacadeService);
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -451,6 +454,152 @@ class BudgetSummaryControllerContractTest {
                 .andExpect(jsonPath("$.content[0].id").value(matching.id().toString()))
                 .andExpect(jsonPath("$.summary.uniqueDepartments").value(1))
                 .andExpect(jsonPath("$.summary.byDepartment.length()").value(1));
+    }
+
+    @Test
+    void summaryCountsPendingCostInTotalActual() throws Exception {
+        UUID budgetId = UUID.randomUUID();
+        UUID lineId = UUID.randomUUID();
+        UUID costCategoryId = UUID.randomUUID();
+
+        MaintenanceBudget budget = new MaintenanceBudget();
+        budget.setId(budgetId);
+        budget.setYear(2026);
+        budget.setDepartmentId(UUID.randomUUID());
+        budget.setStatus(BudgetStatus.APPROVED);
+        budget.setTotalPlanned(1000.0);
+        budget.setTotalActual(0.0);
+
+        BudgetLine line = new BudgetLine();
+        line.setId(lineId);
+        line.setBudget(budget);
+        line.setCostCategoryId(costCategoryId);
+        line.setPlannedAmount(1000.0);
+        line.setActualAmount(0.0);
+
+        ActualCost pendingCost = new ActualCost();
+        pendingCost.setId(UUID.randomUUID());
+        pendingCost.setStatus(ActualCostStatus.PENDING);
+        pendingCost.setAmount(300.0);
+        pendingCost.setBudgetLineId(lineId);
+        pendingCost.setCostCategoryId(costCategoryId);
+        pendingCost.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
+
+        when(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(budget));
+        when(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(line));
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(pendingCost));
+        when(financeScopeService.filterBudgets(any())).thenReturn(List.of(budget));
+        when(financeScopeService.filterBudgetLines(any())).thenReturn(List.of(line));
+        when(financeScopeService.filterActualCosts(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+
+        var response = controller.summary(2026, null, null).getBody();
+
+        assertThat(response.totalActual()).isEqualTo(300.0);
+        assertThat(response.totalPlanned()).isEqualTo(1000.0);
+    }
+
+    @Test
+    void summaryCountsApprovedAndPendingButNotRejected() throws Exception {
+        UUID budgetId = UUID.randomUUID();
+        UUID lineId = UUID.randomUUID();
+        UUID costCategoryId = UUID.randomUUID();
+
+        MaintenanceBudget budget = new MaintenanceBudget();
+        budget.setId(budgetId);
+        budget.setYear(2026);
+        budget.setDepartmentId(UUID.randomUUID());
+        budget.setStatus(BudgetStatus.APPROVED);
+        budget.setTotalPlanned(2000.0);
+        budget.setTotalActual(0.0);
+
+        BudgetLine line = new BudgetLine();
+        line.setId(lineId);
+        line.setBudget(budget);
+        line.setCostCategoryId(costCategoryId);
+        line.setPlannedAmount(2000.0);
+        line.setActualAmount(0.0);
+
+        ActualCost approved = new ActualCost();
+        approved.setId(UUID.randomUUID());
+        approved.setStatus(ActualCostStatus.APPROVED);
+        approved.setAmount(500.0);
+        approved.setBudgetLineId(lineId);
+        approved.setCostCategoryId(costCategoryId);
+        approved.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
+
+        ActualCost pending = new ActualCost();
+        pending.setId(UUID.randomUUID());
+        pending.setStatus(ActualCostStatus.PENDING);
+        pending.setAmount(300.0);
+        pending.setBudgetLineId(lineId);
+        pending.setCostCategoryId(costCategoryId);
+        pending.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
+
+        ActualCost rejected = new ActualCost();
+        rejected.setId(UUID.randomUUID());
+        rejected.setStatus(ActualCostStatus.REJECTED);
+        rejected.setAmount(200.0);
+        rejected.setBudgetLineId(lineId);
+        rejected.setCostCategoryId(costCategoryId);
+        rejected.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
+
+        when(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(budget));
+        when(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(line));
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(approved, pending, rejected));
+        when(financeScopeService.filterBudgets(any())).thenReturn(List.of(budget));
+        when(financeScopeService.filterBudgetLines(any())).thenReturn(List.of(line));
+        when(financeScopeService.filterActualCosts(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+
+        var response = controller.summary(2026, null, null).getBody();
+
+        assertThat(response.totalActual()).isEqualTo(800.0);
+    }
+
+    @Test
+    void summaryFallsBackToLineActualAmountWhenNoVisibleCostsExist() throws Exception {
+        UUID budgetId = UUID.randomUUID();
+        UUID lineId = UUID.randomUUID();
+
+        MaintenanceBudget budget = new MaintenanceBudget();
+        budget.setId(budgetId);
+        budget.setYear(2026);
+        budget.setDepartmentId(UUID.randomUUID());
+        budget.setStatus(BudgetStatus.APPROVED);
+        budget.setTotalPlanned(1000.0);
+        budget.setTotalActual(400.0);
+
+        BudgetLine line = new BudgetLine();
+        line.setId(lineId);
+        line.setBudget(budget);
+        line.setCostCategoryId(UUID.randomUUID());
+        line.setPlannedAmount(1000.0);
+        line.setActualAmount(400.0);
+
+        when(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(budget));
+        when(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(line));
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of());
+        when(financeScopeService.filterBudgets(any())).thenReturn(List.of(budget));
+        when(financeScopeService.filterBudgetLines(any())).thenReturn(List.of(line));
+        when(financeScopeService.filterActualCosts(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+
+        var response = controller.summary(2026, null, null).getBody();
+
+        assertThat(response.totalActual()).isEqualTo(400.0);
     }
 
     private ActualCost actualCost(UUID id) {
