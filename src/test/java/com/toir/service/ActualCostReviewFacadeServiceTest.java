@@ -21,6 +21,7 @@ import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.FinancialApprovalRuleRepository;
 import com.toir.security.PermissionConstants;
+import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -37,6 +38,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,6 +71,8 @@ class ActualCostReviewFacadeServiceTest {
     FinancialApprovalRuleRepository financialApprovalRuleRepository;
     @Mock
     CounteragentService counteragentService;
+    @Mock
+    ScopeAccessService scopeAccessService;
 
     @InjectMocks
     ActualCostReviewFacadeService service;
@@ -161,6 +166,9 @@ class ActualCostReviewFacadeServiceTest {
 
         when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
                 .thenReturn(List.of(actualCost));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(false);
         when(financeScopeService.filterActualCosts(List.of(actualCost))).thenReturn(List.of(actualCost));
         when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId))
                 .thenReturn(Optional.empty());
@@ -176,6 +184,82 @@ class ActualCostReviewFacadeServiceTest {
         assertThat(item.hoursToOverdue()).isLessThanOrEqualTo(8);
         assertThat(item.approvalRule()).hasFieldOrPropertyWithValue("id", rule.getId());
         assertThat(item.approvalRule()).hasFieldOrPropertyWithValue("code", "MECH_GT_500");
+    }
+
+    @Test
+    void reviewQueueReturnsAllPendingCostsForApprover() {
+        List<ActualCost> pendingCosts = List.of(
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID())
+        );
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(pendingCosts);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(true);
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null)).hasSize(3);
+
+        verify(financeScopeService, never()).filterActualCosts(any());
+    }
+
+    @Test
+    void reviewQueueAppliesScopeFilterForNonApprover() {
+        List<ActualCost> pendingCosts = List.of(
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID())
+        );
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(pendingCosts);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(false);
+        when(financeScopeService.filterActualCosts(pendingCosts)).thenReturn(List.of(pendingCosts.getFirst()));
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null)).hasSize(1);
+
+        verify(financeScopeService).filterActualCosts(pendingCosts);
+    }
+
+    @Test
+    void reviewQueueReturnsAllPendingCostsForRejectRole() {
+        List<ActualCost> pendingCosts = List.of(
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID())
+        );
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(pendingCosts);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(true);
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null)).hasSize(3);
+
+        verify(financeScopeService, never()).filterActualCosts(any());
+    }
+
+    @Test
+    void reviewQueueReturnsScopeFilteredResultsForScopeAdmin() {
+        List<ActualCost> pendingCosts = List.of(
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID())
+        );
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(pendingCosts);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null)).hasSize(5);
+
+        verify(financeScopeService, never()).filterActualCosts(any());
     }
 
     @Test
@@ -235,6 +319,21 @@ class ActualCostReviewFacadeServiceTest {
         actualCost.setAmount(amount);
         actualCost.setCostDate(createdAt);
         return actualCost;
+    }
+
+    private ActualCost minimalPendingCost(UUID actualCostId) {
+        ActualCost actualCost = new ActualCost();
+        ReflectionTestUtils.setField(actualCost, "id", actualCostId);
+        ReflectionTestUtils.setField(actualCost, "createdAt", Instant.now());
+        actualCost.setStatus(ActualCostStatus.PENDING);
+        actualCost.setAmount(100.0);
+        actualCost.setCostDate(Instant.parse("2026-05-26T09:00:00Z"));
+        return actualCost;
+    }
+
+    private void stubMinimalReviewQueueMapping() {
+        when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(any()))
+                .thenReturn(Optional.empty());
     }
 
     private WorkOrder workOrder(UUID workOrderId, UUID departmentId) {
