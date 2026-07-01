@@ -46,6 +46,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -114,16 +117,20 @@ class WarehouseTaskServiceEnrichmentTest {
         workOrder.setNumber("WO-2026-00042");
 
         WarehouseBin fromBin = new WarehouseBin();
+        fromBin.setId(fromBinId);
         fromBin.setCode("A-01");
 
         WarehouseBin toBin = new WarehouseBin();
+        toBin.setId(toBinId);
         toBin.setCode("B-02");
 
         SparePart sparePart = new SparePart();
+        sparePart.setId(sparePartId);
         sparePart.setCode("SP-100");
         sparePart.setName("Bearing");
 
         Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
         equipment.setCode("EQ-55");
         equipment.setName("Pump");
 
@@ -132,12 +139,18 @@ class WarehouseTaskServiceEnrichmentTest {
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
         when(userRepository.findByIdAndIsDeletedFalse(assigneeId)).thenReturn(Optional.of(assignee));
         when(workOrderRepository.findByIdAndIsDeletedFalse(sourceId)).thenReturn(Optional.of(workOrder));
-        when(warehouseBinRepository.findByIdAndIsDeletedFalse(fromBinId)).thenReturn(Optional.of(fromBin));
-        when(warehouseBinRepository.findByIdAndIsDeletedFalse(toBinId)).thenReturn(Optional.of(toBin));
-        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
-        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(warehouseBinRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(fromBin, toBin));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(sparePart));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(equipment));
 
         WarehouseTaskDto dto = service.findAll(null, null, null, null, 0, 20).getContent().getFirst();
+
+        verify(warehouseBinRepository, times(1)).findAllByIdInAndIsDeletedFalse(any());
+        verify(sparePartRepository, times(1)).findAllByIdInAndIsDeletedFalse(any());
+        verify(equipmentRepository, times(1)).findAllByIdInAndIsDeletedFalse(any());
+        verify(warehouseBinRepository, never()).findByIdAndIsDeletedFalse(any());
+        verify(sparePartRepository, never()).findByIdAndIsDeletedFalse(any());
+        verify(equipmentRepository, never()).findByIdAndIsDeletedFalse(any());
 
         assertThat(dto.warehouseName()).isEqualTo("Main Warehouse");
         assertThat(dto.assignedToName()).isEqualTo("Ali Valiyev");
@@ -149,6 +162,65 @@ class WarehouseTaskServiceEnrichmentTest {
         assertThat(dto.lines().getFirst().sparePartName()).isEqualTo("Bearing");
         assertThat(dto.lines().getFirst().equipmentCode()).isEqualTo("EQ-55");
         assertThat(dto.lines().getFirst().equipmentName()).isEqualTo("Pump");
+    }
+
+    @Test
+    void findAllEnrichesMultipleLinesWithSingleBatchQueryPerEntityType() {
+        UUID taskId = UUID.randomUUID();
+        UUID sharedSparePartId = UUID.randomUUID();
+        UUID sharedFromBinId = UUID.randomUUID();
+
+        WarehouseTask task = new WarehouseTask();
+        task.setId(taskId);
+        task.setTaskNumber("WT-2026-00002");
+        task.setTaskType(WarehouseTaskType.PICK);
+        task.setStatus(WarehouseTaskStatus.OPEN);
+        task.setPriority(WarehouseTaskPriority.NORMAL);
+        task.setWarehouseId(warehouseId);
+        task.setSourceType(WarehouseTaskSourceType.MANUAL);
+        task.setCreatedAt(Instant.now());
+        task.setUpdatedAt(Instant.now());
+
+        WarehouseTaskLine lineOne = line(UUID.randomUUID(), sharedSparePartId, equipmentId, sharedFromBinId, toBinId);
+        WarehouseTaskLine lineTwo = line(UUID.randomUUID(), sharedSparePartId, null, sharedFromBinId, null);
+        lineOne.setTask(task);
+        lineTwo.setTask(task);
+        task.getLines().add(lineOne);
+        task.getLines().add(lineTwo);
+
+        SparePart sparePart = new SparePart();
+        sparePart.setId(sharedSparePartId);
+        sparePart.setCode("SP-200");
+        sparePart.setName("Filter");
+
+        WarehouseBin fromBin = new WarehouseBin();
+        fromBin.setId(sharedFromBinId);
+        fromBin.setCode("C-03");
+
+        WarehouseBin toBin = new WarehouseBin();
+        toBin.setId(toBinId);
+        toBin.setCode("D-04");
+
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setCode("EQ-77");
+        equipment.setName("Motor");
+
+        when(taskRepository.search(any(), any(), any(), any(), any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(task)));
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.empty());
+        when(warehouseBinRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(fromBin, toBin));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(sparePart));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(equipment));
+
+        WarehouseTaskDto dto = service.findAll(null, null, null, null, 0, 20).getContent().getFirst();
+
+        assertThat(dto.lines()).hasSize(2);
+        assertThat(dto.lines().get(0).sparePartCode()).isEqualTo("SP-200");
+        assertThat(dto.lines().get(1).fromBinCode()).isEqualTo("C-03");
+        verify(warehouseBinRepository, times(1)).findAllByIdInAndIsDeletedFalse(any());
+        verify(sparePartRepository, times(1)).findAllByIdInAndIsDeletedFalse(any());
+        verify(equipmentRepository, times(1)).findAllByIdInAndIsDeletedFalse(any());
     }
 
     @Test
@@ -230,6 +302,24 @@ class WarehouseTaskServiceEnrichmentTest {
         line.setStatus(WarehouseTaskLineStatus.OPEN);
         task.getLines().add(line);
         return task;
+    }
+
+    private WarehouseTaskLine line(UUID lineId,
+                                   UUID sparePartIdValue,
+                                   UUID equipmentIdValue,
+                                   UUID fromBinIdValue,
+                                   UUID toBinIdValue) {
+        WarehouseTaskLine line = new WarehouseTaskLine();
+        line.setId(lineId);
+        line.setSparePartId(sparePartIdValue);
+        line.setEquipmentId(equipmentIdValue);
+        line.setFromBinId(fromBinIdValue);
+        line.setToBinId(toBinIdValue);
+        line.setStockStatus(WarehouseStockStatus.AVAILABLE);
+        line.setPlannedQty(BigDecimal.ONE);
+        line.setActualQty(BigDecimal.ZERO);
+        line.setStatus(WarehouseTaskLineStatus.OPEN);
+        return line;
     }
 
     private RepairRequest repairRequest(String number) {
