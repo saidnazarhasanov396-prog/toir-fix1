@@ -94,7 +94,10 @@ class WorkOrderWmsControllerContractTest {
                 null,
                 List.of(),
                 Instant.now(),
-                Instant.now()
+                Instant.now(),
+                null,
+                null,
+                null
         ));
         when(service.confirmPick(eq(workOrderId), eq(pickListId), any())).thenReturn(List.of(new RepairMaterialUsageDto(
                 usageId,

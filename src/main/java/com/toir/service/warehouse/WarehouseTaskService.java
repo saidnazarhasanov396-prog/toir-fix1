@@ -4,9 +4,19 @@ import com.toir.dto.warehouse.WarehouseStockMoveRequest;
 import com.toir.dto.warehouse.WarehouseTaskAssignRequest;
 import com.toir.dto.warehouse.WarehouseTaskCompleteRequest;
 import com.toir.dto.warehouse.WarehouseTaskDto;
+import com.toir.dto.warehouse.WarehouseTaskLineDto;
 import com.toir.dto.warehouse.WarehouseTaskLineRequest;
 import com.toir.dto.warehouse.WarehouseTaskRequest;
 import com.toir.dto.warehouse.WarehouseTaskScanConfirmRequest;
+import com.toir.entity.PurchaseOrder;
+import com.toir.entity.SparePart;
+import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.projects.ProcurementRequest;
+import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.User;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.entity.warehouse.WarehouseBin;
 import com.toir.entity.warehouse.WarehouseTask;
 import com.toir.entity.warehouse.WarehouseTaskLine;
 import com.toir.enums.AuditAction;
@@ -14,10 +24,20 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WarehouseTaskLineStatus;
 import com.toir.enums.WarehouseTaskPriority;
+import com.toir.enums.WarehouseTaskSourceType;
 import com.toir.enums.WarehouseTaskStatus;
 import com.toir.enums.WarehouseTaskType;
 import com.toir.exception.RestException;
+import com.toir.repository.ProcurementRequestRepository;
+import com.toir.repository.PurchaseOrderRepository;
+import com.toir.repository.SparePartRepository;
+import com.toir.repository.WarehouseBinRepository;
+import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseTaskRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -30,6 +50,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -43,6 +64,15 @@ public class WarehouseTaskService {
     private final WarehouseTaskRepository taskRepository;
     private final WarehouseStockMoveService stockMoveService;
     private final AuditBuilderService auditBuilderService;
+    private final WarehouseBinRepository warehouseBinRepository;
+    private final SparePartRepository sparePartRepository;
+    private final EquipmentRepository equipmentRepository;
+    private final WarehouseRepository warehouseRepository;
+    private final UserRepository userRepository;
+    private final WorkOrderRepository workOrderRepository;
+    private final RepairRequestRepository repairRequestRepository;
+    private final ProcurementRequestRepository procurementRequestRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     @Transactional(readOnly = true)
     public Page<WarehouseTaskDto> findAll(WarehouseTaskStatus status,
@@ -53,7 +83,7 @@ public class WarehouseTaskService {
                                           int size) {
         PageRequest pageable = PageRequest.of(Math.max(page, 0), Math.max(1, Math.min(size, MAX_PAGE_SIZE)));
         return taskRepository.search(warehouseId, status, type, assignedToId, pageable)
-                .map(WarehouseTaskDto::from);
+                .map(this::toEnrichedDto);
     }
 
     @Transactional
@@ -75,7 +105,7 @@ public class WarehouseTaskService {
         }
         WarehouseTask saved = taskRepository.save(task);
         audit(saved, AuditAction.CREATE, "Warehouse task created");
-        return WarehouseTaskDto.from(saved);
+        return toEnrichedDto(saved);
     }
 
     @Transactional
@@ -89,7 +119,7 @@ public class WarehouseTaskService {
         task.setStatus(WarehouseTaskStatus.ASSIGNED);
         WarehouseTask saved = taskRepository.save(task);
         audit(saved, AuditAction.UPDATE, "Warehouse task assigned");
-        return WarehouseTaskDto.from(saved);
+        return toEnrichedDto(saved);
     }
 
     @Transactional
@@ -105,7 +135,7 @@ public class WarehouseTaskService {
                 .forEach(line -> line.setStatus(WarehouseTaskLineStatus.IN_PROGRESS));
         WarehouseTask saved = taskRepository.save(task);
         audit(saved, AuditAction.UPDATE, "Warehouse task started");
-        return WarehouseTaskDto.from(saved);
+        return toEnrichedDto(saved);
     }
 
     @Transactional
@@ -117,7 +147,7 @@ public class WarehouseTaskService {
         line.setScanConfirmed(true);
         line.setStatus(WarehouseTaskLineStatus.IN_PROGRESS);
         WarehouseTask saved = taskRepository.save(task);
-        return WarehouseTaskDto.from(saved);
+        return toEnrichedDto(saved);
     }
 
     @Transactional
@@ -148,7 +178,7 @@ public class WarehouseTaskService {
         }
         WarehouseTask saved = taskRepository.save(task);
         audit(saved, AuditAction.UPDATE, "Warehouse task completed");
-        return WarehouseTaskDto.from(saved);
+        return toEnrichedDto(saved);
     }
 
     @Transactional
@@ -172,7 +202,127 @@ public class WarehouseTaskService {
                 .forEach(line -> line.setStatus(WarehouseTaskLineStatus.CANCELLED));
         WarehouseTask saved = taskRepository.save(task);
         audit(saved, AuditAction.UPDATE, "Warehouse task cancelled");
-        return WarehouseTaskDto.from(saved);
+        return toEnrichedDto(saved);
+    }
+
+    private String resolveSourceNumber(WarehouseTaskSourceType sourceType, UUID sourceId) {
+        if (sourceType == null || sourceId == null) {
+            return null;
+        }
+        return switch (sourceType) {
+            case WORK_ORDER -> workOrderRepository
+                    .findByIdAndIsDeletedFalse(sourceId)
+                    .map(WorkOrder::getNumber)
+                    .orElse(null);
+            case REPAIR_REQUEST -> repairRequestRepository
+                    .findByIdAndIsDeletedFalse(sourceId)
+                    .map(RepairRequest::getNumber)
+                    .orElse(null);
+            case PROCUREMENT_REQUEST -> procurementRequestRepository
+                    .findByIdAndIsDeletedFalse(sourceId)
+                    .map(ProcurementRequest::getNumber)
+                    .orElse(null);
+            case PURCHASE_ORDER -> purchaseOrderRepository
+                    .findByIdAndIsDeletedFalse(sourceId)
+                    .map(PurchaseOrder::getNumber)
+                    .orElse(null);
+            case INVENTORY_COUNT_SESSION, MANUAL -> null;
+        };
+    }
+
+    private WarehouseTaskLineDto toEnrichedLineDto(WarehouseTaskLine line) {
+        String fromBinCode = line.getFromBinId() == null ? null :
+                warehouseBinRepository.findByIdAndIsDeletedFalse(line.getFromBinId())
+                        .map(WarehouseBin::getCode).orElse(null);
+
+        String toBinCode = line.getToBinId() == null ? null :
+                warehouseBinRepository.findByIdAndIsDeletedFalse(line.getToBinId())
+                        .map(WarehouseBin::getCode).orElse(null);
+
+        String sparePartCode = null;
+        String sparePartName = null;
+        if (line.getSparePartId() != null) {
+            SparePart sparePart = sparePartRepository
+                    .findByIdAndIsDeletedFalse(line.getSparePartId()).orElse(null);
+            if (sparePart != null) {
+                sparePartCode = sparePart.getCode();
+                sparePartName = sparePart.getName();
+            }
+        }
+
+        String equipmentCode = null;
+        String equipmentName = null;
+        if (line.getEquipmentId() != null) {
+            Equipment equipment = equipmentRepository
+                    .findByIdAndIsDeletedFalse(line.getEquipmentId()).orElse(null);
+            if (equipment != null) {
+                equipmentCode = equipment.getCode();
+                equipmentName = equipment.getName();
+            }
+        }
+
+        return new WarehouseTaskLineDto(
+                line.getId(),
+                line.getSparePartId(),
+                line.getEquipmentId(),
+                line.getFromBinId(),
+                line.getToBinId(),
+                line.getLotNumber(),
+                line.getSerialNumber(),
+                line.getExpiryDate(),
+                line.getStockStatus(),
+                line.getPlannedQty(),
+                line.getActualQty(),
+                line.getUnit(),
+                line.getStatus(),
+                line.isScanConfirmed(),
+                line.getExceptionReason(),
+                fromBinCode,
+                toBinCode,
+                sparePartCode,
+                sparePartName,
+                equipmentCode,
+                equipmentName
+        );
+    }
+
+    private WarehouseTaskDto toEnrichedDto(WarehouseTask task) {
+        String warehouseName = task.getWarehouseId() == null ? null :
+                warehouseRepository.findByIdAndIsDeletedFalse(task.getWarehouseId())
+                        .map(Warehouse::getName).orElse(null);
+
+        String assignedToName = task.getAssignedToId() == null ? null :
+                userRepository.findByIdAndIsDeletedFalse(task.getAssignedToId())
+                        .map(User::getFullName).orElse(null);
+
+        String sourceNumber = resolveSourceNumber(task.getSourceType(), task.getSourceId());
+
+        List<WarehouseTaskLineDto> lines = task.getLines().stream()
+                .map(this::toEnrichedLineDto)
+                .toList();
+
+        return new WarehouseTaskDto(
+                task.getId(),
+                task.getTaskNumber(),
+                task.getTaskType(),
+                task.getStatus(),
+                task.getPriority(),
+                task.getWarehouseId(),
+                task.getSourceType(),
+                task.getSourceId(),
+                task.getAssignedToId(),
+                task.getDueAt(),
+                task.getStartedAt(),
+                task.getCompletedAt(),
+                task.getCancelledAt(),
+                task.getComment(),
+                lines,
+                task.getCreatedAt(),
+                task.getUpdatedAt(),
+                warehouseName,
+                assignedToName,
+                sourceNumber
+        );
     }
 
     private WarehouseTaskLine line(WarehouseTask task, WarehouseTaskLineRequest request) {
