@@ -109,6 +109,7 @@ class SeedProfileStartupSmokeTest {
         return new SpringApplicationBuilder(ToirApplication.class)
                 .profiles(profilesCsv.split(","))
                 .properties(
+                        "spring.config.location=optional:classpath:/seed-profile-startup-smoke-test.yml",
                         "spring.datasource.url=" + POSTGRES.getJdbcUrl(),
                         "spring.datasource.username=" + POSTGRES.getUsername(),
                         "spring.datasource.password=" + POSTGRES.getPassword(),
