@@ -3,11 +3,13 @@ package com.toir.controller;
 import com.toir.dto.warehouse.WarehouseBinDto;
 import com.toir.dto.warehouse.WarehouseBinRequest;
 import com.toir.dto.warehouse.WarehouseBinStatusRequest;
+import com.toir.dto.warehouse.WarehouseBinStatsResponse;
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
 import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.warehouse.WarehouseBinService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,19 @@ import java.util.UUID;
 public class WarehouseBinController {
 
     private final WarehouseBinService service;
+    private final WmsOperationsQueryService queryService;
+
+    @GetMapping("/bins/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_READ') or hasAuthority('WAREHOUSE_READ') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<WarehouseBinStatsResponse> stats(@RequestParam(required = false) UUID warehouseId) {
+        return ResponseEntity.ok(queryService.binStats(warehouseId));
+    }
+
+    @GetMapping("/{warehouseId}/bins/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_READ') or hasAuthority('WAREHOUSE_READ') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<WarehouseBinStatsResponse> warehouseStats(@PathVariable UUID warehouseId) {
+        return ResponseEntity.ok(queryService.binStats(warehouseId));
+    }
 
     @GetMapping("/{warehouseId}/bins")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_READ') or hasAuthority('WAREHOUSE_READ') or hasAuthority('STOCK_READ')")

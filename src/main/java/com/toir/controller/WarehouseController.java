@@ -5,6 +5,7 @@ import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
 import com.toir.dto.warehouse.WarehouseStockDto;
 import com.toir.dto.warehouse.WarehouseStockLedgerDto;
+import com.toir.dto.warehouse.WarehouseStockStatsResponse;
 import com.toir.dto.warehouse.WarehouseStockReconciliationDto;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WarehouseStockStatus;
@@ -12,6 +13,7 @@ import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
 import com.toir.service.warehouse.ToirWarehouseQueryService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -35,6 +37,7 @@ public class WarehouseController {
     private final WarehouseService service;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
     private final ToirWarehouseQueryService warehouseQueryService;
+    private final WmsOperationsQueryService wmsQueryService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_READ')")
@@ -68,6 +71,12 @@ public class WarehouseController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(service.findStocks(id, search), page, size));
+    }
+
+    @GetMapping("/{id}/stock/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<WarehouseStockStatsResponse> stockStats(@PathVariable UUID id) {
+        return ResponseEntity.ok(wmsQueryService.stockStats(id));
     }
 
     @GetMapping("/{id}/stock-balances")

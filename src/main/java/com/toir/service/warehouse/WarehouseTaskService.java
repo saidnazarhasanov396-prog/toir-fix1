@@ -89,6 +89,17 @@ public class WarehouseTaskService {
                 .map(this::toEnrichedDto);
     }
 
+    @Transactional(readOnly = true)
+    public List<WarehouseTaskDto> findBySource(WarehouseTaskSourceType sourceType, UUID sourceId, int size) {
+        if (sourceType == null || sourceId == null) {
+            return List.of();
+        }
+        return taskRepository.findBySource(sourceType, sourceId, PageRequest.of(0, Math.max(1, Math.min(size, MAX_PAGE_SIZE))))
+                .stream()
+                .map(this::toEnrichedDto)
+                .toList();
+    }
+
     @Transactional
     public WarehouseTaskDto create(WarehouseTaskRequest request) {
         return createInternal(request, null, false);

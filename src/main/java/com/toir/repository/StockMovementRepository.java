@@ -1,6 +1,10 @@
 package com.toir.repository;
 
 import com.toir.entity.StockMovement;
+import com.toir.enums.StockMovementSourceType;
+import com.toir.enums.StockMovementType;
+import com.toir.enums.WarehouseStockStatus;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -134,6 +138,112 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, UU
             @Param("responsiblePersonId") UUID responsiblePersonId,
             @Param("workOrderId") UUID workOrderId,
             Pageable pageable);
+
+
+    @Query("""
+            select sm
+            from StockMovement sm
+            where sm.isDeleted = false
+              and sm.type = com.toir.enums.StockMovementType.BIN_MOVE
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+              and (:sparePartId is null or sm.sparePartId = :sparePartId)
+              and (:binId is null or sm.fromBinId = :binId or sm.toBinId = :binId)
+              and (:stockStatus is null or sm.stockStatus = :stockStatus)
+            order by sm.occurredAt desc, sm.updatedAt desc
+            """)
+    Page<StockMovement> searchWmsStockMoves(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("sparePartId") UUID sparePartId,
+            @Param("binId") UUID binId,
+            @Param("stockStatus") WarehouseStockStatus stockStatus,
+            Pageable pageable);
+
+    @Query("""
+            select sm
+            from StockMovement sm
+            where sm.isDeleted = false
+              and sm.type = com.toir.enums.StockMovementType.TRANSFER
+              and sm.sourceType = com.toir.enums.StockMovementSourceType.QUALITY_STATUS_TRANSFER
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+              and (:sparePartId is null or sm.sparePartId = :sparePartId)
+              and (:binId is null or sm.binId = :binId)
+              and (:toStatus is null or sm.stockStatus = :toStatus)
+            order by sm.occurredAt desc, sm.updatedAt desc
+            """)
+    Page<StockMovement> searchQualityTransfers(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("sparePartId") UUID sparePartId,
+            @Param("binId") UUID binId,
+            @Param("toStatus") WarehouseStockStatus toStatus,
+            Pageable pageable);
+
+    @Query("""
+            select count(sm)
+            from StockMovement sm
+            where sm.isDeleted = false
+              and sm.type = :type
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+            """)
+    long countByType(@Param("warehouseId") UUID warehouseId,
+                     @Param("type") StockMovementType type);
+
+    @Query("""
+            select count(sm)
+            from StockMovement sm
+            where sm.isDeleted = false
+              and sm.type = :type
+              and (:sourceType is null or sm.sourceType = :sourceType)
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+              and (:stockStatus is null or sm.stockStatus = :stockStatus)
+            """)
+    long countByTypeAndSourceAndStatus(@Param("warehouseId") UUID warehouseId,
+                                       @Param("type") StockMovementType type,
+                                       @Param("sourceType") StockMovementSourceType sourceType,
+                                       @Param("stockStatus") WarehouseStockStatus stockStatus);
+
+    @Query("""
+            select coalesce(sum(sm.quantity), 0)
+            from StockMovement sm
+            where sm.isDeleted = false
+              and sm.type = :type
+              and (:sourceType is null or sm.sourceType = :sourceType)
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+            """)
+    Double sumQuantityByTypeAndSource(@Param("warehouseId") UUID warehouseId,
+                                      @Param("type") StockMovementType type,
+                                      @Param("sourceType") StockMovementSourceType sourceType);
+
+    @Query("""
+            select max(sm.occurredAt)
+            from StockMovement sm
+            where sm.isDeleted = false
+              and sm.type = :type
+              and (:sourceType is null or sm.sourceType = :sourceType)
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+            """)
+    Instant maxOccurredAtByTypeAndSource(@Param("warehouseId") UUID warehouseId,
+                                         @Param("type") StockMovementType type,
+                                         @Param("sourceType") StockMovementSourceType sourceType);
+
+    @Query("""
+            select count(distinct sm.sparePartId)
+            from StockMovement sm
+            where sm.isDeleted = false
+              and sm.type = com.toir.enums.StockMovementType.BIN_MOVE
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+            """)
+    long countMovedSpareParts(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select count(sm)
+            from StockMovement sm
+            where sm.isDeleted = false
+              and sm.type = com.toir.enums.StockMovementType.BIN_MOVE
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+              and sm.occurredAt >= :from
+            """)
+    long countMovesSince(@Param("warehouseId") UUID warehouseId,
+                         @Param("from") Instant from);
 
     @Query(value = "SELECT * FROM stock_movements WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<StockMovement> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
