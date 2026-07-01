@@ -1,5 +1,6 @@
 package com.toir.dto.warehouse;
 
+import com.toir.entity.warehouse.WarehouseTaskLine;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WarehouseTaskLineStatus;
 
@@ -29,4 +30,30 @@ public record WarehouseTaskLineDto(
         String sparePartName,
         String equipmentCode,
         String equipmentName
-) {}
+) {
+    public static WarehouseTaskLineDto from(WarehouseTaskLine line) {
+        return new WarehouseTaskLineDto(
+                line.getId(),
+                line.getSparePartId(),
+                line.getEquipmentId(),
+                line.getFromBinId(),
+                line.getToBinId(),
+                line.getLotNumber(),
+                line.getSerialNumber(),
+                line.getExpiryDate(),
+                line.getStockStatus(),
+                line.getPlannedQty(),
+                line.getActualQty(),
+                line.getUnit(),
+                line.getStatus(),
+                line.isScanConfirmed(),
+                line.getExceptionReason(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+}

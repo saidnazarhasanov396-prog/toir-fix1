@@ -26,6 +26,7 @@ import com.toir.service.CounteragentService;
 import com.toir.service.ProcurementRequestService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import com.toir.util.AuditBuilderService;
@@ -108,7 +109,8 @@ class ProcurementPbacScopeTest {
                 mock(ToirStockService.class),
                 mock(LegacyStockProjectionService.class),
                 mock(WmsStockCoordinateValidator.class),
-                mock(WmsDocumentPolicyService.class)
+                mock(WmsDocumentPolicyService.class),
+                mock(WarehouseTaskGenerationService.class)
         );
     }
 

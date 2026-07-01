@@ -2,6 +2,7 @@ package com.toir.security;
 
 import com.toir.controller.WarehouseBinController;
 import com.toir.dto.warehouse.WarehouseBinDto;
+import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 import com.toir.service.warehouse.WarehouseBinService;
 import org.junit.jupiter.api.Test;
@@ -109,7 +110,7 @@ class RbacWarehouseBinSecurityTest {
 
         mockMvc.perform(post("/api/v1/warehouses/{warehouseId}/bins", warehouseId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"code\":\"A-01-02-03\"}"))
+                        .content("{\"qualityZoneType\":\"STORAGE\"}"))
                 .andExpect(status().isCreated());
         mockMvc.perform(post("/api/v1/warehouses/{warehouseId}/bins/{binId}/block", warehouseId, binId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -122,7 +123,7 @@ class RbacWarehouseBinSecurityTest {
     void warehouseBinReadCannotCreateBin() throws Exception {
         mockMvc.perform(post("/api/v1/warehouses/{warehouseId}/bins", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"code\":\"A-01-02-03\"}"))
+                        .content("{\"qualityZoneType\":\"STORAGE\"}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -135,7 +136,7 @@ class RbacWarehouseBinSecurityTest {
                 null,
                 null,
                 null,
-                null,
+                WarehouseBinType.PALLET,
                 null,
                 null,
                 WarehouseQualityZoneType.STORAGE,

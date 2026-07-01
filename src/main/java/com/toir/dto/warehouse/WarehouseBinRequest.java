@@ -1,17 +1,17 @@
 package com.toir.dto.warehouse;
 
+import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
-import jakarta.validation.constraints.NotBlank;
 
 import java.math.BigDecimal;
 
 public record WarehouseBinRequest(
-        @NotBlank String code,
+        String code,
         String zone,
         String aisle,
         String rack,
         String shelfLevel,
-        String binType,
+        WarehouseBinType binType,
         BigDecimal maxWeightKg,
         BigDecimal maxVolumeM3,
         WarehouseQualityZoneType qualityZoneType,

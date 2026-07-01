@@ -4,6 +4,7 @@ import com.toir.dto.warehouse.WarehouseBinDto;
 import com.toir.dto.warehouse.WarehouseBinRequest;
 import com.toir.dto.warehouse.WarehouseBinStatusRequest;
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
+import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.warehouse.WarehouseBinService;
@@ -43,7 +44,7 @@ public class WarehouseBinController {
                                                       @RequestParam(required = false) String aisle,
                                                       @RequestParam(required = false) String rack,
                                                       @RequestParam(required = false) String shelfLevel,
-                                                      @RequestParam(required = false) String binType,
+                                                      @RequestParam(required = false) WarehouseBinType binType,
                                                       @RequestParam(required = false) WarehouseQualityZoneType qualityZoneType,
                                                       @RequestParam(required = false) String temperatureZone,
                                                       @RequestParam(required = false) String hazardClass,
@@ -81,7 +82,7 @@ public class WarehouseBinController {
                                                          @RequestParam(required = false) String aisle,
                                                          @RequestParam(required = false) String rack,
                                                          @RequestParam(required = false) String shelfLevel,
-                                                         @RequestParam(required = false) String binType,
+                                                         @RequestParam(required = false) WarehouseBinType binType,
                                                          @RequestParam(required = false) WarehouseQualityZoneType qualityZoneType,
                                                          @RequestParam(required = false) String temperatureZone,
                                                          @RequestParam(required = false) String hazardClass,
