@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
             is_deleted boolean DEFAULT false NOT NULL,
             meter_id uuid NOT NULL,
             equipment_id uuid NOT NULL,
-            value double precision NOT NULL,
+            "value" double precision NOT NULL,
             delta double precision,
             read_at timestamp NOT NULL,
             source varchar(255) NOT NULL,
@@ -129,7 +129,7 @@ class MeterRepositoryStatsTest {
         jdbcTemplate.update("""
                 INSERT INTO meter_readings (
                     id, created_at, updated_at, is_deleted, meter_id, equipment_id,
-                    value, read_at, source, reading_context
+                    "value", read_at, source, reading_context
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 UUID.randomUUID(),
