@@ -47,8 +47,8 @@ public class CounteragentService {
     @Transactional
     public CounteragentDto create(CounteragentRequest request) {
         Counteragent counteragent = new Counteragent();
-        counteragent.setCode(resolveCode(request.code()));
         validateUniqueInnForCreate(request.inn());
+        counteragent.setCode(generateCode());
         apply(counteragent, request);
         return CounteragentDto.from(counteragentRepository.save(counteragent));
     }
@@ -56,13 +56,6 @@ public class CounteragentService {
     @Transactional
     public CounteragentDto update(UUID id, CounteragentRequest request) {
         Counteragent counteragent = load(id);
-        String requestedCode = trimToNull(request.code());
-        if (requestedCode != null && !requestedCode.equals(counteragent.getCode())) {
-            if (counteragentRepository.existsByCodeAndIsDeletedFalse(requestedCode)) {
-                throw RestException.conflict("Counteragent code already exists: " + requestedCode);
-            }
-            counteragent.setCode(requestedCode);
-        }
         validateUniqueInnForUpdate(request.inn(), id);
         apply(counteragent, request);
         return CounteragentDto.from(counteragentRepository.save(counteragent));
@@ -134,14 +127,7 @@ public class CounteragentService {
         counteragent.setStatus(request.status() != null ? request.status() : CounteragentStatus.ACTIVE);
     }
 
-    private String resolveCode(String requestedCode) {
-        String code = trimToNull(requestedCode);
-        if (code != null) {
-            if (counteragentRepository.existsByCodeAndIsDeletedFalse(code)) {
-                throw RestException.conflict("Counteragent code already exists: " + code);
-            }
-            return code;
-        }
+    private String generateCode() {
         String prefix = "CA-" + java.time.Year.now().getValue() + "-";
         return CodeGenerationUtils.nextYearSequenceCode(
                 "CA",

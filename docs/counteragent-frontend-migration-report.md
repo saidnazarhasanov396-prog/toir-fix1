@@ -36,6 +36,8 @@ Unchanged fields remain:
 
 ## API Behavior To Reflect In UI
 
+`code` is returned by the backend for display/search, but it is backend-generated. Do not include `code` in `POST /api/v1/counteragents` or `PUT /api/v1/counteragents/{id}` payloads.
+
 `POST /api/v1/counteragents` and `PUT /api/v1/counteragents/{id}` now reject duplicate non-empty `inn` values among non-deleted counteragents with HTTP 409.
 
 `inn` is nullable, so the UI should allow creating/updating a counteragent without INN. If the user enters INN, validate exactly 9 digits before submit.
@@ -55,7 +57,6 @@ Search now matches `code`, `name`, `inn`, `contactName`, `contactPhone`, and `co
 
 ```json
 {
-  "code": "CA-2026-0001",
   "name": "Tashkent Service LLC",
   "inn": "123456789",
   "contactName": "Ali Valiyev",

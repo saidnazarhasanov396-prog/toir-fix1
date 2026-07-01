@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record CounteragentRequest(
-        @Size(max = 100) String code,
         @NotBlank @Size(max = 255) String name,
         @Pattern(regexp = "\\s*|\\s*\\d{9}\\s*", message = "INN must contain exactly 9 digits") String inn,
         @Size(max = 255) String contactName,

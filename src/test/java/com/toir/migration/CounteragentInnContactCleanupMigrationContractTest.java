@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CounteragentInnContactCleanupMigrationContractTest {
 
     private static final Path MIGRATION = Path.of(
-            "src/main/resources/db/migration/V20260701_1__counteragent_contact_and_inn_cleanup.sql"
+            "src/main/resources/db/migration/V20260701_2__counteragent_contact_and_inn_cleanup.sql"
     );
 
     @Test

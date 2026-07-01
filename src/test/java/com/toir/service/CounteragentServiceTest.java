@@ -37,9 +37,10 @@ class CounteragentServiceTest {
     CounteragentService service;
 
     @Test
-    void createStoresStructuredContactFieldsAndRejectsDuplicateInn() {
-        CounteragentRequest request = request(" CA-001 ", "123456789");
-        when(counteragentRepository.existsByCodeAndIsDeletedFalse("CA-001")).thenReturn(false);
+    void createGeneratesCodeAndStoresStructuredContactFields() {
+        CounteragentRequest request = request("123456789");
+        when(counteragentRepository.maxSequenceByCodePrefix("CA-" + java.time.Year.now().getValue() + "-")).thenReturn(0L);
+        when(counteragentRepository.existsByCodeAndIsDeletedFalse("CA-" + java.time.Year.now().getValue() + "-0001")).thenReturn(false);
         when(counteragentRepository.existsByInnAndIsDeletedFalse("123456789")).thenReturn(false);
         when(counteragentRepository.save(any(Counteragent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -48,7 +49,7 @@ class CounteragentServiceTest {
         ArgumentCaptor<Counteragent> captor = ArgumentCaptor.forClass(Counteragent.class);
         verify(counteragentRepository).save(captor.capture());
         Counteragent saved = captor.getValue();
-        assertThat(saved.getCode()).isEqualTo("CA-001");
+        assertThat(saved.getCode()).isEqualTo("CA-" + java.time.Year.now().getValue() + "-0001");
         assertThat(saved.getInn()).isEqualTo("123456789");
         assertThat(saved.getContactName()).isEqualTo("Ali Valiyev");
         assertThat(saved.getContactPosition()).isEqualTo("Supply manager");
@@ -59,8 +60,7 @@ class CounteragentServiceTest {
 
     @Test
     void createRejectsDuplicateFilledInn() {
-        CounteragentRequest request = request("CA-002", "123456789");
-        when(counteragentRepository.existsByCodeAndIsDeletedFalse("CA-002")).thenReturn(false);
+        CounteragentRequest request = request("123456789");
         when(counteragentRepository.existsByInnAndIsDeletedFalse("123456789")).thenReturn(true);
 
         assertThatThrownBy(() -> service.create(request))
@@ -83,7 +83,7 @@ class CounteragentServiceTest {
         when(counteragentRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
         when(counteragentRepository.existsByInnAndIdNotAndIsDeletedFalse("123456789", id)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.update(id, request(null, "123456789")))
+        assertThatThrownBy(() -> service.update(id, request("123456789")))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
                     assertThat(ex.getMessage()).contains("Counteragent INN already exists: 123456789");
@@ -92,9 +92,26 @@ class CounteragentServiceTest {
         verify(counteragentRepository, never()).save(any());
     }
 
-    private CounteragentRequest request(String code, String inn) {
+    @Test
+    void updateKeepsExistingCodeImmutable() {
+        UUID id = UUID.randomUUID();
+        Counteragent existing = new Counteragent();
+        existing.setId(id);
+        existing.setCode("CA-IMMUTABLE");
+        existing.setName("Old name");
+        when(counteragentRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
+        when(counteragentRepository.existsByInnAndIdNotAndIsDeletedFalse("123456789", id)).thenReturn(false);
+        when(counteragentRepository.save(any(Counteragent.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.update(id, request("123456789"));
+
+        ArgumentCaptor<Counteragent> captor = ArgumentCaptor.forClass(Counteragent.class);
+        verify(counteragentRepository).save(captor.capture());
+        assertThat(captor.getValue().getCode()).isEqualTo("CA-IMMUTABLE");
+    }
+
+    private CounteragentRequest request(String inn) {
         return new CounteragentRequest(
-                code,
                 "Tashkent Service LLC",
                 inn,
                 "Ali Valiyev",
