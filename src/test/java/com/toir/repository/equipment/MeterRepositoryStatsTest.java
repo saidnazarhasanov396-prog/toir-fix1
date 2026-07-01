@@ -1,12 +1,11 @@
 package com.toir.repository.equipment;
 
+import com.toir.test.RepositorySliceTest;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.enums.MeterType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 
 import java.time.Instant;
@@ -14,8 +13,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
-@ActiveProfiles("test")
+@RepositorySliceTest
 @Sql(statements = """
         CREATE TABLE IF NOT EXISTS meter_readings (
             id uuid NOT NULL PRIMARY KEY,

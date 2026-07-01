@@ -1,21 +1,19 @@
 package com.toir.repository.defect;
 
 
+import com.toir.test.RepositorySliceTest;
 import com.toir.entity.defects.Defect;
 import com.toir.enums.DefectStatus;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.test.context.ActiveProfiles;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
-@ActiveProfiles("test")
+@RepositorySliceTest
 class DefectRepositoryStatsTest {
 
     @Autowired

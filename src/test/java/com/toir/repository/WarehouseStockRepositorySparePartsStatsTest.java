@@ -1,5 +1,6 @@
 package com.toir.repository;
 
+import com.toir.test.RepositorySliceTest;
 import com.toir.entity.Reservation;
 import com.toir.entity.SparePart;
 import com.toir.entity.SparePartType;
@@ -13,17 +14,14 @@ import com.toir.enums.ReservationStatus;
 import com.toir.enums.StockMovementType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
-import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
-@ActiveProfiles("test")
+@RepositorySliceTest
 class WarehouseStockRepositorySparePartsStatsTest {
 
     @Autowired
