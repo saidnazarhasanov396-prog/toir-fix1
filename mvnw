@@ -25,7 +25,7 @@ fi
 MAVEN_HOME="$WRAPPER_DIR/apache-maven-$maven_version"
 ARCHIVE="$WRAPPER_DIR/apache-maven-$maven_version-bin.zip"
 
-if [ ! -x "$MAVEN_HOME/bin/mvn" ]; then
+if [ ! -x "$MAVEN_HOME/bin/mvn" ] || ! ls "$MAVEN_HOME"/boot/plexus-classworlds-*.jar >/dev/null 2>&1; then
   mkdir -p "$WRAPPER_DIR"
   if [ ! -f "$ARCHIVE" ]; then
     if command -v curl >/dev/null 2>&1; then
@@ -37,9 +37,17 @@ if [ ! -x "$MAVEN_HOME/bin/mvn" ]; then
       exit 1
     fi
   fi
+  rm -rf "$MAVEN_HOME"
   (
     cd "$WRAPPER_DIR"
-    jar xf "$ARCHIVE"
+    if command -v jar >/dev/null 2>&1; then
+      jar xf "$ARCHIVE"
+    elif command -v unzip >/dev/null 2>&1; then
+      unzip -q "$ARCHIVE"
+    else
+      echo "jar or unzip is required to extract Maven" >&2
+      exit 1
+    fi
   )
   chmod +x "$MAVEN_HOME/bin/mvn"
 fi
