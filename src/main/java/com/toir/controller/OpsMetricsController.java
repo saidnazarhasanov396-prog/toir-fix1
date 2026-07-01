@@ -11,8 +11,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * ÐžÐ¿ÐµÑ€Ð°Ñ‚Ð¸Ð²Ð½Ñ‹Ðµ Ð¼ÐµÑ‚Ñ€Ð¸ÐºÐ¸ ÑÐ¸ÑÑ‚ÐµÐ¼Ñ‹ â€” Ð»Ñ‘Ð³ÐºÐ¸Ð¹ ÑÐ½Ð¸Ð¼Ð¾Ðº ÑÐ¾ÑÑ‚Ð¾ÑÐ½Ð¸Ñ Ð´Ð»Ñ Ð¼Ð¾Ð½Ð¸Ñ‚Ð¾Ñ€Ð¸Ð½Ð³Ð°
- * Ð¸ health-check'Ð¾Ð². ÐÐµ Ð·Ð°Ð¼ÐµÐ½ÑÐµÑ‚ full dashboard, Ð½Ð¾ ÑƒÐ´Ð¾Ð±ÐµÐ½ Ð´Ð»Ñ ops team.
+ * Lightweight operational metrics snapshot for monitoring and health checks.
+ * This endpoint complements the full dashboard for ops team workflows.
  */
 @RestController
 @RequestMapping("/api/v1/ops")

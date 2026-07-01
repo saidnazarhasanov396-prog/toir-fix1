@@ -1,17 +1,22 @@
 package com.toir.service.maintenanceworkspace;
 
+import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherActionRequest;
+import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherActionResponse;
 import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherQueues;
 import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceFilter;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.BrigadeMember;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WorkOrderStatus;
+import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.projects.BrigadeMemberRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -19,9 +24,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,6 +43,9 @@ class MaintenanceDispatcherServiceTest {
 
     @Mock
     WorkOrderRepository workOrderRepository;
+
+    @Mock
+    BrigadeMemberRepository brigadeMemberRepository;
 
     @Test
     void queuesFiltersItemsAndRecomputesSummary() {
@@ -80,7 +91,8 @@ class MaintenanceDispatcherServiceTest {
         MaintenanceDispatcherService service = new MaintenanceDispatcherService(
                 repairRequestRepository,
                 defectRepository,
-                workOrderRepository
+                workOrderRepository,
+                brigadeMemberRepository
         );
         MaintenanceWorkspaceFilter filter = new MaintenanceWorkspaceFilter(
                 "pump",
@@ -103,6 +115,121 @@ class MaintenanceDispatcherServiceTest {
         assertThat(queues.emergencyRepairRequests()).extracting("id").containsExactly(matchingEmergency.getId());
         assertThat(queues.newDefects()).isEmpty();
         assertThat(queues.blockedWorkOrders()).isEmpty();
+    }
+
+
+    @Test
+    void assignAppliesRepairRequestOwner() {
+        UUID ownerId = UUID.randomUUID();
+        RepairRequest request = repairRequest(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "RR-ASSIGN",
+                "Assign me",
+                PriorityLevel.HIGH,
+                RequestStatus.OPEN,
+                Instant.parse("2026-07-10T09:00:00Z"),
+                null
+        );
+        request.setAssignedToId(null);
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(request.getId())).thenReturn(Optional.of(request));
+        when(repairRequestRepository.save(request)).thenReturn(request);
+        MaintenanceDispatcherService service = service();
+
+        MaintenanceDispatcherActionResponse response = service.assign(new MaintenanceDispatcherActionRequest(
+                "REPAIR_REQUEST",
+                request.getId(),
+                ownerId,
+                "Assign to shift master"
+        ));
+
+        assertThat(request.getAssignedToId()).isEqualTo(ownerId);
+        assertThat(response.status()).isEqualTo("APPLIED");
+        assertThat(response.objectId()).isEqualTo(request.getId());
+        verify(repairRequestRepository).save(request);
+    }
+
+    @Test
+    void assignAppliesWorkOrderPerformerByUserId() {
+        UUID ownerId = UUID.randomUUID();
+        WorkOrder workOrder = blockedWorkOrder(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "WO-ASSIGN",
+                "Assign performer",
+                PriorityLevel.HIGH,
+                WorkOrderStatus.APPROVED,
+                Instant.parse("2026-07-10T09:00:00Z")
+        );
+        BrigadeMember member = new BrigadeMember();
+        member.setId(UUID.randomUUID());
+        member.setUserId(ownerId);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrder.getId())).thenReturn(Optional.of(workOrder));
+        when(brigadeMemberRepository.findAllByUserIdAndIsDeletedFalse(ownerId)).thenReturn(List.of(member));
+        when(workOrderRepository.save(workOrder)).thenReturn(workOrder);
+        MaintenanceDispatcherService service = service();
+
+        MaintenanceDispatcherActionResponse response = service.assign(new MaintenanceDispatcherActionRequest(
+                "WORK_ORDER",
+                workOrder.getId(),
+                ownerId,
+                "Assign performer"
+        ));
+
+        assertThat(workOrder.getPerformer()).isSameAs(member);
+        assertThat(response.status()).isEqualTo("APPLIED");
+        verify(workOrderRepository).save(workOrder);
+    }
+
+    @Test
+    void escalateRaisesRepairRequestPriorityAndReason() {
+        RepairRequest request = repairRequest(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "RR-ESC",
+                "Escalate me",
+                PriorityLevel.MEDIUM,
+                RequestStatus.OPEN,
+                Instant.parse("2026-07-10T09:00:00Z"),
+                null
+        );
+        when(repairRequestRepository.findByIdAndIsDeletedFalse(request.getId())).thenReturn(Optional.of(request));
+        when(repairRequestRepository.save(request)).thenReturn(request);
+        MaintenanceDispatcherService service = service();
+
+        MaintenanceDispatcherActionResponse response = service.escalate(new MaintenanceDispatcherActionRequest(
+                "REPAIR_REQUEST",
+                request.getId(),
+                null,
+                "SLA breach"
+        ));
+
+        assertThat(request.getPriority()).isEqualTo(PriorityLevel.EMERGENCY);
+        assertThat(request.getEmergencyReason()).isEqualTo("SLA breach");
+        assertThat(response.status()).isEqualTo("APPLIED");
+        verify(repairRequestRepository).save(request);
+    }
+
+    @Test
+    void assignRejectsDefectsBecauseTheyHaveNoOwnerField() {
+        MaintenanceDispatcherService service = service();
+
+        assertThatThrownBy(() -> service.assign(new MaintenanceDispatcherActionRequest(
+                "DEFECT",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "Assign defect"
+        ))).isInstanceOf(RestException.class)
+                .hasMessageContaining("Defects do not support owner assignment");
+    }
+
+    private MaintenanceDispatcherService service() {
+        return new MaintenanceDispatcherService(
+                repairRequestRepository,
+                defectRepository,
+                workOrderRepository,
+                brigadeMemberRepository
+        );
     }
 
     private RepairRequest repairRequest(
