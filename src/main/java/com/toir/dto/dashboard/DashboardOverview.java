@@ -48,6 +48,7 @@ public record DashboardOverview(
 
     public record Counters(
             long openRequests,
+            long activeRepairRequests,
             long emergencyRequests,
             long activeEmergencyRequests,
             long totalEmergencyRequests,

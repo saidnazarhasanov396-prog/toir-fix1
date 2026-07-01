@@ -14,4 +14,6 @@ public interface PprPlanStatsProjection {
     Long getInProgressTasks();
 
     Long getCompletedTasks();
+
+    Long getOverdueTasks();
 }

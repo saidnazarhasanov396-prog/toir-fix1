@@ -7,6 +7,7 @@ import com.toir.enums.WarehouseQualityZoneType;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.warehouse.WarehouseBinService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,11 +38,14 @@ class WarehouseBinControllerContractTest {
     @Mock
     WarehouseBinService service;
 
+    @Mock
+    WmsOperationsQueryService operationsQueryService;
+
     MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new WarehouseBinController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new WarehouseBinController(service, operationsQueryService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
