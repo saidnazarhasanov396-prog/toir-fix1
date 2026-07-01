@@ -8,6 +8,7 @@ import com.toir.enums.InventoryCountScopeType;
 import com.toir.enums.InventoryCountSessionStatus;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.service.warehouse.InventoryCountSessionService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -53,6 +54,9 @@ class RbacInventoryCountSecurityTest {
 
     @MockBean
     InventoryCountSessionService service;
+
+    @MockBean
+    WmsOperationsQueryService queryService;
 
     @TestConfiguration
     static class SecurityBeans {

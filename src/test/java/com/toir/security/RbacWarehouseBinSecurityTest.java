@@ -5,6 +5,7 @@ import com.toir.dto.warehouse.WarehouseBinDto;
 import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 import com.toir.service.warehouse.WarehouseBinService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -49,6 +50,9 @@ class RbacWarehouseBinSecurityTest {
 
     @MockBean
     WarehouseBinService service;
+
+    @MockBean
+    WmsOperationsQueryService wmsOperationsQueryService;
 
     @TestConfiguration
     static class SecurityBeans {
