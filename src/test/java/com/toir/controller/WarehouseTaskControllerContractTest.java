@@ -162,10 +162,19 @@ class WarehouseTaskControllerContractTest {
                         "pcs",
                         WarehouseTaskLineStatus.OPEN,
                         false,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
                         null
                 )),
                 Instant.now(),
-                Instant.now()
+                Instant.now(),
+                null,
+                null,
+                null
         );
     }
 }
