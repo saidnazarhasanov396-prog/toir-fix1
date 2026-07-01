@@ -782,7 +782,8 @@ public class DashboardService {
                 || request.getStatus() == RequestStatus.IN_REVIEW
                 || request.getStatus() == RequestStatus.NEEDS_CLARIFICATION
                 || request.getStatus() == RequestStatus.APPROVED
-                || request.getStatus() == RequestStatus.ASSIGNED;
+                || request.getStatus() == RequestStatus.ASSIGNED
+                || request.getStatus() == RequestStatus.IN_PROGRESS;
     }
 
     private static long totalEmergencyEvents(

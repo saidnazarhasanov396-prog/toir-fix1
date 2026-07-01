@@ -18,15 +18,14 @@ The migration `V20260630_1__counteragents_foundation.sql` creates `counteragents
 | Field | Meaning | Origin | Why we need it |
 | --- | --- | --- | --- |
 | `id` | Unique counteragent record id. | Base entity/shared | Used as the one vendor id across procurement, equipment, warranty, work orders, contracts, and actual costs. |
-| `code` | Human-friendly unique code, e.g. `CA-2026-001`. | Supplier + contractor | Needed for lists, search, integrations, and stable references that are easier to read than UUIDs. If not provided, backend generates a yearly sequence. |
+| `code` | Backend-generated human-friendly unique code, e.g. `CA-2026-0001`. | Supplier + contractor | Needed for lists, search, integrations, and stable references that are easier to read than UUIDs. Clients do not send or update this field. |
 | `name` | Legal/company/display name. | Supplier + contractor | Main display value everywhere: purchase orders, work orders, reports, financial review. |
-| `taxNumber` | Tax identifier/INN-style value. | Supplier + contractor | Needed for legal identity, duplicate matching, financial documents, and migration matching between old supplier/contractor records. |
-| `baseInn` | Normalized/base tax id. If `taxNumber` has a suffix like `123_1`, base becomes `123`. | Mainly supplier, then generalized | Needed to group branches or duplicate supplier records under one legal base identity. The service derives it automatically when not provided. |
-| `contactPerson` | Main person to contact at the company. | Supplier + contractor | Used by procurement/warranty/contractor coordination so users know who to call or email. |
-| `phone` | Company/contact phone. | Supplier + contractor | Operational contact for delivery, warranty, contractor dispatch, acceptance issues. |
-| `email` | Company/contact email. | Supplier + contractor | Formal communication, purchase order sending, warranty and contract communication. Validated as email in requests. |
+| `inn` | INN/tax identifier. Optional, but when provided must be exactly 9 digits and unique among non-deleted counteragents. | Supplier + contractor | Needed for legal identity, duplicate protection, financial documents, and migration matching between old supplier/contractor records. |
+| `contactName` | Main contact person's name. | Supplier + contractor | Used by procurement/warranty/contractor coordination so users know who to contact. |
+| `contactPosition` | Main contact person's position/title. | Counteragent cleanup | Adds context for the contact person without overloading the name field. |
+| `contactPhone` | Main contact person's phone. | Supplier + contractor | Operational contact for delivery, warranty, contractor dispatch, acceptance issues. |
+| `contactEmail` | Main contact person's email. | Supplier + contractor | Formal communication, purchase order sending, warranty and contract communication. Validated as email in requests. |
 | `address` | Physical/legal address. | Supplier | Supplier table had this first; it is useful for deliveries, documents, and legal/vendor master data. Contractors did not have this in the baseline, but the unified model can now store it for all vendors. |
-| `specialization` | What the company does, e.g. pump repair, electrical works, spare parts. | Contractor | Contractor table had this first. It helps select vendors for outsourced maintenance and is searchable in the counteragent list. |
 | `directorName` | Director/general manager name. | Supplier + contractor legal details | Added to both supplier and contractor before unification. Needed for contracts, invoices, official documents. |
 | `bankName` | Bank name. | Supplier + contractor legal details | Needed for payment and contract/payment document details. |
 | `bankAccount` | Settlement/account number. | Supplier + contractor legal details | Needed for payment details and finance workflows. |
@@ -126,9 +125,9 @@ This means the business language has moved to `counteragent`, while the storage/
 
 | Field group | Supplier reason | Contractor reason | Keep in counteragent? |
 | --- | --- | --- | --- |
-| Code/name/contact/phone/email/tax number | Yes | Yes | Yes, shared vendor identity. |
+| Code/name/contact/phone/email/INN | Yes | Yes | Yes, shared vendor identity. |
 | Address | Yes | Not originally | Yes, useful for all legal/vendor records. |
-| Specialization | Not originally | Yes | Yes, useful for contractor selection and possibly supplier categories. |
+| Specialization | Not originally | Yes | Removed from counteragent identity. Model service/supply capability separately if needed later. |
 | Director/bank/account/MFO | Yes | Yes | Yes, needed for legal and payment details. |
 | Status | Supplier had `active`; contractor had status enum | Yes | Yes, unified selection control. |
 | Contracts/work lifecycle | No, not purchase-order supplier logic | Yes | Yes, because a counteragent can be a contractor. |
