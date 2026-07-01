@@ -11,6 +11,7 @@ import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.WarehouseEquipmentItemService;
 import com.toir.service.WarehouseService;
 import com.toir.service.warehouse.ToirWarehouseQueryService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +51,9 @@ class WarehouseControllerContractTest {
     @Mock
     ToirWarehouseQueryService warehouseQueryService;
 
+    @Mock
+    WmsOperationsQueryService operationsQueryService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -57,7 +61,8 @@ class WarehouseControllerContractTest {
         mockMvc = MockMvcBuilders.standaloneSetup(new WarehouseController(
                         warehouseService,
                         warehouseEquipmentItemService,
-                        warehouseQueryService
+                        warehouseQueryService,
+                        operationsQueryService
                 ))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.dto.reservation.ReservationDto;
 import com.toir.dto.warehouse.WarehouseTaskDto;
+import com.toir.dto.warehouse.WorkOrderWmsHistoryResponse;
 import com.toir.dto.workorder.WorkOrderMaterialReturnDto;
 import com.toir.dto.workorder.WorkOrderMaterialReturnRequest;
 import com.toir.dto.workorder.WorkOrderPickConfirmRequest;
@@ -10,12 +11,14 @@ import com.toir.dto.workorder.WorkOrderPickListRequest;
 import com.toir.dto.workorder.WorkOrderWmsReservationRequest;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.warehouse.WorkOrderWmsService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -33,6 +36,13 @@ import java.util.UUID;
 public class WorkOrderWmsController {
 
     private final WorkOrderWmsService service;
+    private final WmsOperationsQueryService queryService;
+
+    @GetMapping("/wms/history")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_PICK') or hasAuthority('STOCK_READ') or hasAuthority('WAREHOUSE_TASK_READ')")
+    public ResponseEntity<WorkOrderWmsHistoryResponse> history(@PathVariable UUID workOrderId) {
+        return ResponseEntity.ok(queryService.workOrderHistory(workOrderId));
+    }
 
     @PostMapping("/wms-reservations")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_PICK') or hasAuthority('STOCK_MOVE')")

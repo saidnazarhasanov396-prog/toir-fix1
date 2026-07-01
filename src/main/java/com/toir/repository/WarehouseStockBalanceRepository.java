@@ -57,6 +57,53 @@ public interface WarehouseStockBalanceRepository extends JpaRepository<Warehouse
 
     List<WarehouseStockBalance> findAllByWarehouseIdAndBinIdAndIsDeletedFalse(UUID warehouseId, UUID binId);
 
+    @Query("""
+            select coalesce(sum(b.qtyOnHand), 0)
+            from WarehouseStockBalance b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+            """)
+    BigDecimal sumQtyOnHand(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select coalesce(sum(b.qtyReserved), 0)
+            from WarehouseStockBalance b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+            """)
+    BigDecimal sumQtyReserved(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select coalesce(sum(
+                case when b.stockStatus = com.toir.enums.WarehouseStockStatus.AVAILABLE
+                     then b.qtyOnHand - b.qtyReserved
+                     else 0
+                end
+            ), 0)
+            from WarehouseStockBalance b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+            """)
+    BigDecimal sumAvailableQty(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select count(b)
+            from WarehouseStockBalance b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+            """)
+    long countRows(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select count(b)
+            from WarehouseStockBalance b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+              and b.stockStatus = :stockStatus
+            """)
+    long countRowsByStatus(@Param("warehouseId") UUID warehouseId,
+                           @Param("stockStatus") WarehouseStockStatus stockStatus);
+
     boolean existsByWarehouseIdAndBinIdAndQtyOnHandGreaterThanAndIsDeletedFalse(
             UUID warehouseId,
             UUID binId,

@@ -8,11 +8,13 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.warehouse.WarehouseBin;
 import com.toir.entity.warehouse.WarehouseTask;
 import com.toir.entity.warehouse.WarehouseTaskLine;
+import com.toir.entity.warehouse.WmsLabelEvent;
 import com.toir.enums.WarehouseTaskType;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseTaskLineRepository;
+import com.toir.repository.WmsLabelEventRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -37,13 +39,15 @@ public class WmsLabelService {
     private final SparePartRepository sparePartRepository;
     private final EquipmentRepository equipmentRepository;
     private final WarehouseTaskLineRepository taskLineRepository;
+    private final WmsLabelEventRepository labelEventRepository;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public WmsLabelPayloadDto binLabel(UUID binId) {
         WarehouseBin bin = binRepository.findByIdAndIsDeletedFalse(binId)
                 .orElseThrow(() -> RestException.notFound("Warehouse bin not found: " + binId));
         String payload = PREFIX + "|type=BIN|id=%s|warehouseId=%s|code=%s"
                 .formatted(bin.getId(), bin.getWarehouseId(), requireText(bin.getCode(), "Warehouse bin code is required"));
+        recordLabel(TYPE_BIN, bin.getId(), bin.getCode(), bin.getWarehouseId(), bin.getId(), null, null, payload);
         return new WmsLabelPayloadDto(
                 TYPE_BIN,
                 bin.getId(),
@@ -56,12 +60,13 @@ public class WmsLabelService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public WmsLabelPayloadDto sparePartLabel(UUID sparePartId) {
         SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)
                 .orElseThrow(() -> RestException.notFound("Spare part not found: " + sparePartId));
         String payload = PREFIX + "|type=SPARE_PART|id=%s|code=%s"
                 .formatted(sparePart.getId(), requireText(sparePart.getCode(), "Spare part code is required"));
+        recordLabel(TYPE_SPARE_PART, sparePart.getId(), sparePart.getCode(), null, null, sparePart.getId(), null, payload);
         return new WmsLabelPayloadDto(
                 TYPE_SPARE_PART,
                 sparePart.getId(),
@@ -74,13 +79,14 @@ public class WmsLabelService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public WmsLabelPayloadDto equipmentLabel(UUID equipmentId) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
         String inventoryNumber = requireText(equipment.getInventoryNumber(), "Equipment inventory number is required");
         String payload = PREFIX + "|type=EQUIPMENT|id=%s|inventoryNumber=%s"
                 .formatted(equipment.getId(), inventoryNumber);
+        recordLabel(TYPE_EQUIPMENT, equipment.getId(), inventoryNumber, null, null, null, equipment.getId(), payload);
         return new WmsLabelPayloadDto(
                 TYPE_EQUIPMENT,
                 equipment.getId(),
@@ -134,6 +140,26 @@ public class WmsLabelService {
                 null,
                 "Scan is valid"
         );
+    }
+
+    private void recordLabel(String labelType,
+                             UUID targetId,
+                             String targetCode,
+                             UUID warehouseId,
+                             UUID binId,
+                             UUID sparePartId,
+                             UUID equipmentId,
+                             String payload) {
+        WmsLabelEvent event = new WmsLabelEvent();
+        event.setLabelType(labelType);
+        event.setTargetId(targetId);
+        event.setTargetCode(targetCode);
+        event.setWarehouseId(warehouseId);
+        event.setBinId(binId);
+        event.setSparePartId(sparePartId);
+        event.setEquipmentId(equipmentId);
+        event.setPayload(payload);
+        labelEventRepository.save(event);
     }
 
     private WmsScanValidationResultDto validateManual(String expectedType, UUID expectedId, String manualValue) {

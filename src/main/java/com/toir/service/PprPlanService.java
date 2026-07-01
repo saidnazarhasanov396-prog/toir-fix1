@@ -236,7 +236,7 @@ public class PprPlanService {
         validateDateFilterParts(year, month, day);
         PprPlanStatsProjection stats = planRepository.getStats(year, month, day, departmentId);
         if (stats == null) {
-            return new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0);
+            return new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0, 0);
         }
         return new PprPlanStatsResponse(
                 safe(stats.getTotalPlans()),
@@ -245,7 +245,8 @@ public class PprPlanService {
                 safe(stats.getApprovedPlans()),
                 safe(stats.getPlannedTasks()),
                 safe(stats.getInProgressTasks()),
-                safe(stats.getCompletedTasks())
+                safe(stats.getCompletedTasks()),
+                safe(stats.getOverdueTasks())
         );
     }
 

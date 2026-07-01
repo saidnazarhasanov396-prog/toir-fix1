@@ -317,7 +317,7 @@ public class WarehouseQualityService {
         movement.setType(StockMovementType.TRANSFER);
         movement.setQuantity(request.quantity().doubleValue());
         movement.setDocumentNumber(request.documentNumber());
-        movement.setSourceType(StockMovementSourceType.MANUAL);
+        movement.setSourceType(StockMovementSourceType.QUALITY_STATUS_TRANSFER);
         movement.setSourceId(operationId);
         movement.setBinId(request.binId());
         movement.setLotNumber(request.lotNumber());

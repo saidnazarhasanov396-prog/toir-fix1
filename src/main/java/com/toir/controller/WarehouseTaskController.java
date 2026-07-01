@@ -6,10 +6,12 @@ import com.toir.dto.warehouse.WarehouseTaskCompleteRequest;
 import com.toir.dto.warehouse.WarehouseTaskDto;
 import com.toir.dto.warehouse.WarehouseTaskRequest;
 import com.toir.dto.warehouse.WarehouseTaskScanConfirmRequest;
+import com.toir.dto.warehouse.WarehouseTaskStatsResponse;
 import com.toir.enums.WarehouseTaskStatus;
 import com.toir.enums.WarehouseTaskType;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.warehouse.WarehouseTaskService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +38,13 @@ import java.util.UUID;
 public class WarehouseTaskController {
 
     private final WarehouseTaskService service;
+    private final WmsOperationsQueryService queryService;
+
+    @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_TASK_READ')")
+    public ResponseEntity<WarehouseTaskStatsResponse> stats(@RequestParam(required = false) UUID warehouseId) {
+        return ResponseEntity.ok(queryService.taskStats(warehouseId));
+    }
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_TASK_READ')")

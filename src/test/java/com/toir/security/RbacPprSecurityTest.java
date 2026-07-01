@@ -124,7 +124,7 @@ class RbacPprSecurityTest {
                 .thenReturn(new PageImpl<>(List.of(planDto(planId)), PageRequest.of(0, 1), 1));
         when(pprPlanService.findById(planId)).thenReturn(planDto(planId));
         when(pprPlanService.getStats(null, null, null, null))
-                .thenReturn(new PprPlanStatsResponse(1, 1, 0, 0, 0, 0, 0));
+                .thenReturn(new PprPlanStatsResponse(1, 1, 0, 0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans?page=0&size=1"))
                 .andExpect(status().isOk());

@@ -19,6 +19,27 @@ public interface InventoryCountSessionRepository extends JpaRepository<Inventory
 
     long countByIsDeletedFalse();
 
+    long countByWarehouseIdAndIsDeletedFalse(UUID warehouseId);
+
+    @Query("""
+            select count(s)
+            from InventoryCountSession s
+            where s.isDeleted = false
+              and (:warehouseId is null or s.warehouseId = :warehouseId)
+              and s.status = :status
+            """)
+    long countByStatus(@Param("warehouseId") UUID warehouseId,
+                       @Param("status") InventoryCountSessionStatus status);
+
+    @Query("""
+            select count(s)
+            from InventoryCountSession s
+            where s.isDeleted = false
+              and (:warehouseId is null or s.warehouseId = :warehouseId)
+              and s.blindCount = true
+            """)
+    long countBlind(@Param("warehouseId") UUID warehouseId);
+
     @Query("""
             select s
             from InventoryCountSession s
