@@ -5,18 +5,45 @@ import com.toir.enums.MeterType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.jdbc.Sql;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @ActiveProfiles("test")
+@Sql(statements = """
+        CREATE TABLE IF NOT EXISTS meter_readings (
+            id uuid NOT NULL PRIMARY KEY,
+            created_at timestamp NOT NULL,
+            updated_at timestamp NOT NULL,
+            is_deleted boolean DEFAULT false NOT NULL,
+            meter_id uuid NOT NULL,
+            equipment_id uuid NOT NULL,
+            value double precision NOT NULL,
+            delta double precision,
+            read_at timestamp NOT NULL,
+            source varchar(255) NOT NULL,
+            recorded_by_user_id uuid,
+            repair_request_id uuid,
+            work_order_id uuid,
+            defect_id uuid,
+            reading_context varchar(255) DEFAULT 'MANUAL_UPDATE' NOT NULL,
+            device_id varchar(255),
+            note text
+        )
+        """)
 class MeterRepositoryStatsTest {
 
     @Autowired
     EquipmentMeterRepository repository;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @Test
     void getMeterStatsWithNoFiltersCountsAllMeters() {
@@ -68,6 +95,23 @@ class MeterRepositoryStatsTest {
         assertThat(stats.getActiveMeters()).isEqualTo(1);
     }
 
+    @Test
+    void getMeterStatsCountsReadingsForFilteredMeters() {
+        UUID targetEquipment = UUID.randomUUID();
+        UUID otherEquipment = UUID.randomUUID();
+        EquipmentMeter target = saveMeter(targetEquipment, MeterType.ENGINE_HOURS, true);
+        EquipmentMeter other = saveMeter(otherEquipment, MeterType.ENGINE_HOURS, true);
+        saveReading(target.getId(), targetEquipment, false);
+        saveReading(target.getId(), targetEquipment, false);
+        saveReading(target.getId(), targetEquipment, true);
+        saveReading(other.getId(), otherEquipment, false);
+
+        MeterStatsProjection stats = repository.getMeterStats(null, null, targetEquipment, null);
+
+        assertThat(stats.getTotalMeters()).isEqualTo(1);
+        assertThat(stats.getTotalReadings()).isEqualTo(2);
+    }
+
     private EquipmentMeter saveMeter(UUID equipmentId, MeterType meterType, boolean active) {
         EquipmentMeter meter = new EquipmentMeter();
         meter.setEquipmentId(equipmentId);
@@ -78,5 +122,26 @@ class MeterRepositoryStatsTest {
         meter.setActive(active);
         meter.setDeleted(false);
         return repository.save(meter);
+    }
+
+    private void saveReading(UUID meterId, UUID equipmentId, boolean deleted) {
+        Instant now = Instant.parse("2026-06-01T10:00:00Z");
+        jdbcTemplate.update("""
+                INSERT INTO meter_readings (
+                    id, created_at, updated_at, is_deleted, meter_id, equipment_id,
+                    value, read_at, source, reading_context
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                UUID.randomUUID(),
+                now,
+                now,
+                deleted,
+                meterId,
+                equipmentId,
+                100.0,
+                now,
+                "MANUAL",
+                "MANUAL_UPDATE"
+        );
     }
 }
