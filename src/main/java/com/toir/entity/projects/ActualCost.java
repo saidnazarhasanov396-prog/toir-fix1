@@ -42,7 +42,7 @@ public class ActualCost extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ActualCostStatus status = ActualCostStatus.APPROVED;
+    private ActualCostStatus status = ActualCostStatus.PENDING;
 
     @Column(name = "reviewed_by_id")
     private UUID reviewedById;

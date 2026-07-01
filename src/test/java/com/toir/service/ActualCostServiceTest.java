@@ -406,6 +406,34 @@ class ActualCostServiceTest {
     }
 
     @Test
+    void newActualCostEntityDefaultsToStatusPending() {
+        ActualCost cost = new ActualCost();
+        assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
+    }
+
+    @Test
+    void createAlwaysSavesWithPendingStatus() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(UUID.randomUUID());
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder));
+        when(repository.save(any(ActualCost.class))).thenAnswer(inv -> {
+            ActualCost saved = inv.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        ActualCostDto result = service.create(dto(workOrderId, null, null, null, 500));
+
+        assertThat(result.status()).isEqualTo(ActualCostStatus.PENDING);
+        var captor = forClass(ActualCost.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(ActualCostStatus.PENDING);
+    }
+
+    @Test
     void approveRejectsAlreadyReviewedCost() {
         UUID id = UUID.randomUUID();
         ActualCost actualCost = new ActualCost();

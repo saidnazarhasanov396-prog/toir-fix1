@@ -136,16 +136,16 @@ class FinancePbacScopeTest {
 
         var response = controller.summary(2026, 5, budget.getDepartmentId()).getBody();
 
-        assertThat(response.totalActual()).isEqualTo(600);
+        assertThat(response.totalActual()).isEqualTo(950);
         assertThat(response.totalCommitted()).isEqualTo(350);
         assertThat(response.pendingReviewAmount()).isEqualTo(350);
-        assertThat(response.totalAvailable()).isEqualTo(50);
+        assertThat(response.totalAvailable()).isEqualTo(-300);
         assertThat(response.unallocatedActualAmount()).isEqualTo(25);
         assertThat(response.atRiskBudgetLineCount()).isEqualTo(1);
-        assertThat(response.overBudgetLineCount()).isZero();
-        assertThat(response.byCategory().getFirst().actualAmount()).isEqualTo(600);
+        assertThat(response.overBudgetLineCount()).isEqualTo(1);
+        assertThat(response.byCategory().getFirst().actualAmount()).isEqualTo(950);
         assertThat(response.byCategory().getFirst().committedAmount()).isEqualTo(350);
-        assertThat(response.byCategory().getFirst().availableAmount()).isEqualTo(50);
+        assertThat(response.byCategory().getFirst().availableAmount()).isEqualTo(-300);
     }
 
     @Test
