@@ -102,15 +102,27 @@ class WarehouseStockConstraintMigrationTest {
 
     private UUID seedSparePart(Connection connection) throws SQLException {
         UUID sparePartId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO spare_part_types (
+                    id, created_at, updated_at, code, name, default_unit, active
+                )
+                VALUES (?, now(), now(), ?, 'Constraint test type', 'pcs', true)
+                """)) {
+            statement.setObject(1, typeId);
+            statement.setString(2, "SPT-" + typeId);
+            statement.executeUpdate();
+        }
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO spare_parts (
                     id, created_at, updated_at, is_deleted,
-                    code, name, unit, min_stock, kind
+                    code, name, unit, min_stock, kind, type_id
                 )
-                VALUES (?, now(), now(), false, ?, 'Constraint test part', 'pcs', 0, 'SPARE_PART')
+                VALUES (?, now(), now(), false, ?, 'Constraint test part', 'pcs', 0, 'SPARE_PART', ?)
                 """)) {
             statement.setObject(1, sparePartId);
             statement.setString(2, "SP-" + sparePartId);
+            statement.setObject(3, typeId);
             statement.executeUpdate();
         }
         return sparePartId;

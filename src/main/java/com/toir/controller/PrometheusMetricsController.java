@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Prometheus text-format exposition â€” Ð¿ÑƒÐ±Ð»Ð¸ÐºÑƒÐµÑ‚ Ñ‚Ðµ Ð¶Ðµ Ð¼ÐµÑ‚Ñ€Ð¸ÐºÐ¸ Ñ‡Ñ‚Ð¾ {@link OpsMetricsController},
- * Ð½Ð¾ Ð² Ñ„Ð¾Ñ€Ð¼Ð°Ñ‚Ðµ, ÐºÐ¾Ñ‚Ð¾Ñ€Ñ‹Ð¹ Ð¿Ð°Ñ€ÑÐ¸Ñ‚ scrape-Ð°Ð³ÐµÐ½Ñ‚ Prometheus / VictoriaMetrics.
+ * Prometheus text-format exposition for the same metrics as {@link OpsMetricsController}.
+ * Scrape agents such as Prometheus or VictoriaMetrics can consume this endpoint directly.
  */
 @RestController
 @RequestMapping("/api/v1/ops")

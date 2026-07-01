@@ -1,5 +1,6 @@
 package com.toir.repository;
 
+import com.toir.test.RepositorySliceTest;
 import com.toir.entity.OperationalIssue;
 import com.toir.entity.defects.Defect;
 import com.toir.enums.DefectStatus;
@@ -11,14 +12,11 @@ import java.util.EnumSet;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
-@ActiveProfiles("test")
+@RepositorySliceTest
 class OperationalIssueRepositorySearchTest {
 
     @Autowired

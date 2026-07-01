@@ -1,5 +1,6 @@
 package com.toir.repository;
 
+import com.toir.test.RepositorySliceTest;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.WorkOrder;
@@ -15,16 +16,13 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
-@ActiveProfiles("test")
+@RepositorySliceTest
 class WorkOrderRepositoryEquipmentTypeDashboardTest {
 
     private static final List<WorkOrderStatus> ACTIVE_STATUSES = List.of(
