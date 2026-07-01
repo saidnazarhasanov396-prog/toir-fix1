@@ -1,6 +1,7 @@
 package com.toir.entity.warehouse;
 
 import com.toir.entity.BaseEntity;
+import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -35,8 +36,9 @@ public class WarehouseBin extends BaseEntity {
     @Column(name = "shelf_level")
     private String shelfLevel;
 
-    @Column(name = "bin_type")
-    private String binType;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "bin_type", length = 64)
+    private WarehouseBinType binType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "quality_zone_type", nullable = false, length = 32)

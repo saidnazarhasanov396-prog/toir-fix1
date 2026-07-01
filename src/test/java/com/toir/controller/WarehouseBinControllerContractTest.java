@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.dto.warehouse.WarehouseBinDto;
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
+import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.GlobalExceptionHandler;
@@ -86,7 +87,7 @@ class WarehouseBinControllerContractTest {
                 eq("A"),
                 eq("01"),
                 eq("02"),
-                eq("PALLET"),
+                eq(WarehouseBinType.PALLET),
                 eq(WarehouseQualityZoneType.STORAGE),
                 eq("AMBIENT"),
                 eq("NONE"),
@@ -187,7 +188,6 @@ class WarehouseBinControllerContractTest {
                         .contentType("application/json")
                         .content("""
                                 {
-                                  "code": "A-01-02-03",
                                   "qualityZoneType": "STORAGE",
                                   "active": true
                                 }
@@ -195,6 +195,25 @@ class WarehouseBinControllerContractTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(binId.toString()))
                 .andExpect(jsonPath("$.warehouseId").value(warehouseId.toString()));
+    }
+
+    @Test
+    void createBinAcceptsStorageBinType() throws Exception {
+        UUID warehouseId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        when(service.create(eq(warehouseId), any())).thenReturn(binDto(warehouseId, binId));
+
+        mockMvc.perform(post("/api/v1/warehouses/{warehouseId}/bins", warehouseId)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "binType": "STORAGE",
+                                  "qualityZoneType": "STORAGE",
+                                  "active": true
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(binId.toString()));
     }
 
     @Test
@@ -242,7 +261,7 @@ class WarehouseBinControllerContractTest {
                 "A",
                 "01",
                 "02",
-                "PALLET",
+                WarehouseBinType.PALLET,
                 null,
                 null,
                 WarehouseQualityZoneType.STORAGE,

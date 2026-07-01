@@ -615,7 +615,8 @@ public class BudgetSummaryController {
                                     Map<UUID, Double> approvedByLine,
                                     Map<UUID, Double> pendingByLine) {
         if (approvedByLine.containsKey(line.getId()) || pendingByLine.containsKey(line.getId())) {
-            return approvedByLine.getOrDefault(line.getId(), 0.0d);
+            return approvedByLine.getOrDefault(line.getId(), 0.0d)
+                    + pendingByLine.getOrDefault(line.getId(), 0.0d);
         }
         return line.getActualAmount();
     }

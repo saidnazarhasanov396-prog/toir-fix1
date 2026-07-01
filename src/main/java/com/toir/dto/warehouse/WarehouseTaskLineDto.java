@@ -23,7 +23,13 @@ public record WarehouseTaskLineDto(
         String unit,
         WarehouseTaskLineStatus status,
         boolean scanConfirmed,
-        String exceptionReason
+        String exceptionReason,
+        String fromBinCode,
+        String toBinCode,
+        String sparePartCode,
+        String sparePartName,
+        String equipmentCode,
+        String equipmentName
 ) {
     public static WarehouseTaskLineDto from(WarehouseTaskLine line) {
         return new WarehouseTaskLineDto(
@@ -41,7 +47,13 @@ public record WarehouseTaskLineDto(
                 line.getUnit(),
                 line.getStatus(),
                 line.isScanConfirmed(),
-                line.getExceptionReason()
+                line.getExceptionReason(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
         );
     }
 }
