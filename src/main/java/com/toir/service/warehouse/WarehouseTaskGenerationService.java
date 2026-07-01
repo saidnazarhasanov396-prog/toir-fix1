@@ -35,19 +35,16 @@ public class WarehouseTaskGenerationService {
             return Optional.empty();
         }
         WarehouseStockStatus stockStatus = effectiveStatus(command.stockStatus());
-        Optional<UUID> toBinId = binSuggestionService.suggestPutawayBin(
+        Optional<UUID> suggestedToBinId = binSuggestionService.suggestPutawayBin(
                 command.warehouseId(),
                 command.fromBinId(),
                 stockStatus
         );
-        if (toBinId.isEmpty()) {
-            return Optional.empty();
-        }
         WarehouseTaskLineRequest line = new WarehouseTaskLineRequest(
                 command.sparePartId(),
                 null,
                 command.fromBinId(),
-                toBinId.get(),
+                suggestedToBinId.orElse(null),
                 command.lotNumber(),
                 command.serialNumber(),
                 command.expiryDate(),
@@ -63,7 +60,9 @@ public class WarehouseTaskGenerationService {
                 command.sourceId(),
                 null,
                 null,
-                command.comment(),
+                suggestedToBinId.isPresent()
+                        ? command.comment()
+                        : appendComment(command.comment(), "Destination bin could not be suggested automatically."),
                 List.of(line)
         );
         return Optional.of(taskService.createGenerated(request, generationKey));
@@ -84,6 +83,13 @@ public class WarehouseTaskGenerationService {
 
     private WarehouseStockStatus effectiveStatus(WarehouseStockStatus status) {
         return status == null ? WarehouseStockStatus.AVAILABLE : status;
+    }
+
+    private String appendComment(String comment, String suffix) {
+        if (comment == null || comment.isBlank()) {
+            return suffix;
+        }
+        return comment.strip() + " " + suffix;
     }
 
     public record ReceiptPutawayCommand(
