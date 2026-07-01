@@ -3,13 +3,9 @@ package com.toir.service;
 import com.toir.dto.mxik.MxikDto;
 import com.toir.dto.mxik.MxikNameCodeCountProjection;
 import com.toir.dto.mxik.MxikNameCountProjection;
-import com.toir.dto.mxik.MxikRequest;
 import com.toir.entity.Mxik;
-import com.toir.enums.AuditAction;
-import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.MxikRepository;
-import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,7 +22,6 @@ import java.util.UUID;
 public class MxikService {
 
     private final MxikRepository repository;
-    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public Page<MxikDto> findAll(String search, int page, int size) {
@@ -37,71 +32,6 @@ public class MxikService {
     @Transactional(readOnly = true)
     public MxikDto findById(UUID id) {
         return MxikDto.from(getOrThrow(id));
-    }
-
-    @Transactional
-    public MxikDto create(MxikRequest request) {
-        String kod = normalizeKod(request.kod());
-        if (repository.existsActiveByKod(kod)) {
-            throw RestException.conflict("MXIK already exists: kod=" + kod);
-        }
-
-        Mxik entity = new Mxik();
-        apply(entity, request, kod);
-        Mxik saved = repository.save(entity);
-
-        auditBuilderService.log(
-                "mxik",
-                saved.getId().toString(),
-                AuditAction.CREATE,
-                AuditModule.SPARE_PART,
-                "MXIK created",
-                null,
-                saved
-        );
-
-        return MxikDto.from(saved);
-    }
-
-    @Transactional
-    public MxikDto update(UUID id, MxikRequest request) {
-        Mxik entity = getOrThrow(id);
-        String kod = normalizeKod(request.kod());
-        if (repository.existsActiveByKodAndIdNot(kod, id)) {
-            throw RestException.conflict("MXIK already exists: kod=" + kod);
-        }
-
-        apply(entity, request, kod);
-        Mxik saved = repository.save(entity);
-
-        auditBuilderService.log(
-                "mxik",
-                saved.getId().toString(),
-                AuditAction.UPDATE,
-                AuditModule.SPARE_PART,
-                "MXIK updated",
-                entity,
-                saved
-        );
-
-        return MxikDto.from(saved);
-    }
-
-    @Transactional
-    public void delete(UUID id) {
-        Mxik entity = getOrThrow(id);
-        entity.setDeleted(true);
-        Mxik saved = repository.save(entity);
-
-        auditBuilderService.log(
-                "mxik",
-                saved.getId().toString(),
-                AuditAction.DELETE,
-                AuditModule.SPARE_PART,
-                "MXIK deleted",
-                saved,
-                null
-        );
     }
 
     @Transactional(readOnly = true)
@@ -132,49 +62,9 @@ public class MxikService {
                 .orElseThrow(() -> RestException.notFound("MXIK not found: " + id));
     }
 
-    private void apply(Mxik entity, MxikRequest request, String kod) {
-        entity.setName(requiredTrim(request.name(), "name"));
-        entity.setKod(kod);
-        entity.setType(requiredTrim(request.type(), "type").toUpperCase(Locale.ROOT));
-        entity.setGroupName(trimToNull(request.groupName()));
-        entity.setPositionName(trimToNull(request.positionName()));
-        entity.setNameUzLatn(trimToNull(request.nameUzLatn()));
-        entity.setNameRu(trimToNull(request.nameRu()));
-        entity.setGroupNameRu(trimToNull(request.groupNameRu()));
-        entity.setGroupNameCyril(trimToNull(request.groupNameCyril()));
-        entity.setClassName(trimToNull(request.className()));
-        entity.setClassNameRu(trimToNull(request.classNameRu()));
-        entity.setClassNameCyril(trimToNull(request.classNameCyril()));
-        entity.setPositionNameRu(trimToNull(request.positionNameRu()));
-        entity.setPositionNameCyril(trimToNull(request.positionNameCyril()));
-        entity.setSubPositionName(trimToNull(request.subPositionName()));
-        entity.setSubPositionNameRu(trimToNull(request.subPositionNameRu()));
-        entity.setSubPositionNameCyril(trimToNull(request.subPositionNameCyril()));
-        entity.setBrandName(trimToNull(request.brandName()));
-        entity.setBrandNameRu(trimToNull(request.brandNameRu()));
-        entity.setBrandNameCyril(trimToNull(request.brandNameCyril()));
-        entity.setAttributeName(trimToNull(request.attributeName()));
-        entity.setAttributeNameRu(trimToNull(request.attributeNameRu()));
-        entity.setAttributeNameCyril(trimToNull(request.attributeNameCyril()));
-        entity.setBarcode(trimToNull(request.barcode()));
-    }
-
-    private String normalizeKod(String value) {
-        String token = requiredTrim(value, "kod");
-        return token.toUpperCase(Locale.ROOT);
-    }
-
     private String searchPattern(String search) {
         String token = trimToNull(search);
         return token == null ? null : "%" + token.toLowerCase(Locale.ROOT) + "%";
-    }
-
-    private String requiredTrim(String value, String fieldName) {
-        String token = trimToNull(value);
-        if (token == null) {
-            throw RestException.badRequest(fieldName + " is required");
-        }
-        return token;
     }
 
     private String trimToNull(String value) {
