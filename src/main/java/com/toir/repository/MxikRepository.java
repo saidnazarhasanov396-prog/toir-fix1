@@ -20,8 +20,6 @@ public interface MxikRepository extends JpaRepository<Mxik, UUID> {
 
     Optional<Mxik> findByIdAndIsDeletedFalse(UUID id);
 
-    Optional<Mxik> findByKodAndIsDeletedFalse(String kod);
-
     @Query("""
             select m
             from Mxik m
@@ -29,23 +27,6 @@ public interface MxikRepository extends JpaRepository<Mxik, UUID> {
               and m.id in :ids
             """)
     List<Mxik> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
-
-    @Query("""
-            select count(m) > 0
-            from Mxik m
-            where m.isDeleted = false
-              and lower(m.kod) = lower(:kod)
-            """)
-    boolean existsActiveByKod(@Param("kod") String kod);
-
-    @Query("""
-            select count(m) > 0
-            from Mxik m
-            where m.isDeleted = false
-              and lower(m.kod) = lower(:kod)
-              and m.id <> :id
-            """)
-    boolean existsActiveByKodAndIdNot(@Param("kod") String kod, @Param("id") UUID id);
 
     @Query("""
             select m

@@ -124,17 +124,41 @@ class WarehouseTaskGenerationServiceTest {
     }
 
     @Test
-    void generatePutawaySkipsWhenNoDestinationBinIsSuggested() {
+    void generatePutawayCreatesTaskWhenNoDestinationBinIsSuggested() {
         UUID warehouseId = UUID.randomUUID();
         UUID fromBinId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
         when(taskRepository.existsByGenerationKeyAndIsDeletedFalse("receipt:1")).thenReturn(false);
         when(binSuggestionService.suggestPutawayBin(warehouseId, fromBinId, WarehouseStockStatus.AVAILABLE))
                 .thenReturn(Optional.empty());
+        when(taskService.createGenerated(any(WarehouseTaskRequest.class), eq("receipt:1")))
+                .thenReturn(new WarehouseTaskDto(
+                        UUID.randomUUID(),
+                        "WT-2026-00011",
+                        WarehouseTaskType.PUTAWAY,
+                        WarehouseTaskStatus.OPEN,
+                        null,
+                        warehouseId,
+                        WarehouseTaskSourceType.PURCHASE_ORDER,
+                        sourceId,
+                        "receipt:1",
+                        true,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        "comment",
+                        List.of(),
+                        null,
+                        null
+                ));
 
         var result = service.generatePutawayForReceipt(new WarehouseTaskGenerationService.ReceiptPutawayCommand(
                 "receipt:1",
                 warehouseId,
-                UUID.randomUUID(),
+                sparePartId,
                 fromBinId,
                 BigDecimal.ONE,
                 "pcs",
@@ -143,12 +167,19 @@ class WarehouseTaskGenerationServiceTest {
                 null,
                 WarehouseStockStatus.AVAILABLE,
                 WarehouseTaskSourceType.PURCHASE_ORDER,
-                UUID.randomUUID(),
-                null
+                sourceId,
+                "comment"
         ));
 
-        assertThat(result).isEmpty();
-        verify(taskService, never()).createGenerated(any(), any());
+        assertThat(result).isPresent();
+        ArgumentCaptor<WarehouseTaskRequest> requestCaptor = ArgumentCaptor.forClass(WarehouseTaskRequest.class);
+        verify(taskService).createGenerated(requestCaptor.capture(), eq("receipt:1"));
+        WarehouseTaskRequest request = requestCaptor.getValue();
+        assertThat(request.lines()).hasSize(1);
+        assertThat(request.lines().getFirst().sparePartId()).isEqualTo(sparePartId);
+        assertThat(request.lines().getFirst().fromBinId()).isEqualTo(fromBinId);
+        assertThat(request.lines().getFirst().toBinId()).isNull();
+        assertThat(request.comment()).contains("Destination bin could not be suggested automatically.");
     }
 
     private WarehouseTaskGenerationService.ReceiptPutawayCommand command(String generationKey) {
