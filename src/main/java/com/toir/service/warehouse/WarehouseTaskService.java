@@ -53,7 +53,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -245,36 +248,14 @@ public class WarehouseTaskService {
         };
     }
 
-    private WarehouseTaskLineDto toEnrichedLineDto(WarehouseTaskLine line) {
-        String fromBinCode = line.getFromBinId() == null ? null :
-                warehouseBinRepository.findByIdAndIsDeletedFalse(line.getFromBinId())
-                        .map(WarehouseBin::getCode).orElse(null);
-
-        String toBinCode = line.getToBinId() == null ? null :
-                warehouseBinRepository.findByIdAndIsDeletedFalse(line.getToBinId())
-                        .map(WarehouseBin::getCode).orElse(null);
-
-        String sparePartCode = null;
-        String sparePartName = null;
-        if (line.getSparePartId() != null) {
-            SparePart sparePart = sparePartRepository
-                    .findByIdAndIsDeletedFalse(line.getSparePartId()).orElse(null);
-            if (sparePart != null) {
-                sparePartCode = sparePart.getCode();
-                sparePartName = sparePart.getName();
-            }
-        }
-
-        String equipmentCode = null;
-        String equipmentName = null;
-        if (line.getEquipmentId() != null) {
-            Equipment equipment = equipmentRepository
-                    .findByIdAndIsDeletedFalse(line.getEquipmentId()).orElse(null);
-            if (equipment != null) {
-                equipmentCode = equipment.getCode();
-                equipmentName = equipment.getName();
-            }
-        }
+    private WarehouseTaskLineDto toEnrichedLineDto(WarehouseTaskLine line,
+                                                   Map<UUID, SparePart> sparePartById,
+                                                   Map<UUID, Equipment> equipmentById,
+                                                   Map<UUID, WarehouseBin> binById) {
+        WarehouseBin fromBin = line.getFromBinId() == null ? null : binById.get(line.getFromBinId());
+        WarehouseBin toBin = line.getToBinId() == null ? null : binById.get(line.getToBinId());
+        SparePart sparePart = line.getSparePartId() == null ? null : sparePartById.get(line.getSparePartId());
+        Equipment equipment = line.getEquipmentId() == null ? null : equipmentById.get(line.getEquipmentId());
 
         return new WarehouseTaskLineDto(
                 line.getId(),
@@ -292,12 +273,12 @@ public class WarehouseTaskService {
                 line.getStatus(),
                 line.isScanConfirmed(),
                 line.getExceptionReason(),
-                fromBinCode,
-                toBinCode,
-                sparePartCode,
-                sparePartName,
-                equipmentCode,
-                equipmentName
+                fromBin == null ? null : fromBin.getCode(),
+                toBin == null ? null : toBin.getCode(),
+                sparePart == null ? null : sparePart.getCode(),
+                sparePart == null ? null : sparePart.getName(),
+                equipment == null ? null : equipment.getCode(),
+                equipment == null ? null : equipment.getName()
         );
     }
 
@@ -312,8 +293,34 @@ public class WarehouseTaskService {
 
         String sourceNumber = resolveSourceNumber(task.getSourceType(), task.getSourceId());
 
-        List<WarehouseTaskLineDto> lines = task.getLines().stream()
-                .map(this::toEnrichedLineDto)
+        List<WarehouseTaskLine> lines = task.getLines();
+
+        Set<UUID> sparePartIds = lines.stream()
+                .map(WarehouseTaskLine::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, SparePart> sparePartById = sparePartIds.isEmpty() ? Map.of() :
+                sparePartRepository.findAllByIdInAndIsDeletedFalse(sparePartIds).stream()
+                        .collect(Collectors.toMap(SparePart::getId, sparePart -> sparePart));
+
+        Set<UUID> equipmentIds = lines.stream()
+                .map(WarehouseTaskLine::getEquipmentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, Equipment> equipmentById = equipmentIds.isEmpty() ? Map.of() :
+                equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds).stream()
+                        .collect(Collectors.toMap(Equipment::getId, equipment -> equipment));
+
+        Set<UUID> binIds = lines.stream()
+                .flatMap(line -> Stream.of(line.getFromBinId(), line.getToBinId()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, WarehouseBin> binById = binIds.isEmpty() ? Map.of() :
+                warehouseBinRepository.findAllByIdInAndIsDeletedFalse(binIds).stream()
+                        .collect(Collectors.toMap(WarehouseBin::getId, bin -> bin));
+
+        List<WarehouseTaskLineDto> lineDtos = lines.stream()
+                .map(line -> toEnrichedLineDto(line, sparePartById, equipmentById, binById))
                 .toList();
 
         return new WarehouseTaskDto(
@@ -333,7 +340,7 @@ public class WarehouseTaskService {
                 task.getCompletedAt(),
                 task.getCancelledAt(),
                 task.getComment(),
-                lines,
+                lineDtos,
                 task.getCreatedAt(),
                 task.getUpdatedAt(),
                 warehouseName,
