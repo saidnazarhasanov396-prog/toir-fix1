@@ -5,6 +5,7 @@ import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherActionResponse;
 import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherQueues;
 import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherSummary;
 import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceItem;
+import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceFilter;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
@@ -20,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -32,11 +35,21 @@ public class MaintenanceDispatcherService {
 
     @Transactional(readOnly = true)
     public MaintenanceDispatcherSummary summary() {
-        return queues().summary();
+        return summary(MaintenanceWorkspaceFilter.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public MaintenanceDispatcherSummary summary(MaintenanceWorkspaceFilter filter) {
+        return queues(filter).summary();
     }
 
     @Transactional(readOnly = true)
     public MaintenanceDispatcherQueues queues() {
+        return queues(MaintenanceWorkspaceFilter.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public MaintenanceDispatcherQueues queues(MaintenanceWorkspaceFilter filter) {
         Instant now = Instant.now();
         List<RepairRequest> requests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         List<Defect> defects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
@@ -66,6 +79,11 @@ public class MaintenanceDispatcherService {
                 .filter(this::hasBlocker)
                 .map(w -> workOrderItem(w, now, blockerReason(w), "Open detail"))
                 .toList();
+        emergency = filterItems(emergency, filter);
+        newDefects = filterItems(newDefects, filter);
+        unassigned = filterItems(unassigned, filter);
+        blockedWorkOrders = filterItems(blockedWorkOrders, filter);
+        overdue = filterItems(overdue, filter);
         MaintenanceDispatcherSummary summary = new MaintenanceDispatcherSummary(
                 emergency.size() + newDefects.size() + unassigned.size() + blockedWorkOrders.size() + overdue.size(),
                 emergency.size(),
@@ -143,5 +161,65 @@ public class MaintenanceDispatcherService {
 
     private String value(Enum<?> value) {
         return value == null ? null : value.name();
+    }
+
+    private List<MaintenanceWorkspaceItem> filterItems(List<MaintenanceWorkspaceItem> items, MaintenanceWorkspaceFilter filter) {
+        if (filter == null) {
+            return items;
+        }
+        return items.stream()
+                .filter(item -> matchesUuid(item.departmentId(), filter.departmentId()))
+                .filter(item -> matchesUuid(item.equipmentId(), filter.equipmentId()))
+                .filter(item -> matchesText(item.priority(), filter.priority()))
+                .filter(item -> matchesText(item.status(), filter.status()))
+                .filter(item -> matchesText(item.objectType(), filter.objectType()))
+                .filter(item -> matchesInstantRange(item.dueAt(), filter.dueFrom(), filter.dueTo()))
+                .filter(item -> matchesSearch(item, filter.search()))
+                .toList();
+    }
+
+    private boolean matchesSearch(MaintenanceWorkspaceItem item, String query) {
+        String normalizedQuery = normalize(query);
+        if (normalizedQuery == null) {
+            return true;
+        }
+        return contains(item.code(), normalizedQuery)
+                || contains(item.title(), normalizedQuery)
+                || contains(item.objectType(), normalizedQuery)
+                || contains(item.priority(), normalizedQuery)
+                || contains(item.status(), normalizedQuery)
+                || contains(item.blockerReason(), normalizedQuery)
+                || contains(item.nextAction(), normalizedQuery);
+    }
+
+    private boolean matchesUuid(UUID actual, UUID expected) {
+        return expected == null || expected.equals(actual);
+    }
+
+    private boolean matchesText(String actual, String expected) {
+        String normalizedExpected = normalize(expected);
+        return normalizedExpected == null || normalizedExpected.equals(normalize(actual));
+    }
+
+    private boolean matchesInstantRange(Instant actual, Instant from, Instant to) {
+        if (from == null && to == null) {
+            return true;
+        }
+        if (actual == null) {
+            return false;
+        }
+        return (from == null || !actual.isBefore(from)) && (to == null || !actual.isAfter(to));
+    }
+
+    private boolean contains(String actual, String normalizedQuery) {
+        String normalizedActual = normalize(actual);
+        return normalizedActual != null && normalizedActual.contains(normalizedQuery);
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 }
