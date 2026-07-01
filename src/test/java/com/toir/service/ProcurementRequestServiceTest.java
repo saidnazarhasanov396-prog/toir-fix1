@@ -342,6 +342,21 @@ class ProcurementRequestServiceTest {
     }
 
     @Test
+    void approvalGeneratesWarehouseReceiveTask() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.SUBMITTED,
+                List.of(line(UUID.randomUUID(), 3, null)));
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.approve(requestId);
+
+        assertThat(result.status()).isEqualTo(ProcurementRequestStatus.APPROVED);
+        verify(taskGenerationService).generateReceiveForApprovedProcurement(request);
+    }
+
+    @Test
     void orderingRejectsInactiveCounteragent() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID requestId = UUID.randomUUID();

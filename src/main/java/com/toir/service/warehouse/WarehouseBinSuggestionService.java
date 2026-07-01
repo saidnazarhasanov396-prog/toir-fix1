@@ -37,6 +37,23 @@ public class WarehouseBinSuggestionService {
                 .map(WarehouseBin::getId);
     }
 
+    public Optional<UUID> suggestReceivingBin(UUID warehouseId) {
+        if (warehouseId == null) {
+            return Optional.empty();
+        }
+        return binRepository.findAllByWarehouseIdAndIsDeletedFalseOrderByTravelSequenceAscCodeAsc(warehouseId)
+                .stream()
+                .filter(WarehouseBin::isActive)
+                .filter(bin -> !bin.isBlocked())
+                .filter(bin -> !bin.isFrozen())
+                .filter(bin -> bin.getQualityZoneType() == WarehouseQualityZoneType.RECEIVING)
+                .min(Comparator
+                        .comparing(WarehouseBin::getTravelSequence, Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(WarehouseBin::getBinLevel, Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(WarehouseBin::getCode, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .map(WarehouseBin::getId);
+    }
+
     private WarehouseQualityZoneType targetZone(WarehouseStockStatus status) {
         if (status == WarehouseStockStatus.QUARANTINE) {
             return WarehouseQualityZoneType.QUARANTINE;

@@ -277,6 +277,7 @@ public class ProcurementRequestService {
         p.setStatus(ProcurementRequestStatus.APPROVED);
         p.setApprovedAt(Instant.now());
         ProcurementRequest saved = repo.save(p);
+        taskGenerationService.generateReceiveForApprovedProcurement(saved);
         auditBuilderService.log(
                 "procurement_request",
                 auditEntityId(saved),

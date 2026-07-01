@@ -52,6 +52,7 @@ import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.service.repair.RepairRequestService;
+import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -88,6 +89,7 @@ class ApprovalPbacScopeTest {
     WorkOrderService workOrderService;
     PprPlanService pprPlanService;
     ProcurementRequestService procurementRequestService;
+    WarehouseTaskGenerationService warehouseTaskGenerationService;
     RepairRequestService repairRequestService;
     MaintenanceAutomationService maintenanceAutomationService;
     MaintenanceRegulationService maintenanceRegulationService;
@@ -111,6 +113,7 @@ class ApprovalPbacScopeTest {
         workOrderService = mock(WorkOrderService.class);
         pprPlanService = mock(PprPlanService.class);
         procurementRequestService = mock(ProcurementRequestService.class);
+        warehouseTaskGenerationService = mock(WarehouseTaskGenerationService.class);
         repairRequestService = mock(RepairRequestService.class);
         maintenanceAutomationService = mock(MaintenanceAutomationService.class);
         maintenanceRegulationService = mock(MaintenanceRegulationService.class);
@@ -126,7 +129,7 @@ class ApprovalPbacScopeTest {
                 new DefaultApprovalActionExecutor(List.of(
                         new WorkOrderApprovalHandler(workOrderService),
                         new PprPlanApprovalHandler(pprPlanService),
-                        new ProcurementRequestApprovalHandler(procurementRequestRepository),
+                        new ProcurementRequestApprovalHandler(procurementRequestRepository, warehouseTaskGenerationService),
                         new MaintenanceBudgetApprovalHandler(maintenanceBudgetRepository),
                         new MaintenanceDueEventApprovalHandler(maintenanceAutomationService)
                 )),

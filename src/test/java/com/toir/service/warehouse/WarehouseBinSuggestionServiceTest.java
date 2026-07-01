@@ -59,6 +59,20 @@ class WarehouseBinSuggestionServiceTest {
         assertThat(result).contains(quarantine.getId());
     }
 
+    @Test
+    void suggestReceivingBinChoosesFirstUsableReceivingBin() {
+        UUID warehouseId = UUID.randomUUID();
+        WarehouseBin frozen = bin(UUID.randomUUID(), "R-01", WarehouseQualityZoneType.RECEIVING, 1, true, false, true);
+        WarehouseBin storage = bin(UUID.randomUUID(), "S-01", WarehouseQualityZoneType.STORAGE, 2, true, false, false);
+        WarehouseBin receiving = bin(UUID.randomUUID(), "R-02", WarehouseQualityZoneType.RECEIVING, 3, true, false, false);
+        when(binRepository.findAllByWarehouseIdAndIsDeletedFalseOrderByTravelSequenceAscCodeAsc(warehouseId))
+                .thenReturn(List.of(frozen, storage, receiving));
+
+        var result = service.suggestReceivingBin(warehouseId);
+
+        assertThat(result).contains(receiving.getId());
+    }
+
     private WarehouseBin bin(UUID id,
                              String code,
                              WarehouseQualityZoneType qualityZoneType,
