@@ -1,6 +1,7 @@
 package com.toir.enums;
 
 public enum WarehouseBinType {
+    STORAGE,
     PALLET,
     SHELF,
     RACK,

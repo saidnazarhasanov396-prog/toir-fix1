@@ -198,6 +198,25 @@ class WarehouseBinControllerContractTest {
     }
 
     @Test
+    void createBinAcceptsStorageBinType() throws Exception {
+        UUID warehouseId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        when(service.create(eq(warehouseId), any())).thenReturn(binDto(warehouseId, binId));
+
+        mockMvc.perform(post("/api/v1/warehouses/{warehouseId}/bins", warehouseId)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "binType": "STORAGE",
+                                  "qualityZoneType": "STORAGE",
+                                  "active": true
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(binId.toString()));
+    }
+
+    @Test
     void stockBalancesReturnsBinScopedBalances() throws Exception {
         UUID warehouseId = UUID.randomUUID();
         UUID binId = UUID.randomUUID();
