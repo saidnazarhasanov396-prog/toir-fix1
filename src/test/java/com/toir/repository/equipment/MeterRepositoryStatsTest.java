@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
             reading_context varchar(255) DEFAULT 'MANUAL_UPDATE' NOT NULL,
             device_id varchar(255),
             note text
-        )
+        );
         """)
 class MeterRepositoryStatsTest {
 
