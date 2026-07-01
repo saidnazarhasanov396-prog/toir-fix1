@@ -16,12 +16,21 @@ import com.toir.enums.WarehouseTaskSourceType;
 import com.toir.enums.WarehouseTaskStatus;
 import com.toir.enums.WarehouseTaskType;
 import com.toir.exception.RestException;
+import com.toir.repository.ProcurementRequestRepository;
+import com.toir.repository.PurchaseOrderRepository;
+import com.toir.repository.SparePartRepository;
+import com.toir.repository.WarehouseBinRepository;
+import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseTaskRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.util.AuditBuilderService;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -51,13 +60,27 @@ class WarehouseTaskServiceTest {
 
     @Mock
     AuditBuilderService auditBuilderService;
+    @Mock
+    WarehouseBinRepository warehouseBinRepository;
+    @Mock
+    SparePartRepository sparePartRepository;
+    @Mock
+    EquipmentRepository equipmentRepository;
+    @Mock
+    WarehouseRepository warehouseRepository;
+    @Mock
+    UserRepository userRepository;
+    @Mock
+    WorkOrderRepository workOrderRepository;
+    @Mock
+    RepairRequestRepository repairRequestRepository;
+    @Mock
+    ProcurementRequestRepository procurementRequestRepository;
+    @Mock
+    PurchaseOrderRepository purchaseOrderRepository;
 
+    @InjectMocks
     WarehouseTaskService service;
-
-    @BeforeEach
-    void setUp() {
-        service = new WarehouseTaskService(taskRepository, stockMoveService, auditBuilderService);
-    }
 
     @Test
     void createAssignStartScanAndCompletePutawayTask() {
