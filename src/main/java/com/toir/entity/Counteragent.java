@@ -27,23 +27,23 @@ public class Counteragent extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "tax_number")
-    private String taxNumber;
+    @Column(length = 9)
+    private String inn;
 
-    @Column(name = "base_inn")
-    private String baseInn;
+    @Column(name = "contact_name")
+    private String contactName;
 
-    @Column(name = "contact_person")
-    private String contactPerson;
+    @Column(name = "contact_position")
+    private String contactPosition;
 
-    private String phone;
+    @Column(name = "contact_phone")
+    private String contactPhone;
 
-    private String email;
+    @Column(name = "contact_email")
+    private String contactEmail;
 
     @Column(columnDefinition = "text")
     private String address;
-
-    private String specialization;
 
     @Column(name = "director_name")
     private String directorName;

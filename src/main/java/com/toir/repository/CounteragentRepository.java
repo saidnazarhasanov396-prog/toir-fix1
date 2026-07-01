@@ -23,6 +23,10 @@ public interface CounteragentRepository extends JpaRepository<Counteragent, UUID
 
     boolean existsByCodeAndIsDeletedFalse(String code);
 
+    boolean existsByInnAndIsDeletedFalse(String inn);
+
+    boolean existsByInnAndIdNotAndIsDeletedFalse(String inn, UUID id);
+
     @Query("""
             select c
             from Counteragent c
@@ -40,10 +44,10 @@ public interface CounteragentRepository extends JpaRepository<Counteragent, UUID
               and (
                     lower(c.code) like lower(concat('%', :search, '%'))
                     or lower(c.name) like lower(concat('%', :search, '%'))
-                    or lower(coalesce(c.contactPerson, '')) like lower(concat('%', :search, '%'))
-                    or lower(coalesce(c.taxNumber, '')) like lower(concat('%', :search, '%'))
-                    or lower(coalesce(c.baseInn, '')) like lower(concat('%', :search, '%'))
-                    or lower(coalesce(c.specialization, '')) like lower(concat('%', :search, '%'))
+                    or lower(coalesce(c.inn, '')) like lower(concat('%', :search, '%'))
+                    or lower(coalesce(c.contactName, '')) like lower(concat('%', :search, '%'))
+                    or lower(coalesce(c.contactPhone, '')) like lower(concat('%', :search, '%'))
+                    or lower(coalesce(c.contactEmail, '')) like lower(concat('%', :search, '%'))
                   )
             order by c.updatedAt desc
             """)
