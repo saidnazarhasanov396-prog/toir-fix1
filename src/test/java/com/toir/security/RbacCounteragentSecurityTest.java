@@ -83,7 +83,7 @@ class RbacCounteragentSecurityTest {
     void systemAdminCanReadCounteragentsWithContent() throws Exception {
         UUID counteragentId = UUID.randomUUID();
         when(counteragentService.findAll(isNull(), isNull())).thenReturn(List.of(
-                new CounteragentDto(counteragentId, "CA-ADMIN", "Admin Counteragent", null, null, null, null, null, null, null, null, null, null, null, CounteragentStatus.ACTIVE)
+                new CounteragentDto(counteragentId, "CA-ADMIN", "Admin Counteragent", null, null, null, null, null, null, null, null, null, null, CounteragentStatus.ACTIVE)
         ));
 
         mockMvc.perform(get("/api/v1/counteragents?page=0&size=5"))
@@ -97,7 +97,7 @@ class RbacCounteragentSecurityTest {
     void counteragentReadCanReadCounteragentsAndRelatedRegisters() throws Exception {
         UUID counteragentId = UUID.randomUUID();
         when(counteragentService.findAll(isNull(), isNull())).thenReturn(List.of(
-                new CounteragentDto(counteragentId, "CA-1", "Counteragent", null, null, null, null, null, null, null, null, null, null, null, CounteragentStatus.ACTIVE)
+                new CounteragentDto(counteragentId, "CA-1", "Counteragent", null, null, null, null, null, null, null, null, null, null, CounteragentStatus.ACTIVE)
         ));
         when(counteragentWorkService.findByCounteragent(any())).thenReturn(List.of());
         when(counteragentContractService.findByCounteragent(counteragentId)).thenReturn(List.of());

@@ -48,6 +48,7 @@ public class CounteragentService {
     public CounteragentDto create(CounteragentRequest request) {
         Counteragent counteragent = new Counteragent();
         counteragent.setCode(resolveCode(request.code()));
+        validateUniqueInnForCreate(request.inn());
         apply(counteragent, request);
         return CounteragentDto.from(counteragentRepository.save(counteragent));
     }
@@ -62,6 +63,7 @@ public class CounteragentService {
             }
             counteragent.setCode(requestedCode);
         }
+        validateUniqueInnForUpdate(request.inn(), id);
         apply(counteragent, request);
         return CounteragentDto.from(counteragentRepository.save(counteragent));
     }
@@ -119,16 +121,12 @@ public class CounteragentService {
 
     private void apply(Counteragent counteragent, CounteragentRequest request) {
         counteragent.setName(request.name());
-        counteragent.setTaxNumber(trimToNull(request.taxNumber()));
-        counteragent.setBaseInn(resolveBaseInn(
-                trimToNull(request.taxNumber()),
-                trimToNull(request.baseInn())
-        ));
-        counteragent.setContactPerson(trimToNull(request.contactPerson()));
-        counteragent.setPhone(trimToNull(request.phone()));
-        counteragent.setEmail(trimToNull(request.email()));
+        counteragent.setInn(trimToNull(request.inn()));
+        counteragent.setContactName(trimToNull(request.contactName()));
+        counteragent.setContactPosition(trimToNull(request.contactPosition()));
+        counteragent.setContactPhone(trimToNull(request.contactPhone()));
+        counteragent.setContactEmail(trimToNull(request.contactEmail()));
         counteragent.setAddress(trimToNull(request.address()));
-        counteragent.setSpecialization(trimToNull(request.specialization()));
         counteragent.setDirectorName(trimToNull(request.directorName()));
         counteragent.setBankName(trimToNull(request.bankName()));
         counteragent.setBankAccount(trimToNull(request.bankAccount()));
@@ -152,6 +150,20 @@ public class CounteragentService {
         );
     }
 
+    private void validateUniqueInnForCreate(String requestedInn) {
+        String inn = trimToNull(requestedInn);
+        if (inn != null && counteragentRepository.existsByInnAndIsDeletedFalse(inn)) {
+            throw RestException.conflict("Counteragent INN already exists: " + inn);
+        }
+    }
+
+    private void validateUniqueInnForUpdate(String requestedInn, UUID id) {
+        String inn = trimToNull(requestedInn);
+        if (inn != null && counteragentRepository.existsByInnAndIdNotAndIsDeletedFalse(inn, id)) {
+            throw RestException.conflict("Counteragent INN already exists: " + inn);
+        }
+    }
+
     private String trimToNull(String value) {
         if (value == null) {
             return null;
@@ -160,21 +172,4 @@ public class CounteragentService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private String resolveBaseInn(String taxNumber, String explicitBaseInn) {
-        if (explicitBaseInn != null && !explicitBaseInn.isBlank()) {
-            return explicitBaseInn.trim();
-        }
-        if (taxNumber == null || taxNumber.isBlank()) {
-            return null;
-        }
-        String trimmed = taxNumber.trim();
-        int underscoreIdx = trimmed.lastIndexOf('_');
-        if (underscoreIdx > 0) {
-            String suffix = trimmed.substring(underscoreIdx + 1);
-            if (suffix.matches("\\d+")) {
-                return trimmed.substring(0, underscoreIdx);
-            }
-        }
-        return trimmed;
-    }
 }

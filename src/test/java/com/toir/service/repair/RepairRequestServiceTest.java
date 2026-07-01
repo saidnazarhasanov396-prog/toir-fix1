@@ -418,9 +418,9 @@ class RepairRequestServiceTest {
         equipment.setWarrantyEndDate(warrantyEnd);
         equipment.setWarrantyCounteragentId(counteragentId);
         Counteragent counteragent = counteragent(counteragentId, "KSB Service");
-        counteragent.setContactPerson("Ali Valiyev");
-        counteragent.setPhone("+998901234567");
-        counteragent.setEmail("service@ksb.example");
+        counteragent.setContactName("Ali Valiyev");
+        counteragent.setContactPhone("+998901234567");
+        counteragent.setContactEmail("service@ksb.example");
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(counteragentService.load(counteragentId)).thenReturn(counteragent);
 
@@ -452,9 +452,9 @@ class RepairRequestServiceTest {
         equipment.setWarrantyEndDate(warrantyEnd);
         equipment.setWarrantyCounteragentId(counteragentId);
         Counteragent counteragent = counteragent(counteragentId, "Warranty Vendor");
-        counteragent.setContactPerson("Nodir");
-        counteragent.setPhone("+998971112233");
-        counteragent.setEmail("warranty@example.com");
+        counteragent.setContactName("Nodir");
+        counteragent.setContactPhone("+998971112233");
+        counteragent.setContactEmail("warranty@example.com");
 
         when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));

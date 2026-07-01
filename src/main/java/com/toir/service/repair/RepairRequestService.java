@@ -1682,9 +1682,9 @@ public class RepairRequestService {
                 warrantyEnd,
                 counteragentId,
                 counteragent == null ? null : counteragent.getName(),
-                counteragent == null ? null : counteragent.getContactPerson(),
-                counteragent == null ? null : counteragent.getPhone(),
-                counteragent == null ? null : counteragent.getEmail()
+                counteragent == null ? null : counteragent.getContactName(),
+                counteragent == null ? null : counteragent.getContactPhone(),
+                counteragent == null ? null : counteragent.getContactEmail()
         );
     }
 
