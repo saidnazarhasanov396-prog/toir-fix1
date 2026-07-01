@@ -364,7 +364,8 @@ class PprPlanControllerContractTest {
                 3,
                 8,
                 4,
-                5
+                5,
+                2
         );
         when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
         when(service.getStats(2026, 5, 12, departmentId)).thenReturn(stats);
@@ -381,14 +382,15 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.approvedPlans").value(3))
                 .andExpect(jsonPath("$.plannedTasks").value(8))
                 .andExpect(jsonPath("$.inProgressTasks").value(4))
-                .andExpect(jsonPath("$.completedTasks").value(5));
+                .andExpect(jsonPath("$.completedTasks").value(5))
+                .andExpect(jsonPath("$.overdueTasks").value(2));
 
         verify(service).getStats(2026, 5, 12, departmentId);
     }
 
     @Test
     void statsRouteIsNotSwallowedByIdRoute() throws Exception {
-        when(service.getStats(null, null, null, null)).thenReturn(new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0));
+        when(service.getStats(null, null, null, null)).thenReturn(new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans/stats"))
                 .andExpect(status().isOk())

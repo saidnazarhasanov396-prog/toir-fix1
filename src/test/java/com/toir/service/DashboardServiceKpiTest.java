@@ -264,7 +264,8 @@ class DashboardServiceKpiTest {
 
         var result = service.overview(null);
 
-        assertThat(result.counters().openRequests()).isEqualTo(2);
+        assertThat(result.counters().openRequests()).isEqualTo(1);
+        assertThat(result.counters().activeRepairRequests()).isEqualTo(2);
         assertThat(result.counters().activeEmergencyRequests()).isEqualTo(1);
         assertThat(result.counters().totalEmergencyRequests()).isEqualTo(2);
     }

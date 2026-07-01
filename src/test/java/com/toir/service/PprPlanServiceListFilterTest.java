@@ -234,7 +234,7 @@ class PprPlanServiceListFilterTest {
 
     @Test
     void statsWithoutFiltersReturnsCountsByStatus() {
-        when(planRepository.getStats(null, null, null, null)).thenReturn(stats(6, 1, 2, 3, 8, 4, 5));
+        when(planRepository.getStats(null, null, null, null)).thenReturn(stats(6, 1, 2, 3, 8, 4, 5, 2));
 
         var result = service.getStats(null, null, null, null);
 
@@ -245,6 +245,7 @@ class PprPlanServiceListFilterTest {
         assertThat(result.plannedTasks()).isEqualTo(8);
         assertThat(result.inProgressTasks()).isEqualTo(4);
         assertThat(result.completedTasks()).isEqualTo(5);
+        assertThat(result.overdueTasks()).isEqualTo(2);
         verify(planRepository).getStats(null, null, null, null);
     }
 
@@ -452,7 +453,7 @@ class PprPlanServiceListFilterTest {
     @Test
     void statsWithDepartmentUsesSameFilter() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.getStats(2026, 5, 12, departmentId)).thenReturn(stats(2, 0, 1, 1, 3, 2, 1));
+        when(planRepository.getStats(2026, 5, 12, departmentId)).thenReturn(stats(2, 0, 1, 1, 3, 2, 1, 1));
 
         var result = service.getStats(2026, 5, 12, departmentId);
 
@@ -465,7 +466,7 @@ class PprPlanServiceListFilterTest {
     @Test
     void statsForNonExistingDepartmentReturnsZeroCounts() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.getStats(null, null, null, departmentId)).thenReturn(stats(0, 0, 0, 0, 0, 0, 0));
+        when(planRepository.getStats(null, null, null, departmentId)).thenReturn(stats(0, 0, 0, 0, 0, 0, 0, 0));
 
         var result = service.getStats(null, null, null, departmentId);
 
@@ -560,7 +561,8 @@ class PprPlanServiceListFilterTest {
             long approvedPlans,
             long plannedTasks,
             long inProgressTasks,
-            long completedTasks
+            long completedTasks,
+            long overdueTasks
     ) {
         return new PprPlanStatsProjection() {
             @Override
@@ -596,6 +598,11 @@ class PprPlanServiceListFilterTest {
             @Override
             public Long getCompletedTasks() {
                 return completedTasks;
+            }
+
+            @Override
+            public Long getOverdueTasks() {
+                return overdueTasks;
             }
         };
     }

@@ -75,7 +75,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
                     (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
                     OR EXISTS (
                         SELECT 1
-                        FROM generate_series(p.start_date, p.end_date, interval '1 day') AS d(value)
+                        FROM generate_series(p.start_date, p.end_date, interval '1' day) AS d(value)
                         WHERE (cast(:year as integer) IS NULL OR extract(year from d.value)::integer = cast(:year as integer))
                           AND (cast(:month as integer) IS NULL OR extract(month from d.value)::integer = cast(:month as integer))
                           AND (cast(:day as integer) IS NULL OR extract(day from d.value)::integer = cast(:day as integer))
@@ -102,7 +102,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
                     (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
                     OR EXISTS (
                         SELECT 1
-                        FROM generate_series(p.start_date, p.end_date, interval '1 day') AS d(value)
+                        FROM generate_series(p.start_date, p.end_date, interval '1' day) AS d(value)
                         WHERE (cast(:year as integer) IS NULL OR extract(year from d.value)::integer = cast(:year as integer))
                           AND (cast(:month as integer) IS NULL OR extract(month from d.value)::integer = cast(:month as integer))
                           AND (cast(:day as integer) IS NULL OR extract(day from d.value)::integer = cast(:day as integer))
@@ -148,7 +148,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
                     (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
                     OR EXISTS (
                         SELECT 1
-                        FROM generate_series(p.start_date, p.end_date, interval '1 day') AS d(value)
+                        FROM generate_series(p.start_date, p.end_date, interval '1' day) AS d(value)
                         WHERE (cast(:year as integer) IS NULL OR extract(year from d.value)::integer = cast(:year as integer))
                           AND (cast(:month as integer) IS NULL OR extract(month from d.value)::integer = cast(:month as integer))
                           AND (cast(:day as integer) IS NULL OR extract(day from d.value)::integer = cast(:day as integer))
@@ -182,7 +182,15 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
                 count(distinct p.id) filter (where p.status = 'APPROVED') as "approvedPlans",
                 count(t.id) filter (where t.status = 'PLANNED') as "plannedTasks",
                 count(t.id) filter (where t.status = 'IN_PROGRESS') as "inProgressTasks",
-                count(t.id) filter (where t.status = 'COMPLETED') as "completedTasks"
+                count(t.id) filter (where t.status = 'COMPLETED') as "completedTasks",
+                count(t.id) filter (
+                    where t.status = 'OVERDUE'
+                       or (
+                            t.due_date is not null
+                            and t.due_date < current_timestamp
+                            and t.status in ('PLANNED', 'APPROVED', 'IN_PROGRESS')
+                       )
+                ) as "overdueTasks"
             from ppr_plans p
             left join ppr_tasks t
                 on t.plan_id = p.id
@@ -193,7 +201,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
                     (cast(:year as integer) is null and cast(:month as integer) is null and cast(:day as integer) is null)
                     or exists (
                         select 1
-                        from generate_series(p.start_date, p.end_date, interval '1 day') as d(value)
+                        from generate_series(p.start_date, p.end_date, interval '1' day) as d(value)
                         where (cast(:year as integer) is null or extract(year from d.value)::integer = cast(:year as integer))
                           and (cast(:month as integer) is null or extract(month from d.value)::integer = cast(:month as integer))
                           and (cast(:day as integer) is null or extract(day from d.value)::integer = cast(:day as integer))

@@ -7,5 +7,6 @@ public record PprPlanStatsResponse(
         long approvedPlans,
         long plannedTasks,
         long inProgressTasks,
-        long completedTasks
+        long completedTasks,
+        long overdueTasks
 ) {}

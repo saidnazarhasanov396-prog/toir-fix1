@@ -127,15 +127,21 @@ public class DashboardService {
         List<RepairRequest> allRequests = repairRequestRepository.search(null, departmentId, null);
 
         long openRequests = allRequests.stream()
+                .filter(r -> r.getStatus() == RequestStatus.OPEN)
+                .count();
+        long activeRepairRequests = allRequests.stream()
                 .filter(DashboardService::isActiveRepairRequest)
                 .count();
         long activeEmergencyRequests = allRequests.stream()
                 .filter(IndustrialKpiAggregations::isActiveEmergencyRequest)
                 .count();
 
-        long overduePpr = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> isPprTaskOverdue(t, now))
+        List<PprTask> scopedPprTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
+                .toList();
+
+        long overduePpr = scopedPprTasks.stream()
+                .filter(t -> isPprTaskOverdue(t, now))
                 .count();
 
         List<WorkOrder> allWorkOrders = workOrderRepository.search(null, departmentId, null);
@@ -379,6 +385,7 @@ public class DashboardService {
 
         Counters counters = new Counters(
                 openRequests,
+                activeRepairRequests,
                 activeEmergencyRequests,
                 activeEmergencyRequests,
                 totalEmergencyRequests,
@@ -400,12 +407,10 @@ public class DashboardService {
                 dueCalibrations
         );
 
-        long plannedTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
+        long plannedTasks = scopedPprTasks.stream()
                 .filter(t -> t.getStatus() == PprTaskStatus.PLANNED || t.getStatus() == PprTaskStatus.APPROVED || t.getStatus() == PprTaskStatus.IN_PROGRESS || t.getStatus() == PprTaskStatus.COMPLETED)
                 .count();
-        long completedTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
+        long completedTasks = scopedPprTasks.stream()
                 .filter(t -> t.getStatus() == PprTaskStatus.COMPLETED)
                 .count();
         PlanFact planFact = new PlanFact(plannedTasks, completedTasks, completedRepairs);
@@ -482,15 +487,11 @@ public class DashboardService {
                 .mapToLong(r -> java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMinutes())
                 .average().orElse(0) / 60.0;
         
-        long pprTotal = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
-                .count();
-        long pprDone = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
+        long pprTotal = scopedPprTasks.size();
+        long pprDone = scopedPprTasks.stream()
                 .filter(t -> t.getStatus() == PprTaskStatus.COMPLETED)
                 .count();
-        long pprOver = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
+        long pprOver = scopedPprTasks.stream()
                 .filter(t -> isPprTaskOverdue(t, now))
                 .count();
         double pprCompletionRate = pprTotal > 0 ? (double) pprDone / pprTotal * 100 : 0;

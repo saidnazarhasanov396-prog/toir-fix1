@@ -10,6 +10,7 @@ import com.toir.enums.WarehouseTaskStatus;
 import com.toir.enums.WarehouseTaskType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.warehouse.WarehouseTaskService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,11 +41,14 @@ class WarehouseTaskControllerContractTest {
     @Mock
     WarehouseTaskService service;
 
+    @Mock
+    WmsOperationsQueryService operationsQueryService;
+
     MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new WarehouseTaskController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new WarehouseTaskController(service, operationsQueryService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

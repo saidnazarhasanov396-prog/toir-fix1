@@ -11,6 +11,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseTaskLineRepository;
+import com.toir.repository.WmsLabelEventRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,11 +41,15 @@ class WmsLabelServiceTest {
     @Mock
     WarehouseTaskLineRepository taskLineRepository;
 
+    @Mock
+    WmsLabelEventRepository labelEventRepository;
+
     WmsLabelService service;
 
     @BeforeEach
     void setUp() {
-        service = new WmsLabelService(binRepository, sparePartRepository, equipmentRepository, taskLineRepository);
+        service = new WmsLabelService(
+                binRepository, sparePartRepository, equipmentRepository, taskLineRepository, labelEventRepository);
     }
 
     @Test
