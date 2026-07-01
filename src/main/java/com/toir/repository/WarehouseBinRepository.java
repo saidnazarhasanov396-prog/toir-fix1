@@ -26,6 +26,52 @@ public interface WarehouseBinRepository extends JpaRepository<WarehouseBin, UUID
     long countByWarehouseIdAndIsDeletedFalse(UUID warehouseId);
 
     @Query("""
+            select count(b)
+            from WarehouseBin b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+            """)
+    long countAllVisible(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select count(b)
+            from WarehouseBin b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+              and b.active = :active
+            """)
+    long countByActive(@Param("warehouseId") UUID warehouseId,
+                       @Param("active") boolean active);
+
+    @Query("""
+            select count(b)
+            from WarehouseBin b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+              and b.blocked = true
+            """)
+    long countBlocked(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select count(b)
+            from WarehouseBin b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+              and b.frozen = true
+            """)
+    long countFrozen(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select count(b)
+            from WarehouseBin b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+              and b.qualityZoneType = :qualityZoneType
+            """)
+    long countByQualityZoneType(@Param("warehouseId") UUID warehouseId,
+                                @Param("qualityZoneType") WarehouseQualityZoneType qualityZoneType);
+
+    @Query("""
             select b
             from WarehouseBin b
             where (:warehouseId is null or b.warehouseId = :warehouseId)

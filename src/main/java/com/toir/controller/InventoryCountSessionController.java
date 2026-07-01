@@ -5,10 +5,12 @@ import com.toir.dto.inventorycount.InventoryCountLineCountRequest;
 import com.toir.dto.inventorycount.InventoryCountReviewRequest;
 import com.toir.dto.inventorycount.InventoryCountSessionDto;
 import com.toir.dto.inventorycount.InventoryCountSessionRequest;
+import com.toir.dto.warehouse.InventoryCountStatsResponse;
 import com.toir.enums.InventoryCountSessionStatus;
 import com.toir.security.PermissionConstants;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.warehouse.InventoryCountSessionService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -32,6 +34,13 @@ import java.util.UUID;
 public class InventoryCountSessionController {
 
     private final InventoryCountSessionService service;
+    private final WmsOperationsQueryService queryService;
+
+    @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.INVENTORY_READ + "')")
+    public ResponseEntity<InventoryCountStatsResponse> stats(@RequestParam(required = false) UUID warehouseId) {
+        return ResponseEntity.ok(queryService.inventoryCountStats(warehouseId));
+    }
 
     @PostMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.WAREHOUSE_COUNT_CREATE + "')")

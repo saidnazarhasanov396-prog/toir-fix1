@@ -1,12 +1,16 @@
 package com.toir.controller;
 
+import com.toir.dto.warehouse.WmsLabelHistoryDto;
 import com.toir.dto.warehouse.WmsLabelPayloadDto;
+import com.toir.dto.warehouse.WmsLabelStatsResponse;
 import com.toir.dto.warehouse.WmsScanValidationRequest;
 import com.toir.dto.warehouse.WmsScanValidationResultDto;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.warehouse.WmsLabelService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -26,6 +31,24 @@ import java.util.UUID;
 public class WmsLabelController {
 
     private final WmsLabelService service;
+    private final WmsOperationsQueryService queryService;
+
+    @GetMapping("/labels/history")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_READ') or hasAuthority('STOCK_READ') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<Page<WmsLabelHistoryDto>> history(
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) String labelType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(queryService.labelHistory(warehouseId, labelType, page, size));
+    }
+
+    @GetMapping("/labels/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_READ') or hasAuthority('STOCK_READ') or hasAuthority('EQUIPMENT_READ')")
+    public ResponseEntity<WmsLabelStatsResponse> stats(@RequestParam(required = false) UUID warehouseId) {
+        return ResponseEntity.ok(queryService.labelStats(warehouseId));
+    }
 
     @GetMapping("/labels/bins/{binId}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WAREHOUSE_BIN_READ') or hasAuthority('STOCK_READ')")
