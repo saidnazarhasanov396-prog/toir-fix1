@@ -1,6 +1,6 @@
 workflow:
   rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
 
 variables:
   CHART_VERSION: 10.2-full
@@ -16,7 +16,9 @@ compile:
   image: maven:3.9.9-eclipse-temurin-21
   stage: compile
   script:
-    - mvn clean package -DskipTests --no-transfer-progress
+    - chmod +x ./mvnw
+    - ./mvnw test --no-transfer-progress
+    - ./mvnw package --no-transfer-progress
   artifacts:
     paths:
       - target/*.jar
@@ -35,20 +37,20 @@ deploy:
   stage: deploy
   image: alpine:latest
   script:
-    - chmod og= $SSH_PRIVATE_KEY
+    - chmod og= ${SSH_PRIVATE_KEY}
     - apk add openssh-client
     - |
       cat > toir-backend.env <<EOF
       SPRING_PROFILES_ACTIVE=prod
       EOF
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password ${CI_REGISTRY_PASSWORD}"
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker pull ${CI_REGISTRY_IMAGE}:latest"
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker stop ${SERVICE_NAME} || true"
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker rm ${SERVICE_NAME} || true"
-    - scp -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -P $SSH_PORT toir-backend.env $SSH_USER@$SERVER_HOST:/tmp/toir-backend.env
+    - ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password ${CI_REGISTRY_PASSWORD}"
+    - ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "docker pull ${CI_REGISTRY_IMAGE}:latest"
+    - ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "docker stop ${SERVICE_NAME} || true"
+    - ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "docker rm ${SERVICE_NAME} || true"
+    - scp -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -P ${SSH_PORT} toir-backend.env ${SSH_USER}@${SERVER_HOST}:/tmp/toir-backend.env
     - rm -f toir-backend.env
     - |
       RUN_STATUS=0
-      ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "docker run -d --name ${SERVICE_NAME} --restart unless-stopped --env-file /tmp/toir-backend.env -p 10260:8080 ${CI_REGISTRY_IMAGE}:latest" || RUN_STATUS=$?
-      ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no -p $SSH_PORT $SSH_USER@$SERVER_HOST "rm -f /tmp/toir-backend.env"
+      ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "docker run -d --name ${SERVICE_NAME} --restart unless-stopped --env-file /tmp/toir-backend.env -p 10260:8080 ${CI_REGISTRY_IMAGE}:latest" || RUN_STATUS=$?
+      ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "rm -f /tmp/toir-backend.env"
       exit $RUN_STATUS

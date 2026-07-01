@@ -30,6 +30,7 @@ import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.FinancialApprovalRuleRepository;
 import com.toir.security.PermissionConstants;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.CsvWriter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -66,15 +67,25 @@ public class ActualCostReviewFacadeService {
     private final CostCategoryRepository costCategoryRepository;
     private final FinancialApprovalRuleRepository financialApprovalRuleRepository;
     private final CounteragentService counteragentService;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewItem> reviewQueue(String search) {
-        return financeScopeService.filterActualCosts(
-                        actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING)
-                ).stream()
+        List<ActualCost> all = actualCostRepository
+                .findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
+        List<ActualCost> visible = isReviewAccessUser()
+                ? all
+                : financeScopeService.filterActualCosts(all);
+        return visible.stream()
                 .filter(cost -> matchesSearch(cost, search))
                 .map(this::toItem)
                 .toList();
+    }
+
+    private boolean isReviewAccessUser() {
+        return scopeAccessService.isScopeAdmin()
+                || scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)
+                || scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT);
     }
 
     @Transactional(readOnly = true)

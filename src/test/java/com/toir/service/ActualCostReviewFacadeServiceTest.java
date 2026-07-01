@@ -5,8 +5,10 @@ import com.toir.entity.Department;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.ActualCostReviewEvent;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.FinancialApprovalRule;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideResponseDto;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.CounteragentStatus;
 import com.toir.enums.ContractorWorkStatus;
@@ -21,8 +23,10 @@ import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.FinancialApprovalRuleRepository;
 import com.toir.security.PermissionConstants;
+import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,6 +41,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,6 +74,8 @@ class ActualCostReviewFacadeServiceTest {
     FinancialApprovalRuleRepository financialApprovalRuleRepository;
     @Mock
     CounteragentService counteragentService;
+    @Mock
+    ScopeAccessService scopeAccessService;
 
     @InjectMocks
     ActualCostReviewFacadeService service;
@@ -161,6 +169,9 @@ class ActualCostReviewFacadeServiceTest {
 
         when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
                 .thenReturn(List.of(actualCost));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(false);
         when(financeScopeService.filterActualCosts(List.of(actualCost))).thenReturn(List.of(actualCost));
         when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId))
                 .thenReturn(Optional.empty());
@@ -176,6 +187,82 @@ class ActualCostReviewFacadeServiceTest {
         assertThat(item.hoursToOverdue()).isLessThanOrEqualTo(8);
         assertThat(item.approvalRule()).hasFieldOrPropertyWithValue("id", rule.getId());
         assertThat(item.approvalRule()).hasFieldOrPropertyWithValue("code", "MECH_GT_500");
+    }
+
+    @Test
+    void reviewQueueReturnsAllPendingCostsForApprover() {
+        List<ActualCost> pendingCosts = List.of(
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID())
+        );
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(pendingCosts);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(true);
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null)).hasSize(3);
+
+        verify(financeScopeService, never()).filterActualCosts(any());
+    }
+
+    @Test
+    void reviewQueueAppliesScopeFilterForNonApprover() {
+        List<ActualCost> pendingCosts = List.of(
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID())
+        );
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(pendingCosts);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(false);
+        when(financeScopeService.filterActualCosts(pendingCosts)).thenReturn(List.of(pendingCosts.getFirst()));
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null)).hasSize(1);
+
+        verify(financeScopeService).filterActualCosts(pendingCosts);
+    }
+
+    @Test
+    void reviewQueueReturnsAllPendingCostsForRejectRole() {
+        List<ActualCost> pendingCosts = List.of(
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID())
+        );
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(pendingCosts);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
+        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(true);
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null)).hasSize(3);
+
+        verify(financeScopeService, never()).filterActualCosts(any());
+    }
+
+    @Test
+    void reviewQueueReturnsScopeFilteredResultsForScopeAdmin() {
+        List<ActualCost> pendingCosts = List.of(
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID())
+        );
+        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+                .thenReturn(pendingCosts);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null)).hasSize(5);
+
+        verify(financeScopeService, never()).filterActualCosts(any());
     }
 
     @Test
@@ -225,6 +312,110 @@ class ActualCostReviewFacadeServiceTest {
         assertThat(response.skippedReminders()).isEqualTo(1);
     }
 
+    @Test
+    void handoversReadOnlyHandoverEventsAndMapReturnedItems() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID notificationId = UUID.randomUUID();
+        ActualCost actualCost = pendingActualCost(actualCostId, workOrderId, 500.0, Instant.parse("2026-06-01T09:00:00Z"));
+        ActualCostReviewEvent handover = handoverEvent(actualCostId, notificationId, actorId);
+
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(actualCost));
+        when(eventRepository.findAllByEventCodeAndIsDeletedFalseOrderByOccurredAtDesc("HANDOVER"))
+                .thenReturn(List.of(handover));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder(workOrderId, departmentId)));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
+
+        var items = service.handovers("reassignment");
+
+        assertThat(items).hasSize(1);
+        assertThat(items.getFirst().actualCostId()).isEqualTo(actualCostId);
+        assertThat(items.getFirst().notificationId()).isEqualTo(notificationId);
+        assertThat(items.getFirst().nextApprovalRoleCode()).isEqualTo("FINANCE_MANAGER");
+        assertThat(items.getFirst().handoverComment()).isEqualTo("SLA reassignment");
+        assertThat(items.getFirst().department()).hasFieldOrPropertyWithValue("id", departmentId);
+        verify(eventRepository).findAllByEventCodeAndIsDeletedFalseOrderByOccurredAtDesc("HANDOVER");
+    }
+
+    @Test
+    void handoversStayEmptyWhenNoHandoverEventsExist() {
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(eventRepository.findAllByEventCodeAndIsDeletedFalseOrderByOccurredAtDesc("HANDOVER"))
+                .thenReturn(List.of());
+
+        var items = service.handovers(null);
+
+        assertThat(items).isEmpty();
+        verify(eventRepository).findAllByEventCodeAndIsDeletedFalseOrderByOccurredAtDesc("HANDOVER");
+    }
+
+    @Test
+    void handoverFromInboxPersistsHandoverEventAfterApplyingOverride() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID notificationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID overrideId = UUID.randomUUID();
+        ActualCost actualCost = pendingActualCost(actualCostId, workOrderId, 900.0, Instant.parse("2026-06-02T09:00:00Z"));
+        ActualCostReviewRouteOverrideResponseDto override = new ActualCostReviewRouteOverrideResponseDto(
+                overrideId,
+                null,
+                departmentId,
+                "TECHNICAL_DIRECTOR",
+                "SYSTEM_ADMIN",
+                12,
+                "Move overdue review",
+                true,
+                actorId,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        when(routeOverrideService.apply(any())).thenReturn(override);
+        when(actualCostRepository.findByIdAndIsDeletedFalse(actualCostId)).thenReturn(Optional.of(actualCost));
+        when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId))
+                .thenReturn(Optional.empty());
+
+        var response = service.handoverFromInbox(
+                actualCostId,
+                notificationId,
+                departmentId,
+                "TECHNICAL_DIRECTOR",
+                "SYSTEM_ADMIN",
+                12,
+                "Move overdue review",
+                "Acknowledged",
+                actorId,
+                true
+        );
+
+        ArgumentCaptor<ActualCostReviewEvent> eventCaptor = ArgumentCaptor.forClass(ActualCostReviewEvent.class);
+        verify(eventRepository, times(2)).save(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues())
+                .anySatisfy(event -> {
+                    assertThat(event.getActualCostId()).isEqualTo(actualCostId);
+                    assertThat(event.getNotificationId()).isEqualTo(notificationId);
+                    assertThat(event.getRouteOverrideId()).isEqualTo(overrideId);
+                    assertThat(event.getActorUserId()).isEqualTo(actorId);
+                    assertThat(event.getEventGroup()).isEqualTo("ROUTE");
+                    assertThat(event.getEventCode()).isEqualTo("HANDOVER");
+                    assertThat(event.getNextApprovalRoleCode()).isEqualTo("TECHNICAL_DIRECTOR");
+                    assertThat(event.getNextEscalationRoleCode()).isEqualTo("SYSTEM_ADMIN");
+                    assertThat(event.getNextThresholdHours()).isEqualTo(12);
+                    assertThat(event.getHandoverComment()).isEqualTo("Move overdue review");
+                    assertThat(event.getAcknowledgementComment()).isEqualTo("Acknowledged");
+                });
+        assertThat(response.override().id()).isEqualTo(overrideId);
+        assertThat(response.acknowledgedNotificationId()).isEqualTo(notificationId);
+        assertThat(response.acknowledgementComment()).isEqualTo("Acknowledged");
+    }
+
     private ActualCost pendingActualCost(UUID actualCostId, UUID workOrderId, double amount, Instant createdAt) {
         ActualCost actualCost = new ActualCost();
         ReflectionTestUtils.setField(actualCost, "id", actualCostId);
@@ -235,6 +426,21 @@ class ActualCostReviewFacadeServiceTest {
         actualCost.setAmount(amount);
         actualCost.setCostDate(createdAt);
         return actualCost;
+    }
+
+    private ActualCost minimalPendingCost(UUID actualCostId) {
+        ActualCost actualCost = new ActualCost();
+        ReflectionTestUtils.setField(actualCost, "id", actualCostId);
+        ReflectionTestUtils.setField(actualCost, "createdAt", Instant.now());
+        actualCost.setStatus(ActualCostStatus.PENDING);
+        actualCost.setAmount(100.0);
+        actualCost.setCostDate(Instant.parse("2026-05-26T09:00:00Z"));
+        return actualCost;
+    }
+
+    private void stubMinimalReviewQueueMapping() {
+        when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(any()))
+                .thenReturn(Optional.empty());
     }
 
     private WorkOrder workOrder(UUID workOrderId, UUID departmentId) {
@@ -252,6 +458,30 @@ class ActualCostReviewFacadeServiceTest {
         department.setCode("D-1");
         department.setName("Mechanical");
         return department;
+    }
+
+    private ActualCostReviewEvent handoverEvent(UUID actualCostId, UUID notificationId, UUID actorId) {
+        ActualCostReviewEvent event = new ActualCostReviewEvent();
+        ReflectionTestUtils.setField(event, "id", UUID.randomUUID());
+        event.setActualCostId(actualCostId);
+        event.setNotificationId(notificationId);
+        event.setActorUserId(actorId);
+        event.setSource("SYSTEM");
+        event.setEventGroup("ROUTE");
+        event.setEventCode("HANDOVER");
+        event.setTitle("Actual cost review handed over");
+        event.setDescription("SLA signal reassignment");
+        event.setStatus("PENDING");
+        event.setPreviousApprovalRoleCode("ECONOMIST");
+        event.setNextApprovalRoleCode("FINANCE_MANAGER");
+        event.setPreviousEscalationRoleCode("CHIEF_MECHANIC");
+        event.setNextEscalationRoleCode("SYSTEM_ADMIN");
+        event.setPreviousThresholdHours(24);
+        event.setNextThresholdHours(12);
+        event.setHandoverComment("SLA reassignment");
+        event.setAcknowledgementComment("Acknowledged");
+        event.setOccurredAt(Instant.parse("2026-06-02T10:00:00Z"));
+        return event;
     }
 
     private NotificationDto notification(UUID actualCostId) {

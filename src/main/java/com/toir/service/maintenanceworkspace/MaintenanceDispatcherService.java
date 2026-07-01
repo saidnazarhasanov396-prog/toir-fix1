@@ -8,13 +8,17 @@ import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceItem;
 import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceFilter;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.users.BrigadeMember;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.PriorityLevel;
+import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.projects.BrigadeMemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +36,7 @@ public class MaintenanceDispatcherService {
     private final RepairRequestRepository repairRequestRepository;
     private final DefectRepository defectRepository;
     private final WorkOrderRepository workOrderRepository;
+    private final BrigadeMemberRepository brigadeMemberRepository;
 
     @Transactional(readOnly = true)
     public MaintenanceDispatcherSummary summary() {
@@ -99,12 +104,88 @@ public class MaintenanceDispatcherService {
 
     @Transactional
     public MaintenanceDispatcherActionResponse assign(MaintenanceDispatcherActionRequest request) {
-        return new MaintenanceDispatcherActionResponse("ASSIGN", request.objectType(), request.objectId(), request.ownerId(), "ACCEPTED", request.comment(), Instant.now());
+        validateActionRequest(request, true);
+        String objectType = normalizeObjectType(request.objectType());
+        if ("REPAIR_REQUEST".equals(objectType)) {
+            RepairRequest repairRequest = repairRequestRepository.findByIdAndIsDeletedFalse(request.objectId())
+                    .orElseThrow(() -> RestException.notFound("Repair request not found: " + request.objectId()));
+            repairRequest.setAssignedToId(request.ownerId());
+            repairRequestRepository.save(repairRequest);
+            return actionResponse("ASSIGN", objectType, request);
+        }
+        if ("WORK_ORDER".equals(objectType)) {
+            WorkOrder workOrder = workOrderRepository.findByIdAndIsDeletedFalse(request.objectId())
+                    .orElseThrow(() -> RestException.notFound("Work order not found: " + request.objectId()));
+            BrigadeMember performer = brigadeMemberRepository.findAllByUserIdAndIsDeletedFalse(request.ownerId()).stream()
+                    .findFirst()
+                    .orElseThrow(() -> RestException.badRequest("Performer is not linked to an active brigade member: " + request.ownerId()));
+            workOrder.setPerformer(performer);
+            workOrderRepository.save(workOrder);
+            return actionResponse("ASSIGN", objectType, request);
+        }
+        if ("DEFECT".equals(objectType)) {
+            throw RestException.badRequest("Defects do not support owner assignment; create or assign a linked work order instead");
+        }
+        throw RestException.badRequest("Unsupported dispatcher object type: " + request.objectType());
     }
 
     @Transactional
     public MaintenanceDispatcherActionResponse escalate(MaintenanceDispatcherActionRequest request) {
-        return new MaintenanceDispatcherActionResponse("ESCALATE", request.objectType(), request.objectId(), request.ownerId(), "ACCEPTED", request.comment(), Instant.now());
+        validateActionRequest(request, false);
+        String objectType = normalizeObjectType(request.objectType());
+        if ("REPAIR_REQUEST".equals(objectType)) {
+            RepairRequest repairRequest = repairRequestRepository.findByIdAndIsDeletedFalse(request.objectId())
+                    .orElseThrow(() -> RestException.notFound("Repair request not found: " + request.objectId()));
+            repairRequest.setPriority(PriorityLevel.EMERGENCY);
+            if (repairRequest.getEmergencyReason() == null || repairRequest.getEmergencyReason().isBlank()) {
+                repairRequest.setEmergencyReason(hasText(request.comment()) ? request.comment().trim() : "Dispatcher escalation");
+            }
+            repairRequestRepository.save(repairRequest);
+            return actionResponse("ESCALATE", objectType, request);
+        }
+        if ("WORK_ORDER".equals(objectType)) {
+            WorkOrder workOrder = workOrderRepository.findByIdAndIsDeletedFalse(request.objectId())
+                    .orElseThrow(() -> RestException.notFound("Work order not found: " + request.objectId()));
+            workOrder.setPriority(PriorityLevel.EMERGENCY);
+            workOrderRepository.save(workOrder);
+            return actionResponse("ESCALATE", objectType, request);
+        }
+        if ("DEFECT".equals(objectType)) {
+            Defect defect = defectRepository.findByIdAndIsDeletedFalse(request.objectId())
+                    .orElseThrow(() -> RestException.notFound("Defect not found: " + request.objectId()));
+            defect.setSeverity("CRITICAL");
+            defectRepository.save(defect);
+            return actionResponse("ESCALATE", objectType, request);
+        }
+        throw RestException.badRequest("Unsupported dispatcher object type: " + request.objectType());
+    }
+
+
+    private void validateActionRequest(MaintenanceDispatcherActionRequest request, boolean ownerRequired) {
+        if (request == null) {
+            throw RestException.badRequest("Dispatcher action request is required");
+        }
+        if (!hasText(request.objectType())) {
+            throw RestException.badRequest("objectType is required");
+        }
+        if (request.objectId() == null) {
+            throw RestException.badRequest("objectId is required");
+        }
+        if (ownerRequired && request.ownerId() == null) {
+            throw RestException.badRequest("ownerId is required");
+        }
+    }
+
+    private MaintenanceDispatcherActionResponse actionResponse(String action, String objectType, MaintenanceDispatcherActionRequest request) {
+        return new MaintenanceDispatcherActionResponse(action, objectType, request.objectId(), request.ownerId(), "APPLIED", request.comment(), Instant.now());
+    }
+
+    private String normalizeObjectType(String objectType) {
+        return objectType == null ? null : objectType.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private boolean isOpenRequest(RepairRequest request) {

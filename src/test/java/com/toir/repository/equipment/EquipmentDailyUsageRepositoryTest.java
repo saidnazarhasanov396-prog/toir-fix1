@@ -1,14 +1,13 @@
 package com.toir.repository.equipment;
 
+import com.toir.test.RepositorySliceTest;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentDailyUsage;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -17,8 +16,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@DataJpaTest
-@ActiveProfiles("test")
+@RepositorySliceTest
 class EquipmentDailyUsageRepositoryTest {
 
     @Autowired
