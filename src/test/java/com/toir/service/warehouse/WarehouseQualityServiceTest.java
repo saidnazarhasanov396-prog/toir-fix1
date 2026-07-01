@@ -117,7 +117,7 @@ class WarehouseQualityServiceTest {
 
         ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
         verify(stockMovementRepository).save(movementCaptor.capture());
-        assertThat(movementCaptor.getValue().getSourceType()).isEqualTo(StockMovementSourceType.MANUAL);
+        assertThat(movementCaptor.getValue().getSourceType()).isEqualTo(StockMovementSourceType.QUALITY_STATUS_TRANSFER);
     }
 
     @Test
