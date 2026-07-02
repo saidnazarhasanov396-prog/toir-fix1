@@ -4,8 +4,10 @@ import com.toir.entity.WebhookSubscription;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 public record WebhookDto(
+         UUID id,
          String code,
          String name,
          String lastDeliveryStatus,
@@ -19,6 +21,7 @@ public record WebhookDto(
 
     public static WebhookDto fromEntity(WebhookSubscription w) {
         return new WebhookDto(
+                w.getId(),
                 w.getCode(),
                 w.getName(),
                 w.getLastDeliveryStatus(),
