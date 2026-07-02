@@ -315,14 +315,14 @@ public class SparePartService {
                     List<WarehouseStock> stocks = stocksByPart.getOrDefault(part.getId(), List.of());
                     double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
                     double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
-                    return enrichCounteragent(SparePartDto.from(
+                    return enrichWarehousePolicies(enrichCounteragent(SparePartDto.from(
                             part,
                             currentStock,
                             reservedStock,
                             stocks.size(),
                             unitRefFor(part.getUnit(), unitRefsByToken),
                             MxikRefDto.from(mxikById.get(part.getMxikId()))
-                    ));
+                    )));
                 });
     }
 
@@ -407,8 +407,8 @@ public class SparePartService {
         var stockSnapshots = legacyStockProjectionService.currentForSparePart(id);
         double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
         double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
-        return enrichCounteragent(SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit()),
-                MxikRefDto.from(mxik(part.getMxikId()).orElse(null))));
+        return enrichWarehousePolicies(enrichCounteragent(SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit()),
+                MxikRefDto.from(mxik(part.getMxikId()).orElse(null)))));
     }
 
     @Transactional(readOnly = true)
@@ -589,6 +589,13 @@ public class SparePartService {
         } catch (RestException ignored) {
             return dto;
         }
+    }
+
+    private SparePartDto enrichWarehousePolicies(SparePartDto dto) {
+        if (dto == null || dto.id() == null) {
+            return dto;
+        }
+        return dto.withWarehousePolicies(warehouseStockPolicyService.findBySparePart(dto.id()));
     }
 
     private UUID resolveUnitFilter(String unit) {

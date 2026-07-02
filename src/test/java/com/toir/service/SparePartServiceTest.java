@@ -146,6 +146,7 @@ class SparePartServiceTest {
         lenient().when(legacyStockProjectionService.currentAll()).thenAnswer(invocation -> wmsSnapshots);
         lenient().when(legacyStockProjectionService.currentForSparePart(any())).thenAnswer(invocation -> wmsSnapshots);
         lenient().when(warehouseStockPolicyService.replaceForSparePart(any(), any())).thenReturn(List.of());
+        lenient().when(warehouseStockPolicyService.findBySparePart(any())).thenReturn(List.of());
         lenient().when(legacyStockProjectionService.snapshot(any(), any(), any())).thenAnswer(invocation ->
                 wmsSnapshots.getOrDefault(
                         new LegacyStockProjectionService.StockKey(invocation.getArgument(1), invocation.getArgument(2)),
@@ -340,6 +341,46 @@ class SparePartServiceTest {
         assertThat(result.getContent()).hasSize(1);
         verify(repository).findAllByFilter(isNull(), isNull(), isNull(), isNull(), any());
         verify(repository, never()).findAllByFilterAndWarehouseIds(any(), any(), any(), any(), anyCollection(), any());
+    }
+
+    @Test
+    void findAllIncludesWarehousePolicies() {
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        SparePart part = sparePart(sparePartId, "SP-POL", "Policy Part", InventoryItemKind.SPARE_PART);
+        WarehouseStockPolicyDto policyDto = new WarehouseStockPolicyDto(
+                UUID.randomUUID(), warehouseId, "Central Warehouse", sparePartId, "Policy Part", "SP-POL",
+                5.0, 20.0, 5.0, 10.0, null, null);
+        Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of());
+        when(warehouseStockPolicyService.findBySparePart(sparePartId)).thenReturn(List.of(policyDto));
+
+        Page<SparePartDto> result = service.findAll(20, 0, null, "", null);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().warehousePolicies()).containsExactly(policyDto);
+    }
+
+    @Test
+    void findByIdIncludesWarehousePolicies() {
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        SparePart part = sparePart(sparePartId, "SP-POL", "Policy Part", InventoryItemKind.SPARE_PART);
+        WarehouseStockPolicyDto policyDto = new WarehouseStockPolicyDto(
+                UUID.randomUUID(), warehouseId, "Central Warehouse", sparePartId, "Policy Part", "SP-POL",
+                5.0, 20.0, 5.0, 10.0, null, null);
+
+        when(repository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(part));
+        when(stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId)).thenReturn(List.of());
+        when(warehouseStockPolicyService.findBySparePart(sparePartId)).thenReturn(List.of(policyDto));
+
+        SparePartDto result = service.findById(sparePartId);
+
+        assertThat(result.warehousePolicies()).containsExactly(policyDto);
     }
 
     @Test
