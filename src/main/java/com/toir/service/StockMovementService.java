@@ -505,6 +505,7 @@ public class StockMovementService {
 
     private boolean shouldEvaluateLowStock(StockMovementType type) {
         return type == StockMovementType.RECEIPT
+                || type == StockMovementType.RETURN
                 || type == StockMovementType.ISSUE
                 || type == StockMovementType.TRANSFER
                 || type == StockMovementType.ADJUSTMENT;

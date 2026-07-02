@@ -302,11 +302,11 @@ class ProcurementRequestServiceTest {
         UUID reorderPartId = UUID.randomUUID();
         UUID catalogMinPartId = UUID.randomUUID();
         UUID duplicatePartId = UUID.randomUUID();
-        WarehouseStock reorderPointStock = stock(warehouseId, reorderPartId, 8);
+        WarehouseStock reorderPointStock = stock(warehouseId, reorderPartId, 50);
         reorderPointStock.setMinQty(5);
         reorderPointStock.setReorderPoint(10.0);
         reorderPointStock.setReorderQty(12.0);
-        WarehouseStock catalogMinStock = stock(warehouseId, catalogMinPartId, 4);
+        WarehouseStock catalogMinStock = stock(warehouseId, catalogMinPartId, 40);
         catalogMinStock.setMinQty(0);
         WarehouseStock duplicateStock = stock(warehouseId, duplicatePartId, 1);
         duplicateStock.setMinQty(5);
@@ -317,9 +317,11 @@ class ProcurementRequestServiceTest {
         SparePart duplicatePart = sparePart(duplicatePartId);
         duplicatePart.setMinStock(0.0);
         WmsStockSnapshot reorderSnapshot = new WmsStockSnapshot(
-                warehouseId, reorderPartId, BigDecimal.valueOf(8), BigDecimal.ZERO);
+                warehouseId, reorderPartId, BigDecimal.valueOf(50), BigDecimal.ZERO,
+                BigDecimal.valueOf(8), BigDecimal.ZERO);
         WmsStockSnapshot catalogSnapshot = new WmsStockSnapshot(
-                warehouseId, catalogMinPartId, BigDecimal.valueOf(4), BigDecimal.ZERO);
+                warehouseId, catalogMinPartId, BigDecimal.valueOf(40), BigDecimal.ZERO,
+                BigDecimal.valueOf(4), BigDecimal.ZERO);
         WmsStockSnapshot duplicateSnapshot = new WmsStockSnapshot(
                 warehouseId, duplicatePartId, BigDecimal.ONE, BigDecimal.ZERO);
         Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots = Map.of(

@@ -8,6 +8,7 @@ import com.toir.dto.warehouse.WarehouseWriteoffDecisionRequest;
 import com.toir.dto.warehouse.WarehouseWriteoffRequestDto;
 import com.toir.dto.wms.WmsDocumentGroupRequest;
 import com.toir.entity.StockMovement;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.entity.warehouse.WarehouseStockBalance;
 import com.toir.entity.warehouse.WarehouseWriteoffRequest;
 import com.toir.enums.ApprovalStatus;
@@ -78,8 +79,12 @@ class WarehouseQualityServiceTest {
         UUID sparePartId = UUID.randomUUID();
         UUID binId = UUID.randomUUID();
         UUID checkedById = UUID.randomUUID();
+        WarehouseStock stock = new WarehouseStock();
+        stock.setWarehouseId(warehouseId);
+        stock.setSparePartId(sparePartId);
         WarehouseStockBalance target = new WarehouseStockBalance();
         when(balanceRepository.findByIdentityKeyAndIsDeletedFalse(any())).thenReturn(Optional.of(target));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenReturn(stock);
         when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
             StockMovement movement = invocation.getArgument(0);
             movement.setId(UUID.randomUUID());
@@ -121,6 +126,7 @@ class WarehouseQualityServiceTest {
         ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
         verify(stockMovementRepository).save(movementCaptor.capture());
         assertThat(movementCaptor.getValue().getSourceType()).isEqualTo(StockMovementSourceType.QUALITY_STATUS_TRANSFER);
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
     }
 
     @Test
