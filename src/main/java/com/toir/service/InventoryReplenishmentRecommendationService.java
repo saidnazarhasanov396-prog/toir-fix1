@@ -82,7 +82,7 @@ public class InventoryReplenishmentRecommendationService {
     }
 
     private InventoryReplenishmentRecommendationDto fromReorder(ReorderSuggestionDto reorder) {
-        double reservedStock = Math.max(reorder.quantity() - reorder.available(), 0);
+        double reservedStock = Math.max(reorder.quantity() - reorder.nonAvailableQty() - reorder.usableAvailable(), 0);
         return build(
                 reorder.sparePartId(),
                 reorder.sparePartCode(),
@@ -188,8 +188,13 @@ public class InventoryReplenishmentRecommendationService {
         double policyQty = positive(reorderPoint) != null ? reorderPoint : valueOrZero(minStock);
         double totalShortageQty = reason == InventoryReplenishmentReason.LOW_STOCK
                 ? Math.max(policyQty - availableStock, 0)
-                : Math.max(policyQty + maintenanceDemandQty - availableStock, 0);
-        double suggestedOrderQty = suggestedOrderQty(reorderQty, totalShortageQty);
+                : ReplenishmentPolicyEvaluator.forecastTotalShortage(policyQty, maintenanceDemandQty, availableStock);
+        double policyRecommendedQty = suggestedOrderQtyOverride == null ? 0 : suggestedOrderQtyOverride;
+        double suggestedOrderQty = ReplenishmentPolicyEvaluator.forecastAwareSuggestedOrderQty(
+                policyRecommendedQty,
+                reorderQty,
+                totalShortageQty
+        );
         if (suggestedOrderQtyOverride != null && suggestedOrderQtyOverride > suggestedOrderQty) {
             suggestedOrderQty = suggestedOrderQtyOverride;
         }
@@ -245,12 +250,6 @@ public class InventoryReplenishmentRecommendationService {
                 counteragent == null ? null : counteragent.getName(),
                 expectedDeliveryDate
         );
-    }
-
-    private double suggestedOrderQty(Double reorderQty, double totalShortageQty) {
-        return reorderQty != null && reorderQty > 0
-                ? Math.max(reorderQty, totalShortageQty)
-                : totalShortageQty;
     }
 
     private boolean include(InventoryReplenishmentRecommendationDto item, boolean deficitOnly) {

@@ -313,17 +313,23 @@ public class HrService {
     public List<TimesheetEntryDto> timesheetFor(UUID employeeId, LocalDate from, LocalDate to) {
         Employee employee = getEmployeeOrThrow(employeeId);
         assertCanReadEmployee(employee);
+        String employeeName = formatEmployeeName(employee);
         return timesheetRepository
                         .findAllByEmployeeIdAndWorkDateBetweenAndIsDeletedFalseOrderByWorkDateAsc(employeeId, from, to)
-                .stream().map(TimesheetEntryDto::from).toList();
+                .stream()
+                .map(entry -> TimesheetEntryDto.from(entry, employeeName))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public List<TimesheetEntryDto> timesheetRange(LocalDate from, LocalDate to) {
-        return timesheetRepository.findAllByWorkDateBetweenAndIsDeletedFalse(from, to)
-                .stream()
-                .filter(this::canAccessTimesheet)
-                .map(TimesheetEntryDto::from).toList();
+        List<TimesheetEntry> entries = timesheetRepository.findAllByWorkDateBetweenAndIsDeletedFalse(from, to);
+        Map<UUID, Employee> employeesById = employeesById(entries);
+
+        return entries.stream()
+                .filter(entry -> canAccessTimesheet(entry, employeesById.get(entry.getEmployeeId())))
+                .map(entry -> TimesheetEntryDto.from(entry, formatEmployeeName(employeesById.get(entry.getEmployeeId()))))
+                .toList();
     }
 
     @Transactional
@@ -343,7 +349,7 @@ public class HrService {
                 null,
                 saved
         );
-        return TimesheetEntryDto.from(saved);
+        return TimesheetEntryDto.from(saved, formatEmployeeName(employee));
     }
 
     @Transactional
@@ -366,7 +372,7 @@ public class HrService {
                 e,
                 save
         );
-        return TimesheetEntryDto.from(e);
+        return TimesheetEntryDto.from(save, formatEmployeeName(targetEmployee));
     }
 
     @Transactional
@@ -407,7 +413,7 @@ public class HrService {
                 e,
                 save
         );
-        return TimesheetEntryDto.from(e);
+        return TimesheetEntryDto.from(save, employeeNameFor(e.getEmployeeId()));
     }
 
     private Employee getEmployeeOrThrow(UUID id) {
@@ -501,12 +507,66 @@ public class HrService {
         if (entry == null) {
             return false;
         }
+        Employee employee = employeeRepository.findByIdAndIsDeletedFalse(entry.getEmployeeId())
+                .orElse(null);
+        return canAccessTimesheet(entry, employee);
+    }
+
+    private boolean canAccessTimesheet(TimesheetEntry entry, Employee employee) {
+        if (entry == null) {
+            return false;
+        }
         if (scopeAccessService.isScopeAdmin()) {
             return true;
         }
-        return employeeRepository.findByIdAndIsDeletedFalse(entry.getEmployeeId())
-                .map(this::canReadEmployee)
-                .orElse(false);
+        return canReadEmployee(employee);
+    }
+
+    private Map<UUID, Employee> employeesById(List<TimesheetEntry> entries) {
+        List<UUID> employeeIds = entries.stream()
+                .map(TimesheetEntry::getEmployeeId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (employeeIds.isEmpty()) {
+            return Map.of();
+        }
+        return nullToEmpty(employeeRepository.findAllByIdInAndIsDeletedFalse(employeeIds))
+                .stream()
+                .collect(Collectors.toMap(
+                        Employee::getId,
+                        employee -> employee,
+                        (a, b) -> a
+                ));
+    }
+
+    private String employeeNameFor(UUID employeeId) {
+        if (employeeId == null) {
+            return null;
+        }
+        return employeeRepository.findByIdAndIsDeletedFalse(employeeId)
+                .map(this::formatEmployeeName)
+                .orElse(null);
+    }
+
+    private String formatEmployeeName(Employee employee) {
+        if (employee == null) {
+            return null;
+        }
+        List<String> parts = new ArrayList<>();
+        addNamePart(parts, employee.getFirstName());
+        addNamePart(parts, employee.getLastName());
+        addNamePart(parts, employee.getMiddleName());
+        if (parts.isEmpty()) {
+            return null;
+        }
+        return String.join(" ", parts);
+    }
+
+    private void addNamePart(List<String> parts, String value) {
+        if (value != null && !value.isBlank()) {
+            parts.add(value.trim());
+        }
     }
 
     private void throwAccessDenied() {

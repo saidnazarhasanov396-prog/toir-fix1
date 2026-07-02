@@ -80,6 +80,7 @@ public class WarehouseTaskService {
     private final RepairRequestRepository repairRequestRepository;
     private final ProcurementRequestRepository procurementRequestRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final WmsStockCoordinateValidator coordinateValidator;
 
     @Transactional(readOnly = true)
     public Page<WarehouseTaskDto> findAll(WarehouseTaskStatus status,
@@ -207,6 +208,7 @@ public class WarehouseTaskService {
         if (task.getTaskType() == WarehouseTaskType.PUTAWAY) {
             for (WarehouseTaskLine line : task.getLines()) {
                 if (zero(line.getActualQty()).signum() > 0) {
+                    validateExistingPutawayLine(task, line);
                     stockMoveService.move(moveRequest(task, line, request == null ? null : request.comment()));
                 }
             }
@@ -450,6 +452,38 @@ public class WarehouseTaskService {
             if (line.plannedQty() == null || line.plannedQty().compareTo(BigDecimal.ZERO) <= 0) {
                 throw RestException.badRequest("Task line plannedQty must be greater than 0");
             }
+            validateLineForTaskType(request.taskType(), request.warehouseId(), line);
+        }
+    }
+
+    private void validateLineForTaskType(WarehouseTaskType taskType, UUID warehouseId, WarehouseTaskLineRequest line) {
+        if (taskType != WarehouseTaskType.PUTAWAY) {
+            return;
+        }
+        validatePutawayShape(
+                line.sparePartId(),
+                line.fromBinId(),
+                line.toBinId()
+        );
+        coordinateValidator.assertCanReadFromReceiving(warehouseId, line.fromBinId());
+        coordinateValidator.assertCanPutawayInto(warehouseId, line.toBinId(), line.effectiveStatus());
+    }
+
+    private void validateExistingPutawayLine(WarehouseTask task, WarehouseTaskLine line) {
+        validatePutawayShape(line.getSparePartId(), line.getFromBinId(), line.getToBinId());
+        coordinateValidator.assertCanReadFromReceiving(task.getWarehouseId(), line.getFromBinId());
+        coordinateValidator.assertCanPutawayInto(task.getWarehouseId(), line.getToBinId(), effectiveStatus(line.getStockStatus()));
+    }
+
+    private void validatePutawayShape(UUID sparePartId, UUID fromBinId, UUID toBinId) {
+        if (sparePartId == null) {
+            throw RestException.badRequest("PUTAWAY task line sparePartId is required");
+        }
+        if (fromBinId == null || toBinId == null) {
+            throw RestException.badRequest("PUTAWAY task line fromBinId and toBinId are required");
+        }
+        if (Objects.equals(fromBinId, toBinId)) {
+            throw RestException.badRequest("PUTAWAY task line fromBinId and toBinId must be different");
         }
     }
 

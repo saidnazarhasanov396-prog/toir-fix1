@@ -25,8 +25,12 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,6 +78,9 @@ class WarehouseAnalyticsServiceTest {
 
     @Mock
     EquipmentRepository equipmentRepository;
+
+    @Mock
+    LegacyStockProjectionService legacyStockProjectionService;
 
     @InjectMocks
     WarehouseAnalyticsService service;
@@ -146,6 +153,42 @@ class WarehouseAnalyticsServiceTest {
         assertThat(result.warehouseDistribution().get(0).positions()).isEqualTo(1);
         assertThat(result.warehouseDistribution().get(0).status()).isEqualTo("CRITICAL");
         assertThat(kpi(result, "criticalItems").value()).isEqualTo(1.0);
+    }
+
+    @Test
+    void overviewUsesWmsUsableAvailabilityForWarehouseDeficitStatus() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WarehouseAnalyticsFilter filter = new WarehouseAnalyticsFilter();
+        filter.setOnlyDeficit(true);
+        SparePart part = sparePart(sparePartId, "AVL", "Available only part", CriticalityLevel.LOW);
+        WarehouseStock stock = stock(warehouseId, sparePartId, 20, 0, 5);
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        warehouse.setName("Main warehouse");
+        Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots = Map.of();
+
+        when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(stock));
+        when(stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.<StockMovement>of());
+        when(replenishmentService.recommendationRows(anyInt(), any(Instant.class), any(Instant.class), isNull(), org.mockito.ArgumentMatchers.eq(true)))
+                .thenReturn(List.of());
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(part));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(warehouse));
+        when(legacyStockProjectionService.currentAll()).thenReturn(snapshots);
+        when(legacyStockProjectionService.snapshot(snapshots, warehouseId, sparePartId)).thenReturn(new WmsStockSnapshot(
+                warehouseId,
+                sparePartId,
+                BigDecimal.valueOf(20),
+                BigDecimal.ZERO,
+                BigDecimal.valueOf(3),
+                BigDecimal.ZERO
+        ));
+
+        WarehouseAnalyticsOverviewDto result = service.overview(filter);
+
+        assertThat(result.warehouseDistribution()).hasSize(1);
+        assertThat(result.warehouseDistribution().getFirst().deficitCount()).isEqualTo(1);
+        assertThat(result.warehouseDistribution().getFirst().status()).isEqualTo("WARNING");
     }
 
     private WarehouseAnalyticsKpiDto kpi(WarehouseAnalyticsOverviewDto result, String key) {

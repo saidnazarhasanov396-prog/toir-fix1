@@ -55,6 +55,7 @@ import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,8 +64,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -290,6 +293,82 @@ class ProcurementRequestServiceTest {
         ArgumentCaptor<ProcurementRequest> saved = ArgumentCaptor.forClass(ProcurementRequest.class);
         verify(repository).save(saved.capture());
         assertThat(saved.getValue().getPriority()).isEqualTo(PriorityLevel.CRITICAL);
+    }
+
+    @Test
+    void generateFromLowStockUsesSharedPolicyAndSkipsActiveAutoDuplicates() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID warehouseId = UUID.randomUUID();
+        UUID reorderPartId = UUID.randomUUID();
+        UUID catalogMinPartId = UUID.randomUUID();
+        UUID duplicatePartId = UUID.randomUUID();
+        WarehouseStock reorderPointStock = stock(warehouseId, reorderPartId, 50);
+        reorderPointStock.setMinQty(5);
+        reorderPointStock.setReorderPoint(10.0);
+        reorderPointStock.setReorderQty(12.0);
+        WarehouseStock catalogMinStock = stock(warehouseId, catalogMinPartId, 40);
+        catalogMinStock.setMinQty(0);
+        WarehouseStock duplicateStock = stock(warehouseId, duplicatePartId, 1);
+        duplicateStock.setMinQty(5);
+        duplicateStock.setMaxQty(10.0);
+        SparePart reorderPart = sparePart(reorderPartId);
+        SparePart catalogPart = sparePart(catalogMinPartId);
+        catalogPart.setMinStock(5.0);
+        SparePart duplicatePart = sparePart(duplicatePartId);
+        duplicatePart.setMinStock(0.0);
+        WmsStockSnapshot reorderSnapshot = new WmsStockSnapshot(
+                warehouseId, reorderPartId, BigDecimal.valueOf(50), BigDecimal.ZERO,
+                BigDecimal.valueOf(8), BigDecimal.ZERO);
+        WmsStockSnapshot catalogSnapshot = new WmsStockSnapshot(
+                warehouseId, catalogMinPartId, BigDecimal.valueOf(40), BigDecimal.ZERO,
+                BigDecimal.valueOf(4), BigDecimal.ZERO);
+        WmsStockSnapshot duplicateSnapshot = new WmsStockSnapshot(
+                warehouseId, duplicatePartId, BigDecimal.ONE, BigDecimal.ZERO);
+        Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots = Map.of(
+                new LegacyStockProjectionService.StockKey(warehouseId, reorderPartId), reorderSnapshot,
+                new LegacyStockProjectionService.StockKey(warehouseId, catalogMinPartId), catalogSnapshot,
+                new LegacyStockProjectionService.StockKey(warehouseId, duplicatePartId), duplicateSnapshot
+        );
+        when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(reorderPointStock, catalogMinStock, duplicateStock));
+        when(legacyStockProjectionService.currentAll()).thenReturn(snapshots);
+        when(legacyStockProjectionService.snapshot(snapshots, warehouseId, reorderPartId)).thenReturn(reorderSnapshot);
+        when(legacyStockProjectionService.snapshot(snapshots, warehouseId, catalogMinPartId)).thenReturn(catalogSnapshot);
+        when(legacyStockProjectionService.snapshot(snapshots, warehouseId, duplicatePartId)).thenReturn(duplicateSnapshot);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(reorderPartId)).thenReturn(Optional.of(reorderPart));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(catalogMinPartId)).thenReturn(Optional.of(catalogPart));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(duplicatePartId)).thenReturn(Optional.of(duplicatePart));
+        when(repository.existsActiveAutoForWarehouseAndSparePart(warehouseId, reorderPartId)).thenReturn(false);
+        when(repository.existsActiveAutoForWarehouseAndSparePart(warehouseId, catalogMinPartId)).thenReturn(false);
+        when(repository.existsActiveAutoForWarehouseAndSparePart(warehouseId, duplicatePartId)).thenReturn(true);
+        when(repository.countByIsDeletedFalse()).thenReturn(0L);
+        when(repository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> {
+            ProcurementRequest request = invocation.getArgument(0);
+            request.setId(UUID.randomUUID());
+            request.getLines().forEach(line -> line.setId(UUID.randomUUID()));
+            return request;
+        });
+
+        var result = service.generateFromLowStock(null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().warehouseId()).isEqualTo(warehouseId);
+        assertThat(result.getFirst().lines()).hasSize(2);
+        assertThat(result.getFirst().lines())
+                .extracting(line -> line.sparePartId())
+                .containsExactlyInAnyOrder(reorderPartId, catalogMinPartId);
+        assertThat(result.getFirst().lines())
+                .filteredOn(line -> line.sparePartId().equals(reorderPartId))
+                .singleElement()
+                .satisfies(line -> assertThat(line.quantity()).isEqualTo(12.0));
+        assertThat(result.getFirst().lines())
+                .filteredOn(line -> line.sparePartId().equals(catalogMinPartId))
+                .singleElement()
+                .satisfies(line -> assertThat(line.quantity()).isEqualTo(6.0));
+        verify(repository).lockAutoProcurementKey(warehouseId, reorderPartId);
+        verify(repository).lockAutoProcurementKey(warehouseId, catalogMinPartId);
+        verify(repository).lockAutoProcurementKey(warehouseId, duplicatePartId);
     }
 
     @Test

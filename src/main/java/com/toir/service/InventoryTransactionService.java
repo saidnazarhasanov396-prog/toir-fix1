@@ -119,7 +119,7 @@ public class InventoryTransactionService {
         );
         InventoryTransaction saved = repository.save(transaction);
         postCoreStockReceipt(saved);
-        legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
+        WarehouseStock stock = legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
         inventoryCostService.applyReceiptCost(sparePart, previousTotalQuantity, request.quantity(), request.unitPrice());
 
         StockMovement movement = new StockMovement();
@@ -148,6 +148,7 @@ public class InventoryTransactionService {
                 stockStatus
         );
         stockMovementRepository.save(movement);
+        lowStockRecommendationService.evaluateStockSafely(stock);
 
         auditTransaction(saved, "Приход запасной части создан");
 
@@ -309,7 +310,7 @@ public class InventoryTransactionService {
         InventoryTransaction saved = repository.save(transaction);
         postCoreStockTransfer(saved, sparePart);
         WarehouseStock sourceStock = legacyStockProjectionService.sync(source.getId(), sparePart.getId());
-        legacyStockProjectionService.sync(destination.getId(), sparePart.getId());
+        WarehouseStock destinationStock = legacyStockProjectionService.sync(destination.getId(), sparePart.getId());
 
         stockMovementRepository.save(movement(source.getId(), sparePart.getId(), StockMovementType.TRANSFER,
                 request.quantity().negate().doubleValue(), unit, transactionDate, responsible.getId(), null,
@@ -322,6 +323,7 @@ public class InventoryTransactionService {
                 request.sourceBinId(), request.destinationBinId(), request.lotNumber(),
                 request.serialNumber(), request.expiryDate(), stockStatus));
         lowStockRecommendationService.evaluateStockSafely(sourceStock);
+        lowStockRecommendationService.evaluateStockSafely(destinationStock);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory transfer created");
 
@@ -389,13 +391,14 @@ public class InventoryTransactionService {
         );
         InventoryTransaction saved = repository.save(transaction);
         postCoreStockReturn(saved, sparePart);
-        legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
+        WarehouseStock stock = legacyStockProjectionService.sync(warehouse.getId(), sparePart.getId());
 
         stockMovementRepository.save(movement(warehouse.getId(), sparePart.getId(), StockMovementType.RETURN,
                 request.quantity().doubleValue(), unit, transactionDate, responsible.getId(), returnedBy.getId(),
                 workOrder.getDepartmentId(), workOrder.getId(), request.documentNumber(), request.comment(),
                 request.binId(), null, null, request.lotNumber(), request.serialNumber(),
                 request.expiryDate(), stockStatus));
+        lowStockRecommendationService.evaluateStockSafely(stock);
         inventoryCostService.refreshInventoryValue(sparePart);
         auditTransaction(saved, "Inventory return created");
 

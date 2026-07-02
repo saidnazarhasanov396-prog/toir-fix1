@@ -29,13 +29,16 @@ import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -67,6 +70,7 @@ class ProcurementPbacScopeTest {
     ActualCostRepository actualCostRepository;
     CostCategoryRepository costCategoryRepository;
     CounteragentService counteragentService;
+    LegacyStockProjectionService legacyStockProjectionService;
     ProcurementRequestService service;
 
     @BeforeEach
@@ -88,6 +92,7 @@ class ProcurementPbacScopeTest {
         actualCostRepository = mock(ActualCostRepository.class);
         costCategoryRepository = mock(CostCategoryRepository.class);
         counteragentService = mock(CounteragentService.class);
+        legacyStockProjectionService = mock(LegacyStockProjectionService.class);
         service = new ProcurementRequestService(
                 repository,
                 sparePartRepository,
@@ -107,7 +112,7 @@ class ProcurementPbacScopeTest {
                 costCategoryRepository,
                 counteragentService,
                 mock(ToirStockService.class),
-                mock(LegacyStockProjectionService.class),
+                legacyStockProjectionService,
                 mock(WmsStockCoordinateValidator.class),
                 mock(WmsDocumentPolicyService.class),
                 mock(WarehouseTaskGenerationService.class)
@@ -335,7 +340,14 @@ class ProcurementPbacScopeTest {
                 .thenReturn(Optional.of(warehouse(warehouseId, departmentId, null)));
         when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(true);
         when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(stock));
+        when(legacyStockProjectionService.currentForWarehouse(warehouseId)).thenReturn(Map.of(
+                new LegacyStockProjectionService.StockKey(warehouseId, sparePartId),
+                new WmsStockSnapshot(warehouseId, sparePartId, BigDecimal.ONE, BigDecimal.ZERO)
+        ));
+        when(legacyStockProjectionService.snapshot(any(), any(), any()))
+                .thenReturn(new WmsStockSnapshot(warehouseId, sparePartId, BigDecimal.ONE, BigDecimal.ZERO));
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.existsActiveAutoForWarehouseAndSparePart(warehouseId, sparePartId)).thenReturn(false);
         when(repository.countByIsDeletedFalse()).thenReturn(0L);
         when(repository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
         when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> {

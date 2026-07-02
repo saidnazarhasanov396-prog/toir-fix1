@@ -77,6 +77,7 @@ class PurchaseOrderServiceTest {
     @Mock InventoryCostService inventoryCostService;
     @Mock ToirStockService toirStockService;
     @Mock LegacyStockProjectionService legacyStockProjectionService;
+    @Mock LowStockRecommendationService lowStockRecommendationService;
     @Mock WmsStockCoordinateValidator coordinateValidator;
     @Mock WmsDocumentPolicyService documentPolicyService;
     @Mock WarehouseTaskGenerationService taskGenerationService;
@@ -98,6 +99,7 @@ class PurchaseOrderServiceTest {
                 inventoryCostService,
                 toirStockService,
                 legacyStockProjectionService,
+                lowStockRecommendationService,
                 coordinateValidator,
                 documentPolicyService,
                 taskGenerationService
@@ -318,6 +320,7 @@ class PurchaseOrderServiceTest {
         assertThat(putawayCommand.stockStatus()).isEqualTo(WarehouseStockStatus.AVAILABLE);
         assertThat(putawayCommand.sourceType()).isEqualTo(WarehouseTaskSourceType.PURCHASE_ORDER);
         assertThat(putawayCommand.sourceId()).isEqualTo(orderId);
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
         verify(coordinateValidator).assertCanReceiveOrMoveInto(warehouseId, binId, WarehouseStockStatus.AVAILABLE);
         verify(documentPolicyService).validateReceiptDocuments(
                 eq(WmsDocumentOperationType.PURCHASE_ORDER_RECEIPT),

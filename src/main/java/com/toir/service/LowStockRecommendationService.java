@@ -4,13 +4,13 @@ import com.toir.dto.warehouse.LowStockEvaluationResultDto;
 import com.toir.entity.SparePart;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
-import com.toir.enums.NotificationSeverity;
 import com.toir.enums.OperationalIssueStatus;
 import com.toir.enums.OperationalIssueType;
 import com.toir.repository.OperationalIssueRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.service.ReplenishmentPolicyEvaluator.ReplenishmentPolicyResult;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.service.warehouse.WmsStockSnapshot;
 import java.nio.charset.StandardCharsets;
@@ -57,16 +57,16 @@ public class LowStockRecommendationService {
             return LowStockEvaluationResultDto.evaluatedSkipped();
         }
 
-        Double triggerThreshold = triggerThreshold(stock, sparePart.get());
-        if (triggerThreshold == null) {
+        WmsStockSnapshot snapshot = legacyStockProjectionService.current(warehouseId, sparePartId);
+        ReplenishmentPolicyResult policy = ReplenishmentPolicyEvaluator.evaluate(stock, sparePart.get(), snapshot);
+        if (policy.triggerThreshold() == null) {
             return LowStockEvaluationResultDto.evaluatedSkipped();
         }
 
         UUID sourceId = sourceId(warehouseId, sparePartId);
         boolean hasOpenIssue = hasOpenIssue(sourceId);
-        WmsStockSnapshot snapshot = legacyStockProjectionService.current(warehouseId, sparePartId);
-        double availableQuantity = snapshot.availableQty().doubleValue();
-        if (availableQuantity > triggerThreshold) {
+        double availableQuantity = policy.usableAvailable();
+        if (!policy.reorderNeeded()) {
             if (hasOpenIssue) {
                 operationalIssueService.resolveOpen(SOURCE_TYPE, sourceId, RESOLUTION_MESSAGE);
                 return LowStockEvaluationResultDto.evaluatedResolved();
@@ -76,17 +76,17 @@ public class LowStockRecommendationService {
 
         SparePart part = sparePart.get();
         Warehouse wh = warehouse.get();
-        double recommendedOrderQuantity = recommendedOrderQuantity(stock, part, availableQuantity);
+        double recommendedOrderQuantity = policy.recommendedQuantity();
         operationalIssueService.openOrUpdate(
                 OperationalIssueType.LOW_STOCK,
-                severity(stock, availableQuantity),
+                policy.severity(),
                 null,
                 wh.getDepartmentId(),
                 SOURCE_TYPE,
                 sourceId,
                 "Low stock: " + firstNonBlank(part.getName(), part.getCode(), sparePartId.toString()),
-                message(wh, part, stock, snapshot, availableQuantity, triggerThreshold, recommendedOrderQuantity),
-                metadata(wh, part, stock, snapshot, availableQuantity, triggerThreshold, recommendedOrderQuantity)
+                message(wh, part, snapshot, policy, recommendedOrderQuantity),
+                metadata(wh, part, stock, snapshot, policy, recommendedOrderQuantity)
         );
         return hasOpenIssue
                 ? LowStockEvaluationResultDto.evaluatedUpdated()
@@ -133,64 +133,22 @@ public class LowStockRecommendationService {
                 .isPresent();
     }
 
-    private Double triggerThreshold(WarehouseStock stock, SparePart sparePart) {
-        Double reorderPoint = positive(stock.getReorderPoint());
-        if (reorderPoint != null) {
-            return reorderPoint;
-        }
-        Double minQty = positive(stock.getMinQty());
-        if (minQty != null) {
-            return minQty;
-        }
-        return positive(sparePart.getMinStock());
-    }
-
-    private NotificationSeverity severity(WarehouseStock stock, double availableQuantity) {
-        if (availableQuantity <= 0 || availableQuantity <= stock.getMinQty()) {
-            return NotificationSeverity.CRITICAL;
-        }
-        if (stock.getReorderPoint() != null && availableQuantity <= stock.getReorderPoint()) {
-            return NotificationSeverity.WARNING;
-        }
-        return NotificationSeverity.WARNING;
-    }
-
-    private double recommendedOrderQuantity(WarehouseStock stock, SparePart sparePart, double availableQuantity) {
-        Double reorderQty = positive(stock.getReorderQty());
-        if (reorderQty != null) {
-            return reorderQty;
-        }
-        Double maxQty = positive(stock.getMaxQty());
-        if (maxQty != null && maxQty > availableQuantity) {
-            return Math.max(maxQty - availableQuantity, 0);
-        }
-        Double minQty = positive(stock.getMinQty());
-        if (minQty != null) {
-            return Math.max(minQty * 2 - availableQuantity, 0);
-        }
-        Double minStock = positive(sparePart.getMinStock());
-        if (minStock != null) {
-            return Math.max(minStock * 2 - availableQuantity, 0);
-        }
-        return 0;
-    }
-
     private String message(Warehouse warehouse,
                            SparePart sparePart,
-                           WarehouseStock stock,
                            WmsStockSnapshot snapshot,
-                           double availableQuantity,
-                           double triggerThreshold,
+                           ReplenishmentPolicyResult policy,
                            double recommendedOrderQuantity) {
-        return "warehouse=%s; sparePart=%s/%s; currentQuantity=%s; reservedQuantity=%s; availableQuantity=%s; threshold=%s; recommendedOrderQuantity=%s"
+        return "warehouse=%s; sparePart=%s/%s; currentQuantity=%s; reservedQuantity=%s; availableQuantity=%s; usableAvailable=%s; nonAvailableQty=%s; threshold=%s; recommendedOrderQuantity=%s"
                 .formatted(
                         firstNonBlank(warehouse.getName(), warehouse.getCode(), warehouse.getId().toString()),
                         sparePart.getCode(),
                         sparePart.getName(),
                         snapshot.qtyOnHand(),
                         snapshot.qtyReserved(),
-                        availableQuantity,
-                        triggerThreshold,
+                        policy.usableAvailable(),
+                        policy.usableAvailable(),
+                        policy.nonAvailableQty(),
+                        policy.triggerThreshold(),
                         recommendedOrderQuantity
                 );
     }
@@ -199,8 +157,7 @@ public class LowStockRecommendationService {
                                          SparePart sparePart,
                                          WarehouseStock stock,
                                          WmsStockSnapshot snapshot,
-                                         double availableQuantity,
-                                         double triggerThreshold,
+                                         ReplenishmentPolicyResult policy,
                                          double recommendedOrderQuantity) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("warehouseId", warehouse.getId().toString());
@@ -211,12 +168,15 @@ public class LowStockRecommendationService {
         metadata.put("kind", sparePart.getKind() == null ? null : sparePart.getKind().name());
         metadata.put("quantity", snapshot.qtyOnHand().doubleValue());
         metadata.put("reservedQty", snapshot.qtyReserved().doubleValue());
-        metadata.put("availableQuantity", availableQuantity);
+        metadata.put("availableQuantity", policy.usableAvailable());
+        metadata.put("usableAvailable", policy.usableAvailable());
+        metadata.put("nonAvailableQty", policy.nonAvailableQty());
         metadata.put("minQty", stock.getMinQty());
         metadata.put("reorderPoint", stock.getReorderPoint());
         metadata.put("reorderQty", stock.getReorderQty());
         metadata.put("maxQty", stock.getMaxQty());
-        metadata.put("triggerThreshold", triggerThreshold);
+        metadata.put("triggerThreshold", policy.triggerThreshold());
+        metadata.put("criticalThreshold", policy.criticalThreshold());
         metadata.put("recommendedOrderQuantity", recommendedOrderQuantity);
         return metadata;
     }
@@ -231,14 +191,6 @@ public class LowStockRecommendationService {
             return stock.getSparePartId();
         }
         return stock.getSparePart() == null ? null : stock.getSparePart().getId();
-    }
-
-    private Double positive(Double value) {
-        return value != null && value > 0 ? value : null;
-    }
-
-    private Double positive(double value) {
-        return value > 0 ? value : null;
     }
 
     private String firstNonBlank(String... values) {

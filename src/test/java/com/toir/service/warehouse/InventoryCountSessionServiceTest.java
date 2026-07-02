@@ -12,6 +12,7 @@ import com.toir.entity.StockMovement;
 import com.toir.entity.warehouse.InventoryCountLine;
 import com.toir.entity.warehouse.InventoryCountSession;
 import com.toir.entity.warehouse.WarehouseBin;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.entity.warehouse.WarehouseStockBalance;
 import com.toir.enums.InventoryCountLineStatus;
 import com.toir.enums.InventoryCountScopeType;
@@ -27,6 +28,7 @@ import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.service.InventoryAnalyticsService;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,6 +69,7 @@ class InventoryCountSessionServiceTest {
     @Mock InventoryTransactionRepository inventoryTransactionRepository;
     @Mock WmsDocumentPolicyService documentPolicyService;
     @Mock LegacyStockProjectionService legacyStockProjectionService;
+    @Mock LowStockRecommendationService lowStockRecommendationService;
     @Mock AuditBuilderService auditBuilderService;
 
     InventoryCountSessionService service;
@@ -84,6 +87,7 @@ class InventoryCountSessionServiceTest {
                 inventoryTransactionRepository,
                 documentPolicyService,
                 legacyStockProjectionService,
+                lowStockRecommendationService,
                 auditBuilderService
         );
     }
@@ -275,6 +279,10 @@ class InventoryCountSessionServiceTest {
         when(inventoryTransactionRepository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(lineRepository.save(any(InventoryCountLine.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(sessionRepository.save(any(InventoryCountSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        WarehouseStock increasedStock = stock(warehouseId, increase.getSparePartId());
+        WarehouseStock decreasedStock = stock(warehouseId, decrease.getSparePartId());
+        when(legacyStockProjectionService.sync(warehouseId, increase.getSparePartId())).thenReturn(increasedStock);
+        when(legacyStockProjectionService.sync(warehouseId, decrease.getSparePartId())).thenReturn(decreasedStock);
 
         InventoryCountSessionDto result = service.postAdjustments(sessionId);
 
@@ -304,6 +312,8 @@ class InventoryCountSessionServiceTest {
                 .containsOnly(StockMovementSourceType.INVENTORY_COUNT_SESSION);
         assertThat(movementCaptor.getAllValues()).extracting(StockMovement::getType)
                 .containsExactlyInAnyOrder(StockMovementType.ADJUSTMENT, StockMovementType.ADJUSTMENT);
+        verify(lowStockRecommendationService).evaluateStockSafely(increasedStock);
+        verify(lowStockRecommendationService).evaluateStockSafely(decreasedStock);
     }
 
     @Test
@@ -377,6 +387,13 @@ class InventoryCountSessionServiceTest {
         line.setExpectedQty(expectedQty);
         line.setStatus(InventoryCountLineStatus.OPEN);
         return line;
+    }
+
+    private WarehouseStock stock(UUID warehouseId, UUID sparePartId) {
+        WarehouseStock stock = new WarehouseStock();
+        stock.setWarehouseId(warehouseId);
+        stock.setSparePartId(sparePartId);
+        return stock;
     }
 
     private WarehouseStockBalance balance(UUID warehouseId,
