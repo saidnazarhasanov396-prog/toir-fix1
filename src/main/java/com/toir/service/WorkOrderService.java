@@ -111,6 +111,7 @@ import com.toir.service.file_management.FileService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.service.maintanance.WorkOrderSparePartRequirementService;
+import com.toir.service.maintenance.WorkOrderCompletionService;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
@@ -199,6 +200,7 @@ public class WorkOrderService {
     private final AttachmentGroupService attachmentGroupService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final RepairMaterialUsageService repairMaterialUsageService;
+    private final WorkOrderCompletionService workOrderCompletionService;
     private final MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
     private final MaintenanceOperationRepository maintenanceOperationRepository;
     private final MaintenanceRegulationRepository maintenanceRegulationRepository;
@@ -865,6 +867,7 @@ public class WorkOrderService {
         List<ResolvedCompletionMeterSnapshot> completionMeterSnapshots =
                 resolveCompletionMeterSnapshots(entity, request);
         issueCompletionMaterials(entity, request);
+        workOrderCompletionService.createActualCostsOnCompletion(entity);
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());
         if (isReplacementWorkOrder(entity)) {

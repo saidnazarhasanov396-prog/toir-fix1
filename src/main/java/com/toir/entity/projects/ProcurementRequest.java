@@ -1,6 +1,7 @@
 package com.toir.entity.projects;
 import com.toir.entity.BaseEntity;
 import com.toir.entity.equipment.ProcurementRequestLine;
+import com.toir.enums.BudgetAllocationStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
@@ -103,6 +104,19 @@ public class ProcurementRequest extends BaseEntity {
 
     @Column(name = "rejection_reason", columnDefinition = "text")
     private String rejectionReason;
+
+    @Column(name = "budget_line_id")
+    private UUID budgetLineId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "budget_allocation_status", nullable = false)
+    private BudgetAllocationStatus budgetAllocationStatus = BudgetAllocationStatus.UNALLOCATED;
+
+    @Column(name = "budget_allocated_at")
+    private Instant budgetAllocatedAt;
+
+    @Column(name = "budget_allocated_by_id")
+    private UUID budgetAllocatedById;
 
     @OneToMany(mappedBy = "request", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ProcurementRequestLine> lines = new ArrayList<>();

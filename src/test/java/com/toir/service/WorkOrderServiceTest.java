@@ -266,6 +266,9 @@ class WorkOrderServiceTest {
     RepairMaterialUsageService repairMaterialUsageService;
 
     @Mock
+    com.toir.service.maintenance.WorkOrderCompletionService workOrderCompletionService;
+
+    @Mock
     MaintenanceCompletionAnchorRepository maintenanceCompletionAnchorRepository;
 
     @Mock
