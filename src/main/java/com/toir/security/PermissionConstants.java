@@ -146,6 +146,9 @@ public final class PermissionConstants {
     public static final String FINANCE_ROUTE_OVERRIDE_APPLY = "FINANCE_ROUTE_OVERRIDE_APPLY";
     public static final String FINANCE_ROUTE_OVERRIDE_CLEAR = "FINANCE_ROUTE_OVERRIDE_CLEAR";
     public static final String FINANCE_REPORT_EXPORT = "FINANCE_REPORT_EXPORT";
+    public static final String FINANCE_REVIEW_READ = "FINANCE_REVIEW_READ";
+    public static final String FINANCE_REVIEW_ALLOCATE = "FINANCE_REVIEW_ALLOCATE";
+    public static final String FINANCE_REVIEW_UNALLOCATE = "FINANCE_REVIEW_UNALLOCATE";
 
     public static final String EQUIPMENT_READ = "EQUIPMENT_READ";
     public static final String EQUIPMENT_CREATE = "EQUIPMENT_CREATE";

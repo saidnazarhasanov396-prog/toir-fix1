@@ -115,6 +115,7 @@ class FinancePbacScopeTest {
         BudgetLine line = line(UUID.randomUUID(), budget);
         line.setPlannedAmount(1000);
         line.setActualAmount(0);
+        line.setCommittedAmount(350);
         ActualCost approved = actualCost(UUID.randomUUID());
         approved.setBudgetLineId(line.getId());
         approved.setStatus(ActualCostStatus.APPROVED);
@@ -142,7 +143,7 @@ class FinancePbacScopeTest {
 
         assertThat(response.totalActual()).isEqualTo(950);
         assertThat(response.totalCommitted()).isEqualTo(350);
-        assertThat(response.pendingReviewAmount()).isEqualTo(350);
+        assertThat(response.pendingReviewAmount()).isEqualTo(375);
         assertThat(response.totalAvailable()).isEqualTo(-300);
         assertThat(response.unallocatedActualAmount()).isEqualTo(25);
         assertThat(response.atRiskBudgetLineCount()).isEqualTo(1);

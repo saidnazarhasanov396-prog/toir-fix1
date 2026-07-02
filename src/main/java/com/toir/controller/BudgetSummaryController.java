@@ -130,10 +130,14 @@ public class BudgetSummaryController {
                 ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum()
                 : scopedLines.stream().mapToDouble(line -> lineActualAmount(line, approvedByLine, pendingByLine)).sum();
         double totalCommitted = scopedLines.stream()
-                .mapToDouble(line -> pendingByLine.getOrDefault(line.getId(), 0.0))
+                .mapToDouble(BudgetLine::getCommittedAmount)
                 .sum();
+        double totalRemaining = totalPlanned - totalCommitted;
         double totalAvailable = totalPlanned - totalActual - totalCommitted;
-        double pendingReviewAmount = totalCommitted;
+        double pendingReviewAmount = visibleActualCosts.stream()
+                .filter(cost -> cost.getStatus() == ActualCostStatus.PENDING)
+                .mapToDouble(ActualCost::getAmount)
+                .sum();
         double unallocatedActualAmount = visibleActualCosts.stream()
                 .filter(cost -> cost.getBudgetLineId() == null)
                 .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED || cost.getStatus() == ActualCostStatus.PENDING)
@@ -142,11 +146,11 @@ public class BudgetSummaryController {
         long atRiskBudgetLineCount = scopedLines.stream()
                 .filter(line -> line.getPlannedAmount() > 0)
                 .filter(line -> (lineActualAmount(line, approvedByLine, pendingByLine)
-                        + pendingByLine.getOrDefault(line.getId(), 0.0)) / line.getPlannedAmount() >= 0.9d)
+                        + line.getCommittedAmount()) / line.getPlannedAmount() >= 0.9d)
                 .count();
         long overBudgetLineCount = scopedLines.stream()
                 .filter(line -> lineActualAmount(line, approvedByLine, pendingByLine)
-                        + pendingByLine.getOrDefault(line.getId(), 0.0) > line.getPlannedAmount())
+                        + line.getCommittedAmount() > line.getPlannedAmount())
                 .count();
         double variance = totalPlanned - totalActual;
         double executionPercent = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
@@ -173,7 +177,7 @@ public class BudgetSummaryController {
                             .mapToDouble(line -> lineActualAmount(line, approvedByLine, pendingByLine))
                             .sum();
                     double committed = entry.getValue().stream()
-                            .mapToDouble(line -> pendingByLine.getOrDefault(line.getId(), 0.0))
+                            .mapToDouble(BudgetLine::getCommittedAmount)
                             .sum();
                     double available = planned - actual - committed;
                     return new BudgetSummaryResponse.CategoryRow(
@@ -205,7 +209,7 @@ public class BudgetSummaryController {
                 unallocatedActualAmount,
                 atRiskBudgetLineCount,
                 overBudgetLineCount,
-                totalAvailable,
+                totalRemaining,
                 variance,
                 executionPercent,
                 budgetItems.size(),

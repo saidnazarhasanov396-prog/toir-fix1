@@ -26,6 +26,7 @@ import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.projects.FinancialApprovalRuleRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.service.finance.BudgetCommitmentService;
 import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +60,7 @@ public class ActualCostService {
     private final FinanceScopeService financeScopeService;
     private final NotificationService notificationService;
     private final RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
+    private final BudgetCommitmentService budgetCommitmentService;
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
@@ -169,6 +171,16 @@ public class ActualCostService {
             assertBudgetLineUsable(line);
             assertBudgetRemaining(line, c.getAmount());
             applyBudgetUsageOnce(line, c);
+            if (c.getSourceType() == ActualCostSourceType.PROCUREMENT_RECEIPT) {
+                budgetCommitmentService.releaseBudget(
+                        line.getId(),
+                        c.getAmount(),
+                        "PROCUREMENT_RECEIPT",
+                        c.getSourceId(),
+                        reviewerId,
+                        "Release commitment on actual cost approval"
+                );
+            }
         }
 
         c.setStatus(approve ? ActualCostStatus.APPROVED : ActualCostStatus.REJECTED);
@@ -399,12 +411,10 @@ public class ActualCostService {
     }
 
     private void assertBudgetRemaining(BudgetLine line, double amount) {
-        double alreadyApproved = repository.sumAmountByBudgetLineIdAndStatusAndIsDeletedFalse(
-                line.getId(), ActualCostStatus.APPROVED);
-        double remaining = line.getPlannedAmount() - alreadyApproved;
-        if (amount - remaining > EPSILON) {
+        double available = line.getAvailableForActual();
+        if (amount - available > EPSILON) {
             throw RestException.badRequest(
-                    "Actual cost amount exceeds budget line remaining amount (remaining=" + remaining + ")");
+                    "Actual cost amount exceeds budget line available amount (available=" + available + ")");
         }
     }
 

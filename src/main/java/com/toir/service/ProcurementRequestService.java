@@ -758,6 +758,7 @@ public class ProcurementRequestService {
                 .orElseGet(ActualCost::new);
         cost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
         cost.setSourceId(movement.getId());
+        cost.setBudgetLineId(request.getBudgetLineId());
         cost.setCostCategoryId(category.get().getId());
         cost.setAmount(quantity * line.getUnitPrice());
         cost.setStatus(ActualCostStatus.PENDING);

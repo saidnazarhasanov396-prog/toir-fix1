@@ -90,6 +90,9 @@ class ActualCostServiceTest {
     @Mock
     RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
 
+    @Mock
+    com.toir.service.finance.BudgetCommitmentService budgetCommitmentService;
+
     @InjectMocks
     ActualCostService service;
 
@@ -389,8 +392,6 @@ class ActualCostServiceTest {
 
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
-        when(repository.sumAmountByBudgetLineIdAndStatusAndIsDeletedFalse(budgetLineId, ActualCostStatus.APPROVED))
-                .thenReturn(200d);
         when(budgetLineRepository.save(any(BudgetLine.class))).thenAnswer(inv -> inv.getArgument(0));
         when(maintenanceBudgetRepository.save(any(MaintenanceBudget.class))).thenAnswer(inv -> inv.getArgument(0));
         when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -458,12 +459,10 @@ class ActualCostServiceTest {
         BudgetLine line = budgetLine(budgetLineId, 400, 200, BudgetStatus.APPROVED);
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
-        when(repository.sumAmountByBudgetLineIdAndStatusAndIsDeletedFalse(budgetLineId, ActualCostStatus.APPROVED))
-                .thenReturn(200d);
 
         assertThatThrownBy(() -> service.review(id, true, UUID.randomUUID(), "Approved"))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("exceeds budget line remaining");
+                .hasMessageContaining("exceeds budget line available amount");
 
         verify(repository, never()).save(any());
     }

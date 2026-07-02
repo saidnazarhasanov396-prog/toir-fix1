@@ -129,7 +129,10 @@ class ApprovalPbacScopeTest {
                 new DefaultApprovalActionExecutor(List.of(
                         new WorkOrderApprovalHandler(workOrderService),
                         new PprPlanApprovalHandler(pprPlanService),
-                        new ProcurementRequestApprovalHandler(procurementRequestRepository, warehouseTaskGenerationService),
+                        new ProcurementRequestApprovalHandler(
+                                procurementRequestRepository,
+                                warehouseTaskGenerationService,
+                                mock(com.toir.service.finance.BudgetCommitmentService.class)),
                         new MaintenanceBudgetApprovalHandler(maintenanceBudgetRepository),
                         new MaintenanceDueEventApprovalHandler(maintenanceAutomationService)
                 )),
