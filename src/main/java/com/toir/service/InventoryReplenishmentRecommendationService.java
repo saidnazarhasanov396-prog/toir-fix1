@@ -9,8 +9,10 @@ import com.toir.dto.warehouse.InventoryReplenishmentRecommendationDto;
 import com.toir.dto.warehouse.ReorderSuggestionDto;
 import com.toir.entity.Counteragent;
 import com.toir.entity.SparePart;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.NotificationSeverity;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.WarehouseStockRepository;
 import com.toir.service.maintanance.SparePartForecastService;
 import com.toir.util.PaginationUtils;
 import java.time.Instant;
@@ -35,6 +37,7 @@ public class InventoryReplenishmentRecommendationService {
     private final WarehouseReorderService reorderService;
     private final SparePartForecastService forecastService;
     private final SparePartRepository sparePartRepository;
+    private final WarehouseStockRepository stockRepository;
     private final CounteragentService counteragentService;
 
     @Transactional(readOnly = true)
@@ -83,6 +86,7 @@ public class InventoryReplenishmentRecommendationService {
 
     private InventoryReplenishmentRecommendationDto fromReorder(ReorderSuggestionDto reorder) {
         double reservedStock = Math.max(reorder.quantity() - reorder.nonAvailableQty() - reorder.usableAvailable(), 0);
+        Double effectiveReorderPoint = firstNonNull(reorder.reorderPoint(), reorder.triggerThreshold());
         return build(
                 reorder.sparePartId(),
                 reorder.sparePartCode(),
@@ -93,7 +97,7 @@ public class InventoryReplenishmentRecommendationService {
                 reservedStock,
                 reorder.available(),
                 reorder.minQty(),
-                reorder.reorderPoint(),
+                effectiveReorderPoint,
                 reorder.reorderQty(),
                 0,
                 0,
@@ -107,6 +111,7 @@ public class InventoryReplenishmentRecommendationService {
 
     private InventoryReplenishmentRecommendationDto fromForecast(SparePartForecastItemDto forecast) {
         double currentStock = forecast.availableQty() + forecast.reservedQty();
+        ReplenishmentPolicy policy = policyForForecast(forecast);
         return build(
                 forecast.sparePartId(),
                 forecast.sparePartCode(),
@@ -118,9 +123,9 @@ public class InventoryReplenishmentRecommendationService {
                 currentStock,
                 forecast.reservedQty(),
                 forecast.availableQty(),
-                null,
-                null,
-                null,
+                policy.minStock(),
+                policy.reorderPoint(),
+                policy.reorderQty(),
                 forecast.requiredQty(),
                 forecast.shortageQty(),
                 forecast.sources(),
@@ -231,6 +236,28 @@ public class InventoryReplenishmentRecommendationService {
         );
     }
 
+    private ReplenishmentPolicy policyForForecast(SparePartForecastItemDto forecast) {
+        if (forecast.sparePartId() == null) {
+            return ReplenishmentPolicy.empty();
+        }
+
+        WarehouseStock stock = forecast.warehouseId() == null
+                ? null
+                : stockRepository
+                .findByWarehouseIdAndSparePartIdAndIsDeletedFalse(forecast.warehouseId(), forecast.sparePartId())
+                .orElse(null);
+        SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(forecast.sparePartId()).orElse(null);
+        Double warehouseMinQty = stock == null ? null : positive(stock.getMinQty());
+        Double sparePartMinStock = sparePart == null ? null : positive(sparePart.getMinStock());
+        Double effectiveMinimum = firstNonNull(warehouseMinQty, sparePartMinStock);
+        Double effectiveReorderPoint = firstNonNull(
+                stock == null ? null : positive(stock.getReorderPoint()),
+                effectiveMinimum
+        );
+        Double reorderQty = stock == null ? null : positive(stock.getReorderQty());
+        return new ReplenishmentPolicy(effectiveMinimum, effectiveReorderPoint, reorderQty);
+    }
+
     private CounteragentRecommendation counteragentRecommendation(UUID sparePartId) {
         if (sparePartId == null) {
             return new CounteragentRecommendation(null, null, null);
@@ -319,5 +346,11 @@ public class InventoryReplenishmentRecommendationService {
     }
 
     private record CounteragentRecommendation(UUID counteragentId, String counteragentName, LocalDate expectedDeliveryDate) {
+    }
+
+    private record ReplenishmentPolicy(Double minStock, Double reorderPoint, Double reorderQty) {
+        private static ReplenishmentPolicy empty() {
+            return new ReplenishmentPolicy(null, null, null);
+        }
     }
 }

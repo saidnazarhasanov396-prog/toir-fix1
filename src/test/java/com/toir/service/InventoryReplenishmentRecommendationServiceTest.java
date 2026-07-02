@@ -6,11 +6,14 @@ import com.toir.dto.sparepartforecast.SparePartForecastSummaryDto;
 import com.toir.dto.warehouse.InventoryReplenishmentReason;
 import com.toir.dto.warehouse.InventoryReplenishmentRecommendationDto;
 import com.toir.dto.warehouse.ReorderSuggestionDto;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.NotificationSeverity;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.WarehouseStockRepository;
 import com.toir.service.maintanance.SparePartForecastService;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +41,9 @@ class InventoryReplenishmentRecommendationServiceTest {
 
     @Mock
     SparePartRepository sparePartRepository;
+
+    @Mock
+    WarehouseStockRepository stockRepository;
 
     @Mock
     CounteragentService counteragentService;
@@ -293,5 +299,105 @@ class InventoryReplenishmentRecommendationServiceTest {
         assertThat(item.currentStock()).isEqualTo(20.0);
         assertThat(item.availableStock()).isEqualTo(3.0);
         assertThat(item.reservedStock()).isEqualTo(7.0);
+    }
+
+    @Test
+    void recommendationsUseEffectiveReorderPointForMinQtyLowStockRows() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-05T00:00:00Z");
+        ReorderSuggestionDto reorder = new ReorderSuggestionDto(
+                UUID.randomUUID(),
+                warehouseId,
+                "Central warehouse",
+                sparePartId,
+                "Min quantity part",
+                "SP-MIN-QTY",
+                "pcs",
+                6.0,
+                4.0,
+                5.0,
+                null,
+                null,
+                1.0,
+                6.0,
+                "CRITICAL",
+                4.0,
+                0.0,
+                5.0,
+                5.0,
+                null,
+                "LOW_STOCK"
+        );
+
+        when(reorderService.allSuggestions(warehouseId)).thenReturn(List.of(reorder));
+        when(forecastService.forecast(any()))
+                .thenReturn(new SparePartForecastSummaryDto(now, now.plusSeconds(30L * 24 * 60 * 60), List.of()));
+
+        Page<InventoryReplenishmentRecommendationDto> result = service.recommendations(
+                30,
+                now,
+                null,
+                warehouseId,
+                true,
+                0,
+                20
+        );
+
+        InventoryReplenishmentRecommendationDto item = result.getContent().getFirst();
+        assertThat(item.minStock()).isEqualTo(5.0);
+        assertThat(item.reorderPoint()).isEqualTo(5.0);
+    }
+
+    @Test
+    void recommendationsIncludePolicyForForecastOnlyWarehouseRows() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-05T00:00:00Z");
+        Instant dueAt = Instant.parse("2026-06-10T09:00:00Z");
+        SparePartForecastItemDto forecast = new SparePartForecastItemDto(
+                sparePartId,
+                "BRG-FORECAST",
+                "Forecast bearing",
+                warehouseId,
+                "Central warehouse",
+                12.0,
+                20.0,
+                2.0,
+                0.0,
+                "pcs",
+                NotificationSeverity.INFO,
+                dueAt,
+                1,
+                List.of()
+        );
+        WarehouseStock stock = new WarehouseStock();
+        stock.setWarehouseId(warehouseId);
+        stock.setSparePartId(sparePartId);
+        stock.setMinQty(5.0);
+        stock.setReorderPoint(8.0);
+        stock.setReorderQty(15.0);
+
+        when(reorderService.allSuggestions(warehouseId)).thenReturn(List.of());
+        when(forecastService.forecast(any()))
+                .thenReturn(new SparePartForecastSummaryDto(now, now.plusSeconds(30L * 24 * 60 * 60), List.of(forecast)));
+        when(stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId))
+                .thenReturn(Optional.of(stock));
+
+        Page<InventoryReplenishmentRecommendationDto> result = service.recommendations(
+                30,
+                now,
+                null,
+                warehouseId,
+                false,
+                0,
+                20
+        );
+
+        InventoryReplenishmentRecommendationDto item = result.getContent().getFirst();
+        assertThat(item.reason()).isEqualTo(InventoryReplenishmentReason.MAINTENANCE_FORECAST);
+        assertThat(item.minStock()).isEqualTo(5.0);
+        assertThat(item.reorderPoint()).isEqualTo(8.0);
+        assertThat(item.reorderQty()).isEqualTo(15.0);
     }
 }
