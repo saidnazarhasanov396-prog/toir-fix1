@@ -1,5 +1,6 @@
 package com.toir.service.warehouse;
 
+import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.dto.warehouse.WarehouseStockMoveRequest;
 import com.toir.dto.warehouse.WarehouseTaskAssignRequest;
 import com.toir.dto.warehouse.WarehouseTaskCompleteRequest;
@@ -66,6 +67,9 @@ public class WarehouseTaskService {
 
     private final WarehouseTaskRepository taskRepository;
     private final WarehouseStockMoveService stockMoveService;
+    private final ToirStockService toirStockService;
+    private final WmsStockCoordinateValidator coordinateValidator;
+    private final LegacyStockProjectionService legacyStockProjectionService;
     private final AuditBuilderService auditBuilderService;
     private final WarehouseBinRepository warehouseBinRepository;
     private final SparePartRepository sparePartRepository;
@@ -193,6 +197,13 @@ public class WarehouseTaskService {
             validateCompletionVariance(line);
             line.setStatus(lineHasVariance(line) ? WarehouseTaskLineStatus.EXCEPTION : WarehouseTaskLineStatus.DONE);
         }
+        if (task.getTaskType() == WarehouseTaskType.RECEIVE) {
+            for (WarehouseTaskLine line : task.getLines()) {
+                if (zero(line.getActualQty()).signum() > 0) {
+                    postReceive(task, line, request == null ? null : request.comment());
+                }
+            }
+        }
         if (task.getTaskType() == WarehouseTaskType.PUTAWAY) {
             for (WarehouseTaskLine line : task.getLines()) {
                 if (zero(line.getActualQty()).signum() > 0) {
@@ -208,6 +219,34 @@ public class WarehouseTaskService {
         WarehouseTask saved = taskRepository.save(task);
         audit(saved, AuditAction.UPDATE, "Warehouse task completed");
         return toEnrichedDto(saved);
+    }
+
+    private void postReceive(WarehouseTask task, WarehouseTaskLine line, String comment) {
+        if (line.getSparePartId() == null) {
+            throw RestException.badRequest("RECEIVE task line sparePartId is required");
+        }
+        if (line.getToBinId() == null) {
+            throw RestException.badRequest("RECEIVE task line toBinId is required");
+        }
+        WarehouseStockStatus status = effectiveStatus(line.getStockStatus());
+        coordinateValidator.assertCanReceiveOrMoveInto(task.getWarehouseId(), line.getToBinId(), status);
+        toirStockService.postReceipt(new StockReceiptCommand(
+                task.getWarehouseId(),
+                line.getSparePartId(),
+                line.getToBinId(),
+                line.getActualQty(),
+                null,
+                line.getLotNumber(),
+                line.getSerialNumber(),
+                line.getExpiryDate(),
+                status,
+                "WAREHOUSE_TASK_RECEIVE",
+                task.getId(),
+                task.getTaskNumber(),
+                trimToNull(comment) == null ? task.getComment() : trimToNull(comment),
+                "warehouse-task-receive:" + line.getId()
+        ));
+        legacyStockProjectionService.sync(task.getWarehouseId(), line.getSparePartId());
     }
 
     @Transactional

@@ -114,12 +114,16 @@ class RbacBudgetSecurityTest {
     @MockBean
     FinanceReportService financeReportService;
 
+    @MockBean
+    ScopeAccessService scopeAccessService;
+
     @BeforeEach
     void setUpFinanceScope() {
         lenient().when(financeScopeService.filterBudgets(any())).thenReturn(List.of());
         lenient().when(financeScopeService.filterBudgetLines(any())).thenReturn(List.of());
         lenient().when(financeScopeService.filterActualCosts(any())).thenReturn(List.of());
         lenient().when(financeScopeService.filterRouteOverrides(any())).thenReturn(List.of());
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(false);
     }
 
     @TestConfiguration

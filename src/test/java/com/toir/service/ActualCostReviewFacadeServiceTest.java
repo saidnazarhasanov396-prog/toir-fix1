@@ -168,7 +168,7 @@ class ActualCostReviewFacadeServiceTest {
         rule.setEscalateToRoleCode("FINANCE_MANAGER");
         rule.setThresholdHours(8);
 
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(List.of(actualCost));
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
@@ -197,7 +197,7 @@ class ActualCostReviewFacadeServiceTest {
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID())
         );
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(pendingCosts);
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(true);
@@ -215,7 +215,7 @@ class ActualCostReviewFacadeServiceTest {
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID())
         );
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(pendingCosts);
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
@@ -235,7 +235,7 @@ class ActualCostReviewFacadeServiceTest {
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID())
         );
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(pendingCosts);
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
@@ -256,7 +256,7 @@ class ActualCostReviewFacadeServiceTest {
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID())
         );
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(pendingCosts);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         stubMinimalReviewQueueMapping();
@@ -272,7 +272,7 @@ class ActualCostReviewFacadeServiceTest {
         ActualCost overdue = pendingActualCost(UUID.randomUUID(), UUID.randomUUID(), 100.0, Instant.now().minusSeconds(30 * 3600));
         ActualCost dueSoon = pendingActualCost(UUID.randomUUID(), UUID.randomUUID(), 120.0, Instant.now().minusSeconds(22 * 3600));
 
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(List.of(overdue, dueSoon));
         when(financeScopeService.filterActualCosts(List.of(overdue, dueSoon))).thenReturn(List.of(overdue, dueSoon));
         when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(any()))

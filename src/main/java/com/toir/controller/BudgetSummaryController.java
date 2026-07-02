@@ -26,6 +26,7 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
+import com.toir.security.ScopeAccessService;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
@@ -91,6 +92,7 @@ public class BudgetSummaryController {
     private final WorkOrderRepository workOrderRepository;
     private final FinanceScopeService financeScopeService;
     private final ActualCostReviewFacadeService actualCostReviewFacadeService;
+    private final ScopeAccessService scopeAccessService;
 
     @GetMapping("/summary")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
@@ -678,6 +680,9 @@ public class BudgetSummaryController {
     }
 
     private boolean matchesCurrentReviewQueue(ActualCostReviewItem item) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
         var authentication = org.springframework.security.core.context.SecurityContextHolder
                 .getContext()
                 .getAuthentication();
@@ -688,9 +693,6 @@ public class BudgetSummaryController {
                 .map(org.springframework.security.core.GrantedAuthority::getAuthority)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        if (authorities.contains("SYSTEM_ADMIN") || authorities.contains("*")) {
-            return true;
-        }
         return authorities.contains(item.effectiveReviewRoleCode())
                 || authorities.contains(item.approvalRoleCode())
                 || authorities.contains("ACTUAL_COST_APPROVE")
