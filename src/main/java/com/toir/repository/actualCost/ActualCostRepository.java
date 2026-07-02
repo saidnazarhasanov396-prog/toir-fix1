@@ -110,7 +110,7 @@ public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
     List<ActualCost> findAllByFiltersOrderByUpdatedAtDesc(@Param("workOrderId") UUID workOrderId,
                                                            @Param("search") String search);
 
-    @Query(value = "SELECT * FROM actual_costs WHERE status = cast(:status as varchar) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM actual_costs WHERE status = :#{#status.name()} AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ActualCost> findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("status") ActualCostStatus status);
 
     @Query(value = """
