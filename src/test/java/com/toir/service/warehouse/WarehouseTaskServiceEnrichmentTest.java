@@ -78,6 +78,8 @@ class WarehouseTaskServiceEnrichmentTest {
     ProcurementRequestRepository procurementRequestRepository;
     @Mock
     PurchaseOrderRepository purchaseOrderRepository;
+    @Mock
+    WmsStockCoordinateValidator coordinateValidator;
 
     @InjectMocks
     WarehouseTaskService service;
