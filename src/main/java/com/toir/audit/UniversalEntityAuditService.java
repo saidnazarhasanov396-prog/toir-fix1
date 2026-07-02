@@ -42,7 +42,7 @@ public class UniversalEntityAuditService {
         if (!deduplicationRegistry.markIfFirst(entityType, change.entityId(), change.action(), diff)) {
             return;
         }
-        String reason = defaultReason(entityType, change.action().name());
+        String message = defaultMessage(entityType, change.action());
 
         auditLogService.recordDetailed(
                 currentUserId(),
@@ -50,13 +50,13 @@ public class UniversalEntityAuditService {
                 entityType,
                 change.entityId(),
                 change.action(),
-                reason,
+                message,
                 requestContext.getIpAddress(),
                 requestContext.getUserAgent(),
                 diff,
                 previous,
                 current,
-                reason,
+                null,
                 SOURCE,
                 requestContext.getMethod(),
                 requestContext.getPath(),
@@ -64,13 +64,24 @@ public class UniversalEntityAuditService {
         );
     }
 
-    private String defaultReason(String entityType, String action) {
-        String method = requestContext.getMethod();
-        String path = requestContext.getPath();
-        if (method == null || method.isBlank() || path == null || path.isBlank()) {
-            return "SYSTEM " + entityType + " " + action;
+    private String defaultMessage(String entityType, com.toir.enums.AuditAction action) {
+        return switch (action) {
+            case CREATE -> "Created " + humanize(entityType);
+            case UPDATE -> "Updated " + humanize(entityType);
+            case DELETE -> "Deleted " + humanize(entityType);
+            case LOGIN -> "User login";
+            case APPROVE -> "Approved " + humanize(entityType);
+            case CLOSE -> "Closed " + humanize(entityType);
+            case CANCEL -> "Cancelled " + humanize(entityType);
+            case EXPORT -> "Exported " + humanize(entityType);
+        };
+    }
+
+    private String humanize(String entityType) {
+        if (entityType == null || entityType.isBlank()) {
+            return "entity";
         }
-        return method + " " + path + " " + entityType + " " + action;
+        return entityType.replace('_', ' ');
     }
 
     private UUID currentUserId() {
