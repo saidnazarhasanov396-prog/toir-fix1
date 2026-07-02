@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.common.PageResponseWithSummary;
+import com.toir.dto.financialreview.ActualCostReviewItem;
 import com.toir.dto.notification.BulkFinancialReviewInboxAcknowledgementResponse;
 import com.toir.dto.notification.BulkNotificationReadResponse;
 import com.toir.dto.notification.FinancialReviewInboxAcknowledgementResponse;
@@ -12,8 +13,10 @@ import com.toir.dto.notification.NotificationDto;
 import com.toir.dto.notification.NotificationEvaluationResponse;
 import com.toir.dto.notification.NotificationSummaryDto;
 import com.toir.dto.sla.SlaRuleDto;
+import com.toir.enums.NotificationChannel;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.NotificationStatus;
+import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.CsvWriter;
 import com.toir.util.PaginationUtils;
@@ -24,8 +27,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 import com.toir.util.SortUtils;
 
 @Service
@@ -35,6 +41,7 @@ public class NotificationFacadeService {
     private final NotificationService notificationService;
     private final SlaRuleService slaRuleService;
     private final ScopeAccessService scopeAccessService;
+    private final ActualCostReviewFacadeService actualCostReviewFacadeService;
 
     @Transactional(readOnly = true)
     public Page<NotificationDto> list(UUID recipientId, int page, int size) {
@@ -108,16 +115,18 @@ public class NotificationFacadeService {
         FinancialReviewInboxFilter safeFilter = filter != null
                 ? filter
                 : new FinancialReviewInboxFilter(null, null, null, null, null, null);
-        List<NotificationDto> notifications = financialReviewNotifications(recipientId).stream()
-                .filter(n -> matchesFinancialReviewInboxFilter(n, safeFilter))
+        List<NotificationDto> notifications = financialReviewNotifications(recipientId);
+        List<FinancialReviewInboxItem> items = Stream.concat(
+                notifications.stream().map(this::toFinancialReviewInboxItem),
+                syntheticInboxItemsFromReviewQueue(notifiedEntityIds(notifications)).stream()
+        )
+                .filter(item -> matchesInboxItemFilter(item, safeFilter))
                 .toList();
 
-        List<FinancialReviewInboxItem> items = notifications.stream().map(this::toFinancialReviewInboxItem).toList();
-
-        long read = notifications.stream().filter(n -> n.status() == NotificationStatus.READ).count();
-        long dueSoon = notifications.stream().filter(n -> n.severity() == NotificationSeverity.WARNING).count();
-        long overdue = notifications.stream().filter(n -> n.severity() == NotificationSeverity.CRITICAL).count();
-        long acknowledged = notifications.stream().filter(n -> n.acknowledgedAt() != null).count();
+        long read = items.stream().filter(item -> item.status() == NotificationStatus.READ).count();
+        long dueSoon = items.stream().filter(item -> "DUE_SOON".equalsIgnoreCase(item.kind())).count();
+        long overdue = items.stream().filter(item -> "OVERDUE".equalsIgnoreCase(item.kind())).count();
+        long acknowledged = items.stream().filter(FinancialReviewInboxItem::isAcknowledged).count();
 
         return PageResponseWithSummary.of(
                 items,
@@ -227,28 +236,96 @@ public class NotificationFacadeService {
         return value != null && value.toLowerCase().contains(search.toLowerCase());
     }
 
-    private boolean matchesFinancialReviewInboxFilter(NotificationDto notification, FinancialReviewInboxFilter filter) {
+    private Set<String> notifiedEntityIds(List<NotificationDto> notifications) {
+        Set<String> ids = new HashSet<>();
+        for (NotificationDto notification : notifications) {
+            if (hasText(notification.entityId())) {
+                ids.add(notification.entityId().trim());
+            }
+        }
+        return ids;
+    }
+
+    private List<FinancialReviewInboxItem> syntheticInboxItemsFromReviewQueue(Set<String> notifiedEntityIds) {
+        return actualCostReviewFacadeService.reviewQueue(null).stream()
+                .filter(this::matchesReviewQueueItem)
+                .filter(item -> !notifiedEntityIds.contains(item.id().toString()))
+                .map(this::toSyntheticInboxItem)
+                .toList();
+    }
+
+    private boolean matchesReviewQueueItem(ActualCostReviewItem item) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
+        if (scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)
+                || scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)) {
+            return true;
+        }
+        if (hasText(item.effectiveReviewRoleCode())
+                && scopeAccessService.hasAuthority(item.effectiveReviewRoleCode())) {
+            return true;
+        }
+        return hasText(item.approvalRoleCode())
+                && scopeAccessService.hasAuthority(item.approvalRoleCode());
+    }
+
+    private FinancialReviewInboxItem toSyntheticInboxItem(ActualCostReviewItem item) {
+        NotificationSeverity severity = item.isOverdue()
+                ? NotificationSeverity.CRITICAL
+                : item.hoursToOverdue() <= 4
+                ? NotificationSeverity.WARNING
+                : NotificationSeverity.INFO;
+        String kind = severity == NotificationSeverity.CRITICAL ? "OVERDUE" : "DUE_SOON";
+        String actionPath = hasText(item.reviewActionPath())
+                ? item.reviewActionPath()
+                : "/financial-review?actualCostId=" + item.id();
+        return new FinancialReviewInboxItem(
+                item.id(),
+                null,
+                "Actual cost pending review",
+                "Actual cost " + item.id() + " requires finance review.",
+                NotificationChannel.WEB,
+                NotificationStatus.SENT,
+                severity,
+                "ACTUAL_COST",
+                item.id().toString(),
+                null,
+                item.costDate(),
+                kind,
+                item.approvalRoleCode(),
+                item.escalationRoleCode(),
+                null,
+                4,
+                item.hoursToOverdue(),
+                actionPath,
+                false,
+                null,
+                null,
+                null
+        );
+    }
+
+    private boolean matchesInboxItemFilter(FinancialReviewInboxItem item, FinancialReviewInboxFilter filter) {
         if (hasText(filter.search())
-                && !containsIgnoreCase(notification.title(), filter.search())
-                && !containsIgnoreCase(notification.message(), filter.search())
-                && !containsIgnoreCase(notification.entityType(), filter.search())
-                && !containsIgnoreCase(notification.entityId(), filter.search())) {
+                && !containsIgnoreCase(item.title(), filter.search())
+                && !containsIgnoreCase(item.message(), filter.search())
+                && !containsIgnoreCase(item.entityType(), filter.search())
+                && !containsIgnoreCase(item.entityId(), filter.search())) {
             return false;
         }
-        if (hasText(filter.kind()) && !filter.kind().equalsIgnoreCase(kind(notification))) {
+        if (hasText(filter.kind()) && !filter.kind().equalsIgnoreCase(item.kind())) {
             return false;
         }
-        if (Boolean.TRUE.equals(filter.unreadOnly()) && notification.status() == NotificationStatus.READ) {
+        if (Boolean.TRUE.equals(filter.unreadOnly()) && item.status() == NotificationStatus.READ) {
             return false;
         }
-        if ("ACKNOWLEDGED".equalsIgnoreCase(filter.acknowledgementMode()) && notification.acknowledgedAt() == null) {
+        if ("ACKNOWLEDGED".equalsIgnoreCase(filter.acknowledgementMode()) && !item.isAcknowledged()) {
             return false;
         }
-        if ("UNACKNOWLEDGED".equalsIgnoreCase(filter.acknowledgementMode()) && notification.acknowledgedAt() != null) {
+        if ("UNACKNOWLEDGED".equalsIgnoreCase(filter.acknowledgementMode()) && item.isAcknowledged()) {
             return false;
         }
-        // Notification rows do not currently persist financial review department/role metadata.
-        // Keep these params accepted at the API boundary without hiding records that cannot be enriched yet.
         return true;
     }
 
