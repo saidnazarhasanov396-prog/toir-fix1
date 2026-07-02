@@ -14,6 +14,7 @@ import com.toir.dto.notification.NotificationSummaryDto;
 import com.toir.dto.sla.SlaRuleDto;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.NotificationStatus;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.CsvWriter;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class NotificationFacadeService {
 
     private final NotificationService notificationService;
     private final SlaRuleService slaRuleService;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public Page<NotificationDto> list(UUID recipientId, int page, int size) {
@@ -106,12 +108,9 @@ public class NotificationFacadeService {
         FinancialReviewInboxFilter safeFilter = filter != null
                 ? filter
                 : new FinancialReviewInboxFilter(null, null, null, null, null, null);
-        List<NotificationDto> notifications = recipientId != null
-                ? notificationService.findForUser(recipientId).stream()
-                .filter(n -> n.entityType() != null && n.entityType().toUpperCase().contains("COST"))
+        List<NotificationDto> notifications = financialReviewNotifications(recipientId).stream()
                 .filter(n -> matchesFinancialReviewInboxFilter(n, safeFilter))
-                .toList()
-                : List.of();
+                .toList();
 
         List<FinancialReviewInboxItem> items = notifications.stream().map(this::toFinancialReviewInboxItem).toList();
 
@@ -205,6 +204,23 @@ public class NotificationFacadeService {
     @Transactional(readOnly = true)
     public NotificationDispatchResponse dispatch() {
         return new NotificationDispatchResponse(0);
+    }
+
+    private List<NotificationDto> financialReviewNotifications(UUID recipientId) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return notificationService.findAllFinancialReviewInbox();
+        }
+        if (recipientId == null) {
+            return List.of();
+        }
+        return notificationService.findForUser(recipientId).stream()
+                .filter(this::isFinancialReviewNotification)
+                .toList();
+    }
+
+    private boolean isFinancialReviewNotification(NotificationDto notification) {
+        return notification.entityType() != null
+                && notification.entityType().toUpperCase().contains("COST");
     }
 
     private boolean containsIgnoreCase(String value, String search) {

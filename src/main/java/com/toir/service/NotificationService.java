@@ -56,6 +56,13 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
+    public List<NotificationDto> findAllFinancialReviewInbox() {
+        return repository.findAllFinancialReviewInboxOrderByCreatedAtDesc().stream()
+                .map(NotificationDto::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public long countUnread(UUID recipientId) {
         if (recipientId == null) {
             return 0;
