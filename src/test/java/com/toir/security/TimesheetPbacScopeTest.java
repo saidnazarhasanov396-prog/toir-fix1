@@ -83,8 +83,8 @@ class TimesheetPbacScopeTest {
         UUID employeeId = UUID.randomUUID();
         when(timesheetRepository.findAllByWorkDateBetweenAndIsDeletedFalse(date(1), date(31)))
                 .thenReturn(List.of(entry(UUID.randomUUID(), employeeId)));
-        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId))
-                .thenReturn(Optional.of(employee(employeeId, UUID.randomUUID())));
+        when(employeeRepository.findAllByIdInAndIsDeletedFalse(List.of(employeeId)))
+                .thenReturn(List.of(employee(employeeId, UUID.randomUUID())));
         when(scopeAccessService.canAccessEmployee(employeeId)).thenReturn(false);
 
         var result = service.timesheetRange(date(1), date(31));
@@ -102,16 +102,18 @@ class TimesheetPbacScopeTest {
                         entry(UUID.randomUUID(), allowedEmployeeId),
                         entry(UUID.randomUUID(), deniedEmployeeId)
                 ));
-        when(employeeRepository.findByIdAndIsDeletedFalse(allowedEmployeeId))
-                .thenReturn(Optional.of(employee(allowedEmployeeId, allowedDepartmentId)));
-        when(employeeRepository.findByIdAndIsDeletedFalse(deniedEmployeeId))
-                .thenReturn(Optional.of(employee(deniedEmployeeId, UUID.randomUUID())));
+        when(employeeRepository.findAllByIdInAndIsDeletedFalse(List.of(allowedEmployeeId, deniedEmployeeId)))
+                .thenReturn(List.of(
+                        employee(allowedEmployeeId, allowedDepartmentId),
+                        employee(deniedEmployeeId, UUID.randomUUID())
+                ));
         when(scopeAccessService.canAccessDepartment(allowedDepartmentId)).thenReturn(true);
 
         var result = service.timesheetRange(date(1), date(31));
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().employeeId()).isEqualTo(allowedEmployeeId);
+        assertThat(result.getFirst().employeeName()).isEqualTo("Ali Valiyev");
     }
 
     @Test
