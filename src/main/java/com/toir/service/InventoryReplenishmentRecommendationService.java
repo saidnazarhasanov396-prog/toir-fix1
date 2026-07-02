@@ -82,7 +82,7 @@ public class InventoryReplenishmentRecommendationService {
     }
 
     private InventoryReplenishmentRecommendationDto fromReorder(ReorderSuggestionDto reorder) {
-        double reservedStock = Math.max(reorder.quantity() - reorder.available(), 0);
+        double reservedStock = Math.max(reorder.quantity() - reorder.nonAvailableQty() - reorder.usableAvailable(), 0);
         return build(
                 reorder.sparePartId(),
                 reorder.sparePartCode(),

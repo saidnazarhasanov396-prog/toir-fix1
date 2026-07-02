@@ -66,7 +66,13 @@ class InventoryReplenishmentRecommendationServiceTest {
                 20.0,
                 2.0,
                 20.0,
-                "WARNING"
+                "WARNING",
+                6.0,
+                0.0,
+                8.0,
+                5.0,
+                null,
+                "LOW_STOCK"
         );
         SparePartForecastItemDto forecast = new SparePartForecastItemDto(
                 sparePartId,
@@ -238,5 +244,54 @@ class InventoryReplenishmentRecommendationServiceTest {
         assertThat(item.suggestedOrderQty()).isEqualTo(5.0);
         assertThat(item.recommendedQuantity()).isEqualTo(5.0);
         assertThat(item.severity()).isEqualTo(NotificationSeverity.WARNING);
+    }
+
+    @Test
+    void recommendationsDoNotCountNonAvailableStockAsReservedStock() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-05T00:00:00Z");
+        ReorderSuggestionDto reorder = new ReorderSuggestionDto(
+                UUID.randomUUID(),
+                warehouseId,
+                "Central warehouse",
+                sparePartId,
+                "Blocked bearing",
+                "BRG-BLOCK",
+                "pcs",
+                20.0,
+                3.0,
+                5.0,
+                8.0,
+                null,
+                5.0,
+                13.0,
+                "WARNING",
+                3.0,
+                10.0,
+                8.0,
+                5.0,
+                null,
+                "LOW_STOCK"
+        );
+
+        when(reorderService.allSuggestions(warehouseId)).thenReturn(List.of(reorder));
+        when(forecastService.forecast(any()))
+                .thenReturn(new SparePartForecastSummaryDto(now, now.plusSeconds(30L * 24 * 60 * 60), List.of()));
+
+        Page<InventoryReplenishmentRecommendationDto> result = service.recommendations(
+                30,
+                now,
+                null,
+                warehouseId,
+                true,
+                0,
+                20
+        );
+
+        InventoryReplenishmentRecommendationDto item = result.getContent().getFirst();
+        assertThat(item.currentStock()).isEqualTo(20.0);
+        assertThat(item.availableStock()).isEqualTo(3.0);
+        assertThat(item.reservedStock()).isEqualTo(7.0);
     }
 }
