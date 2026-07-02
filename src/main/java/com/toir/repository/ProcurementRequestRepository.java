@@ -45,6 +45,14 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
     boolean existsByNumberAndIsDeletedFalse(@Param("number") String number);
 
     @Query(value = """
+            SELECT pg_advisory_xact_lock(
+                hashtextextended(cast(:warehouseId as text) || ':' || cast(:sparePartId as text), 0)
+            )
+            """, nativeQuery = true)
+    void lockAutoProcurementKey(@Param("warehouseId") UUID warehouseId,
+                                @Param("sparePartId") UUID sparePartId);
+
+    @Query(value = """
             SELECT EXISTS(
                 SELECT 1
                 FROM procurement_requests pr

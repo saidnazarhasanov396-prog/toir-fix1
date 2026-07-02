@@ -2,6 +2,7 @@ package com.toir.service.warehouse;
 
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.entity.warehouse.WarehouseStockBalance;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.repository.WarehouseStockPolicyRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -11,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Collection;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,14 +28,11 @@ public class LegacyStockProjectionService {
 
     @Transactional(readOnly = true)
     public WmsStockSnapshot current(UUID warehouseId, UUID sparePartId) {
-        BigDecimal onHand = BigDecimal.ZERO;
-        BigDecimal reserved = BigDecimal.ZERO;
-        for (WarehouseStockBalance balance :
-                balanceRepository.findAllByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId)) {
-            onHand = onHand.add(zero(balance.getQtyOnHand()));
-            reserved = reserved.add(zero(balance.getQtyReserved()));
-        }
-        return new WmsStockSnapshot(warehouseId, sparePartId, onHand, reserved);
+        return snapshotFromBalances(
+                warehouseId,
+                sparePartId,
+                balanceRepository.findAllByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId, sparePartId)
+        );
     }
 
     @Transactional(readOnly = true)
@@ -87,19 +86,50 @@ public class LegacyStockProjectionService {
     }
 
     private Map<StockKey, WmsStockSnapshot> aggregate(List<WarehouseStockBalance> balances) {
-        Map<StockKey, WmsStockSnapshot> result = new LinkedHashMap<>();
+        Map<StockKey, List<WarehouseStockBalance>> byStock = new LinkedHashMap<>();
         for (WarehouseStockBalance balance : balances) {
             StockKey key = new StockKey(balance.getWarehouseId(), balance.getSparePartId());
-            WmsStockSnapshot current = result.getOrDefault(key, new WmsStockSnapshot(
-                    balance.getWarehouseId(), balance.getSparePartId(), BigDecimal.ZERO, BigDecimal.ZERO));
-            result.put(key, new WmsStockSnapshot(
-                    key.warehouseId(),
-                    key.sparePartId(),
-                    current.qtyOnHand().add(zero(balance.getQtyOnHand())),
-                    current.qtyReserved().add(zero(balance.getQtyReserved()))
-            ));
+            byStock.computeIfAbsent(key, ignored -> new java.util.ArrayList<>()).add(balance);
         }
+        Map<StockKey, WmsStockSnapshot> result = new LinkedHashMap<>();
+        byStock.forEach((key, stockBalances) -> result.put(
+                key,
+                snapshotFromBalances(key.warehouseId(), key.sparePartId(), stockBalances)
+        ));
         return result;
+    }
+
+    private WmsStockSnapshot snapshotFromBalances(UUID warehouseId,
+                                                  UUID sparePartId,
+                                                  List<WarehouseStockBalance> balances) {
+        BigDecimal totalOnHand = BigDecimal.ZERO;
+        BigDecimal totalReserved = BigDecimal.ZERO;
+        BigDecimal usableOnHand = BigDecimal.ZERO;
+        BigDecimal usableReserved = BigDecimal.ZERO;
+        Map<WarehouseStockStatus, BigDecimal> breakdown = new EnumMap<>(WarehouseStockStatus.class);
+        for (WarehouseStockBalance balance : balances == null ? List.<WarehouseStockBalance>of() : balances) {
+            WarehouseStockStatus status = balance.getStockStatus() == null
+                    ? WarehouseStockStatus.AVAILABLE
+                    : balance.getStockStatus();
+            BigDecimal onHand = zero(balance.getQtyOnHand());
+            BigDecimal reserved = zero(balance.getQtyReserved());
+            totalOnHand = totalOnHand.add(onHand);
+            totalReserved = totalReserved.add(reserved);
+            breakdown.merge(status, onHand, BigDecimal::add);
+            if (status == WarehouseStockStatus.AVAILABLE) {
+                usableOnHand = usableOnHand.add(onHand);
+                usableReserved = usableReserved.add(reserved);
+            }
+        }
+        return new WmsStockSnapshot(
+                warehouseId,
+                sparePartId,
+                totalOnHand,
+                totalReserved,
+                usableOnHand,
+                usableReserved,
+                breakdown
+        );
     }
 
     private BigDecimal zero(BigDecimal value) {

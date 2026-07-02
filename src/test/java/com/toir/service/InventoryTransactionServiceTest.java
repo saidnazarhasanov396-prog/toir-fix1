@@ -196,6 +196,7 @@ class InventoryTransactionServiceTest {
         assertThat(stockCommand.referenceId()).isEqualTo(result.id());
         assertThat(stockCommand.referenceDocNo()).isEqualTo("RCV-2026-0001");
         assertThat(stockCommand.idempotencyKey()).isEqualTo("inventory-receipt:" + result.id());
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
     }
 
     @Test

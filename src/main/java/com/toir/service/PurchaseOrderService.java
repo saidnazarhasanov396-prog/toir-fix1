@@ -76,6 +76,7 @@ public class PurchaseOrderService {
     private final InventoryCostService inventoryCostService;
     private final ToirStockService toirStockService;
     private final LegacyStockProjectionService legacyStockProjectionService;
+    private final LowStockRecommendationService lowStockRecommendationService;
     private final WmsStockCoordinateValidator coordinateValidator;
     private final WmsDocumentPolicyService documentPolicyService;
     private final WarehouseTaskGenerationService taskGenerationService;
@@ -303,7 +304,8 @@ public class PurchaseOrderService {
         );
         postCoreStockReceipt(order, line, movement, quantity, lineRequest);
         generatePutawayTask(order, line, sparePart, movement, quantity, lineRequest);
-        legacyStockProjectionService.sync(order.getWarehouseId(), sparePart.getId());
+        WarehouseStock stock = legacyStockProjectionService.sync(order.getWarehouseId(), sparePart.getId());
+        lowStockRecommendationService.evaluateStockSafely(stock);
         inventoryCostService.applyReceiptCost(sparePart, previousTotalQuantity, quantity, line.getUnitPrice());
         inventoryTransactionRepository.save(receiptTransaction(order, line, sparePart, quantity, receiptDate, documentNumber, responsible, lineRequest));
     }

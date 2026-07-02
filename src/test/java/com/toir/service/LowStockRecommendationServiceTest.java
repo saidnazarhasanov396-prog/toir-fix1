@@ -205,7 +205,7 @@ class LowStockRecommendationServiceTest {
 
         verify(operationalIssueService).openOrUpdate(
                 eq(OperationalIssueType.LOW_STOCK),
-                eq(NotificationSeverity.WARNING),
+                eq(NotificationSeverity.CRITICAL),
                 eq(null),
                 eq(null),
                 eq("LOW_STOCK"),

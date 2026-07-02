@@ -18,6 +18,7 @@ import com.toir.enums.WarehouseWriteoffStatus;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.repository.WarehouseWriteoffRequestRepository;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.service.approval.ApprovalOrchestrator;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +52,7 @@ class WarehouseQualityServiceTest {
     @Mock WmsDocumentPolicyService documentPolicyService;
     @Mock ApprovalOrchestrator approvalOrchestrator;
     @Mock LegacyStockProjectionService legacyStockProjectionService;
+    @Mock LowStockRecommendationService lowStockRecommendationService;
     @Mock AuditBuilderService auditBuilderService;
 
     WarehouseQualityService service;
@@ -65,6 +67,7 @@ class WarehouseQualityServiceTest {
                 documentPolicyService,
                 approvalOrchestrator,
                 legacyStockProjectionService,
+                lowStockRecommendationService,
                 auditBuilderService
         );
     }

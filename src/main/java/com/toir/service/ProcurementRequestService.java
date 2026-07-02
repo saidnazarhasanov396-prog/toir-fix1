@@ -59,6 +59,7 @@ import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -1031,12 +1032,32 @@ public class ProcurementRequestService {
         }
         List<WarehouseStock> stocks = stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(s -> warehouseId == null || s.getWarehouseId().equals(warehouseId))
-                .filter(s -> s.getAvailable() < s.getMinQty())
                 .toList();
         if (stocks.isEmpty()) return List.of();
+        Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots = warehouseId == null
+                ? legacyStockProjectionService.currentAll()
+                : legacyStockProjectionService.currentForWarehouse(warehouseId);
 
         Map<UUID, ProcurementRequest> byWarehouse = new HashMap<>();
+        Set<String> selectedKeys = new HashSet<>();
         for (WarehouseStock s : stocks) {
+            SparePart sp = sparePartRepository.findByIdAndIsDeletedFalse(s.getSparePartId()).orElse(null);
+            if (sp == null) continue;
+            WmsStockSnapshot snapshot = legacyStockProjectionService.snapshot(
+                    snapshots,
+                    s.getWarehouseId(),
+                    s.getSparePartId()
+            );
+            var policy = ReplenishmentPolicyEvaluator.evaluate(s, sp, snapshot);
+            if (!policy.reorderNeeded()) continue;
+            String selectedKey = s.getWarehouseId() + ":" + s.getSparePartId();
+            if (!selectedKeys.add(selectedKey)) continue;
+            repo.lockAutoProcurementKey(s.getWarehouseId(), s.getSparePartId());
+            if (repo.existsActiveAutoForWarehouseAndSparePart(s.getWarehouseId(), s.getSparePartId())) {
+                continue;
+            }
+            double needed = policy.recommendedQuantity();
+            if (needed <= 0) continue;
             ProcurementRequest p = byWarehouse.computeIfAbsent(s.getWarehouseId(), wh -> {
                 ProcurementRequest pr = new ProcurementRequest();
                 pr.setNumber(nextNumber());
@@ -1044,17 +1065,17 @@ public class ProcurementRequestService {
                 pr.setDescription("Автозаявка: пополнение запасов ниже минимального уровня");
                 pr.setWarehouseId(wh);
                 pr.setType(ProcurementRequestType.SPARE_PART);
-                pr.setPriority(PriorityLevel.MEDIUM);
+                pr.setPriority(policy.severity() == com.toir.enums.NotificationSeverity.CRITICAL
+                        ? PriorityLevel.CRITICAL
+                        : PriorityLevel.HIGH);
                 pr.setStatus(ProcurementRequestStatus.DRAFT);
                 pr.setSource("AUTO");
                 pr.setRequiredBy(LocalDate.now(ZoneOffset.UTC).plusDays(14));
                 return pr;
             });
-            SparePart sp = sparePartRepository.findByIdAndIsDeletedFalse(s.getSparePartId()).orElse(null);
-            if (sp == null) continue;
-            double target = s.getMaxQty() != null ? s.getMaxQty() : s.getMinQty() * 2;
-            double needed = Math.max(0, target - s.getAvailable());
-            if (needed <= 0) continue;
+            if (policy.severity() == com.toir.enums.NotificationSeverity.CRITICAL) {
+                p.setPriority(PriorityLevel.CRITICAL);
+            }
             ProcurementRequestLine line = new ProcurementRequestLine();
             line.setRequest(p);
             line.setSparePartId(sp.getId());
@@ -1063,7 +1084,12 @@ public class ProcurementRequestService {
             line.setRemainingQuantity(needed);
             line.setUnit(sp.getUnit());
             line.setEstimatedCost(0.0);
-            line.setNotes("Автогенерация: available=" + s.getAvailable() + ", min=" + s.getMinQty());
+            line.setNotes("Автогенерация: usableAvailable=" + policy.usableAvailable()
+                    + ", triggerThreshold=" + policy.triggerThreshold()
+                    + ", criticalThreshold=" + policy.criticalThreshold()
+                    + ", min=" + policy.minQty()
+                    + ", reorderPoint=" + policy.reorderPoint()
+                    + ", recommendedQuantity=" + needed);
             p.getLines().add(line);
         }
 

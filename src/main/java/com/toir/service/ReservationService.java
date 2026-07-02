@@ -75,6 +75,7 @@ public class ReservationService {
         postCoreReserve(saved);
         WarehouseStock stock = legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
         stockMovementRepository.save(buildMovement(saved, StockMovementType.RESERVATION));
+        lowStockRecommendationService.evaluateStockSafely(stock);
 
         auditBuilderService.log(
                 "reservation",
@@ -101,8 +102,9 @@ public class ReservationService {
 
         Reservation saved = repository.save(reservation);
         postCoreRelease(saved);
-        legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
+        WarehouseStock stock = legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
         stockMovementRepository.save(buildMovement(saved, StockMovementType.RELEASE));
+        lowStockRecommendationService.evaluateStockSafely(stock);
 
         auditBuilderService.log(
                 "reservation",

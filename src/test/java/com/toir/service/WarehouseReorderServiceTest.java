@@ -160,7 +160,7 @@ class WarehouseReorderServiceTest {
         assertThat(suggestion.minQty()).isEqualTo(5.0);
         assertThat(suggestion.shortfall()).isZero();
         assertThat(suggestion.recommendedQuantity()).isEqualTo(5.0);
-        assertThat(suggestion.urgency()).isEqualTo("WARNING");
+        assertThat(suggestion.urgency()).isEqualTo("CRITICAL");
     }
 
     @Test
@@ -247,6 +247,48 @@ class WarehouseReorderServiceTest {
         assertThat(suggestion.urgency()).isEqualTo("WARNING");
         assertThat(suggestion.shortfall()).isEqualTo(3.0); // 15 - 12
         assertThat(suggestion.recommendedQuantity()).isEqualTo(20.0);
+    }
+
+    @Test
+    void suggestionsUseUsableAvailableAndExposePolicyThresholds() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WarehouseStock stock = createStock(warehouseId, sparePartId, 12.0, 0.0, 5.0, 6.0, null);
+        stock.setMaxQty(15.0);
+        Warehouse warehouse = createWarehouse(warehouseId, "Store B");
+        SparePart sparePart = createSparePart(sparePartId, "SP-STATUS", "Status sensitive part", "PCS");
+        Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots = Map.of(
+                new LegacyStockProjectionService.StockKey(warehouseId, sparePartId),
+                new WmsStockSnapshot(
+                        warehouseId,
+                        sparePartId,
+                        java.math.BigDecimal.valueOf(12),
+                        java.math.BigDecimal.ZERO,
+                        java.math.BigDecimal.valueOf(4),
+                        java.math.BigDecimal.ZERO
+                )
+        );
+
+        when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(stock));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(warehouse));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(sparePart));
+        when(legacyStockProjectionService.currentAll()).thenReturn(snapshots);
+
+        Page<ReorderSuggestionDto> result = service.suggestions(null, 0, 10);
+
+        assertThat(result.getContent()).hasSize(1);
+        ReorderSuggestionDto suggestion = result.getContent().getFirst();
+        assertThat(suggestion.quantity()).isEqualTo(12.0);
+        assertThat(suggestion.available()).isEqualTo(4.0);
+        assertThat(suggestion.usableAvailable()).isEqualTo(4.0);
+        assertThat(suggestion.nonAvailableQty()).isEqualTo(8.0);
+        assertThat(suggestion.triggerThreshold()).isEqualTo(6.0);
+        assertThat(suggestion.criticalThreshold()).isEqualTo(5.0);
+        assertThat(suggestion.maxQty()).isEqualTo(15.0);
+        assertThat(suggestion.shortfall()).isEqualTo(2.0);
+        assertThat(suggestion.recommendedQuantity()).isEqualTo(11.0);
+        assertThat(suggestion.urgency()).isEqualTo("CRITICAL");
+        assertThat(suggestion.reason()).isEqualTo("LOW_STOCK");
     }
 
     @Test

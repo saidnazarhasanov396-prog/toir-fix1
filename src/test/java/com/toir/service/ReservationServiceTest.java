@@ -115,6 +115,7 @@ class ReservationServiceTest {
                 null,
                 "reservation-reserve:" + result.id()
         );
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
     }
 
     @Test
@@ -217,6 +218,7 @@ class ReservationServiceTest {
                 null,
                 "reservation-cancel:" + reservationId
         );
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
     }
 
     @Test
