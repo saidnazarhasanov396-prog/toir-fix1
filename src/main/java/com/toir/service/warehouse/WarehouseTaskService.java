@@ -80,7 +80,6 @@ public class WarehouseTaskService {
     private final RepairRequestRepository repairRequestRepository;
     private final ProcurementRequestRepository procurementRequestRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
-    private final WmsStockCoordinateValidator coordinateValidator;
 
     @Transactional(readOnly = true)
     public Page<WarehouseTaskDto> findAll(WarehouseTaskStatus status,
