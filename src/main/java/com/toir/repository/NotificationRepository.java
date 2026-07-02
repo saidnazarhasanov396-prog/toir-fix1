@@ -32,6 +32,16 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     @Query(value = "SELECT * FROM notifications WHERE recipient_id = :recipientId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Notification> findAllByRecipientIdAndIsDeletedFalseOrderByCreatedAtDesc(@Param("recipientId") UUID recipientId);
 
+    @Query(value = """
+            SELECT *
+            FROM notifications
+            WHERE is_deleted = false
+              AND entity_type IS NOT NULL
+              AND UPPER(entity_type) LIKE '%COST%'
+            ORDER BY created_at DESC
+            """, nativeQuery = true)
+    List<Notification> findAllFinancialReviewInboxOrderByCreatedAtDesc();
+
    @Query(value = "SELECT COUNT(*) FROM notifications WHERE recipient_id = :recipientId AND status = cast(:status as varchar) AND is_deleted = false", nativeQuery = true)
     long countByRecipientIdAndStatusAndIsDeletedFalse(@Param("recipientId") UUID recipientId, @Param("status") NotificationStatus status);
 
