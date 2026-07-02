@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.financialreview.ActualCostReviewItem;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.enums.NotificationChannel;
 import com.toir.enums.NotificationSeverity;
@@ -11,9 +12,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +31,9 @@ class NotificationFacadeServiceTest {
 
     @Mock
     ScopeAccessService scopeAccessService;
+
+    @Mock
+    ActualCostReviewFacadeService actualCostReviewFacadeService;
 
     @InjectMocks
     NotificationFacadeService service;
@@ -167,6 +173,61 @@ class NotificationFacadeServiceTest {
         assertThat(result.totalElements()).isEqualTo(2);
         assertThat(result.content()).extracting("title")
                 .containsExactly("Finance manager cost review", "Own cost review");
+    }
+
+    @Test
+    void financialReviewInboxFallsBackToReviewQueueWhenNotificationsMissing() {
+        UUID adminId = UUID.randomUUID();
+        UUID actualCostId = UUID.randomUUID();
+        ActualCostReviewItem queueItem = new ActualCostReviewItem(
+                actualCostId,
+                null,
+                null,
+                null,
+                null,
+                "PENDING",
+                1000.0,
+                Instant.parse("2026-07-02T05:37:14.935408Z"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                2,
+                false,
+                "/financial-review/history/" + actualCostId,
+                null,
+                "FINANCE_MANAGER",
+                null,
+                22,
+                "RULE",
+                null,
+                true,
+                null,
+                "FINANCE_MANAGER",
+                "GENERAL",
+                "/budgets?actualCostId=" + actualCostId,
+                "/financial-review?actualCostId=" + actualCostId,
+                "/financial-review?actualCostId=" + actualCostId
+        );
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(notificationService.findAllFinancialReviewInbox()).thenReturn(List.of());
+        when(actualCostReviewFacadeService.reviewQueue(any())).thenReturn(List.of(queueItem));
+
+        var result = service.financialReviewInbox(adminId, 0, 10, (String) null);
+
+        assertThat(result.totalElements()).isEqualTo(1);
+        assertThat(result.content()).singleElement()
+                .extracting("entityId")
+                .isEqualTo(actualCostId.toString());
     }
 
     private NotificationDto notification(UUID recipientId, String title, String message,
