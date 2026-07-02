@@ -211,7 +211,8 @@ public class StockMovementService {
 
         StockMovement saved = repository.save(movement);
         postCoreStockReceipt(saved);
-        legacyStockProjectionService.sync(request.warehouseId(), request.sparePartId());
+        WarehouseStock stock = legacyStockProjectionService.sync(request.warehouseId(), request.sparePartId());
+        lowStockRecommendationService.evaluateStockSafely(stock);
         auditMovement(saved);
         return StockMovementDto.from(saved);
     }
@@ -503,7 +504,8 @@ public class StockMovementService {
     }
 
     private boolean shouldEvaluateLowStock(StockMovementType type) {
-        return type == StockMovementType.ISSUE
+        return type == StockMovementType.RECEIPT
+                || type == StockMovementType.ISSUE
                 || type == StockMovementType.TRANSFER
                 || type == StockMovementType.ADJUSTMENT;
     }

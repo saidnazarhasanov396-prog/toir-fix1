@@ -10,6 +10,7 @@ import com.toir.dto.warehouse.WarehouseWriteoffDecisionRequest;
 import com.toir.dto.warehouse.WarehouseWriteoffRequestDto;
 import com.toir.dto.wms.WmsDocumentGroupRequest;
 import com.toir.entity.StockMovement;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.entity.warehouse.WarehouseStockBalance;
 import com.toir.entity.warehouse.WarehouseWriteoffRequest;
 import com.toir.enums.ApprovalActionType;
@@ -23,6 +24,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.repository.WarehouseWriteoffRequestRepository;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.service.approval.ApprovalOrchestrator;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +49,7 @@ public class WarehouseQualityService {
     private final WmsDocumentPolicyService documentPolicyService;
     private final ApprovalOrchestrator approvalOrchestrator;
     private final LegacyStockProjectionService legacyStockProjectionService;
+    private final LowStockRecommendationService lowStockRecommendationService;
     private final AuditBuilderService auditBuilderService;
 
     @Transactional
@@ -73,7 +76,8 @@ public class WarehouseQualityService {
                 request.checkedById()
         );
         stockMovementRepository.save(statusTransferMovement(operationId, request));
-        legacyStockProjectionService.sync(request.warehouseId(), request.sparePartId());
+        WarehouseStock stock = legacyStockProjectionService.sync(request.warehouseId(), request.sparePartId());
+        lowStockRecommendationService.evaluateStockSafely(stock);
         return new WarehouseQualityTransferDto(
                 operationId,
                 request.warehouseId(),
@@ -137,6 +141,8 @@ public class WarehouseQualityService {
                     request.getRequestedById()
             );
             request.setStockStatus(WarehouseStockStatus.WRITEOFF_PENDING);
+            WarehouseStock stock = legacyStockProjectionService.sync(request.getWarehouseId(), request.getSparePartId());
+            lowStockRecommendationService.evaluateStockSafely(stock);
         }
         var approval = approvalOrchestrator.requestApproval(new CreateApprovalRequest(
                 "WAREHOUSE_WRITEOFF",
@@ -201,7 +207,8 @@ public class WarehouseQualityService {
         ), StockLedgerMovementType.WRITEOFF);
         request.setStockMovementId(movement.getId());
         request.setStatus(WarehouseWriteoffStatus.POSTED);
-        legacyStockProjectionService.sync(request.getWarehouseId(), request.getSparePartId());
+        WarehouseStock stock = legacyStockProjectionService.sync(request.getWarehouseId(), request.getSparePartId());
+        lowStockRecommendationService.evaluateStockSafely(stock);
         return WarehouseWriteoffRequestDto.from(writeoffRepository.save(request));
     }
 
@@ -231,6 +238,8 @@ public class WarehouseQualityService {
                     decision == null ? null : decision.approverId()
             );
             request.setStockStatus(WarehouseStockStatus.AVAILABLE);
+            WarehouseStock stock = legacyStockProjectionService.sync(request.getWarehouseId(), request.getSparePartId());
+            lowStockRecommendationService.evaluateStockSafely(stock);
         }
         request.setStatus(WarehouseWriteoffStatus.REJECTED);
         request.setComment(decision == null ? request.getComment() : trimToNull(decision.comment()));

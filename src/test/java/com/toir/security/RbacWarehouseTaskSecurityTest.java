@@ -7,6 +7,7 @@ import com.toir.enums.WarehouseTaskSourceType;
 import com.toir.enums.WarehouseTaskStatus;
 import com.toir.enums.WarehouseTaskType;
 import com.toir.service.warehouse.WarehouseTaskService;
+import com.toir.service.warehouse.WmsOperationsQueryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -49,6 +50,9 @@ class RbacWarehouseTaskSecurityTest {
 
     @MockBean
     WarehouseTaskService service;
+
+    @MockBean
+    WmsOperationsQueryService wmsOperationsQueryService;
 
     @TestConfiguration
     static class SecurityBeans {

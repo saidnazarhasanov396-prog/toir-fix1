@@ -206,7 +206,8 @@ public class WorkOrderWmsService {
         RepairMaterialReturn saved = materialReturnRepository.save(
                 materialReturn(workOrder, usage, identity, request, movement, transaction)
         );
-        legacyStockProjectionService.sync(identity.warehouseId(), identity.sparePartId());
+        WarehouseStock stock = legacyStockProjectionService.sync(identity.warehouseId(), identity.sparePartId());
+        lowStockRecommendationService.evaluateStockSafely(stock);
 
         auditBuilderService.log(
                 "repair_material_return",

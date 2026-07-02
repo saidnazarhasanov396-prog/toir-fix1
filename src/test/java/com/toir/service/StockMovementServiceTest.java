@@ -263,7 +263,7 @@ class StockMovementServiceTest {
     }
 
     @Test
-    void receiptDoesNotTriggerLowStockEvaluation() {
+    void receiptTriggersLowStockEvaluationForRecovery() {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
         WarehouseStock stock = stock(warehouseId, sparePartId, 8, 0);
@@ -280,7 +280,7 @@ class StockMovementServiceTest {
         service.create(request(warehouseId, sparePartId, StockMovementType.RECEIPT, 5));
 
         assertThat(stock.getQuantity()).isEqualTo(13);
-        verify(lowStockRecommendationService, never()).evaluateStockSafely(any(WarehouseStock.class));
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
 
         ArgumentCaptor<StockReceiptCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
         verify(toirStockService).postIncrease(stockCommandCaptor.capture(), eq(StockLedgerMovementType.RECEIPT));
