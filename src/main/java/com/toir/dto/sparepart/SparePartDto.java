@@ -1,11 +1,13 @@
 package com.toir.dto.sparepart;
 
 import com.toir.dto.mxik.MxikRefDto;
+import com.toir.dto.warehouse.WarehouseStockPolicyDto;
 import com.toir.entity.SparePart;
 import com.toir.entity.SparePartType;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.InventoryItemKind;
 
+import java.util.List;
 import java.util.UUID;
 import java.math.BigDecimal;
 
@@ -42,7 +44,8 @@ public record SparePartDto(
         BigDecimal inventoryValue,
         CriticalityLevel criticality,
         UUID mxikId,
-        MxikRefDto mxik
+        MxikRefDto mxik,
+        List<WarehouseStockPolicyDto> warehousePolicies
 ) {
     public record UnitRef(String code, String name) {}
 
@@ -65,7 +68,7 @@ public record SparePartDto(
         this(id, entityType, code, name, kind, unit == null ? null : unit.code(), unit == null ? null : unit.code(),
                 unit == null ? null : unit.name(), manufacturer, sku, specification, minStock, currentStock,
                 reservedStock, availableStock, warehouseCount, null, null, null, com.toir.enums.SparePartType.OTHER,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, List.of());
     }
 
     public static SparePartDto from(SparePart s) {
@@ -129,7 +132,8 @@ public record SparePartDto(
                 s.getInventoryValue(),
                 s.getCriticality(),
                 s.getMxikId(),
-                mxik
+                mxik,
+                List.of()
         );
     }
 
@@ -138,7 +142,15 @@ public record SparePartDto(
                 specification, minStock, currentStock, reservedStock, availableStock, warehouseCount,
                 typeId, typeCode, typeName, type, preferredCounteragentId, preferredCounteragentName,
                 leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, inventoryValue, criticality,
-                mxikId, mxik);
+                mxikId, mxik, warehousePolicies);
+    }
+
+    public SparePartDto withWarehousePolicies(List<WarehouseStockPolicyDto> warehousePolicies) {
+        return new SparePartDto(id, entityType, code, name, kind, unit, unitCode, unitName, manufacturer, sku,
+                specification, minStock, currentStock, reservedStock, availableStock, warehouseCount,
+                typeId, typeCode, typeName, type, preferredCounteragentId, preferredCounteragentName,
+                leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, inventoryValue, criticality,
+                mxikId, mxik, warehousePolicies == null ? List.of() : warehousePolicies);
     }
 
     public static UnitRef unitRef(String unit) {

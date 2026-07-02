@@ -82,6 +82,7 @@ public class SparePartService {
     private final ScopeAccessService scopeAccessService;
     private final AuditBuilderService auditBuilderService;
     private final LegacyStockProjectionService legacyStockProjectionService;
+    private final WarehouseStockPolicyService warehouseStockPolicyService;
 
     private static final List<String> NUMERIC_SORT_FIELDS = List.of(
             "minStock",
@@ -466,6 +467,7 @@ public class SparePartService {
         entity.setCode(nextCode());
         apply(entity, request);
         SparePart saved = repository.save(entity);
+        var warehousePolicies = warehouseStockPolicyService.replaceForSparePart(saved.getId(), request.warehousePolicies());
 
         auditBuilderService.log(
                 "spare_part",
@@ -478,7 +480,7 @@ public class SparePartService {
         );
 
         return enrichCounteragent(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()),
-                MxikRefDto.from(mxik(request.mxikId()).orElse(null))));
+                MxikRefDto.from(mxik(request.mxikId()).orElse(null))).withWarehousePolicies(warehousePolicies));
     }
 
     @Transactional
@@ -489,6 +491,7 @@ public class SparePartService {
         apply(entity, request);
 
         SparePart saved = repository.save(entity);
+        var warehousePolicies = warehouseStockPolicyService.replaceForSparePart(saved.getId(), request.warehousePolicies());
 
         auditBuilderService.log(
                 "spare_part",
@@ -500,7 +503,7 @@ public class SparePartService {
                 saved
         );
         return enrichCounteragent(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()),
-                MxikRefDto.from(mxik(request.mxikId()).orElse(null))));
+                MxikRefDto.from(mxik(request.mxikId()).orElse(null))).withWarehousePolicies(warehousePolicies));
     }
 
     @Transactional
