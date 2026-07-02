@@ -74,6 +74,7 @@ public class ReplenishmentProcurementRequestService {
 
         Map<UUID, ProcurementAssembly> byWarehouse = new LinkedHashMap<>();
         Set<String> allocatedNumbers = new HashSet<>();
+        Set<String> selectedProcurementKeys = new HashSet<>();
         for (ReplenishmentProcurementItemRequest item : effectiveRequest.items()) {
             if (item == null || item.sparePartId() == null) {
                 throw RestException.badRequest("sparePartId is required for replenishment procurement item");
@@ -89,6 +90,11 @@ public class ReplenishmentProcurementRequestService {
             UUID targetWarehouseId = resolveTargetWarehouseId(item, recommendation);
             Warehouse warehouse = loadWarehouse(targetWarehouseId);
             assertCanCreateForWarehouse(warehouse);
+            String selectedKey = targetWarehouseId + ":" + item.sparePartId();
+            if (!selectedProcurementKeys.add(selectedKey)) {
+                continue;
+            }
+            procurementRequestRepository.lockAutoProcurementKey(targetWarehouseId, item.sparePartId());
             if (procurementRequestRepository.existsActiveAutoForWarehouseAndSparePart(targetWarehouseId, item.sparePartId())) {
                 throw RestException.conflict("Active AUTO procurement request already exists for sparePartId="
                         + item.sparePartId() + ", warehouseId=" + targetWarehouseId);

@@ -31,6 +31,7 @@ import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.service.InventoryAnalyticsService;
+import com.toir.service.LowStockRecommendationService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -68,6 +69,7 @@ public class InventoryCountSessionService {
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final WmsDocumentPolicyService documentPolicyService;
     private final LegacyStockProjectionService legacyStockProjectionService;
+    private final LowStockRecommendationService lowStockRecommendationService;
     private final AuditBuilderService auditBuilderService;
 
     @Transactional
@@ -308,7 +310,8 @@ public class InventoryCountSessionService {
             toirStockService.postDecrease(adjustmentIssueCommand(session, line, variance.abs()), StockLedgerMovementType.ADJUSTMENT_DEC);
         }
         inventoryTransactionRepository.save(adjustmentTransaction(session, line, variance.abs(), movement));
-        legacyStockProjectionService.sync(line.getWarehouseId(), line.getSparePartId());
+        var stock = legacyStockProjectionService.sync(line.getWarehouseId(), line.getSparePartId());
+        lowStockRecommendationService.evaluateStockSafely(stock);
     }
 
     private StockMovement adjustmentMovement(InventoryCountSession session, InventoryCountLine line, BigDecimal quantity) {

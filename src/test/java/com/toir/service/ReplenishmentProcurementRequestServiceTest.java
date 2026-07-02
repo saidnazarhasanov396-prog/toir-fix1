@@ -198,6 +198,52 @@ class ReplenishmentProcurementRequestServiceTest {
         verify(procurementRequestRepository, never()).save(any());
     }
 
+    @Test
+    void deDuplicatesRepeatedItemsInsideOneRequestPayload() {
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        InventoryReplenishmentRecommendationDto recommendation = recommendation(
+                sparePartId,
+                warehouseId,
+                "Main warehouse",
+                4.0,
+                NotificationSeverity.WARNING,
+                InventoryReplenishmentReason.LOW_STOCK,
+                null
+        );
+        when(recommendationService.recommendationRows(30, null, null, null, true))
+                .thenReturn(List.of(recommendation));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse(warehouseId, "Main warehouse")));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart(sparePartId, "PCS")));
+        when(procurementRequestRepository.countByIsDeletedFalse()).thenReturn(0L);
+        when(procurementRequestRepository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(procurementRequestRepository.existsActiveAutoForWarehouseAndSparePart(warehouseId, sparePartId))
+                .thenReturn(false);
+        when(procurementRequestRepository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> {
+            ProcurementRequest request = invocation.getArgument(0);
+            request.setId(UUID.randomUUID());
+            request.getLines().forEach(line -> line.setId(UUID.randomUUID()));
+            return request;
+        });
+
+        List<ProcurementRequestDto> result = service.createProcurementRequests(new ReplenishmentProcurementRequest(
+                30,
+                null,
+                null,
+                null,
+                true,
+                List.of(
+                        new ReplenishmentProcurementItemRequest(sparePartId, warehouseId, null, null),
+                        new ReplenishmentProcurementItemRequest(sparePartId, warehouseId, null, null)
+                )
+        ));
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().lines()).hasSize(1);
+        verify(procurementRequestRepository).lockAutoProcurementKey(warehouseId, sparePartId);
+    }
+
     private InventoryReplenishmentRecommendationDto recommendation(UUID sparePartId,
                                                                    UUID warehouseId,
                                                                    String warehouseName,
