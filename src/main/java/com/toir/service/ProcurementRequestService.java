@@ -27,6 +27,7 @@ import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.BudgetAllocationStatus;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
@@ -102,6 +103,21 @@ public class ProcurementRequestService {
     private final WmsStockCoordinateValidator coordinateValidator;
     private final WmsDocumentPolicyService documentPolicyService;
     private final WarehouseTaskGenerationService taskGenerationService;
+
+    @Transactional(readOnly = true)
+    public List<ProcurementRequestDto> findFinanceReviewQueue(UUID departmentId,
+                                                             ProcurementRequestStatus status,
+                                                             boolean unallocatedOnly) {
+        UUID effectiveDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
+        List<ProcurementRequest> filtered = repo.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(request -> effectiveDepartmentId == null
+                        || effectiveDepartmentId.equals(request.getDepartmentId()))
+                .filter(request -> status == null || status == request.getStatus())
+                .filter(request -> !unallocatedOnly
+                        || request.getBudgetAllocationStatus() == BudgetAllocationStatus.UNALLOCATED)
+                .toList();
+        return toDtos(filtered);
+    }
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId, String search) {

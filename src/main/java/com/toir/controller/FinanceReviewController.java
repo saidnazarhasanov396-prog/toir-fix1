@@ -2,14 +2,12 @@ package com.toir.controller;
 
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.dto.procurement.ProcurementRequestDto;
-import com.toir.enums.BudgetAllocationStatus;
 import com.toir.enums.ProcurementRequestStatus;
-import com.toir.repository.ProcurementRequestRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
-import com.toir.security.ScopeAccessService;
 import com.toir.service.ActualCostService;
 import com.toir.service.finance.ProcurementBudgetAllocationService;
+import com.toir.service.ProcurementRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,10 +26,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class FinanceReviewController {
 
-    private final ProcurementRequestRepository procurementRequestRepository;
+    private final ProcurementRequestService procurementRequestService;
     private final ProcurementBudgetAllocationService procurementBudgetAllocationService;
     private final ActualCostService actualCostService;
-    private final ScopeAccessService scopeAccessService;
 
     @GetMapping("/procurement-requests")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_REVIEW_READ')")
@@ -40,16 +37,10 @@ public class FinanceReviewController {
             @RequestParam(required = false) ProcurementRequestStatus status,
             @RequestParam(required = false, defaultValue = "false") Boolean unallocatedOnly) {
 
-        UUID effectiveDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
-
-        return procurementRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(request -> effectiveDepartmentId == null
-                        || effectiveDepartmentId.equals(request.getDepartmentId()))
-                .filter(request -> status == null || status == request.getStatus())
-                .filter(request -> !unallocatedOnly
-                        || request.getBudgetAllocationStatus() == BudgetAllocationStatus.UNALLOCATED)
-                .map(ProcurementRequestDto::from)
-                .toList();
+        return procurementRequestService.findFinanceReviewQueue(
+                departmentId,
+                status,
+                Boolean.TRUE.equals(unallocatedOnly));
     }
 
     @PostMapping("/procurement-requests/{id}/allocate")
