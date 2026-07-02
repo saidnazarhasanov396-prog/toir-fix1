@@ -27,6 +27,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.CounteragentService;
 import com.toir.service.FinanceScopeService;
+import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -95,6 +96,9 @@ class BudgetSummaryControllerContractTest {
     @Mock
     ActualCostReviewFacadeService actualCostReviewFacadeService;
 
+    @Mock
+    ScopeAccessService scopeAccessService;
+
     private MockMvc mockMvc;
     private BudgetSummaryController controller;
 
@@ -113,7 +117,8 @@ class BudgetSummaryControllerContractTest {
                 counteragentService,
                 workOrderRepository,
                 financeScopeService,
-                actualCostReviewFacadeService);
+                actualCostReviewFacadeService,
+                scopeAccessService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -259,6 +264,21 @@ class BudgetSummaryControllerContractTest {
     }
 
     @Test
+    void reviewQueueMyQueueReturnsAllItemsForScopeAdmin() throws Exception {
+        UUID actualCostId = UUID.randomUUID();
+        ActualCostReviewItem item = reviewItemWithContext(
+                actualCostId, UUID.randomUUID(), UUID.randomUUID(), "PENDING", "FINANCE_MANAGER", false, 12);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(actualCostReviewFacadeService.reviewQueue(null)).thenReturn(List.of(item));
+
+        mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue")
+                        .param("myQueue", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(actualCostId.toString()));
+    }
+
+    @Test
     void reviewQueueTreatsRejectPermissionAsCurrentReviewQueueAccess() throws Exception {
         UUID actualCostId = UUID.randomUUID();
         ActualCostReviewItem item = reviewItemWithContext(
@@ -268,6 +288,7 @@ class BudgetSummaryControllerContractTest {
                 "credentials",
                 List.of(new SimpleGrantedAuthority("ACTUAL_COST_REJECT"))
         ));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
         when(actualCostReviewFacadeService.reviewQueue(null)).thenReturn(List.of(item));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue")
