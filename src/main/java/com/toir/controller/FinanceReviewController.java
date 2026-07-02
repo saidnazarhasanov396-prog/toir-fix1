@@ -7,7 +7,6 @@ import com.toir.security.AuthenticatedUser;
 import com.toir.security.CurrentUser;
 import com.toir.service.ActualCostService;
 import com.toir.service.finance.ProcurementBudgetAllocationService;
-import com.toir.service.ProcurementRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,7 +25,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class FinanceReviewController {
 
-    private final ProcurementRequestService procurementRequestService;
     private final ProcurementBudgetAllocationService procurementBudgetAllocationService;
     private final ActualCostService actualCostService;
 
@@ -37,7 +35,7 @@ public class FinanceReviewController {
             @RequestParam(required = false) ProcurementRequestStatus status,
             @RequestParam(required = false, defaultValue = "false") Boolean unallocatedOnly) {
 
-        return procurementRequestService.findFinanceReviewQueue(
+        return procurementBudgetAllocationService.reviewQueue(
                 departmentId,
                 status,
                 Boolean.TRUE.equals(unallocatedOnly));
