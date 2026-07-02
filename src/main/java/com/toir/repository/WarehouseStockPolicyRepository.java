@@ -14,6 +14,9 @@ public interface WarehouseStockPolicyRepository extends JpaRepository<WarehouseS
     Optional<WarehouseStockPolicy> findByWarehouseIdAndSparePartIdAndIsDeletedFalse(
             UUID warehouseId, UUID sparePartId);
 
+    Optional<WarehouseStockPolicy> findByWarehouseIdAndSparePartId(
+            UUID warehouseId, UUID sparePartId);
+
     List<WarehouseStockPolicy> findAllByWarehouseIdAndIsDeletedFalse(UUID warehouseId);
 
     List<WarehouseStockPolicy> findAllBySparePartIdAndIsDeletedFalse(UUID sparePartId);

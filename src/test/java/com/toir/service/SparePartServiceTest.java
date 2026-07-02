@@ -1,6 +1,8 @@
 package com.toir.service;
 
 import com.toir.dto.sparepart.SparePartDto;
+import com.toir.dto.warehouse.WarehouseStockPolicyDto;
+import com.toir.dto.warehouse.WarehouseStockPolicyRequest;
 import com.toir.entity.Counteragent;
 import com.toir.entity.Mxik;
 import com.toir.entity.SparePart;
@@ -113,6 +115,9 @@ class SparePartServiceTest {
     @Mock
     LegacyStockProjectionService legacyStockProjectionService;
 
+    @Mock
+    WarehouseStockPolicyService warehouseStockPolicyService;
+
     SparePartService service;
     Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> wmsSnapshots;
 
@@ -135,10 +140,12 @@ class SparePartServiceTest {
                 unitOfMeasurementService,
                 scopeAccessService,
                 auditBuilderService,
-                legacyStockProjectionService
+                legacyStockProjectionService,
+                warehouseStockPolicyService
         );
         lenient().when(legacyStockProjectionService.currentAll()).thenAnswer(invocation -> wmsSnapshots);
         lenient().when(legacyStockProjectionService.currentForSparePart(any())).thenAnswer(invocation -> wmsSnapshots);
+        lenient().when(warehouseStockPolicyService.replaceForSparePart(any(), any())).thenReturn(List.of());
         lenient().when(legacyStockProjectionService.snapshot(any(), any(), any())).thenAnswer(invocation ->
                 wmsSnapshots.getOrDefault(
                         new LegacyStockProjectionService.StockKey(invocation.getArgument(1), invocation.getArgument(2)),
@@ -612,6 +619,54 @@ class SparePartServiceTest {
         assertThat(result.mxikId()).isEqualTo(mxikId);
         assertThat(result.mxik()).isNotNull();
         assertThat(result.mxik().kod()).isEqualTo("8482");
+    }
+
+    @Test
+    void createReplacesWarehousePoliciesAndReturnsThem() {
+        String codePrefix = "SP-" + java.time.Year.now().getValue() + "-";
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        com.toir.entity.SparePartType otherType = sparePartType(UUID.randomUUID(), "OTHER", "Other", "PCS");
+        WarehouseStockPolicyRequest policyRequest = new WarehouseStockPolicyRequest(
+                warehouseId, 5.0, 20.0, 5.0, 10.0, null);
+        WarehouseStockPolicyDto policyDto = new WarehouseStockPolicyDto(
+                UUID.randomUUID(), warehouseId, "Central Warehouse", sparePartId, "Laptop Kamera", "SP-001",
+                5.0, 20.0, 5.0, 10.0, null, null);
+
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(codePrefix + "0001")).thenReturn(false);
+        when(typeRepository.findByCodeIgnoreCaseAndActiveTrue("OTHER")).thenReturn(Optional.of(otherType));
+        when(repository.save(any(SparePart.class))).thenAnswer(invocation -> {
+            SparePart saved = invocation.getArgument(0);
+            saved.setId(sparePartId);
+            return saved;
+        });
+        when(warehouseStockPolicyService.replaceForSparePart(eq(sparePartId), eq(List.of(policyRequest))))
+                .thenReturn(List.of(policyDto));
+
+        SparePartDto result = service.create(new com.toir.dto.sparepart.SparePartRequest(
+                null,
+                "Laptop Kamera",
+                null,
+                InventoryItemKind.SPARE_PART,
+                null,
+                null,
+                "PCS",
+                null,
+                null,
+                5,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(policyRequest)
+        ));
+
+        verify(warehouseStockPolicyService).replaceForSparePart(sparePartId, List.of(policyRequest));
+        assertThat(result.warehousePolicies()).containsExactly(policyDto);
     }
 
     @Test
