@@ -93,6 +93,9 @@ class ActualCostServiceTest {
     @Mock
     com.toir.service.finance.BudgetCommitmentService budgetCommitmentService;
 
+    @Mock
+    com.toir.repository.StockMovementRepository stockMovementRepository;
+
     @InjectMocks
     ActualCostService service;
 

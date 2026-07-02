@@ -75,6 +75,8 @@ class ActualCostPbacScopeTest {
         repairCampaignBudgetLineResolver = mock(RepairCampaignBudgetLineResolver.class);
         com.toir.service.finance.BudgetCommitmentService budgetCommitmentService =
                 mock(com.toir.service.finance.BudgetCommitmentService.class);
+        com.toir.repository.StockMovementRepository stockMovementRepository =
+                mock(com.toir.repository.StockMovementRepository.class);
         FinanceScopeService financeScopeService = new FinanceScopeService(
                 scopeAccessService,
                 repository,
@@ -97,7 +99,8 @@ class ActualCostPbacScopeTest {
                 financeScopeService,
                 notificationService,
                 repairCampaignBudgetLineResolver,
-                budgetCommitmentService
+                budgetCommitmentService,
+                stockMovementRepository
         );
     }
 

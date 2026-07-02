@@ -8,6 +8,7 @@ public record FinanceReportRow(
         String groupName,
         String groupType,
         double plannedAmount,
+        double committedAmount,
         double approvedActualAmount,
         double pendingActualAmount,
         double rejectedActualAmount,

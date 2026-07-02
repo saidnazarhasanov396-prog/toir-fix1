@@ -60,6 +60,7 @@ public class FinanceReportService {
         List<FinanceReportRow> byCategory = byCategory(dataset);
         return new FinanceDashboardResponse(
                 totals.plannedAmount,
+                totals.committedAmount,
                 totals.approvedActualAmount,
                 totals.pendingActualAmount,
                 totals.rejectedActualAmount,
@@ -147,7 +148,9 @@ public class FinanceReportService {
         Map<UUID, MutableTotals> totalsByDepartment = new LinkedHashMap<>();
         for (BudgetLine line : dataset.lines()) {
             UUID departmentId = line.getBudget() != null ? line.getBudget().getDepartmentId() : null;
-            totalsByDepartment.computeIfAbsent(departmentId, key -> new MutableTotals()).plannedAmount += line.getPlannedAmount();
+            MutableTotals departmentTotals = totalsByDepartment.computeIfAbsent(departmentId, key -> new MutableTotals());
+            departmentTotals.plannedAmount += line.getPlannedAmount();
+            departmentTotals.committedAmount += line.getCommittedAmount();
         }
         for (ActualCost cost : dataset.actualCosts()) {
             UUID departmentId = resolveDepartmentId(cost, dataset.lineById(), dataset.sourceMaps());
@@ -174,7 +177,9 @@ public class FinanceReportService {
     private List<FinanceReportRow> byCategory(FinanceDataset dataset) {
         Map<UUID, MutableTotals> totalsByCategory = new LinkedHashMap<>();
         for (BudgetLine line : dataset.lines()) {
-            totalsByCategory.computeIfAbsent(line.getCostCategoryId(), key -> new MutableTotals()).plannedAmount += line.getPlannedAmount();
+            MutableTotals categoryTotals = totalsByCategory.computeIfAbsent(line.getCostCategoryId(), key -> new MutableTotals());
+            categoryTotals.plannedAmount += line.getPlannedAmount();
+            categoryTotals.committedAmount += line.getCommittedAmount();
         }
         for (ActualCost cost : dataset.actualCosts()) {
             addActualCost(totalsByCategory.computeIfAbsent(cost.getCostCategoryId(), key -> new MutableTotals()), cost);
@@ -196,7 +201,10 @@ public class FinanceReportService {
 
     private Totals totals(List<ActualCost> actualCosts, List<BudgetLine> lines) {
         MutableTotals totals = new MutableTotals();
-        lines.forEach(line -> totals.plannedAmount += line.getPlannedAmount());
+        lines.forEach(line -> {
+            totals.plannedAmount += line.getPlannedAmount();
+            totals.committedAmount += line.getCommittedAmount();
+        });
         actualCosts.forEach(cost -> addActualCost(totals, cost));
         return totals.toTotals();
     }
@@ -223,6 +231,7 @@ public class FinanceReportService {
                 groupName,
                 groupType,
                 totals.plannedAmount,
+                totals.committedAmount,
                 totals.approvedActualAmount,
                 totals.pendingActualAmount,
                 totals.rejectedActualAmount,
@@ -252,6 +261,7 @@ public class FinanceReportService {
                         "groupCode",
                         "groupName",
                         "plannedAmount",
+                        "committedAmount",
                         "approvedActualAmount",
                         "pendingActualAmount",
                         "rejectedActualAmount",
@@ -274,6 +284,7 @@ public class FinanceReportService {
                         row -> row.reportRow().groupCode(),
                         row -> row.reportRow().groupName(),
                         row -> row.reportRow().plannedAmount(),
+                        row -> row.reportRow().committedAmount(),
                         row -> row.reportRow().approvedActualAmount(),
                         row -> row.reportRow().pendingActualAmount(),
                         row -> row.reportRow().rejectedActualAmount(),
@@ -425,6 +436,7 @@ public class FinanceReportService {
 
     private static class MutableTotals {
         private double plannedAmount;
+        private double committedAmount;
         private double approvedActualAmount;
         private double pendingActualAmount;
         private double rejectedActualAmount;
@@ -434,6 +446,7 @@ public class FinanceReportService {
         private Totals toTotals() {
             return new Totals(
                     plannedAmount,
+                    committedAmount,
                     approvedActualAmount,
                     pendingActualAmount,
                     rejectedActualAmount,
@@ -445,6 +458,7 @@ public class FinanceReportService {
 
     private record Totals(
             double plannedAmount,
+            double committedAmount,
             double approvedActualAmount,
             double pendingActualAmount,
             double rejectedActualAmount,

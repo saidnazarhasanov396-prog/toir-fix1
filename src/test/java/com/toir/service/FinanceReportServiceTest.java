@@ -91,6 +91,7 @@ class FinanceReportServiceTest {
         FinanceDashboardResponse dashboard = service.dashboard(2026, 6, departmentId);
 
         assertThat(dashboard.totalPlanned()).isEqualTo(1_000);
+        assertThat(dashboard.totalCommitted()).isZero();
         assertThat(dashboard.approvedActual()).isEqualTo(200);
         assertThat(dashboard.pendingActual()).isEqualTo(200);
         assertThat(dashboard.rejectedActual()).isEqualTo(30);

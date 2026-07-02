@@ -1,7 +1,7 @@
 package com.toir.service.finance;
 
 import com.toir.dto.procurement.ProcurementRequestDto;
-import com.toir.entity.projects.ActualCostAllocationEvent;
+import com.toir.entity.projects.BudgetEvent;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ProcurementRequest;
@@ -12,7 +12,7 @@ import com.toir.enums.BudgetStatus;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ProcurementRequestRepository;
-import com.toir.repository.actualCost.ActualCostAllocationEventRepository;
+import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
@@ -29,7 +29,8 @@ public class ProcurementBudgetAllocationService {
 
     private final ProcurementRequestRepository procurementRequestRepository;
     private final BudgetLineRepository budgetLineRepository;
-    private final ActualCostAllocationEventRepository allocationEventRepository;
+    private final BudgetEventRepository budgetEventRepository;
+    private final BudgetCommitmentService budgetCommitmentService;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
 
@@ -50,6 +51,7 @@ public class ProcurementBudgetAllocationService {
                 .orElseThrow(() -> RestException.notFound("Budget line not found: " + budgetLineId));
 
         validateBudgetLineForProcurement(line, request);
+        budgetCommitmentService.assertCanCommit(line, request.getTotalEstimatedCost());
 
         UUID oldBudgetLineId = request.getBudgetLineId();
         request.setBudgetLineId(budgetLineId);
@@ -59,7 +61,8 @@ public class ProcurementBudgetAllocationService {
 
         ProcurementRequest saved = procurementRequestRepository.save(request);
 
-        recordAllocationEvent(request.getId(), oldBudgetLineId, budgetLineId, actorUserId, comment);
+        recordBudgetAllocationEvent(line, requestId, oldBudgetLineId, budgetLineId, actorUserId,
+                "PROCUREMENT_BUDGET_ALLOCATED", comment);
         auditBuilderService.log("procurement_request", requestId.toString(), AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST, "Budget allocated", null, saved);
 
@@ -84,6 +87,10 @@ public class ProcurementBudgetAllocationService {
         assertCanMutate(request);
 
         UUID oldBudgetLineId = request.getBudgetLineId();
+        BudgetLine line = oldBudgetLineId == null
+                ? null
+                : budgetLineRepository.findByIdAndIsDeletedFalse(oldBudgetLineId).orElse(null);
+
         request.setBudgetLineId(null);
         request.setBudgetAllocationStatus(BudgetAllocationStatus.UNALLOCATED);
         request.setBudgetAllocatedAt(null);
@@ -91,7 +98,10 @@ public class ProcurementBudgetAllocationService {
 
         ProcurementRequest saved = procurementRequestRepository.save(request);
 
-        recordAllocationEvent(request.getId(), oldBudgetLineId, null, actorUserId, comment);
+        if (line != null) {
+            recordBudgetAllocationEvent(line, requestId, oldBudgetLineId, null, actorUserId,
+                    "PROCUREMENT_BUDGET_UNALLOCATED", comment);
+        }
         auditBuilderService.log("procurement_request", requestId.toString(), AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST, "Budget unallocated", null, saved);
 
@@ -127,17 +137,24 @@ public class ProcurementBudgetAllocationService {
         }
     }
 
-    private void recordAllocationEvent(UUID procurementRequestId, UUID oldBudgetLineId, UUID newBudgetLineId,
-                                       UUID actorUserId, String comment) {
-        ActualCostAllocationEvent event = new ActualCostAllocationEvent();
-        event.setActualCostId(procurementRequestId);
-        event.setOldBudgetLineId(oldBudgetLineId);
-        event.setNewBudgetLineId(newBudgetLineId);
+    private void recordBudgetAllocationEvent(BudgetLine line, UUID procurementRequestId,
+                                             UUID oldBudgetLineId, UUID newBudgetLineId,
+                                             UUID actorUserId, String eventType, String comment) {
+        BudgetEvent event = new BudgetEvent();
+        event.setBudgetId(line.getBudget().getId());
+        event.setBudgetLineId(line.getId());
+        event.setEventType(eventType);
+        event.setOldValues("{\"budgetLineId\":"
+                + (oldBudgetLineId == null ? "null" : "\"" + oldBudgetLineId + "\"")
+                + ",\"procurementRequestId\":\"" + procurementRequestId + "\"}");
+        event.setNewValues("{\"budgetLineId\":"
+                + (newBudgetLineId == null ? "null" : "\"" + newBudgetLineId + "\"")
+                + ",\"procurementRequestId\":\"" + procurementRequestId + "\"}");
         event.setActorUserId(actorUserId);
         event.setComment(comment == null || comment.isBlank()
                 ? "Procurement budget allocation change"
                 : comment.trim());
         event.setOccurredAt(Instant.now());
-        allocationEventRepository.save(event);
+        budgetEventRepository.save(event);
     }
 }
