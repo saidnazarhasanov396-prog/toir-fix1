@@ -24,6 +24,7 @@ import com.toir.dto.procurement.EquipmentWarrantyLineRequest;
 import com.toir.dto.procurement.ProcurementOrderRequest;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.BudgetAllocationStatus;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.PriorityLevel;
@@ -1184,5 +1185,31 @@ class ProcurementRequestServiceTest {
 
     private WmsDocumentGroupRequest documentGroup(String name, String type) {
         return new WmsDocumentGroupRequest(name, type, "DOC-1", LocalDate.of(2026, 6, 18), UUID.randomUUID());
+    }
+
+    @Test
+    void findFinanceReviewQueueIncludesRequestLines() {
+        UUID requestId = UUID.randomUUID();
+        ProcurementRequest request = new ProcurementRequest();
+        request.setId(requestId);
+        request.setNumber("PR-2026-0001");
+        request.setTitle("Finance review queue");
+        request.setStatus(ProcurementRequestStatus.SUBMITTED);
+        request.setBudgetAllocationStatus(BudgetAllocationStatus.UNALLOCATED);
+        ProcurementRequestLine line = new ProcurementRequestLine();
+        line.setId(UUID.randomUUID());
+        line.setRequest(request);
+        line.setQuantity(2);
+        line.setUnitPrice(150.0);
+        request.setLines(new java.util.ArrayList<>(List.of(line)));
+
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(request));
+
+        var result = service.findFinanceReviewQueue(null, ProcurementRequestStatus.SUBMITTED, true);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().lines()).hasSize(1);
+        assertThat(result.getFirst().lines().getFirst().quantity()).isEqualTo(2);
     }
 }
