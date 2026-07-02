@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.hr.*;
 import com.toir.entity.Department;
+import com.toir.entity.TimesheetEntry;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.Employee;
@@ -9,6 +10,7 @@ import com.toir.entity.users.EmployeePicture;
 import com.toir.entity.users.EmployeeSpecialisation;
 import com.toir.enums.DepartmentType;
 import com.toir.enums.FileCategory;
+import com.toir.enums.TimesheetStatus;
 import com.toir.repository.TimesheetEntryRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.projects.BrigadeRepository;
@@ -379,6 +381,31 @@ class HrServiceTest {
     }
 
     @Test
+    void timesheetForIncludesEmployeeName() {
+        UUID employeeId = UUID.randomUUID();
+        TimesheetEntry entry = timesheetEntry(UUID.randomUUID(), employeeId);
+        Employee employee = employee(employeeId, UUID.randomUUID(), null);
+
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId))
+                .thenReturn(Optional.of(employee));
+        when(timesheetRepository.findAllByEmployeeIdAndWorkDateBetweenAndIsDeletedFalseOrderByWorkDateAsc(
+                employeeId,
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 31)
+        )).thenReturn(List.of(entry));
+
+        var result = service.timesheetFor(
+                employeeId,
+                LocalDate.of(2026, 5, 1),
+                LocalDate.of(2026, 5, 31)
+        );
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().employeeId()).isEqualTo(employeeId);
+        assertThat(result.getFirst().employeeName()).isEqualTo("Ali Valiyev Akmalovich");
+    }
+
+    @Test
     void getEmployeeIncludesDepartmentNameAndBrigadeName() {
         UUID employeeId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
@@ -623,6 +650,20 @@ class HrServiceTest {
         employee.setActive(true);
         employee.setDeleted(false);
         return employee;
+    }
+
+    private TimesheetEntry timesheetEntry(UUID entryId, UUID employeeId) {
+        TimesheetEntry entry = new TimesheetEntry();
+        entry.setId(entryId);
+        entry.setEmployeeId(employeeId);
+        entry.setWorkDate(LocalDate.of(2026, 5, 1));
+        entry.setHoursRegular(8);
+        entry.setHoursOvertime(1);
+        entry.setHoursNight(0);
+        entry.setHoursHoliday(0);
+        entry.setStatus(TimesheetStatus.DRAFT);
+        entry.setDeleted(false);
+        return entry;
     }
 
     private UploadedFile uploadedPictureFile(UUID fileId, String originalName) {
