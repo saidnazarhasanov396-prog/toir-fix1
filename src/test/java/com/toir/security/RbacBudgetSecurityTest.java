@@ -434,6 +434,7 @@ class RbacBudgetSecurityTest {
     private FinanceDashboardResponse dashboard() {
         return new FinanceDashboardResponse(
                 100,
+                0,
                 10,
                 5,
                 0,
@@ -445,7 +446,7 @@ class RbacBudgetSecurityTest {
                 0,
                 java.time.Instant.parse("2026-06-27T00:00:00Z"),
                 new FinanceDashboardResponse.Filters(2026, 6, null),
-                List.of(new FinanceReportRow(null, "D", "Dept", "DEPARTMENT", 100, 10, 5, 0, 90, 85, 90, 0.1, 0, 0, 1)),
+                List.of(new FinanceReportRow(null, "D", "Dept", "DEPARTMENT", 100, 0, 10, 5, 0, 90, 85, 90, 0.1, 0, 0, 1)),
                 List.of()
         );
     }

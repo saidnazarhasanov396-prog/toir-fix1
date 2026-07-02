@@ -78,7 +78,18 @@ class BudgetCommitmentServiceTest {
     }
 
     @Test
-    void releaseBudgetDecreasesCommittedAmountWithoutGoingBelowZero() {
+    void commitBudgetRejectsWhenActualSpendLeavesInsufficientRoom() {
+        line.setActualAmount(900);
+        line.setCommittedAmount(0);
+
+        assertThatThrownBy(() -> service.commitBudget(budgetLineId, 200, "PROCUREMENT_REQUEST",
+                UUID.randomUUID(), UUID.randomUUID(), "commit"))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Insufficient budget for commitment");
+    }
+
+    @Test
+    void releaseBudgetCapsReleaseAtCurrentCommittedAmount() {
         service.releaseBudget(budgetLineId, 500, "PROCUREMENT_REQUEST", UUID.randomUUID(),
                 UUID.randomUUID(), "release");
 

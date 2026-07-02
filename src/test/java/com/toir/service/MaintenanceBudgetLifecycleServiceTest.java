@@ -129,7 +129,28 @@ class MaintenanceBudgetLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.transfer(budgetId, fromLineId, toLineId, 100, UUID.randomUUID(), "shift"))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("below approved actual amount");
+                .hasMessageContaining("below approved actual and committed amounts");
+    }
+
+    @Test
+    void transferRejectsWhenTargetLineWouldDropBelowCommittedAmount() {
+        UUID budgetId = UUID.randomUUID();
+        UUID fromLineId = UUID.randomUUID();
+        UUID toLineId = UUID.randomUUID();
+        MaintenanceBudget budget = budget(budgetId, BudgetStatus.APPROVED);
+        BudgetLine from = line(fromLineId, budget, 500, 100);
+        from.setCommittedAmount(450);
+        BudgetLine to = line(toLineId, budget, 200, 0);
+        budget.getLines().add(from);
+        budget.getLines().add(to);
+        budget.setTotalPlanned(700);
+        when(repository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(budget));
+        when(lineRepository.findByIdAndIsDeletedFalse(fromLineId)).thenReturn(Optional.of(from));
+        when(lineRepository.findByIdAndIsDeletedFalse(toLineId)).thenReturn(Optional.of(to));
+
+        assertThatThrownBy(() -> service.transfer(budgetId, fromLineId, toLineId, 100, UUID.randomUUID(), "shift"))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("below approved actual and committed amounts");
     }
 
     @Test
@@ -150,7 +171,7 @@ class MaintenanceBudgetLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.reviseLine(budgetId, lineId, 100, UUID.randomUUID(), "too low"))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("below approved actual amount");
+                .hasMessageContaining("below approved actual and committed amounts");
     }
 
     private MaintenanceBudget budget(UUID id, BudgetStatus status) {

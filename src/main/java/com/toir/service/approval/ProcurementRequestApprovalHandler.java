@@ -51,22 +51,24 @@ public class ProcurementRequestApprovalHandler implements ApprovalActionHandler 
         if (request.getStatus() != ProcurementRequestStatus.SUBMITTED) {
             throw RestException.badRequest("Procurement request approval can be finalized only from SUBMITTED status");
         }
+        if (request.getBudgetAllocationStatus() != BudgetAllocationStatus.ALLOCATED
+                || request.getBudgetLineId() == null) {
+            throw RestException.badRequest(
+                    "Procurement request must be allocated to a budget line before approval");
+        }
         request.setStatus(ProcurementRequestStatus.APPROVED);
         request.setApprovedAt(Instant.now());
         request.setRejectionReason(null);
         ProcurementRequest saved = procurementRequestRepository.save(request);
 
-        if (request.getBudgetLineId() != null
-                && request.getBudgetAllocationStatus() == BudgetAllocationStatus.ALLOCATED) {
-            budgetCommitmentService.commitBudget(
-                    request.getBudgetLineId(),
-                    request.getTotalEstimatedCost(),
-                    "PROCUREMENT_REQUEST",
-                    request.getId(),
-                    terminalActor(approval),
-                    "Budget commitment on procurement approval"
-            );
-        }
+        budgetCommitmentService.commitBudget(
+                request.getBudgetLineId(),
+                request.getTotalEstimatedCost(),
+                "PROCUREMENT_REQUEST",
+                request.getId(),
+                terminalActor(approval),
+                "Budget commitment on procurement approval"
+        );
 
         taskGenerationService.generateReceiveForApprovedProcurement(saved);
     }

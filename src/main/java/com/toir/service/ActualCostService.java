@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.entity.StockMovement;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
@@ -16,8 +17,10 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.NotificationSeverity;
+import com.toir.enums.StockMovementSourceType;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.StockMovementRepository;
 import com.toir.repository.actualCost.ActualCostAllocationEventRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.actualCost.ActualCostReviewEventRepository;
@@ -61,6 +64,7 @@ public class ActualCostService {
     private final NotificationService notificationService;
     private final RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
     private final BudgetCommitmentService budgetCommitmentService;
+    private final StockMovementRepository stockMovementRepository;
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
@@ -172,14 +176,7 @@ public class ActualCostService {
             assertBudgetRemaining(line, c.getAmount());
             applyBudgetUsageOnce(line, c);
             if (c.getSourceType() == ActualCostSourceType.PROCUREMENT_RECEIPT) {
-                budgetCommitmentService.releaseBudget(
-                        line.getId(),
-                        c.getAmount(),
-                        "PROCUREMENT_RECEIPT",
-                        c.getSourceId(),
-                        reviewerId,
-                        "Release commitment on actual cost approval"
-                );
+                releaseProcurementCommitment(line, c, reviewerId);
             }
         }
 
@@ -430,6 +427,28 @@ public class ActualCostService {
             budget.setTotalActual(budget.getTotalActual() + cost.getAmount());
             maintenanceBudgetRepository.save(budget);
         }
+    }
+
+    private void releaseProcurementCommitment(BudgetLine line, ActualCost cost, UUID reviewerId) {
+        String sourceType = "PROCUREMENT_RECEIPT";
+        UUID sourceId = cost.getSourceId();
+        if (cost.getSourceId() != null) {
+            StockMovement movement = stockMovementRepository.findByIdAndIsDeletedFalse(cost.getSourceId()).orElse(null);
+            if (movement != null
+                    && movement.getSourceType() == StockMovementSourceType.PROCUREMENT_REQUEST
+                    && movement.getSourceId() != null) {
+                sourceType = "PROCUREMENT_REQUEST";
+                sourceId = movement.getSourceId();
+            }
+        }
+        budgetCommitmentService.releaseBudget(
+                line.getId(),
+                cost.getAmount(),
+                sourceType,
+                sourceId,
+                reviewerId,
+                "Release commitment on actual cost approval"
+        );
     }
 
     private WorkOrder resolveEffectiveWorkOrder(WorkOrder workOrder, ContractorWork contractorWork) {

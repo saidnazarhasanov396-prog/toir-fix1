@@ -23,14 +23,18 @@ public class BudgetCommitmentService {
     private final BudgetLineRepository budgetLineRepository;
     private final BudgetEventRepository budgetEventRepository;
 
+    public void assertCanCommit(BudgetLine line, double amount) {
+        validateBudgetLineForCommitment(line);
+        validateRemainingAmount(line, amount);
+    }
+
     @Transactional
     public void commitBudget(UUID budgetLineId, double amount, String sourceType,
                              UUID sourceId, UUID actorUserId, String comment) {
         BudgetLine line = budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)
                 .orElseThrow(() -> RestException.notFound("Budget line not found: " + budgetLineId));
 
-        validateBudgetLineForCommitment(line);
-        validateRemainingAmount(line, amount);
+        assertCanCommit(line, amount);
 
         double oldCommitted = line.getCommittedAmount();
         line.setCommittedAmount(oldCommitted + amount);
@@ -47,7 +51,8 @@ public class BudgetCommitmentService {
                 .orElseThrow(() -> RestException.notFound("Budget line not found: " + budgetLineId));
 
         double oldCommitted = line.getCommittedAmount();
-        double newCommitted = Math.max(0, oldCommitted - amount);
+        double effectiveRelease = Math.min(amount, oldCommitted);
+        double newCommitted = oldCommitted - effectiveRelease;
         line.setCommittedAmount(newCommitted);
         budgetLineRepository.save(line);
 
@@ -66,7 +71,7 @@ public class BudgetCommitmentService {
     }
 
     private void validateRemainingAmount(BudgetLine line, double amount) {
-        double available = line.getAvailableForCommitment();
+        double available = line.getAvailableForActual();
         if (amount - available > EPSILON) {
             throw RestException.badRequest(
                     "Insufficient budget for commitment: available=" + available + ", requested=" + amount);

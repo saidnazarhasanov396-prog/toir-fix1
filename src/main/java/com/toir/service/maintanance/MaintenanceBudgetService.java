@@ -422,8 +422,10 @@ public class MaintenanceBudgetService {
     }
 
     private void assertPlannedAmountNotBelowActual(BudgetLine line, double plannedAmount) {
-        if (plannedAmount + 0.000001d < line.getActualAmount()) {
-            throw RestException.badRequest("Budget line planned amount cannot be below approved actual amount");
+        double minimumPlanned = line.getActualAmount() + line.getCommittedAmount();
+        if (plannedAmount + 0.000001d < minimumPlanned) {
+            throw RestException.badRequest(
+                    "Budget line planned amount cannot be below approved actual and committed amounts");
         }
     }
 
