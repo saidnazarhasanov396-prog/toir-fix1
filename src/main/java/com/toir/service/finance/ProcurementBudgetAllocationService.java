@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -32,6 +33,16 @@ public class ProcurementBudgetAllocationService {
     private final ActualCostAllocationEventRepository allocationEventRepository;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
+
+    @Transactional(readOnly = true)
+    public List<ProcurementRequestDto> reviewQueue(UUID departmentId, ProcurementRequestStatus status, boolean unallocatedOnly) {
+        UUID effectiveDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
+        BudgetAllocationStatus allocationStatus = unallocatedOnly ? BudgetAllocationStatus.UNALLOCATED : null;
+
+        return procurementRequestRepository.findFinanceReviewQueue(effectiveDepartmentId, status, allocationStatus).stream()
+                .map(ProcurementRequestDto::from)
+                .toList();
+    }
 
     @Transactional
     public ProcurementRequestDto allocateBudget(UUID requestId, UUID budgetLineId,
