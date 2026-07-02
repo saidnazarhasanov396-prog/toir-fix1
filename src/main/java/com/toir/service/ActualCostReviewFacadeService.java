@@ -71,14 +71,19 @@ public class ActualCostReviewFacadeService {
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewItem> reviewQueue(String search) {
-        List<ActualCost> all = actualCostRepository
-                .findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING);
+        List<ActualCost> all = pendingActualCosts(search);
         List<ActualCost> visible = isReviewAccessUser()
                 ? all
                 : financeScopeService.filterActualCosts(all);
         return visible.stream()
                 .filter(cost -> matchesSearch(cost, search))
                 .map(this::toItem)
+                .toList();
+    }
+
+    private List<ActualCost> pendingActualCosts(String search) {
+        return actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, search).stream()
+                .filter(cost -> cost.getStatus() == ActualCostStatus.PENDING)
                 .toList();
     }
 

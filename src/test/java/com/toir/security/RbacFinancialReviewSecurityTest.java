@@ -90,9 +90,13 @@ class RbacFinancialReviewSecurityTest {
     @MockBean
     ActualCostReviewFacadeService actualCostReviewFacadeService;
 
+    @MockBean
+    ScopeAccessService scopeAccessService;
+
     @BeforeEach
     void setUpFinanceScope() {
         lenient().when(financeScopeService.filterActualCosts(any())).thenReturn(List.of());
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(false);
     }
 
     @TestConfiguration

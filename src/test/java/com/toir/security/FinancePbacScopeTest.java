@@ -19,6 +19,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.CounteragentService;
 import com.toir.service.FinanceScopeService;
+import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
@@ -49,6 +50,7 @@ class FinancePbacScopeTest {
     WorkOrderRepository workOrderRepository;
     FinanceScopeService financeScopeService;
     ActualCostReviewFacadeService actualCostReviewFacadeService;
+    ScopeAccessService scopeAccessService;
     BudgetSummaryController controller;
 
     @BeforeEach
@@ -65,6 +67,7 @@ class FinancePbacScopeTest {
         workOrderRepository = mock(WorkOrderRepository.class);
         financeScopeService = mock(FinanceScopeService.class);
         actualCostReviewFacadeService = mock(ActualCostReviewFacadeService.class);
+        scopeAccessService = mock(ScopeAccessService.class);
         controller = new BudgetSummaryController(
                 budgetRepository,
                 lineRepository,
@@ -77,7 +80,8 @@ class FinancePbacScopeTest {
                 counteragentService,
                 workOrderRepository,
                 financeScopeService,
-                actualCostReviewFacadeService
+                actualCostReviewFacadeService,
+                scopeAccessService
         );
     }
 
