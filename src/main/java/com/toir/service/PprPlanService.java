@@ -37,6 +37,7 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.Year;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -248,6 +250,41 @@ public class PprPlanService {
                 safe(stats.getCompletedTasks()),
                 safe(stats.getOverdueTasks())
         );
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprTaskDto> findTasks(UUID departmentId,
+                                      UUID equipmentId,
+                                      PprTaskStatus status,
+                                      int page,
+                                      int size) {
+        Page<PprTask> tasks = taskRepository.searchTasks(
+                departmentId,
+                equipmentId,
+                status,
+                PageRequest.of(page, size)
+        );
+        List<PprTask> content = tasks.getContent();
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(content);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(List.of(), content);
+        Map<UUID, String> regulationNames = resolveRegulationNames(List.of(), content);
+        return tasks.map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames));
+    }
+
+    @Transactional(readOnly = true)
+    public PprTaskStatsResponse getTaskStats(UUID departmentId, UUID equipmentId, PprTaskStatus status) {
+        List<PprTask> tasks = taskRepository.searchTasks(departmentId, equipmentId, status);
+        Map<PprTaskStatus, Long> statusBreakdown = new EnumMap<>(PprTaskStatus.class);
+        for (PprTaskStatus taskStatus : PprTaskStatus.values()) {
+            statusBreakdown.put(taskStatus, 0L);
+        }
+        for (PprTask task : tasks) {
+            statusBreakdown.computeIfPresent(task.getStatus(), (ignored, count) -> count + 1);
+        }
+        long totalTasks = tasks.size();
+        long completedTasks = statusBreakdown.get(PprTaskStatus.COMPLETED);
+        double completionRate = totalTasks > 0 ? (double) completedTasks / totalTasks * 100 : 0;
+        return new PprTaskStatsResponse(totalTasks, completedTasks, completionRate, statusBreakdown);
     }
 
     @Transactional(readOnly = true)
