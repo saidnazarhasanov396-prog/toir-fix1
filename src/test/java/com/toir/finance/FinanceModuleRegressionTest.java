@@ -1,6 +1,7 @@
 package com.toir.finance;
 
 import com.toir.dto.budget.FinanceDashboardResponse;
+import com.toir.finance.FinanceBudgetMath;
 import com.toir.entity.Department;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.BudgetLine;
@@ -53,17 +54,22 @@ import static org.mockito.Mockito.when;
 class FinanceModuleRegressionTest {
 
     @Nested
-    class CurrentKnownGaps {
+    class Phase1UnifiedReports {
 
         private FinanceReportService reportService;
+        private MaintenanceBudgetRepository budgetRepository;
+        private BudgetLineRepository lineRepository;
+        private ActualCostRepository actualCostRepository;
+        private DepartmentRepository departmentRepository;
+        private CostCategoryRepository costCategoryRepository;
 
         @BeforeEach
         void setUpReportService() {
-            MaintenanceBudgetRepository budgetRepository = mock(MaintenanceBudgetRepository.class);
-            BudgetLineRepository lineRepository = mock(BudgetLineRepository.class);
-            ActualCostRepository actualCostRepository = mock(ActualCostRepository.class);
-            DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
-            CostCategoryRepository costCategoryRepository = mock(CostCategoryRepository.class);
+            budgetRepository = mock(MaintenanceBudgetRepository.class);
+            lineRepository = mock(BudgetLineRepository.class);
+            actualCostRepository = mock(ActualCostRepository.class);
+            departmentRepository = mock(DepartmentRepository.class);
+            costCategoryRepository = mock(CostCategoryRepository.class);
             var financeScopeService = mock(com.toir.service.FinanceScopeService.class);
             reportService = new FinanceReportService(
                     budgetRepository,
@@ -79,7 +85,10 @@ class FinanceModuleRegressionTest {
             when(financeScopeService.filterBudgets(any())).thenAnswer(inv -> List.copyOf(inv.getArgument(0)));
             when(financeScopeService.filterBudgetLines(any())).thenAnswer(inv -> List.copyOf(inv.getArgument(0)));
             when(financeScopeService.filterActualCosts(any())).thenAnswer(inv -> List.copyOf(inv.getArgument(0)));
+        }
 
+        @Test
+        void byCategoryAggregatesActualsByBudgetLineCategory() {
             UUID departmentId = UUID.randomUUID();
             UUID purchaseCategoryId = UUID.randomUUID();
             UUID materialsCategoryId = UUID.randomUUID();
@@ -116,53 +125,19 @@ class FinanceModuleRegressionTest {
                     category(purchaseCategoryId, "PURCHASE", "Purchase"),
                     category(materialsCategoryId, "MATERIALS", "Materials")
             ));
-        }
 
-        @Test
-        void reportsSplitCategoryWhenActualCostCategoryDiffersFromBudgetLine() {
             FinanceDashboardResponse dashboard = reportService.dashboard(2026, null, null);
 
-            assertThat(dashboard.byCategory()).hasSize(2);
-            var purchase = dashboard.byCategory().stream()
-                    .filter(row -> "Purchase".equals(row.groupName()))
-                    .findFirst()
-                    .orElseThrow();
-            var materials = dashboard.byCategory().stream()
-                    .filter(row -> "Materials".equals(row.groupName()))
-                    .findFirst()
-                    .orElseThrow();
-
+            assertThat(dashboard.byCategory()).hasSize(1);
+            var purchase = dashboard.byCategory().getFirst();
+            assertThat(purchase.groupName()).isEqualTo("Purchase");
             assertThat(purchase.plannedAmount()).isEqualTo(230_000);
-            assertThat(purchase.approvedActualAmount()).isZero();
-            assertThat(materials.plannedAmount()).isZero();
-            assertThat(materials.approvedActualAmount()).isEqualTo(300_000);
-            assertThat(purchase.remainingBudget()).isEqualTo(230_000);
-            assertThat(materials.remainingBudget()).isEqualTo(-300_000);
+            assertThat(purchase.approvedActualAmount()).isEqualTo(300_000);
+            assertThat(purchase.remainingBudget()).isEqualTo(-70_000);
         }
 
         @Test
-        void reportsRemainingIgnoresCommittedToday() {
-            MaintenanceBudgetRepository budgetRepository = mock(MaintenanceBudgetRepository.class);
-            BudgetLineRepository lineRepository = mock(BudgetLineRepository.class);
-            ActualCostRepository actualCostRepository = mock(ActualCostRepository.class);
-            DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
-            CostCategoryRepository costCategoryRepository = mock(CostCategoryRepository.class);
-            var financeScopeService = mock(com.toir.service.FinanceScopeService.class);
-            FinanceReportService service = new FinanceReportService(
-                    budgetRepository,
-                    lineRepository,
-                    actualCostRepository,
-                    departmentRepository,
-                    costCategoryRepository,
-                    mock(WorkOrderRepository.class),
-                    mock(RepairRequestRepository.class),
-                    mock(ContractorWorkRepository.class),
-                    financeScopeService
-            );
-            when(financeScopeService.filterBudgets(any())).thenAnswer(inv -> List.copyOf(inv.getArgument(0)));
-            when(financeScopeService.filterBudgetLines(any())).thenAnswer(inv -> List.copyOf(inv.getArgument(0)));
-            when(financeScopeService.filterActualCosts(any())).thenAnswer(inv -> List.copyOf(inv.getArgument(0)));
-
+        void remainingBudgetSubtractsCommitted() {
             UUID categoryId = UUID.randomUUID();
             MaintenanceBudget budget = new MaintenanceBudget();
             budget.setId(UUID.randomUUID());
@@ -184,9 +159,9 @@ class FinanceModuleRegressionTest {
             when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
             when(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
 
-            FinanceDashboardResponse dashboard = service.dashboard(2026, null, null);
+            FinanceDashboardResponse dashboard = reportService.dashboard(2026, null, null);
 
-            assertThat(dashboard.remainingBudget()).isEqualTo(800);
+            assertThat(dashboard.remainingBudget()).isEqualTo(500);
             assertThat(FinanceBudgetMath.remainingBudget(1_000, 200, 300)).isEqualTo(500);
         }
 
@@ -219,7 +194,7 @@ class FinanceModuleRegressionTest {
     }
 
     @Nested
-    @Disabled("FAZA 1 — enable after FinanceReportService uses FinanceBudgetMath and line-category aggregation")
+    @Disabled("FAZA 1 — merged into Phase1UnifiedReports")
     class TargetPhase1Reports {
 
         @Test

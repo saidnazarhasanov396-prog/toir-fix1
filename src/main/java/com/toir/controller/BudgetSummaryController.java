@@ -36,6 +36,7 @@ import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.finance.FinanceBudgetMath;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.CounteragentService;
@@ -122,18 +123,17 @@ public class BudgetSummaryController {
                 .filter(cost -> cost.getBudgetLineId() == null || scopedLineIds.contains(cost.getBudgetLineId()))
                 .toList();
         Map<UUID, Double> approvedByLine = sumByBudgetLine(visibleActualCosts, ActualCostStatus.APPROVED);
-        Map<UUID, Double> pendingByLine = sumByBudgetLine(visibleActualCosts, ActualCostStatus.PENDING);
         double totalPlanned = scopedLines.isEmpty()
                 ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalPlanned).sum()
                 : scopedLines.stream().mapToDouble(BudgetLine::getPlannedAmount).sum();
         double totalActual = scopedLines.isEmpty()
                 ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum()
-                : scopedLines.stream().mapToDouble(line -> lineActualAmount(line, approvedByLine, pendingByLine)).sum();
+                : scopedLines.stream().mapToDouble(line -> lineApprovedActualAmount(line, approvedByLine)).sum();
         double totalCommitted = scopedLines.stream()
                 .mapToDouble(BudgetLine::getCommittedAmount)
                 .sum();
-        double totalRemaining = totalPlanned - totalCommitted;
-        double totalAvailable = totalPlanned - totalActual - totalCommitted;
+        double totalRemaining = FinanceBudgetMath.remainingBudget(totalPlanned, totalActual, totalCommitted);
+        double totalAvailable = FinanceBudgetMath.remainingBudget(totalPlanned, totalActual, totalCommitted);
         double pendingReviewAmount = visibleActualCosts.stream()
                 .filter(cost -> cost.getStatus() == ActualCostStatus.PENDING)
                 .mapToDouble(ActualCost::getAmount)
@@ -145,11 +145,11 @@ public class BudgetSummaryController {
                 .sum();
         long atRiskBudgetLineCount = scopedLines.stream()
                 .filter(line -> line.getPlannedAmount() > 0)
-                .filter(line -> (lineActualAmount(line, approvedByLine, pendingByLine)
+                .filter(line -> (lineApprovedActualAmount(line, approvedByLine)
                         + line.getCommittedAmount()) / line.getPlannedAmount() >= 0.9d)
                 .count();
         long overBudgetLineCount = scopedLines.stream()
-                .filter(line -> lineActualAmount(line, approvedByLine, pendingByLine)
+                .filter(line -> lineApprovedActualAmount(line, approvedByLine)
                         + line.getCommittedAmount() > line.getPlannedAmount())
                 .count();
         double variance = totalPlanned - totalActual;
@@ -174,7 +174,7 @@ public class BudgetSummaryController {
                     CostCategory cat = catById.get(entry.getKey());
                     double planned = entry.getValue().stream().mapToDouble(BudgetLine::getPlannedAmount).sum();
                     double actual = entry.getValue().stream()
-                            .mapToDouble(line -> lineActualAmount(line, approvedByLine, pendingByLine))
+                            .mapToDouble(line -> lineApprovedActualAmount(line, approvedByLine))
                             .sum();
                     double committed = entry.getValue().stream()
                             .mapToDouble(BudgetLine::getCommittedAmount)
@@ -617,12 +617,9 @@ public class BudgetSummaryController {
                 ));
     }
 
-    private double lineActualAmount(BudgetLine line,
-                                    Map<UUID, Double> approvedByLine,
-                                    Map<UUID, Double> pendingByLine) {
-        if (approvedByLine.containsKey(line.getId()) || pendingByLine.containsKey(line.getId())) {
-            return approvedByLine.getOrDefault(line.getId(), 0.0d)
-                    + pendingByLine.getOrDefault(line.getId(), 0.0d);
+    private double lineApprovedActualAmount(BudgetLine line, Map<UUID, Double> approvedByLine) {
+        if (approvedByLine.containsKey(line.getId())) {
+            return approvedByLine.getOrDefault(line.getId(), 0.0d);
         }
         return line.getActualAmount();
     }

@@ -478,7 +478,7 @@ class BudgetSummaryControllerContractTest {
     }
 
     @Test
-    void summaryCountsPendingCostInTotalActual() throws Exception {
+    void summaryExcludesPendingFromTotalActual() throws Exception {
         UUID budgetId = UUID.randomUUID();
         UUID lineId = UUID.randomUUID();
         UUID costCategoryId = UUID.randomUUID();
@@ -520,12 +520,13 @@ class BudgetSummaryControllerContractTest {
 
         var response = controller.summary(2026, null, null).getBody();
 
-        assertThat(response.totalActual()).isEqualTo(300.0);
+        assertThat(response.totalActual()).isZero();
+        assertThat(response.pendingReviewAmount()).isEqualTo(300.0);
         assertThat(response.totalPlanned()).isEqualTo(1000.0);
     }
 
     @Test
-    void summaryCountsApprovedAndPendingButNotRejected() throws Exception {
+    void summaryCountsApprovedOnlyInTotalActual() throws Exception {
         UUID budgetId = UUID.randomUUID();
         UUID lineId = UUID.randomUUID();
         UUID costCategoryId = UUID.randomUUID();
@@ -583,7 +584,8 @@ class BudgetSummaryControllerContractTest {
 
         var response = controller.summary(2026, null, null).getBody();
 
-        assertThat(response.totalActual()).isEqualTo(800.0);
+        assertThat(response.totalActual()).isEqualTo(500.0);
+        assertThat(response.pendingReviewAmount()).isEqualTo(300.0);
     }
 
     @Test
