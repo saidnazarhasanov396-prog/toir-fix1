@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -141,6 +142,55 @@ class ToirStockServiceTest {
         assertThat(ledger.getQuantity()).isEqualByComparingTo("-6");
         assertThat(ledger.getUnitCost()).isEqualByComparingTo("20");
         assertThat(ledger.getTotalCost()).isEqualByComparingTo("-120");
+    }
+
+    @Test
+    void issueAutoAllocateConsumesAvailableStockAcrossBinnedBalances() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID firstBinId = UUID.randomUUID();
+        UUID secondBinId = UUID.randomUUID();
+        WarehouseStockBalance first = balance(warehouseId, sparePartId, new BigDecimal("3"), BigDecimal.ZERO, new BigDecimal("10"));
+        first.setBinId(firstBinId);
+        first.prepareForSave();
+        WarehouseStockBalance second = balance(warehouseId, sparePartId, new BigDecimal("5"), BigDecimal.ZERO, new BigDecimal("12"));
+        second.setBinId(secondBinId);
+        second.prepareForSave();
+
+        when(balanceRepository.lockAvailableBalancesForIssue(warehouseId, sparePartId))
+                .thenReturn(List.of(first, second));
+        when(ledgerRepository.findByIdempotencyKeyAndIsDeletedFalse("issue-auto:allocation:1")).thenReturn(Optional.empty());
+        when(ledgerRepository.findByIdempotencyKeyAndIsDeletedFalse("issue-auto:allocation:2")).thenReturn(Optional.empty());
+        when(balanceRepository.lockByIdentityKey(first.getIdentityKey())).thenReturn(Optional.of(first));
+        when(balanceRepository.lockByIdentityKey(second.getIdentityKey())).thenReturn(Optional.of(second));
+        when(balanceRepository.save(any(WarehouseStockBalance.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(ledgerRepository.save(any(WarehouseStockLedger.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<WarehouseStockLedger> ledgers = service.postIssueAutoAllocate(new StockIssueCommand(
+                warehouseId,
+                sparePartId,
+                null,
+                new BigDecimal("8"),
+                null,
+                null,
+                null,
+                null,
+                "WORK_ORDER",
+                UUID.randomUUID(),
+                null,
+                "auto issue",
+                "issue-auto"
+        ));
+
+        assertThat(first.getQtyOnHand()).isEqualByComparingTo("0");
+        assertThat(second.getQtyOnHand()).isEqualByComparingTo("0");
+        assertThat(ledgers).hasSize(2);
+        assertThat(ledgers.get(0).getBinId()).isEqualTo(firstBinId);
+        assertThat(ledgers.get(0).getQuantity()).isEqualByComparingTo("-3");
+        assertThat(ledgers.get(0).getIdempotencyKey()).isEqualTo("issue-auto:allocation:1");
+        assertThat(ledgers.get(1).getBinId()).isEqualTo(secondBinId);
+        assertThat(ledgers.get(1).getQuantity()).isEqualByComparingTo("-5");
+        assertThat(ledgers.get(1).getIdempotencyKey()).isEqualTo("issue-auto:allocation:2");
     }
 
     @Test
