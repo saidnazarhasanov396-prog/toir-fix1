@@ -153,7 +153,7 @@ class RepairMaterialUsageServiceTest {
         });
         org.mockito.Mockito.doThrow(RestException.badRequest(
                         "Insufficient available stock: available=6, requested=7"))
-                .when(toirStockService).postIssue(any(StockIssueCommand.class));
+                .when(toirStockService).postIssueAutoAllocate(any(StockIssueCommand.class));
 
         assertThatThrownBy(() -> service.register(
                 workOrderId,
@@ -239,7 +239,7 @@ class RepairMaterialUsageServiceTest {
         assertThat(movement.getQuantity()).isEqualTo(7);
         assertThat(movement.getUnitCost()).isEqualTo(12.5);
         ArgumentCaptor<StockIssueCommand> coreIssueCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
-        verify(toirStockService).postIssue(coreIssueCaptor.capture());
+        verify(toirStockService).postIssueAutoAllocate(coreIssueCaptor.capture());
         StockIssueCommand coreIssue = coreIssueCaptor.getValue();
         assertThat(coreIssue.warehouseId()).isEqualTo(warehouseId);
         assertThat(coreIssue.sparePartId()).isEqualTo(sparePartId);

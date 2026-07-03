@@ -49,6 +49,26 @@ public interface WarehouseStockBalanceRepository extends JpaRepository<Warehouse
             UUID sparePartId
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select b
+            from WarehouseStockBalance b
+            where b.warehouseId = :warehouseId
+              and b.sparePartId = :sparePartId
+              and b.stockStatus = com.toir.enums.WarehouseStockStatus.AVAILABLE
+              and b.isDeleted = false
+              and b.qtyOnHand > b.qtyReserved
+            order by
+              case when b.expiryDate is null then 1 else 0 end,
+              b.expiryDate asc,
+              b.updatedAt asc,
+              b.id asc
+            """)
+    List<WarehouseStockBalance> lockAvailableBalancesForIssue(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("sparePartId") UUID sparePartId
+    );
+
     List<WarehouseStockBalance> findAllByIsDeletedFalse();
 
     List<WarehouseStockBalance> findAllByWarehouseIdAndIsDeletedFalse(UUID warehouseId);
