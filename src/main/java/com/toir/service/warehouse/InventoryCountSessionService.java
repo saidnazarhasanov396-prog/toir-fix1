@@ -10,6 +10,7 @@ import com.toir.dto.warehouse.StockIssueCommand;
 import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.InventoryTransaction;
 import com.toir.entity.StockMovement;
+import com.toir.entity.SparePart;
 import com.toir.entity.warehouse.InventoryCountLine;
 import com.toir.entity.warehouse.InventoryCountSession;
 import com.toir.entity.warehouse.WarehouseBin;
@@ -28,6 +29,7 @@ import com.toir.repository.InventoryCountLineRepository;
 import com.toir.repository.InventoryCountSessionRepository;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.service.InventoryAnalyticsService;
@@ -44,9 +46,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 @Service
@@ -63,6 +67,7 @@ public class InventoryCountSessionService {
     private final InventoryCountLineRepository lineRepository;
     private final WarehouseStockBalanceRepository balanceRepository;
     private final WarehouseBinRepository binRepository;
+    private final SparePartRepository sparePartRepository;
     private final InventoryAnalyticsService analyticsService;
     private final ToirStockService toirStockService;
     private final StockMovementRepository stockMovementRepository;
@@ -91,8 +96,10 @@ public class InventoryCountSessionService {
         session.setComment(trimToNull(request.comment()));
         InventoryCountSession saved = sessionRepository.save(session);
 
-        List<InventoryCountLine> lines = snapshotBalances(request).stream()
-                .map(balance -> snapshotLine(saved.getId(), balance))
+        List<WarehouseStockBalance> balances = snapshotBalances(request);
+        Map<UUID, String> unitBySparePartId = unitsBySparePartId(balances);
+        List<InventoryCountLine> lines = balances.stream()
+                .map(balance -> snapshotLine(saved.getId(), balance, unitBySparePartId.get(balance.getSparePartId())))
                 .toList();
         List<InventoryCountLine> savedLines = stream(lineRepository.saveAll(lines));
         auditBuilderService.log(
@@ -163,6 +170,12 @@ public class InventoryCountSessionService {
     public InventoryCountSessionDto review(UUID id, InventoryCountReviewRequest request) {
         InventoryCountSession session = loadSession(id);
         List<InventoryCountLine> lines = lines(id);
+        lines.stream()
+                .filter(line -> line.getStatus() != InventoryCountLineStatus.COUNTED)
+                .findFirst()
+                .ifPresent(line -> {
+                    throw RestException.badRequest("All inventory count lines must be counted before review");
+                });
         boolean hasVariance = lines.stream().anyMatch(line -> nonZero(line.getVarianceQty()));
         documentPolicyService.validateInventoryCountDocuments(
                 hasVariance,
@@ -450,7 +463,7 @@ public class InventoryCountSessionService {
         );
     }
 
-    private InventoryCountLine snapshotLine(UUID sessionId, WarehouseStockBalance balance) {
+    private InventoryCountLine snapshotLine(UUID sessionId, WarehouseStockBalance balance, String unit) {
         InventoryCountLine line = new InventoryCountLine();
         line.setSessionId(sessionId);
         line.setWarehouseId(balance.getWarehouseId());
@@ -461,8 +474,30 @@ public class InventoryCountSessionService {
         line.setExpiryDate(balance.getExpiryDate());
         line.setStockStatus(effectiveStatus(balance.getStockStatus()));
         line.setExpectedQty(zero(balance.getQtyOnHand()));
+        line.setUnit(trimToNull(unit));
         line.setStatus(InventoryCountLineStatus.OPEN);
         return line;
+    }
+
+    private Map<UUID, String> unitsBySparePartId(List<WarehouseStockBalance> balances) {
+        Set<UUID> sparePartIds = balances.stream()
+                .map(WarehouseStockBalance::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (sparePartIds.isEmpty()) {
+            return Map.of();
+        }
+        List<SparePart> spareParts = sparePartRepository.findAllByIdInAndIsDeletedFalse(sparePartIds);
+        if (spareParts == null) {
+            return Map.of();
+        }
+        return spareParts.stream()
+                .filter(sparePart -> sparePart.getId() != null && trimToNull(sparePart.getUnit()) != null)
+                .collect(Collectors.toMap(
+                        SparePart::getId,
+                        sparePart -> trimToNull(sparePart.getUnit()),
+                        (left, right) -> left
+                ));
     }
 
     private InventoryCountSession loadSession(UUID id) {

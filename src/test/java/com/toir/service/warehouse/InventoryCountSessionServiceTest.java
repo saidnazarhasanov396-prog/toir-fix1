@@ -9,6 +9,7 @@ import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.dto.wms.WmsDocumentGroupRequest;
 import com.toir.entity.InventoryTransaction;
 import com.toir.entity.StockMovement;
+import com.toir.entity.SparePart;
 import com.toir.entity.warehouse.InventoryCountLine;
 import com.toir.entity.warehouse.InventoryCountSession;
 import com.toir.entity.warehouse.WarehouseBin;
@@ -21,10 +22,12 @@ import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.WarehouseStockStatus;
+import com.toir.exception.RestException;
 import com.toir.repository.InventoryCountLineRepository;
 import com.toir.repository.InventoryCountSessionRepository;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.StockMovementRepository;
+import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.service.InventoryAnalyticsService;
@@ -63,6 +66,7 @@ class InventoryCountSessionServiceTest {
     @Mock InventoryCountLineRepository lineRepository;
     @Mock WarehouseStockBalanceRepository balanceRepository;
     @Mock WarehouseBinRepository binRepository;
+    @Mock SparePartRepository sparePartRepository;
     @Mock InventoryAnalyticsService analyticsService;
     @Mock ToirStockService toirStockService;
     @Mock StockMovementRepository stockMovementRepository;
@@ -81,6 +85,7 @@ class InventoryCountSessionServiceTest {
                 lineRepository,
                 balanceRepository,
                 binRepository,
+                sparePartRepository,
                 analyticsService,
                 toirStockService,
                 stockMovementRepository,
@@ -100,6 +105,10 @@ class InventoryCountSessionServiceTest {
         WarehouseStockBalance balanceA = balance(warehouseId, UUID.randomUUID(), binA, "LOT-1", new BigDecimal("10.0000"));
         WarehouseStockBalance balanceB = balance(warehouseId, UUID.randomUUID(), binB, "LOT-2", new BigDecimal("4.0000"));
         when(balanceRepository.findAllByWarehouseIdAndIsDeletedFalse(warehouseId)).thenReturn(List.of(balanceA, balanceB));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(
+                sparePart(balanceA.getSparePartId(), "pcs"),
+                sparePart(balanceB.getSparePartId(), "kg")
+        ));
         stubSessionSave();
         List<InventoryCountLine> savedLines = stubLineSaveAll();
 
@@ -126,6 +135,8 @@ class InventoryCountSessionServiceTest {
         assertThat(savedLines).hasSize(2);
         assertThat(savedLines).extracting(InventoryCountLine::getSparePartId)
                 .containsExactlyInAnyOrder(balanceA.getSparePartId(), balanceB.getSparePartId());
+        assertThat(savedLines).extracting(InventoryCountLine::getUnit)
+                .containsExactlyInAnyOrder("pcs", "kg");
     }
 
     @Test
@@ -229,6 +240,29 @@ class InventoryCountSessionServiceTest {
 
         assertThat(result.status()).isEqualTo(InventoryCountSessionStatus.REVIEW);
         verify(documentPolicyService).validateInventoryCountDocuments(true, documents, true);
+    }
+
+    @Test
+    void reviewRejectsWhenAnyLineIsNotCounted() {
+        UUID sessionId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        InventoryCountSession session = session(sessionId, warehouseId, InventoryCountSessionStatus.COUNTING, false);
+        InventoryCountLine counted = line(sessionId, warehouseId, new BigDecimal("10.0000"));
+        counted.setStatus(InventoryCountLineStatus.COUNTED);
+        counted.setCountedQty(new BigDecimal("10.0000"));
+        counted.setVarianceQty(BigDecimal.ZERO);
+        InventoryCountLine open = line(sessionId, warehouseId, new BigDecimal("4.0000"));
+        open.setStatus(InventoryCountLineStatus.OPEN);
+        when(sessionRepository.findByIdAndIsDeletedFalse(sessionId)).thenReturn(Optional.of(session));
+        when(lineRepository.findAllBySessionIdAndIsDeletedFalseOrderByCreatedAtAsc(sessionId))
+                .thenReturn(List.of(counted, open));
+
+        assertThatThrownBy(() -> service.review(sessionId, new InventoryCountReviewRequest(null, false, null)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("All inventory count lines must be counted before review");
+
+        verify(documentPolicyService, never()).validateInventoryCountDocuments(any(), any(), any());
+        verify(sessionRepository, never()).save(any());
     }
 
     @Test
@@ -394,6 +428,13 @@ class InventoryCountSessionServiceTest {
         stock.setWarehouseId(warehouseId);
         stock.setSparePartId(sparePartId);
         return stock;
+    }
+
+    private SparePart sparePart(UUID id, String unit) {
+        SparePart sparePart = new SparePart();
+        sparePart.setId(id);
+        sparePart.setUnit(unit);
+        return sparePart;
     }
 
     private WarehouseStockBalance balance(UUID warehouseId,
