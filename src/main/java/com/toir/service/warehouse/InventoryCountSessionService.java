@@ -11,6 +11,7 @@ import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.entity.InventoryTransaction;
 import com.toir.entity.StockMovement;
 import com.toir.entity.SparePart;
+import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.warehouse.InventoryCountLine;
 import com.toir.entity.warehouse.InventoryCountSession;
 import com.toir.entity.warehouse.WarehouseBin;
@@ -30,6 +31,7 @@ import com.toir.repository.InventoryCountSessionRepository;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.service.InventoryAnalyticsService;
@@ -46,11 +48,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 @Service
@@ -68,6 +72,7 @@ public class InventoryCountSessionService {
     private final WarehouseStockBalanceRepository balanceRepository;
     private final WarehouseBinRepository binRepository;
     private final SparePartRepository sparePartRepository;
+    private final UnitOfMeasurementRepository unitOfMeasurementRepository;
     private final InventoryAnalyticsService analyticsService;
     private final ToirStockService toirStockService;
     private final StockMovementRepository stockMovementRepository;
@@ -147,11 +152,11 @@ public class InventoryCountSessionService {
             throw RestException.badRequest("countedQty must be greater than or equal to 0");
         }
         InventoryCountSession session = loadSession(id);
-        if (!EnumSet.of(InventoryCountSessionStatus.OPEN, InventoryCountSessionStatus.COUNTING).contains(session.getStatus())) {
-            throw RestException.badRequest("Count line is allowed only for open or counting sessions");
-        }
         InventoryCountLine line = lineRepository.findByIdAndSessionIdAndIsDeletedFalse(lineId, id)
                 .orElseThrow(() -> RestException.notFound("Inventory count line not found: " + lineId));
+        if (!canCountLine(session.getStatus(), line.getStatus())) {
+            throw RestException.badRequest("Count line is allowed only for open/counting sessions or recount-required review lines");
+        }
         line.setCountedQty(request.countedQty());
         line.setVarianceQty(request.countedQty().subtract(zero(line.getExpectedQty())));
         line.setCountedById(request.countedById());
@@ -491,13 +496,60 @@ public class InventoryCountSessionService {
         if (spareParts == null) {
             return Map.of();
         }
+        Map<String, String> unitNameByToken = unitNamesByToken(spareParts);
         return spareParts.stream()
                 .filter(sparePart -> sparePart.getId() != null && trimToNull(sparePart.getUnit()) != null)
                 .collect(Collectors.toMap(
                         SparePart::getId,
-                        sparePart -> trimToNull(sparePart.getUnit()),
+                        sparePart -> unitNameByToken.getOrDefault(
+                                normalizeToken(sparePart.getUnit()),
+                                trimToNull(sparePart.getUnit())
+                        ),
                         (left, right) -> left
                 ));
+    }
+
+    private Map<String, String> unitNamesByToken(List<SparePart> spareParts) {
+        List<String> tokens = spareParts.stream()
+                .map(SparePart::getUnit)
+                .map(this::normalizeToken)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (tokens.isEmpty()) {
+            return Map.of();
+        }
+        List<UnitOfMeasurement> units = unitOfMeasurementRepository.findAllByTokenIgnoreCaseIn(tokens);
+        if (units == null) {
+            return Map.of();
+        }
+        return units.stream()
+                .flatMap(unit -> unitTokenEntries(unit).entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (left, right) -> left));
+    }
+
+    private Map<String, String> unitTokenEntries(UnitOfMeasurement unit) {
+        String label = trimToNull(unit.getName()) != null ? trimToNull(unit.getName()) : trimToNull(unit.getCode());
+        if (label == null) {
+            return Map.of();
+        }
+        return Stream.of(unit.getCode(), unit.getName(), unit.getNameEn(), unit.getNameUz())
+                .map(this::normalizeToken)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(token -> token, ignored -> label, (left, right) -> left));
+    }
+
+    private String normalizeToken(String value) {
+        String trimmed = trimToNull(value);
+        return trimmed == null ? null : trimmed.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean canCountLine(InventoryCountSessionStatus sessionStatus, InventoryCountLineStatus lineStatus) {
+        if (EnumSet.of(InventoryCountSessionStatus.OPEN, InventoryCountSessionStatus.COUNTING).contains(sessionStatus)) {
+            return !EnumSet.of(InventoryCountLineStatus.APPROVED, InventoryCountLineStatus.POSTED).contains(lineStatus);
+        }
+        return sessionStatus == InventoryCountSessionStatus.REVIEW
+                && lineStatus == InventoryCountLineStatus.RECOUNT_REQUIRED;
     }
 
     private InventoryCountSession loadSession(UUID id) {
