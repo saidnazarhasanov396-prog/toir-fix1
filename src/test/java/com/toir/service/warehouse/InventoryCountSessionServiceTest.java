@@ -226,6 +226,29 @@ class InventoryCountSessionServiceTest {
     }
 
     @Test
+    void countLineRejectsVisibleVarianceWithoutReason() {
+        UUID sessionId = UUID.randomUUID();
+        UUID lineId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        InventoryCountSession session = session(sessionId, warehouseId, InventoryCountSessionStatus.REVIEW, true);
+        InventoryCountLine line = line(sessionId, warehouseId, new BigDecimal("10.0000"));
+        line.setId(lineId);
+        line.setStatus(InventoryCountLineStatus.RECOUNT_REQUIRED);
+        when(sessionRepository.findByIdAndIsDeletedFalse(sessionId)).thenReturn(Optional.of(session));
+        when(lineRepository.findByIdAndSessionIdAndIsDeletedFalse(lineId, sessionId)).thenReturn(Optional.of(line));
+
+        assertThatThrownBy(() -> service.countLine(sessionId, lineId, new InventoryCountLineCountRequest(
+                new BigDecimal("7.0000"),
+                UUID.randomUUID(),
+                " "
+        )))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Variance reason is required");
+
+        verify(lineRepository, never()).save(any());
+    }
+
+    @Test
     void countLineAllowsRecountRequiredLineDuringReview() {
         UUID sessionId = UUID.randomUUID();
         UUID lineId = UUID.randomUUID();
