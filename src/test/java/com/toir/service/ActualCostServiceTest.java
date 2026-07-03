@@ -490,7 +490,7 @@ class ActualCostServiceTest {
     }
 
     @Test
-    void rejectPendingCostWithCommentDoesNotMutateBudgetUsage() {
+    void rejectPendingCostWithCommentReleasesCommitmentWithoutMutatingBudgetUsage() {
         UUID id = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
         UUID budgetLineId = UUID.randomUUID();
@@ -498,8 +498,11 @@ class ActualCostServiceTest {
         actualCost.setId(id);
         actualCost.setStatus(ActualCostStatus.PENDING);
         actualCost.setBudgetLineId(budgetLineId);
+        actualCost.setSourceType(ActualCostSourceType.WORK_ORDER);
         actualCost.setAmount(100);
+        BudgetLine line = budgetLine(budgetLineId, 500, 200, BudgetStatus.APPROVED);
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
         when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ActualCostDto result = service.review(id, false, reviewerId, "Rejected: missing source invoice");
@@ -507,9 +510,17 @@ class ActualCostServiceTest {
         assertThat(result.status()).isEqualTo(ActualCostStatus.REJECTED);
         assertThat(result.reviewedById()).isEqualTo(reviewerId);
         assertThat(result.reviewComment()).isEqualTo("Rejected: missing source invoice");
+        verify(budgetCommitmentService).releaseBudget(
+                eq(budgetLineId),
+                eq(100.0),
+                eq("ACTUAL_COST_PENDING"),
+                eq(id),
+                eq(reviewerId),
+                eq("Release commitment on actual cost rejection")
+        );
         verify(budgetLineRepository, never()).save(any(BudgetLine.class));
         verify(maintenanceBudgetRepository, never()).save(any(MaintenanceBudget.class));
-        verify(budgetLineRepository, never()).findByIdAndIsDeletedFalse(any());
+        assertThat(line.getActualAmount()).isEqualTo(200);
     }
 
     @Test
@@ -610,14 +621,24 @@ class ActualCostServiceTest {
         UUID actorId = UUID.randomUUID();
         UUID budgetLineId = UUID.randomUUID();
         ActualCost actualCost = pendingActualCost(id, budgetLineId, UUID.randomUUID(), 120);
+        BudgetLine line = budgetLine(budgetLineId, 500, 200, BudgetStatus.APPROVED);
 
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
         when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ActualCostDto result = service.requestCorrection(id, actorId, "Need source correction");
 
         assertThat(result.status()).isEqualTo(ActualCostStatus.REJECTED);
         assertThat(result.correctionReason()).isEqualTo("Need source correction");
+        verify(budgetCommitmentService).releaseBudget(
+                eq(budgetLineId),
+                eq(120.0),
+                eq("ACTUAL_COST_PENDING"),
+                eq(id),
+                eq(actorId),
+                eq("Release commitment on actual cost rejection")
+        );
         verify(budgetLineRepository, never()).save(any(BudgetLine.class));
         verify(maintenanceBudgetRepository, never()).save(any(MaintenanceBudget.class));
     }

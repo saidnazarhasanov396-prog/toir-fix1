@@ -205,7 +205,97 @@ class FinanceModuleRegressionTest {
 
     @Nested
     @ExtendWith(MockitoExtension.class)
-    @Disabled("FAZA 2 — enable after ActualCostService releases commitment on reject")
+    class Phase2RejectRelease {
+
+        @Mock
+        com.toir.repository.actualCost.ActualCostRepository repository;
+        @Mock
+        com.toir.repository.projects.BudgetLineRepository budgetLineRepository;
+        @Mock
+        com.toir.service.FinanceScopeService financeScopeService;
+        @Mock
+        BudgetCommitmentService budgetCommitmentService;
+        @Mock
+        com.toir.repository.StockMovementRepository stockMovementRepository;
+        @Mock
+        com.toir.util.AuditBuilderService auditBuilderService;
+
+        @InjectMocks
+        ActualCostService service;
+
+        @Test
+        void rejectProcurementReceiptReleasesCommitment() {
+            UUID id = UUID.randomUUID();
+            UUID lineId = UUID.randomUUID();
+            UUID reviewerId = UUID.randomUUID();
+            ActualCost cost = new ActualCost();
+            ReflectionTestUtils.setField(cost, "id", id);
+            cost.setStatus(ActualCostStatus.PENDING);
+            cost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
+            cost.setSourceId(UUID.randomUUID());
+            cost.setBudgetLineId(lineId);
+            cost.setAmount(150_000);
+
+            BudgetLine line = new BudgetLine();
+            line.setId(lineId);
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setStatus(BudgetStatus.APPROVED);
+            line.setBudget(budget);
+
+            when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(cost));
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.review(id, false, reviewerId, "Rejected after receipt inspection");
+
+            verify(budgetCommitmentService).releaseBudget(
+                    eq(lineId),
+                    eq(150_000d),
+                    any(),
+                    any(),
+                    eq(reviewerId),
+                    eq("Release commitment on actual cost rejection")
+            );
+        }
+
+        @Test
+        void rejectDirectActualCostReleasesPendingCommitment() {
+            UUID id = UUID.randomUUID();
+            UUID lineId = UUID.randomUUID();
+            UUID reviewerId = UUID.randomUUID();
+            ActualCost cost = new ActualCost();
+            ReflectionTestUtils.setField(cost, "id", id);
+            cost.setStatus(ActualCostStatus.PENDING);
+            cost.setSourceType(ActualCostSourceType.WORK_ORDER);
+            cost.setBudgetLineId(lineId);
+            cost.setAmount(75_000);
+
+            BudgetLine line = new BudgetLine();
+            line.setId(lineId);
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setStatus(BudgetStatus.APPROVED);
+            line.setBudget(budget);
+
+            when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(cost));
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.review(id, false, reviewerId, "Rejected: invalid documentation");
+
+            verify(budgetCommitmentService).releaseBudget(
+                    eq(lineId),
+                    eq(75_000d),
+                    eq("ACTUAL_COST_PENDING"),
+                    eq(id),
+                    eq(reviewerId),
+                    eq("Release commitment on actual cost rejection")
+            );
+        }
+    }
+
+    @Nested
+    @ExtendWith(MockitoExtension.class)
+    @Disabled("FAZA 2 — merged into Phase2RejectRelease")
     class TargetPhase2ActualCostReject {
 
         @Mock

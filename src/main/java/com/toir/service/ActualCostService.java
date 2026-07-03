@@ -176,8 +176,13 @@ public class ActualCostService {
             assertBudgetRemaining(line, c.getAmount());
             applyBudgetUsageOnce(line, c);
             if (c.getSourceType() == ActualCostSourceType.PROCUREMENT_RECEIPT) {
-                releaseProcurementCommitment(line, c, reviewerId);
+                releaseProcurementCommitment(line, c, reviewerId,
+                        "Release commitment on actual cost approval");
             }
+        } else if (!approve && c.getBudgetLineId() != null) {
+            BudgetLine line = requireBudgetLine(c.getBudgetLineId());
+            assertBudgetLineUsable(line);
+            releaseCommitmentOnReject(line, c, reviewerId);
         }
 
         c.setStatus(approve ? ActualCostStatus.APPROVED : ActualCostStatus.REJECTED);
@@ -247,6 +252,12 @@ public class ActualCostService {
         financeScopeService.assertCanMutateActualCost(cost);
         if (cost.getStatus() != ActualCostStatus.PENDING && cost.getStatus() != ActualCostStatus.REJECTED) {
             throw RestException.badRequest("Only PENDING or REJECTED actual costs can be sent for correction");
+        }
+
+        if (cost.getBudgetLineId() != null && cost.getStatus() == ActualCostStatus.PENDING) {
+            BudgetLine line = requireBudgetLine(cost.getBudgetLineId());
+            assertBudgetLineUsable(line);
+            releaseCommitmentOnReject(line, cost, actorUserId);
         }
 
         String normalizedComment = comment.trim();
@@ -429,7 +440,23 @@ public class ActualCostService {
         }
     }
 
-    private void releaseProcurementCommitment(BudgetLine line, ActualCost cost, UUID reviewerId) {
+    private void releaseCommitmentOnReject(BudgetLine line, ActualCost cost, UUID actorUserId) {
+        if (cost.getSourceType() == ActualCostSourceType.PROCUREMENT_RECEIPT) {
+            releaseProcurementCommitment(line, cost, actorUserId,
+                    "Release commitment on actual cost rejection");
+            return;
+        }
+        budgetCommitmentService.releaseBudget(
+                line.getId(),
+                cost.getAmount(),
+                "ACTUAL_COST_PENDING",
+                cost.getId(),
+                actorUserId,
+                "Release commitment on actual cost rejection"
+        );
+    }
+
+    private void releaseProcurementCommitment(BudgetLine line, ActualCost cost, UUID reviewerId, String comment) {
         String sourceType = "PROCUREMENT_RECEIPT";
         UUID sourceId = cost.getSourceId();
         if (cost.getSourceId() != null) {
@@ -447,7 +474,7 @@ public class ActualCostService {
                 sourceType,
                 sourceId,
                 reviewerId,
-                "Release commitment on actual cost approval"
+                comment
         );
     }
 
