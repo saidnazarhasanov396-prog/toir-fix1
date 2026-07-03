@@ -157,8 +157,12 @@ public class InventoryCountSessionService {
         if (!canCountLine(session.getStatus(), line.getStatus())) {
             throw RestException.badRequest("Count line is allowed only for open/counting sessions or recount-required review lines");
         }
+        BigDecimal varianceQty = request.countedQty().subtract(zero(line.getExpectedQty()));
+        if (requiresVarianceReasonOnCount(session, varianceQty) && trimToNull(request.varianceReason()) == null) {
+            throw RestException.badRequest("Variance reason is required when counted quantity differs from expected quantity");
+        }
         line.setCountedQty(request.countedQty());
-        line.setVarianceQty(request.countedQty().subtract(zero(line.getExpectedQty())));
+        line.setVarianceQty(varianceQty);
         line.setCountedById(request.countedById());
         line.setCountedAt(Instant.now());
         line.setVarianceReason(trimToNull(request.varianceReason()));
@@ -542,6 +546,13 @@ public class InventoryCountSessionService {
     private String normalizeToken(String value) {
         String trimmed = trimToNull(value);
         return trimmed == null ? null : trimmed.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean requiresVarianceReasonOnCount(InventoryCountSession session, BigDecimal varianceQty) {
+        if (!nonZero(varianceQty)) {
+            return false;
+        }
+        return !session.isBlindCount() || EXPECTED_VISIBLE_STATUSES.contains(session.getStatus());
     }
 
     private boolean canCountLine(InventoryCountSessionStatus sessionStatus, InventoryCountLineStatus lineStatus) {

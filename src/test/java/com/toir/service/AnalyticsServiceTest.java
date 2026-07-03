@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
+import com.toir.dto.analytics.AnalyticsDowntimeEventRow;
 import com.toir.dto.analytics.AnalyticsOverview;
 import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
@@ -12,7 +13,10 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.DowntimeType;
+import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkType;
 import com.toir.exception.RestException;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.PprTaskRepository;
@@ -37,6 +41,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -348,6 +353,116 @@ class AnalyticsServiceTest {
             assertThat(row.equipmentId()).isEqualTo(equipmentId);
             assertThat(row.mtbfHours()).isCloseTo(95.0, offset(0.05));
             assertThat(row.mttrHours()).isCloseTo(5.0, offset(0.02));
+        });
+    }
+
+    @Test
+    void downtimeEventsReturnsDashboardFailureSlicesWithSourceMetadataAndDedupe() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID representedWorkOrderId = UUID.randomUUID();
+        UUID representedRepairRequestId = UUID.randomUUID();
+        Instant now = Instant.now();
+        Equipment equipment = equipment(equipmentId, departmentId);
+        equipment.setCreatedAt(now.minus(Duration.ofDays(10)));
+        Department department = new Department();
+        department.setId(departmentId);
+        department.setCode("MECH");
+        department.setName("Mechanical");
+
+        DowntimeEvent downtime = DowntimeEvent.builder()
+                .equipmentId(equipmentId)
+                .departmentId(departmentId)
+                .workOrderId(representedWorkOrderId)
+                .startAt(now.minus(Duration.ofHours(6)))
+                .endAt(now.minus(Duration.ofHours(5)))
+                .durationMinutes(60)
+                .type(DowntimeType.EMERGENCY)
+                .description("Emergency stoppage")
+                .build();
+        downtime.setId(UUID.randomUUID());
+
+        WorkOrder representedWorkOrder = WorkOrder.builder()
+                .number("WO-REPRESENTED")
+                .title("Represented work order")
+                .equipmentId(equipmentId)
+                .departmentId(departmentId)
+                .repairRequestId(representedRepairRequestId)
+                .workType(WorkType.REPAIR)
+                .status(WorkOrderStatus.CLOSED)
+                .startedAt(now.minus(Duration.ofHours(6)))
+                .completedAt(now.minus(Duration.ofHours(5)))
+                .build();
+        representedWorkOrder.setId(representedWorkOrderId);
+
+        WorkOrder standaloneWorkOrder = WorkOrder.builder()
+                .number("WO-100")
+                .title("Standalone repair")
+                .summary("Repair summary")
+                .equipmentId(equipmentId)
+                .departmentId(departmentId)
+                .workType(WorkType.REPAIR)
+                .status(WorkOrderStatus.COMPLETED)
+                .startedAt(now.minus(Duration.ofHours(4)))
+                .completedAt(now.minus(Duration.ofHours(3)))
+                .build();
+        standaloneWorkOrder.setId(UUID.randomUUID());
+
+        RepairRequest representedRequest = RepairRequest.builder()
+                .number("RR-REPRESENTED")
+                .title("Represented request")
+                .description("Already represented by downtime")
+                .equipmentId(equipmentId)
+                .departmentId(departmentId)
+                .priority(PriorityLevel.HIGH)
+                .status(RequestStatus.CLOSED)
+                .detectedAt(now.minus(Duration.ofHours(6)))
+                .actualCompletionAt(now.minus(Duration.ofHours(5)))
+                .build();
+        representedRequest.setId(representedRepairRequestId);
+
+        RepairRequest standaloneRequest = RepairRequest.builder()
+                .number("RR-200")
+                .title("Standalone request")
+                .description("Request description")
+                .equipmentId(equipmentId)
+                .departmentId(departmentId)
+                .priority(PriorityLevel.MEDIUM)
+                .status(RequestStatus.CLOSED)
+                .detectedAt(now.minus(Duration.ofHours(2)))
+                .actualCompletionAt(now.minus(Duration.ofHours(1)))
+                .build();
+        standaloneRequest.setId(UUID.randomUUID());
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                representedRequest,
+                standaloneRequest
+        ));
+        when(workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                representedWorkOrder,
+                standaloneWorkOrder
+        ));
+        when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(downtime));
+        when(departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(department));
+
+        Page<AnalyticsDowntimeEventRow> result = service.downtimeEvents(departmentId, 0, 20);
+
+        assertThat(result.getTotalElements()).isEqualTo(3);
+        assertThat(result.getContent())
+                .extracting(AnalyticsDowntimeEventRow::sourceType)
+                .containsExactly("REPAIR_REQUEST", "WORK_ORDER", "DOWNTIME_EVENT");
+        assertThat(result.getContent().get(0)).satisfies(row -> {
+            assertThat(row.sourceId()).isEqualTo(standaloneRequest.getId());
+            assertThat(row.number()).isEqualTo("RR-200");
+            assertThat(row.title()).isEqualTo("Standalone request");
+            assertThat(row.departmentName()).isEqualTo("Mechanical");
+            assertThat(row.durationMinutes()).isEqualTo(60);
+        });
+        assertThat(result.getContent().get(1)).satisfies(row -> {
+            assertThat(row.sourceId()).isEqualTo(standaloneWorkOrder.getId());
+            assertThat(row.number()).isEqualTo("WO-100");
+            assertThat(row.title()).isEqualTo("Standalone repair");
         });
     }
 
