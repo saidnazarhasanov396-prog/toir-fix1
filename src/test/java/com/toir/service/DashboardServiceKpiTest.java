@@ -393,11 +393,37 @@ class DashboardServiceKpiTest {
         assertThat(result.counters().overduePpr()).isEqualTo(1);
     }
 
+    @Test
+    void overviewCalculatesPprCompletionRateFromAllScopedPprTasks() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                equipment(equipmentId, departmentId, "Pump A")));
+        com.toir.entity.PprTask completed = pprTask(equipmentId, com.toir.enums.PprTaskStatus.COMPLETED);
+        com.toir.entity.PprTask planned = pprTask(equipmentId, com.toir.enums.PprTaskStatus.PLANNED);
+        com.toir.entity.PprTask postponed = pprTask(equipmentId, com.toir.enums.PprTaskStatus.POSTPONED);
+        com.toir.entity.PprTask cancelled = pprTask(equipmentId, com.toir.enums.PprTaskStatus.CANCELLED);
+        when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(completed, planned, postponed, cancelled));
+
+        var result = service.overview(departmentId);
+
+        assertThat(result.kpis().pprCompletionRate()).isCloseTo(25.0, within(0.001));
+    }
+
     private Instant monthStart() {
         return LocalDate.now(ZoneId.of("Asia/Tashkent"))
                 .withDayOfMonth(1)
                 .atStartOfDay(ZoneId.of("Asia/Tashkent"))
                 .toInstant();
+    }
+
+    private com.toir.entity.PprTask pprTask(UUID equipmentId, com.toir.enums.PprTaskStatus status) {
+        com.toir.entity.PprTask task = new com.toir.entity.PprTask();
+        task.setId(UUID.randomUUID());
+        task.setEquipmentId(equipmentId);
+        task.setStatus(status);
+        return task;
     }
 
     private Department department(UUID id, String name) {
