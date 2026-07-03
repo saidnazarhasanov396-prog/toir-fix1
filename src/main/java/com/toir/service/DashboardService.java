@@ -314,8 +314,11 @@ public class DashboardService {
         long completedOrClosedWorkOrders = allWorkOrders.stream()
                 .filter(w -> w.getStatus() == WorkOrderStatus.COMPLETED || w.getStatus() == WorkOrderStatus.CLOSED)
                 .count();
-        long completedRepairs = allWorkOrders.stream()
+        long completedRepairWorkOrders = allWorkOrders.stream()
                 .filter(IndustrialKpiAggregations::isCompletedRepair)
+                .count();
+        long completedRepairs = allRequests.stream()
+                .filter(DashboardService::isCompletedRepairRequest)
                 .count();
         long closedWorkOrders = allWorkOrders.stream()
                 .filter(w -> w.getStatus() == WorkOrderStatus.CLOSED)
@@ -424,7 +427,7 @@ public class DashboardService {
         long completedTasks = scopedPprTasks.stream()
                 .filter(t -> t.getStatus() == PprTaskStatus.COMPLETED)
                 .count();
-        PlanFact planFact = new PlanFact(plannedTasks, completedTasks, completedRepairs);
+        PlanFact planFact = new PlanFact(plannedTasks, completedTasks, completedRepairWorkOrders);
 
         List<Equipment> scopedEquipment = equipById.values().stream()
                 .filter(e -> departmentId == null || departmentId.equals(e.getDepartmentId()))
@@ -832,6 +835,14 @@ public class DashboardService {
                 || request.getStatus() == RequestStatus.APPROVED
                 || request.getStatus() == RequestStatus.ASSIGNED
                 || request.getStatus() == RequestStatus.IN_PROGRESS;
+    }
+
+    private static boolean isCompletedRepairRequest(RepairRequest request) {
+        if (request == null || request.getStatus() == null) {
+            return false;
+        }
+        return request.getStatus() == RequestStatus.COMPLETED
+                || request.getStatus() == RequestStatus.CLOSED;
     }
 
     private static long totalEmergencyEvents(

@@ -1,5 +1,7 @@
 package com.toir.repository;
 
+import com.toir.dto.repairrequest.RepairRequestFilterRequest;
+import com.toir.exception.RestException;
 import com.toir.test.RepositorySliceTest;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.defects.Defect;
@@ -8,12 +10,15 @@ import com.toir.enums.*;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
+import com.toir.repository.specification.RepairRequestSpecifications;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @RepositorySliceTest
 class RepairRequestRepositoryStatsTest {
@@ -185,6 +190,46 @@ class RepairRequestRepositoryStatsTest {
     }
 
     @Test
+    void specificationWithCompletedOrClosedStatusScopeMatchesBothCompletedAndClosedRequests() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        saveRepairRequest("RR-SCOPE-OPEN", "Open", "Open request", departmentId, equipmentId, RequestStatus.OPEN, PriorityLevel.MEDIUM);
+        saveRepairRequest("RR-SCOPE-COMPLETED", "Completed", "Completed request", departmentId, equipmentId, RequestStatus.COMPLETED, PriorityLevel.MEDIUM);
+        saveRepairRequest("RR-SCOPE-CLOSED", "Closed", "Closed request", departmentId, equipmentId, RequestStatus.CLOSED, PriorityLevel.MEDIUM);
+        saveRepairRequest("RR-SCOPE-CANCELLED", "Cancelled", "Cancelled request", departmentId, equipmentId, RequestStatus.CANCELLED, PriorityLevel.MEDIUM);
+
+        List<RepairRequest> result = repository.findAll(
+                RepairRequestSpecifications.byFilter(filter(null, "COMPLETED_OR_CLOSED")));
+
+        assertThat(result)
+                .extracting(RepairRequest::getNumber)
+                .containsExactlyInAnyOrder("RR-SCOPE-COMPLETED", "RR-SCOPE-CLOSED");
+    }
+
+    @Test
+    void specificationPrefersExactStatusWhenStatusAndStatusScopeAreBothPresent() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        saveRepairRequest("RR-PRECEDENCE-COMPLETED", "Completed", "Completed request", departmentId, equipmentId, RequestStatus.COMPLETED, PriorityLevel.MEDIUM);
+        saveRepairRequest("RR-PRECEDENCE-CLOSED", "Closed", "Closed request", departmentId, equipmentId, RequestStatus.CLOSED, PriorityLevel.MEDIUM);
+
+        List<RepairRequest> result = repository.findAll(
+                RepairRequestSpecifications.byFilter(filter(RequestStatus.COMPLETED, "COMPLETED_OR_CLOSED")));
+
+        assertThat(result)
+                .extracting(RepairRequest::getNumber)
+                .containsExactly("RR-PRECEDENCE-COMPLETED");
+    }
+
+    @Test
+    void specificationRejectsUnsupportedStatusScope() {
+        assertThatThrownBy(() -> repository.findAll(
+                RepairRequestSpecifications.byFilter(filter(null, "UNKNOWN"))))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Unsupported repair request statusScope: UNKNOWN");
+    }
+
+    @Test
     void persistedRepairRequestCanBeLinkedFromDefect() {
         UUID departmentId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
@@ -241,6 +286,39 @@ class RepairRequestRepositoryStatsTest {
         request.setDeleted(deleted);
 
         return repository.save(request);
+    }
+
+    private RepairRequestFilterRequest filter(RequestStatus status, String statusScope) {
+        return new RepairRequestFilterRequest(
+                status,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                statusScope
+        );
     }
 
     private Defect saveDefect(UUID equipmentId, UUID repairRequestId) {
