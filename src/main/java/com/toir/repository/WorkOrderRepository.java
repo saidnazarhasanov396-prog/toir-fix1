@@ -125,7 +125,18 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
             Instant plannedFrom,
             Instant plannedTo,
             Pageable pageable) {
-        return searchPaginated(status, false, departmentId, equipmentId, search, plannedFrom, plannedTo, pageable);
+        return searchPaginated(status, false, departmentId, equipmentId, search, plannedFrom, plannedTo, null, false, pageable);
+    }
+
+    default Page<WorkOrder> searchPaginated(String status,
+            boolean completedOrClosedOnly,
+            UUID departmentId,
+            UUID equipmentId,
+            String search,
+            Instant plannedFrom,
+            Instant plannedTo,
+            Pageable pageable) {
+        return searchPaginated(status, completedOrClosedOnly, departmentId, equipmentId, search, plannedFrom, plannedTo, null, false, pageable);
     }
 
     @Query(nativeQuery = true, value = """
@@ -180,6 +191,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
                 w.is_deleted = false
                 and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
                 and (:completedOrClosedOnly = false or w.status in ('COMPLETED', 'CLOSED'))
+                and (cast(:type as varchar) is null or w.type = cast(:type as varchar))
+                and (:unplannedTypeOnly = false or w.type in ('EMERGENCY', 'DEFECT'))
                 and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
                 and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
                 and (cast(:plannedFrom as timestamptz) is null or coalesce(w.end_planned_at, w.start_planned_at) >= cast(:plannedFrom as timestamptz))
@@ -199,6 +212,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
                 w.is_deleted = false
                 and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
                 and (:completedOrClosedOnly = false or w.status in ('COMPLETED', 'CLOSED'))
+                and (cast(:type as varchar) is null or w.type = cast(:type as varchar))
+                and (:unplannedTypeOnly = false or w.type in ('EMERGENCY', 'DEFECT'))
                 and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
                 and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
                 and (cast(:plannedFrom as timestamptz) is null or coalesce(w.end_planned_at, w.start_planned_at) >= cast(:plannedFrom as timestamptz))
@@ -218,6 +233,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
             @Param("search") String search,
             @Param("plannedFrom") Instant plannedFrom,
             @Param("plannedTo") Instant plannedTo,
+            @Param("type") String type,
+            @Param("unplannedTypeOnly") boolean unplannedTypeOnly,
             Pageable pageable);
 
     @Query(nativeQuery = true, value = """
@@ -331,6 +348,15 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
         return getWorkOrderStats(status, false, departmentId, equipmentId, search);
     }
 
+    default WorkOrderStatsProjection getWorkOrderStats(
+            String status,
+            boolean completedOrClosedOnly,
+            UUID departmentId,
+            UUID equipmentId,
+            String search) {
+        return getWorkOrderStats(status, completedOrClosedOnly, departmentId, equipmentId, search, null, false);
+    }
+
     @Query(nativeQuery = true, value = """
                 select
                     count(w.id) as totalOrders,
@@ -345,6 +371,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
                 where w.is_deleted = false
                   and (cast(:status as varchar) is null or w.status = cast(:status as varchar))
                   and (:completedOrClosedOnly = false or w.status in ('COMPLETED', 'CLOSED'))
+                  and (cast(:type as varchar) is null or w.type = cast(:type as varchar))
+                  and (:unplannedTypeOnly = false or w.type in ('EMERGENCY', 'DEFECT'))
                   and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
                   and (cast(:equipmentId as varchar) is null or w.equipment_id = cast(:equipmentId as uuid))
                   and (
@@ -361,7 +389,9 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
             @Param("completedOrClosedOnly") boolean completedOrClosedOnly,
             @Param("departmentId") UUID departmentId,
             @Param("equipmentId") UUID equipmentId,
-            @Param("search") String search);
+            @Param("search") String search,
+            @Param("type") String type,
+            @Param("unplannedTypeOnly") boolean unplannedTypeOnly);
 
     @Query("""
             select

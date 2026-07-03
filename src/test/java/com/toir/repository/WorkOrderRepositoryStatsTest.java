@@ -53,6 +53,34 @@ class WorkOrderRepositoryStatsTest {
     }
 
     @Test
+    void getWorkOrderStatsWithUnplannedTypeScopeCountsOnlyEmergencyAndDefectOrders() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        saveWorkOrder("WO-TYPE-001", departmentId, equipmentId, WorkOrderStatus.APPROVED, null, WorkOrderType.EMERGENCY);
+        saveWorkOrder("WO-TYPE-002", departmentId, equipmentId, WorkOrderStatus.APPROVED, null, WorkOrderType.DEFECT);
+        saveWorkOrder("WO-TYPE-003", departmentId, equipmentId, WorkOrderStatus.APPROVED, null, WorkOrderType.PLANNED);
+
+        WorkOrderStatsProjection stats = repository.getWorkOrderStats(null, false, null, null, null, null, true);
+
+        assertThat(stats.getTotalOrders()).isEqualTo(2);
+        assertThat(stats.getOpenOrders()).isEqualTo(2);
+    }
+
+    @Test
+    void getWorkOrderStatsWithExactTypeCountsOnlyThatType() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        saveWorkOrder("WO-TYPE-EXACT-001", departmentId, equipmentId, WorkOrderStatus.APPROVED, null, WorkOrderType.EMERGENCY);
+        saveWorkOrder("WO-TYPE-EXACT-002", departmentId, equipmentId, WorkOrderStatus.APPROVED, null, WorkOrderType.DEFECT);
+
+        WorkOrderStatsProjection stats = repository.getWorkOrderStats(null, false, null, null, null, "DEFECT", false);
+
+        assertThat(stats.getTotalOrders()).isEqualTo(1);
+    }
+
+    @Test
     void getWorkOrderStatsCountsOverdueOrders() {
         UUID departmentId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
@@ -115,13 +143,18 @@ class WorkOrderRepositoryStatsTest {
 
     private WorkOrder saveWorkOrder(String number, UUID departmentId, UUID equipmentId,
                                     WorkOrderStatus status, Instant endPlannedAt) {
+        return saveWorkOrder(number, departmentId, equipmentId, status, endPlannedAt, WorkOrderType.values()[0]);
+    }
+
+    private WorkOrder saveWorkOrder(String number, UUID departmentId, UUID equipmentId,
+                                    WorkOrderStatus status, Instant endPlannedAt, WorkOrderType type) {
         WorkOrder wo = new WorkOrder();
         wo.setNumber(number);
         wo.setTitle("Work order " + number);
         wo.setEquipmentId(equipmentId);
         wo.setDepartmentId(departmentId);
         wo.setStatus(status);
-        wo.setType(WorkOrderType.values()[0]);
+        wo.setType(type);
         wo.setWorkType(WorkType.REPAIR);
         wo.setPriority(PriorityLevel.MEDIUM);
         wo.setCreatedById(UUID.randomUUID());

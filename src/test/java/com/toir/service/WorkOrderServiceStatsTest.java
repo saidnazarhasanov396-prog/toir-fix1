@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.workorder.WorkOrderStatsResponse;
 import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkOrderType;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.WorkOrderStatsProjection;
@@ -131,6 +132,38 @@ class WorkOrderServiceStatsTest {
         assertThatThrownBy(() -> service.getStats(null, "UNKNOWN", null, null, null))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Unsupported work order statusScope: UNKNOWN");
+
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void getStatsWithUnplannedTypeScopePassesUnplannedTypeFilter() {
+        WorkOrderStatsProjection projection = mockProjection(2L, 2L, 0L, 0L);
+        when(repository.getWorkOrderStats(isNull(), eq(false), isNull(), isNull(), isNull(), isNull(), eq(true)))
+                .thenReturn(projection);
+
+        WorkOrderStatsResponse stats = service.getStats(null, null, null, "UNPLANNED", null, null, null);
+
+        assertThat(stats.totalOrders()).isEqualTo(2);
+        verify(repository).getWorkOrderStats(null, false, null, null, null, null, true);
+    }
+
+    @Test
+    void getStatsWithExactTypeTakesPrecedenceOverTypeScope() {
+        WorkOrderStatsProjection projection = mockProjection(1L, 1L, 0L, 0L);
+        when(repository.getWorkOrderStats(isNull(), eq(false), isNull(), isNull(), isNull(), eq("EMERGENCY"), eq(false)))
+                .thenReturn(projection);
+
+        service.getStats(null, null, WorkOrderType.EMERGENCY, "UNPLANNED", null, null, null);
+
+        verify(repository).getWorkOrderStats(null, false, null, null, null, "EMERGENCY", false);
+    }
+
+    @Test
+    void getStatsWithUnsupportedTypeScopeThrowsBadRequest() {
+        assertThatThrownBy(() -> service.getStats(null, null, null, "UNKNOWN", null, null, null))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Unsupported work order typeScope: UNKNOWN");
 
         verifyNoInteractions(repository);
     }
