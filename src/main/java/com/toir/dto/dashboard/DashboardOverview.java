@@ -54,6 +54,7 @@ public record DashboardOverview(
             long totalEmergencyRequests,
             long overduePpr,
             long repairsThisMonth,
+            long completedOrClosedWorkOrders,
             long completedRepairs,
             long closedWorkOrders,
             long activeReservations,

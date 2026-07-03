@@ -82,62 +82,114 @@ public class WorkOrderController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Instant plannedFrom,
             @RequestParam(required = false) Instant plannedTo,
+            @RequestParam(required = false) String statusScope,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         Sort sort = SortUtils.sort(sortBy, sortDir, SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
+        boolean hasStatusScope = statusScope != null && !statusScope.isBlank();
         if (repairCampaignId != null || repairCampaignStageId != null) {
             return ResponseEntity
-                    .ok(service.searchByCampaign(
-                            status,
-                            scopedDepartment(departmentId),
-                            equipmentId,
-                            page,
-                            size,
-                            search,
-                            plannedFrom,
-                            plannedTo,
-                            sort,
-                            repairCampaignId,
-                            repairCampaignStageId));
+                    .ok(hasStatusScope
+                            ? service.searchByCampaign(
+                                    status,
+                                    statusScope,
+                                    scopedDepartment(departmentId),
+                                    equipmentId,
+                                    page,
+                                    size,
+                                    search,
+                                    plannedFrom,
+                                    plannedTo,
+                                    sort,
+                                    repairCampaignId,
+                                    repairCampaignStageId)
+                            : service.searchByCampaign(
+                                    status,
+                                    scopedDepartment(departmentId),
+                                    equipmentId,
+                                    page,
+                                    size,
+                                    search,
+                                    plannedFrom,
+                                    plannedTo,
+                                    sort,
+                                    repairCampaignId,
+                                    repairCampaignStageId));
         }
         String requestedSort = sortBy == null ? null : sortBy.trim();
         if (requestedSort == null || requestedSort.isBlank() || "updatedAt".equals(requestedSort)) {
             return ResponseEntity
-                    .ok(service.search(
-                            status,
-                            scopedDepartment(departmentId),
-                            equipmentId,
-                            page,
-                            size,
-                            search,
-                            plannedFrom,
-                            plannedTo,
-                            sort));
+                    .ok(hasStatusScope
+                            ? service.search(
+                                    status,
+                                    statusScope,
+                                    scopedDepartment(departmentId),
+                                    equipmentId,
+                                    page,
+                                    size,
+                                    search,
+                                    plannedFrom,
+                                    plannedTo,
+                                    sort)
+                            : service.search(
+                                    status,
+                                    scopedDepartment(departmentId),
+                                    equipmentId,
+                                    page,
+                                    size,
+                                    search,
+                                    plannedFrom,
+                                    plannedTo,
+                                    sort));
         }
         if (SortUtils.field(requestedSort, SORT_FIELDS) == null) {
             return ResponseEntity
-                    .ok(service.search(
-                            status,
-                            scopedDepartment(departmentId),
-                            equipmentId,
-                            page,
-                            size,
-                            search,
-                            plannedFrom,
-                            plannedTo,
-                            sort));
+                    .ok(hasStatusScope
+                            ? service.search(
+                                    status,
+                                    statusScope,
+                                    scopedDepartment(departmentId),
+                                    equipmentId,
+                                    page,
+                                    size,
+                                    search,
+                                    plannedFrom,
+                                    plannedTo,
+                                    sort)
+                            : service.search(
+                                    status,
+                                    scopedDepartment(departmentId),
+                                    equipmentId,
+                                    page,
+                                    size,
+                                    search,
+                                    plannedFrom,
+                                    plannedTo,
+                                    sort));
         }
         return ResponseEntity
-                .ok(service.searchSorted(
-                        status,
-                        scopedDepartment(departmentId),
-                        equipmentId,
-                        page,
-                        size,
-                        search,
-                        plannedFrom,
-                        plannedTo,
-                        sort));
+                .ok(hasStatusScope
+                        ? service.searchSorted(
+                                status,
+                                statusScope,
+                                scopedDepartment(departmentId),
+                                equipmentId,
+                                page,
+                                size,
+                                search,
+                                plannedFrom,
+                                plannedTo,
+                                sort)
+                        : service.searchSorted(
+                                status,
+                                scopedDepartment(departmentId),
+                                equipmentId,
+                                page,
+                                size,
+                                search,
+                                plannedFrom,
+                                plannedTo,
+                                sort));
     }
 
     @GetMapping("/calendar-summary")
@@ -164,8 +216,11 @@ public class WorkOrderController {
             @RequestParam(required = false) WorkOrderStatus status,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
-            @RequestParam(required = false) String search) {
-        return ResponseEntity.ok(service.getStats(status, scopedDepartment(departmentId), equipmentId, search));
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String statusScope) {
+        return ResponseEntity.ok(statusScope != null && !statusScope.isBlank()
+                ? service.getStats(status, statusScope, scopedDepartment(departmentId), equipmentId, search)
+                : service.getStats(status, scopedDepartment(departmentId), equipmentId, search));
     }
 
     @GetMapping("/options/performers")

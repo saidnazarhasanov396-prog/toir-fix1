@@ -36,6 +36,23 @@ class WorkOrderRepositoryStatsTest {
     }
 
     @Test
+    void getWorkOrderStatsWithCompletedOrClosedScopeCountsOnlyFinalSuccessfulOrders() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+
+        saveWorkOrder("WO-SCOPE-001", departmentId, equipmentId, WorkOrderStatus.APPROVED, null);
+        saveWorkOrder("WO-SCOPE-002", departmentId, equipmentId, WorkOrderStatus.COMPLETED, null);
+        saveWorkOrder("WO-SCOPE-003", departmentId, equipmentId, WorkOrderStatus.CLOSED, null);
+        saveWorkOrder("WO-SCOPE-004", departmentId, equipmentId, WorkOrderStatus.CANCELLED, null);
+
+        WorkOrderStatsProjection stats = repository.getWorkOrderStats(null, true, null, null, null);
+
+        assertThat(stats.getTotalOrders()).isEqualTo(2);
+        assertThat(stats.getOpenOrders()).isZero();
+        assertThat(stats.getCompletedOrders()).isEqualTo(2);
+    }
+
+    @Test
     void getWorkOrderStatsCountsOverdueOrders() {
         UUID departmentId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
