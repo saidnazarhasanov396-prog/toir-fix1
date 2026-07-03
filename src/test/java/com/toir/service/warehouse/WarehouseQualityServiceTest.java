@@ -1,6 +1,7 @@
 package com.toir.service.warehouse;
 
 import com.toir.dto.approval.ApprovalRequestDto;
+import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.warehouse.StockIssueCommand;
 import com.toir.dto.warehouse.StockReceiptCommand;
 import com.toir.dto.warehouse.WarehouseQualityTransferRequest;
@@ -15,6 +16,7 @@ import com.toir.entity.warehouse.WarehouseWriteoffRequest;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.StockMovementSourceType;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WarehouseWriteoffStatus;
 import com.toir.repository.StockMovementRepository;
@@ -208,6 +210,11 @@ class WarehouseQualityServiceTest {
 
         assertThat(result.status()).isEqualTo(WarehouseWriteoffStatus.PENDING_APPROVAL);
         assertThat(result.approvalRequestId()).isEqualTo(approvalId);
+        ArgumentCaptor<CreateApprovalRequest> approvalCaptor = ArgumentCaptor.forClass(CreateApprovalRequest.class);
+        verify(approvalOrchestrator).requestApproval(approvalCaptor.capture());
+        assertThat(approvalCaptor.getValue().targetType()).isEqualTo(ApprovalTargetType.WAREHOUSE_WRITEOFF);
+        assertThat(approvalCaptor.getValue().targetId()).isEqualTo(requestId);
+        assertThat(approvalCaptor.getValue().steps()).isEmpty();
         verify(toirStockService).postDecrease(any(StockIssueCommand.class), eq(StockLedgerMovementType.STATUS_TRANSFER_OUT));
         verify(toirStockService).postIncrease(any(StockReceiptCommand.class), eq(StockLedgerMovementType.STATUS_TRANSFER_IN));
         assertThat(request.getStockStatus()).isEqualTo(WarehouseStockStatus.WRITEOFF_PENDING);

@@ -23,6 +23,7 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.equipment.EquipmentCommissioningActRepository;
+import com.toir.repository.WarehouseWriteoffRequestRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.security.PermissionConstants;
@@ -53,6 +54,7 @@ public class ApprovalScopeService {
     private final FinanceScopeService financeScopeService;
     private final UserRepository userRepository;
     private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
+    private final WarehouseWriteoffRequestRepository warehouseWriteoffRequestRepository;
 
     public boolean canReadApproval(ApprovalRequest approval) {
         if (approval == null) {
@@ -223,6 +225,12 @@ public class ApprovalScopeService {
                     .map(this::canAccessProcurementRequest)
                     .orElse(false);
         }
+        if (targetType == ApprovalTargetType.WAREHOUSE_WRITEOFF) {
+            return warehouseWriteoffRequestRepository.findByIdAndIsDeletedFalse(targetId)
+                    .map(request -> request.getWarehouseId() != null
+                            && scopeAccessService.canAccessWarehouse(request.getWarehouseId()))
+                    .orElse(false);
+        }
         return resolveApprovalDocumentDepartment(targetType, targetId)
                 .map(scopeAccessService::canAccessDepartment)
                 .orElse(false);
@@ -287,7 +295,7 @@ public class ApprovalScopeService {
         return switch (targetType) {
             case PPR_PLAN, PPR_TASK, REPAIR_REQUEST, WORK_ORDER,
                  PROCUREMENT, PROCUREMENT_REQUEST, BUDGET, MAINTENANCE_BUDGET, ACTUAL_COST,
-                 EQUIPMENT_COMMISSIONING -> true;
+                 EQUIPMENT_COMMISSIONING, WAREHOUSE_WRITEOFF -> true;
             default -> false;
         };
     }

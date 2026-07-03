@@ -34,6 +34,7 @@ public class ApprovalHandlerRegistryVerifier implements ApplicationRunner {
         addApproveReject(contracts, ApprovalTargetType.PLANNED_SHUTDOWN);
         addApproveReject(contracts, ApprovalTargetType.REPAIR_CAMPAIGN);
         addApproveReject(contracts, ApprovalTargetType.EQUIPMENT_COMMISSIONING);
+        addApproveReject(contracts, ApprovalTargetType.WAREHOUSE_WRITEOFF);
 
         for (HandlerContract contract : contracts) {
             long matches = handlers.stream()
