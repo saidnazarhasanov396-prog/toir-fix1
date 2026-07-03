@@ -3,6 +3,7 @@ package com.toir.finance;
 import com.toir.dto.budget.FinanceDashboardResponse;
 import com.toir.finance.FinanceBudgetMath;
 import com.toir.entity.Department;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.CostCategory;
@@ -468,6 +469,82 @@ class FinanceModuleRegressionTest {
         @Test
         void policyRequiresDepartmentScopedReviewQueue() {
             assertThat(FinanceUpgradePolicy.DEPARTMENT_SCOPED_REVIEW_QUEUE).isTrue();
+        }
+    }
+
+    @Nested
+    @ExtendWith(MockitoExtension.class)
+    class Phase6ApproveAndCommitRules {
+
+        @Mock
+        com.toir.repository.actualCost.ActualCostRepository repository;
+        @Mock
+        com.toir.repository.projects.BudgetLineRepository budgetLineRepository;
+        @Mock
+        com.toir.repository.maintenance.MaintenanceBudgetRepository maintenanceBudgetRepository;
+        @Mock
+        WorkOrderRepository workOrderRepository;
+        @Mock
+        com.toir.repository.projects.FinancialApprovalRuleRepository financialApprovalRuleRepository;
+        @Mock
+        com.toir.repository.actualCost.ActualCostReviewEventRepository reviewEventRepository;
+        @Mock
+        com.toir.service.FinanceScopeService financeScopeService;
+        @Mock
+        BudgetCommitmentService budgetCommitmentService;
+        @Mock
+        com.toir.util.AuditBuilderService auditBuilderService;
+        @Mock
+        com.toir.service.NotificationService notificationService;
+        @Mock
+        com.toir.service.repair.RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
+
+        @InjectMocks
+        ActualCostService service;
+
+        @Test
+        void policyRequiresBudgetLineOnApprove() {
+            assertThat(FinanceUpgradePolicy.REQUIRE_BUDGET_LINE_ON_APPROVE).isTrue();
+            assertThat(FinanceUpgradePolicy.DIRECT_ACTUAL_COST_COMMIT_ON_CREATE).isTrue();
+            assertThat(FinanceUpgradePolicy.RECEIPT_CATEGORY_FOLLOWS_BUDGET_LINE).isTrue();
+        }
+
+        @Test
+        void createCommitsWhenBudgetLinePresent() {
+            UUID id = UUID.randomUUID();
+            UUID lineId = UUID.randomUUID();
+            UUID workOrderId = UUID.randomUUID();
+            WorkOrder workOrder = new WorkOrder();
+            workOrder.setId(workOrderId);
+            workOrder.setDepartmentId(UUID.randomUUID());
+            BudgetLine line = new BudgetLine();
+            line.setId(lineId);
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setStatus(BudgetStatus.APPROVED);
+            line.setBudget(budget);
+
+            when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(financialApprovalRuleRepository.findFirstMatchingRule(any(), any())).thenReturn(Optional.empty());
+            when(repository.save(any())).thenAnswer(inv -> {
+                ActualCost saved = inv.getArgument(0);
+                ReflectionTestUtils.setField(saved, "id", id);
+                return saved;
+            });
+
+            service.create(new com.toir.dto.actualcost.ActualCostDto(
+                    null, workOrderId, null, null, null, null, lineId,
+                    UUID.randomUUID(), null, null, null, null, 90_000, null, null, null, null, null, null
+            ));
+
+            verify(budgetCommitmentService).commitBudget(
+                    eq(lineId),
+                    eq(90_000d),
+                    eq("ACTUAL_COST_PENDING"),
+                    eq(id),
+                    eq(null),
+                    eq("Reserve on actual cost create")
+            );
         }
     }
 

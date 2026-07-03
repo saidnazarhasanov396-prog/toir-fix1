@@ -18,6 +18,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.Warehouse;
@@ -41,6 +42,7 @@ import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WarehouseTaskSourceType;
 import com.toir.enums.WmsDocumentOperationType;
 import com.toir.exception.RestException;
+import com.toir.finance.FinanceUpgradePolicy;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -51,6 +53,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
@@ -96,6 +99,7 @@ public class ProcurementRequestService {
     private final ScopeAccessService scopeAccessService;
     private final LowStockRecommendationService lowStockRecommendationService;
     private final ActualCostRepository actualCostRepository;
+    private final BudgetLineRepository budgetLineRepository;
     private final CostCategoryRepository costCategoryRepository;
     private final CounteragentService counteragentService;
     private final ToirStockService toirStockService;
@@ -760,8 +764,8 @@ public class ProcurementRequestService {
                 || movement == null || movement.getId() == null) {
             return;
         }
-        Optional<CostCategory> category = costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS");
-        if (category.isEmpty()) {
+        UUID categoryId = resolveReceiptCostCategoryId(request);
+        if (categoryId == null) {
             return;
         }
         ActualCost cost = actualCostRepository
@@ -773,12 +777,25 @@ public class ProcurementRequestService {
         cost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
         cost.setSourceId(movement.getId());
         cost.setBudgetLineId(request.getBudgetLineId());
-        cost.setCostCategoryId(category.get().getId());
+        cost.setCostCategoryId(categoryId);
         cost.setAmount(quantity * line.getUnitPrice());
         cost.setStatus(ActualCostStatus.PENDING);
         cost.setCostDate(movement.getOccurredAt() == null ? Instant.now() : movement.getOccurredAt());
         cost.setNotes("Generated from procurement receipt %s line %s".formatted(request.getId(), line.getId()));
         actualCostRepository.save(cost);
+    }
+
+    private UUID resolveReceiptCostCategoryId(ProcurementRequest request) {
+        if (FinanceUpgradePolicy.RECEIPT_CATEGORY_FOLLOWS_BUDGET_LINE && request.getBudgetLineId() != null) {
+            Optional<UUID> fromBudgetLine = budgetLineRepository.findByIdAndIsDeletedFalse(request.getBudgetLineId())
+                    .map(BudgetLine::getCostCategoryId);
+            if (fromBudgetLine.isPresent()) {
+                return fromBudgetLine.get();
+            }
+        }
+        return costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS")
+                .map(CostCategory::getId)
+                .orElse(null);
     }
 
     private StockMovement receiptMovement(ProcurementRequest request,

@@ -19,6 +19,7 @@ import com.toir.enums.BudgetStatus;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.exception.RestException;
+import com.toir.finance.FinanceUpgradePolicy;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.actualCost.ActualCostAllocationEventRepository;
@@ -124,6 +125,10 @@ public class ActualCostService {
         financeScopeService.assertCanMutateActualCost(c);
         ActualCost saved = repository.save(c);
 
+        if (budgetLine != null) {
+            commitPendingBudgetOnCreate(saved, budgetLine);
+        }
+
         UUID deptIdForRule = resolveActualCostDepartment(effectiveWorkOrder, repairRequest, budgetLine);
         FinancialApprovalRule matchedRule = financialApprovalRuleRepository
                 .findFirstMatchingRule(deptIdForRule, saved.getAmount())
@@ -170,15 +175,21 @@ public class ActualCostService {
         assertCanReviewActualCost(c, approve, reviewerId, comment);
         financeScopeService.assertCanMutateActualCost(c);
 
+        if (approve && FinanceUpgradePolicy.REQUIRE_BUDGET_LINE_ON_APPROVE && c.getBudgetLineId() == null) {
+            throw RestException.badRequest("Actual cost approve requires budget line allocation");
+        }
+
         if (approve && c.getBudgetLineId() != null) {
             BudgetLine line = requireBudgetLine(c.getBudgetLineId());
             assertBudgetLineUsable(line);
             assertBudgetRemaining(line, c.getAmount());
-            applyBudgetUsageOnce(line, c);
             if (c.getSourceType() == ActualCostSourceType.PROCUREMENT_RECEIPT) {
                 releaseProcurementCommitment(line, c, reviewerId,
                         "Release commitment on actual cost approval");
+            } else {
+                releasePendingCommitmentOnApprove(line, c, reviewerId);
             }
+            applyBudgetUsageOnce(line, c);
         } else if (!approve && c.getBudgetLineId() != null) {
             BudgetLine line = requireBudgetLine(c.getBudgetLineId());
             assertBudgetLineUsable(line);
@@ -453,6 +464,32 @@ public class ActualCostService {
                 cost.getId(),
                 actorUserId,
                 "Release commitment on actual cost rejection"
+        );
+    }
+
+    private void commitPendingBudgetOnCreate(ActualCost saved, BudgetLine budgetLine) {
+        if (!FinanceUpgradePolicy.DIRECT_ACTUAL_COST_COMMIT_ON_CREATE
+                || saved.getSourceType() == ActualCostSourceType.PROCUREMENT_RECEIPT) {
+            return;
+        }
+        budgetCommitmentService.commitBudget(
+                budgetLine.getId(),
+                saved.getAmount(),
+                "ACTUAL_COST_PENDING",
+                saved.getId(),
+                null,
+                "Reserve on actual cost create"
+        );
+    }
+
+    private void releasePendingCommitmentOnApprove(BudgetLine line, ActualCost cost, UUID reviewerId) {
+        budgetCommitmentService.releaseBudget(
+                line.getId(),
+                cost.getAmount(),
+                "ACTUAL_COST_PENDING",
+                cost.getId(),
+                reviewerId,
+                "Release commitment on actual cost approval"
         );
     }
 

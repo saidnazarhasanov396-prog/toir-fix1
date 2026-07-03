@@ -264,16 +264,22 @@ class ActualCostPbacScopeTest {
     @Test
     void primaryWorkOrderDepartmentUsedWhenMultipleSourcesExist() {
         UUID id = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
         UUID workOrderDepartmentId = UUID.randomUUID();
         UUID repairDepartmentId = UUID.randomUUID();
         UUID workOrderId = UUID.randomUUID();
         UUID repairRequestId = UUID.randomUUID();
-        ActualCost actualCost = actualCost(id, workOrderId, repairRequestId, null, ActualCostStatus.PENDING);
+        ActualCost actualCost = actualCost(id, workOrderId, repairRequestId, budgetLineId, ActualCostStatus.PENDING);
+        actualCost.setSourceType(com.toir.enums.ActualCostSourceType.WORK_ORDER);
+        BudgetLine line = budgetLine(budgetLineId, workOrderDepartmentId);
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder(workOrderId, workOrderDepartmentId)));
         when(repairRequestRepository.findByIdAndIsDeletedFalse(repairRequestId))
                 .thenReturn(Optional.of(repairRequest(repairRequestId, repairDepartmentId)));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
+        when(budgetLineRepository.save(any(BudgetLine.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(maintenanceBudgetRepository.save(any(MaintenanceBudget.class))).thenAnswer(inv -> inv.getArgument(0));
         when(scopeAccessService.canAccessDepartment(workOrderDepartmentId)).thenReturn(true);
         when(repository.save(actualCost)).thenReturn(actualCost);
 
@@ -386,6 +392,9 @@ class ActualCostPbacScopeTest {
         budget.setStatus(BudgetStatus.APPROVED);
         BudgetLine line = new BudgetLine();
         line.setId(id);
+        line.setPlannedAmount(500);
+        line.setActualAmount(0);
+        line.setCommittedAmount(0);
         line.setBudget(budget);
         return line;
     }
