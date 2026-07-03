@@ -144,11 +144,8 @@ public class FinanceScopeService {
         if (scopeAccessService.isScopeAdmin()) {
             return true;
         }
-        Set<UUID> departments = resolveActualCostDepartmentIds(actualCost);
-        if (departments.size() != 1) {
-            return false;
-        }
-        return scopeAccessService.canAccessDepartment(departments.iterator().next());
+        UUID departmentId = resolvePrimaryDepartmentId(actualCost);
+        return departmentId != null && scopeAccessService.canAccessDepartment(departmentId);
     }
 
     private boolean canReadReviewer(ActualCost actualCost) {
@@ -182,15 +179,49 @@ public class FinanceScopeService {
         if (override == null) {
             return false;
         }
-        Set<UUID> departments = new LinkedHashSet<>();
-        if (override.getDepartmentId() != null) {
-            departments.add(override.getDepartmentId());
+        UUID departmentId = override.getDepartmentId() != null
+                ? override.getDepartmentId()
+                : resolvePrimaryDepartmentId(actualCost);
+        return departmentId != null && scopeAccessService.canAccessDepartment(departmentId);
+    }
+
+    private UUID resolvePrimaryDepartmentId(ActualCost actualCost) {
+        if (actualCost == null) {
+            return null;
         }
-        departments.addAll(resolveActualCostDepartmentIds(actualCost));
-        if (departments.size() != 1) {
-            return false;
+        if (actualCost.getBudgetLineId() != null) {
+            UUID fromBudgetLine = budgetLineRepository.findByIdAndIsDeletedFalse(actualCost.getBudgetLineId())
+                    .map(BudgetLine::getBudget)
+                    .map(MaintenanceBudget::getDepartmentId)
+                    .orElse(null);
+            if (fromBudgetLine != null) {
+                return fromBudgetLine;
+            }
         }
-        return scopeAccessService.canAccessDepartment(departments.iterator().next());
+        if (actualCost.getWorkOrderId() != null) {
+            UUID fromWorkOrder = workOrderRepository.findByIdAndIsDeletedFalse(actualCost.getWorkOrderId())
+                    .map(WorkOrder::getDepartmentId)
+                    .orElse(null);
+            if (fromWorkOrder != null) {
+                return fromWorkOrder;
+            }
+        }
+        if (actualCost.getRepairRequestId() != null) {
+            UUID fromRepairRequest = repairRequestRepository.findByIdAndIsDeletedFalse(actualCost.getRepairRequestId())
+                    .map(RepairRequest::getDepartmentId)
+                    .orElse(null);
+            if (fromRepairRequest != null) {
+                return fromRepairRequest;
+            }
+        }
+        if (actualCost.getContractorWorkId() != null) {
+            return contractorWorkRepository.findByIdAndIsDeletedFalse(actualCost.getContractorWorkId())
+                    .map(ContractorWork::getWorkOrderId)
+                    .flatMap(workOrderRepository::findByIdAndIsDeletedFalse)
+                    .map(WorkOrder::getDepartmentId)
+                    .orElse(null);
+        }
+        return null;
     }
 
     private Set<UUID> resolveActualCostDepartmentIds(ActualCost actualCost) {

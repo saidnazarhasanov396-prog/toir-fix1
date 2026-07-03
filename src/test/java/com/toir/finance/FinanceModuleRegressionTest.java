@@ -463,6 +463,15 @@ class FinanceModuleRegressionTest {
     }
 
     @Nested
+    class Phase5DepartmentScopedReview {
+
+        @Test
+        void policyRequiresDepartmentScopedReviewQueue() {
+            assertThat(FinanceUpgradePolicy.DEPARTMENT_SCOPED_REVIEW_QUEUE).isTrue();
+        }
+    }
+
+    @Nested
     @ExtendWith(MockitoExtension.class)
     @Disabled("FAZA 3 — merged into Phase3ProcurementAllocate")
     class TargetPhase3ProcurementAllocate {

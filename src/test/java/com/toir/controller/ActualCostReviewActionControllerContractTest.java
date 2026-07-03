@@ -63,7 +63,7 @@ class ActualCostReviewActionControllerContractTest {
                 UUID.randomUUID(), departmentId, counteragentId, categoryId, "PENDING",
                 "FINANCE_MANAGER", Instant.parse("2026-06-15T09:00:00Z"), false, 2, true);
 
-        when(service.reviewQueue("pump"))
+        when(service.reviewQueue("pump", null))
                 .thenReturn(List.of(wrongDepartment, wrongRole, overdue, allocated, matching));
         when(service.csv(eq("actual-cost-review-queue.csv"), any()))
                 .thenAnswer(invocation -> idsCsv(invocation.getArgument(1)));
@@ -106,7 +106,7 @@ class ActualCostReviewActionControllerContractTest {
                 UUID.randomUUID(), departmentId, counteragentId, categoryId, "APPROVED",
                 "FINANCE_MANAGER", Instant.parse("2026-06-15T09:00:00Z"), false, 12, false);
 
-        when(service.actualCostRegister("valve"))
+        when(service.actualCostRegister("valve", null))
                 .thenReturn(List.of(wrongStatus, wrongDate, wrongCategory, unallocated, matching));
         when(service.csv(eq("actual-costs.csv"), any()))
                 .thenAnswer(invocation -> idsCsv(invocation.getArgument(1)));

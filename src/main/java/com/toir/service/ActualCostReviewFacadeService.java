@@ -16,8 +16,11 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostReviewEvent;
 import com.toir.entity.projects.ActualCostReviewRouteOverride;
+import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.FinancialApprovalRule;
+import com.toir.entity.projects.MaintenanceBudget;
+import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.NotificationSeverity;
 import com.toir.exception.RestException;
@@ -28,7 +31,9 @@ import com.toir.repository.actualCost.ActualCostReviewEventRepository;
 import com.toir.repository.actualCost.ActualCostReviewRouteOverrideRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.projects.FinancialApprovalRuleRepository;
+import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.CsvWriter;
@@ -40,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -65,6 +71,8 @@ public class ActualCostReviewFacadeService {
     private final ActualCostReviewEventRepository eventRepository;
     private final WorkOrderRepository workOrderRepository;
     private final ContractorWorkRepository contractorWorkRepository;
+    private final BudgetLineRepository budgetLineRepository;
+    private final RepairRequestRepository repairRequestRepository;
     private final DepartmentRepository departmentRepository;
     private final CostCategoryRepository costCategoryRepository;
     private final FinancialApprovalRuleRepository financialApprovalRuleRepository;
@@ -80,8 +88,15 @@ public class ActualCostReviewFacadeService {
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewItem> reviewQueue(String search) {
-        List<ActualCost> all = pendingActualCosts(search);
-        List<ActualCost> visible = isReviewAccessUser()
+        return reviewQueue(search, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ActualCostReviewItem> reviewQueue(String search, Integer year) {
+        List<ActualCost> all = pendingActualCosts(search).stream()
+                .filter(cost -> matchesYear(cost, year))
+                .toList();
+        List<ActualCost> visible = scopeAccessService.isScopeAdmin()
                 ? all
                 : financeScopeService.filterActualCosts(all);
         return visible.stream()
@@ -96,17 +111,17 @@ public class ActualCostReviewFacadeService {
                 .toList();
     }
 
-    private boolean isReviewAccessUser() {
-        return scopeAccessService.isScopeAdmin()
-                || scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)
-                || scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT);
+    @Transactional(readOnly = true)
+    public List<ActualCostReviewItem> actualCostRegister(String search) {
+        return actualCostRegister(search, null);
     }
 
     @Transactional(readOnly = true)
-    public List<ActualCostReviewItem> actualCostRegister(String search) {
+    public List<ActualCostReviewItem> actualCostRegister(String search, Integer year) {
         return financeScopeService.filterActualCosts(
                         actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, search)
                 ).stream()
+                .filter(cost -> matchesYear(cost, year))
                 .map(this::toItem)
                 .toList();
     }
@@ -736,7 +751,7 @@ public class ActualCostReviewFacadeService {
                 ? contractorWorkRepository.findByIdAndIsDeletedFalse(cost.getContractorWorkId()).orElse(null)
                 : null;
         WorkOrder workOrder = resolveWorkOrder(cost, contractorWork);
-        Department department = resolveDepartment(activeOverride, workOrder);
+        Department department = resolveDepartment(cost, activeOverride, workOrder);
         CostCategory costCategory = cost.getCostCategoryId() != null
                 ? costCategoryRepository.findByIdAndIsDeletedFalse(cost.getCostCategoryId()).orElse(null)
                 : null;
@@ -753,14 +768,42 @@ public class ActualCostReviewFacadeService {
         return null;
     }
 
-    private Department resolveDepartment(ActualCostReviewRouteOverride activeOverride, WorkOrder workOrder) {
+    private Department resolveDepartment(ActualCost cost,
+                                         ActualCostReviewRouteOverride activeOverride,
+                                         WorkOrder workOrder) {
         if (activeOverride != null && activeOverride.getDepartmentId() != null) {
             return departmentRepository.findByIdAndIsDeletedFalse(activeOverride.getDepartmentId()).orElse(null);
+        }
+        if (cost.getBudgetLineId() != null) {
+            Department fromBudgetLine = budgetLineRepository.findByIdAndIsDeletedFalse(cost.getBudgetLineId())
+                    .map(BudgetLine::getBudget)
+                    .map(MaintenanceBudget::getDepartmentId)
+                    .flatMap(departmentRepository::findByIdAndIsDeletedFalse)
+                    .orElse(null);
+            if (fromBudgetLine != null) {
+                return fromBudgetLine;
+            }
+        }
+        if (cost.getRepairRequestId() != null) {
+            Department fromRepairRequest = repairRequestRepository.findByIdAndIsDeletedFalse(cost.getRepairRequestId())
+                    .map(RepairRequest::getDepartmentId)
+                    .flatMap(departmentRepository::findByIdAndIsDeletedFalse)
+                    .orElse(null);
+            if (fromRepairRequest != null) {
+                return fromRepairRequest;
+            }
         }
         if (workOrder != null && workOrder.getDepartmentId() != null) {
             return departmentRepository.findByIdAndIsDeletedFalse(workOrder.getDepartmentId()).orElse(null);
         }
         return null;
+    }
+
+    private boolean matchesYear(ActualCost cost, Integer year) {
+        if (year == null || cost.getCostDate() == null) {
+            return true;
+        }
+        return cost.getCostDate().atZone(ZoneOffset.UTC).getYear() == year;
     }
 
     private ActualCostReviewItem.Ref toDepartmentRef(Department department) {
