@@ -24,6 +24,8 @@ import com.toir.dto.procurement.EquipmentWarrantyLineRequest;
 import com.toir.dto.procurement.ProcurementOrderRequest;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
+import com.toir.entity.Department;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.BudgetAllocationStatus;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
@@ -1204,12 +1206,47 @@ class ProcurementRequestServiceTest {
         request.setLines(new java.util.ArrayList<>(List.of(line)));
 
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
-        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(request));
+        when(repository.findFinanceReviewQueue(null, ProcurementRequestStatus.SUBMITTED, BudgetAllocationStatus.UNALLOCATED))
+                .thenReturn(List.of(request));
 
         var result = service.findFinanceReviewQueue(null, ProcurementRequestStatus.SUBMITTED, true);
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().lines()).hasSize(1);
         assertThat(result.getFirst().lines().getFirst().quantity()).isEqualTo(2);
+    }
+
+    @Test
+    void findFinanceReviewQueueEnrichesDepartmentAndWarehouseNames() {
+        UUID departmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        ProcurementRequest request = new ProcurementRequest();
+        request.setId(UUID.randomUUID());
+        request.setNumber("PR-2026-0002");
+        request.setTitle("Named procurement");
+        request.setStatus(ProcurementRequestStatus.SUBMITTED);
+        request.setDepartmentId(departmentId);
+        request.setWarehouseId(warehouseId);
+        request.setBudgetAllocationStatus(BudgetAllocationStatus.UNALLOCATED);
+        request.setLines(new java.util.ArrayList<>());
+
+        Department department = new Department();
+        department.setId(departmentId);
+        department.setName("Maintenance");
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        warehouse.setName("Central WH");
+
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(repository.findFinanceReviewQueue(null, ProcurementRequestStatus.SUBMITTED, BudgetAllocationStatus.UNALLOCATED))
+                .thenReturn(List.of(request));
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(department));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(warehouse));
+
+        var result = service.findFinanceReviewQueue(null, ProcurementRequestStatus.SUBMITTED, true);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().departmentName()).isEqualTo("Maintenance");
+        assertThat(result.getFirst().warehouseName()).isEqualTo("Central WH");
     }
 }

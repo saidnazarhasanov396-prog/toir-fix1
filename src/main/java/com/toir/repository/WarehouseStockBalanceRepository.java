@@ -69,6 +69,35 @@ public interface WarehouseStockBalanceRepository extends JpaRepository<Warehouse
             @Param("sparePartId") UUID sparePartId
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select b
+            from WarehouseStockBalance b
+            where b.warehouseId = :warehouseId
+              and b.sparePartId = :sparePartId
+              and b.stockStatus = :stockStatus
+              and b.isDeleted = false
+              and b.qtyOnHand > b.qtyReserved
+              and (:binId is null or b.binId = :binId)
+              and (cast(:lotNumber as string) is null or lower(coalesce(b.lotNumber, '')) = lower(cast(:lotNumber as string)))
+              and (cast(:serialNumber as string) is null or lower(coalesce(b.serialNumber, '')) = lower(cast(:serialNumber as string)))
+              and (:expiryDate is null or b.expiryDate = :expiryDate)
+            order by
+              case when b.expiryDate is null then 1 else 0 end,
+              b.expiryDate asc,
+              b.updatedAt asc,
+              b.id asc
+            """)
+    List<WarehouseStockBalance> lockEligibleBalancesForWriteoff(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("sparePartId") UUID sparePartId,
+            @Param("stockStatus") WarehouseStockStatus stockStatus,
+            @Param("binId") UUID binId,
+            @Param("lotNumber") String lotNumber,
+            @Param("serialNumber") String serialNumber,
+            @Param("expiryDate") java.time.LocalDate expiryDate
+    );
+
     List<WarehouseStockBalance> findAllByIsDeletedFalse();
 
     List<WarehouseStockBalance> findAllByWarehouseIdAndIsDeletedFalse(UUID warehouseId);

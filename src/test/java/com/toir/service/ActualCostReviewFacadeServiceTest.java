@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.entity.Counteragent;
 import com.toir.entity.Department;
 import com.toir.entity.contractors.ContractorWork;
@@ -13,6 +14,8 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.CounteragentStatus;
 import com.toir.enums.ContractorWorkStatus;
 import com.toir.enums.NotificationSeverity;
+import com.toir.exception.RestException;
+import com.toir.dto.financialreview.BulkActualCostReviewResponse;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -41,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -80,6 +84,53 @@ class ActualCostReviewFacadeServiceTest {
 
     @InjectMocks
     ActualCostReviewFacadeService service;
+
+    @Test
+    void bulkReviewCollectsFailuresWithoutAbortingRemainingItems() {
+        UUID successId = UUID.randomUUID();
+        UUID failId = UUID.randomUUID();
+        UUID reviewerId = UUID.randomUUID();
+        ActualCostReviewFacadeService self = mock(ActualCostReviewFacadeService.class);
+        ReflectionTestUtils.setField(service, "self", self);
+
+        when(self.approve(successId, reviewerId, "ok"))
+                .thenReturn(approvedDto(successId));
+        when(self.approve(failId, reviewerId, "ok"))
+                .thenThrow(RestException.badRequest("Already reviewed"));
+
+        var response = service.bulkReview(List.of(successId, failId), "APPROVE", reviewerId, "ok");
+
+        assertThat(response.processed()).isEqualTo(2);
+        assertThat(response.succeeded()).isEqualTo(1);
+        assertThat(response.failed()).isEqualTo(1);
+        assertThat(response.successes()).extracting(BulkActualCostReviewResponse.Success::id).containsExactly(successId);
+        assertThat(response.failures()).extracting(BulkActualCostReviewResponse.Failure::message)
+                .containsExactly("Already reviewed");
+    }
+
+    private ActualCostDto approvedDto(UUID id) {
+        return new ActualCostDto(
+                id,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                UUID.randomUUID(),
+                ActualCostStatus.APPROVED,
+                null,
+                null,
+                null,
+                100.0,
+                Instant.now(),
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
 
     @Test
     void actualCostRegisterEnrichesDepartmentContractorWorkOrderAndCostCategoryRefs() {

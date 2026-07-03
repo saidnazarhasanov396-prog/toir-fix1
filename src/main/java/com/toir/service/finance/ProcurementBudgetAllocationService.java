@@ -15,6 +15,7 @@ import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.ProcurementRequestService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,18 +33,9 @@ public class ProcurementBudgetAllocationService {
     private final BudgetLineRepository budgetLineRepository;
     private final BudgetEventRepository budgetEventRepository;
     private final BudgetCommitmentService budgetCommitmentService;
+    private final ProcurementRequestService procurementRequestService;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
-
-    @Transactional(readOnly = true)
-    public List<ProcurementRequestDto> reviewQueue(UUID departmentId, ProcurementRequestStatus status, boolean unallocatedOnly) {
-        UUID effectiveDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
-        BudgetAllocationStatus allocationStatus = unallocatedOnly ? BudgetAllocationStatus.UNALLOCATED : null;
-
-        return procurementRequestRepository.findFinanceReviewQueue(effectiveDepartmentId, status, allocationStatus).stream()
-                .map(ProcurementRequestDto::from)
-                .toList();
-    }
 
     @Transactional
     public ProcurementRequestDto allocateBudget(UUID requestId, UUID budgetLineId,
@@ -77,7 +69,7 @@ public class ProcurementBudgetAllocationService {
         auditBuilderService.log("procurement_request", requestId.toString(), AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST, "Budget allocated", null, saved);
 
-        return ProcurementRequestDto.from(saved);
+        return procurementRequestService.toProcurementRequestDto(saved);
     }
 
     @Transactional
@@ -116,7 +108,7 @@ public class ProcurementBudgetAllocationService {
         auditBuilderService.log("procurement_request", requestId.toString(), AuditAction.UPDATE,
                 AuditModule.PROCUREMENT_REQUEST, "Budget unallocated", null, saved);
 
-        return ProcurementRequestDto.from(saved);
+        return procurementRequestService.toProcurementRequestDto(saved);
     }
 
     private void validateBudgetLineForProcurement(BudgetLine line, ProcurementRequest request) {

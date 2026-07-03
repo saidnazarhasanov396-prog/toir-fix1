@@ -109,14 +109,12 @@ public class ProcurementRequestService {
                                                              ProcurementRequestStatus status,
                                                              boolean unallocatedOnly) {
         UUID effectiveDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
-        List<ProcurementRequest> filtered = repo.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(request -> effectiveDepartmentId == null
-                        || effectiveDepartmentId.equals(request.getDepartmentId()))
-                .filter(request -> status == null || status == request.getStatus())
-                .filter(request -> !unallocatedOnly
-                        || request.getBudgetAllocationStatus() == BudgetAllocationStatus.UNALLOCATED)
-                .toList();
-        return toDtos(filtered);
+        BudgetAllocationStatus allocationStatus = unallocatedOnly ? BudgetAllocationStatus.UNALLOCATED : null;
+        return toDtos(repo.findFinanceReviewQueue(effectiveDepartmentId, status, allocationStatus));
+    }
+
+    public ProcurementRequestDto toProcurementRequestDto(ProcurementRequest request) {
+        return toDto(request);
     }
 
     @Transactional(readOnly = true)
