@@ -1064,12 +1064,22 @@ public class DashboardService {
         Instant end = slice.end().isBefore(periodEnd) ? slice.end() : periodEnd;
         if (!end.isAfter(start)) {
             return new ReliabilityDowntimeCalculator.DowntimeSlice(
-                    slice.equipmentId(), slice.departmentId(), slice.causeKey(), start, start, 0, slice.completed());
+                    slice.equipmentId(),
+                    slice.departmentId(),
+                    slice.causeKey(),
+                    slice.sourceType(),
+                    slice.sourceId(),
+                    start,
+                    start,
+                    0,
+                    slice.completed());
         }
         return new ReliabilityDowntimeCalculator.DowntimeSlice(
                 slice.equipmentId(),
                 slice.departmentId(),
                 slice.causeKey(),
+                slice.sourceType(),
+                slice.sourceId(),
                 start,
                 end,
                 Duration.between(start, end).toMinutes(),
