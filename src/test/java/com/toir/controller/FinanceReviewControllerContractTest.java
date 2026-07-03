@@ -7,6 +7,7 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.ActualCostService;
+import com.toir.service.ProcurementRequestService;
 import com.toir.service.finance.ProcurementBudgetAllocationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class FinanceReviewControllerContractTest {
 
     @Mock
+    ProcurementRequestService procurementRequestService;
+
+    @Mock
     ProcurementBudgetAllocationService procurementBudgetAllocationService;
 
     @Mock
@@ -39,6 +43,7 @@ class FinanceReviewControllerContractTest {
     @BeforeEach
     void setUp() {
         FinanceReviewController controller = new FinanceReviewController(
+                procurementRequestService,
                 procurementBudgetAllocationService,
                 actualCostService
         );
@@ -52,6 +57,7 @@ class FinanceReviewControllerContractTest {
         UUID departmentId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();
         UUID lineId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
         ProcurementRequestLineDto line = new ProcurementRequestLineDto(
                 lineId,
                 requestId,
@@ -70,9 +76,9 @@ class FinanceReviewControllerContractTest {
                 "Pump procurement",
                 null,
                 departmentId,
-                null,
-                null,
-                null,
+                warehouseId,
+                "Maintenance Dept",
+                "Central Warehouse",
                 null,
                 null,
                 null,
@@ -100,7 +106,7 @@ class FinanceReviewControllerContractTest {
                 null
         );
 
-        when(procurementBudgetAllocationService.reviewQueue(
+        when(procurementRequestService.findFinanceReviewQueue(
                 departmentId,
                 ProcurementRequestStatus.SUBMITTED,
                 true
@@ -112,10 +118,12 @@ class FinanceReviewControllerContractTest {
                         .param("unallocatedOnly", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(requestId.toString()))
+                .andExpect(jsonPath("$[0].departmentName").value("Maintenance Dept"))
+                .andExpect(jsonPath("$[0].warehouseName").value("Central Warehouse"))
                 .andExpect(jsonPath("$[0].lines.length()").value(1))
                 .andExpect(jsonPath("$[0].lines[0].id").value(lineId.toString()));
 
-        verify(procurementBudgetAllocationService).reviewQueue(
+        verify(procurementRequestService).findFinanceReviewQueue(
                 departmentId,
                 ProcurementRequestStatus.SUBMITTED,
                 true

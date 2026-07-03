@@ -1,7 +1,6 @@
 package com.toir.service.finance;
 
 import com.toir.entity.projects.BudgetEvent;
-import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ProcurementRequest;
@@ -13,6 +12,7 @@ import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.ProcurementRequestService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,6 +56,9 @@ class ProcurementBudgetAllocationServiceTest {
     @Mock
     ScopeAccessService scopeAccessService;
 
+    @Mock
+    ProcurementRequestService procurementRequestService;
+
     @InjectMocks
     ProcurementBudgetAllocationService service;
 
@@ -94,6 +97,11 @@ class ProcurementBudgetAllocationServiceTest {
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(budgetLine));
         when(procurementRequestRepository.save(any(ProcurementRequest.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        when(procurementRequestService.toProcurementRequestDto(any(ProcurementRequest.class)))
+                .thenAnswer(invocation -> {
+                    ProcurementRequest saved = invocation.getArgument(0);
+                    return com.toir.dto.procurement.ProcurementRequestDto.from(saved);
+                });
     }
 
     @Test
@@ -137,31 +145,5 @@ class ProcurementBudgetAllocationServiceTest {
         assertThatThrownBy(() -> service.unallocateBudget(requestId, UUID.randomUUID(), "unallocate"))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Cannot unallocate approved procurement request");
-    }
-
-    @Test
-    void reviewQueueMapsProcurementLinesInsideServiceBoundary() {
-        ProcurementRequestLine line = new ProcurementRequestLine();
-        line.setId(UUID.randomUUID());
-        line.setRequest(request);
-        line.setSparePartId(UUID.randomUUID());
-        line.setQuantity(2);
-        line.setRemainingQuantity(2);
-        line.setUnit("pcs");
-        line.setEstimatedCost(120);
-        request.getLines().add(line);
-
-        when(scopeAccessService.enforceDepartmentScope(request.getDepartmentId())).thenReturn(request.getDepartmentId());
-        when(procurementRequestRepository.findFinanceReviewQueue(
-                request.getDepartmentId(),
-                ProcurementRequestStatus.SUBMITTED,
-                BudgetAllocationStatus.UNALLOCATED
-        )).thenReturn(List.of(request));
-
-        var result = service.reviewQueue(request.getDepartmentId(), ProcurementRequestStatus.SUBMITTED, true);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).lines()).hasSize(1);
-        assertThat(result.get(0).lines().get(0).id()).isEqualTo(line.getId());
     }
 }
