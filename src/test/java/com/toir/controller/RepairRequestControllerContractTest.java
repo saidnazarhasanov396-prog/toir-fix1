@@ -138,6 +138,26 @@ class RepairRequestControllerContractTest {
     }
 
     @Test
+    void listWithCompletedOrClosedStatusScopeForwardsScope() throws Exception {
+        RepairRequestDto response = dtoWithLinks(UUID.randomUUID());
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(any(RepairRequestFilterRequest.class), eq(0), eq(100)))
+                .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 100), 1));
+
+        mockMvc.perform(get("/api/v1/repair-requests")
+                        .param("size", "100")
+                        .param("statusScope", "COMPLETED_OR_CLOSED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(response.id().toString()));
+
+        verify(scopeAccessService).enforceDepartmentScope(null);
+        ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
+        verify(service).search(filterCaptor.capture(), eq(0), eq(100));
+        assertThat(filterCaptor.getValue().status()).isNull();
+        assertThat(filterCaptor.getValue().statusScope()).isEqualTo("COMPLETED_OR_CLOSED");
+    }
+
+    @Test
     void listWithEquipmentIdAndStatusNoMatchesReturnsEmptyPage() throws Exception {
         UUID equipmentId = UUID.randomUUID();
         when(service.search(any(RepairRequestFilterRequest.class), eq(0), eq(100)))
@@ -414,6 +434,30 @@ class RepairRequestControllerContractTest {
         ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
         verify(service).getStats(filterCaptor.capture());
         assertThat(filterCaptor.getValue().departmentId()).isNull();
+    }
+
+    @Test
+    void statsWithCompletedOrClosedStatusScopeForwardsScope() throws Exception {
+        RepairRequestStatsResponse response = new RepairRequestStatsResponse(
+                5,
+                0,
+                0,
+                4
+        );
+
+        when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
+        when(service.getStats(any(RepairRequestFilterRequest.class))).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/repair-requests/stats")
+                        .param("statusScope", "COMPLETED_OR_CLOSED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalRequests").value(5));
+
+        verify(scopeAccessService).enforceDepartmentScope(null);
+        ArgumentCaptor<RepairRequestFilterRequest> filterCaptor = ArgumentCaptor.forClass(RepairRequestFilterRequest.class);
+        verify(service).getStats(filterCaptor.capture());
+        assertThat(filterCaptor.getValue().status()).isNull();
+        assertThat(filterCaptor.getValue().statusScope()).isEqualTo("COMPLETED_OR_CLOSED");
     }
 
     @Test
