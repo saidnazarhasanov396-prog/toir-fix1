@@ -19,6 +19,7 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
+import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.ActualCostService;
@@ -414,6 +415,50 @@ class FinanceModuleRegressionTest {
                     eq(actorId),
                     eq("Allocate for Q2 spares")
             );
+        }
+    }
+
+    @Nested
+    @ExtendWith(MockitoExtension.class)
+    class Phase4BudgetTotalCommitted {
+
+        @Mock
+        BudgetLineRepository budgetLineRepository;
+
+        @Mock
+        BudgetEventRepository budgetEventRepository;
+
+        @Mock
+        com.toir.repository.maintenance.MaintenanceBudgetRepository maintenanceBudgetRepository;
+
+        @InjectMocks
+        BudgetCommitmentService service;
+
+        @Test
+        void commitAndReleaseKeepBudgetTotalCommittedInSyncWithLines() {
+            UUID lineId = UUID.randomUUID();
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setId(UUID.randomUUID());
+            budget.setStatus(BudgetStatus.APPROVED);
+            budget.setTotalCommitted(0);
+            BudgetLine line = new BudgetLine();
+            line.setId(lineId);
+            line.setBudget(budget);
+            line.setPlannedAmount(500_000);
+            line.setCommittedAmount(0);
+
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(budgetLineRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(maintenanceBudgetRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.commitBudget(lineId, 120_000, "PROCUREMENT_REQUEST", UUID.randomUUID(),
+                    UUID.randomUUID(), "Allocate");
+            assertThat(budget.getTotalCommitted()).isEqualTo(120_000);
+
+            service.releaseBudget(lineId, 120_000, "PROCUREMENT_REQUEST", UUID.randomUUID(),
+                    UUID.randomUUID(), "Unallocate");
+            assertThat(budget.getTotalCommitted()).isZero();
+            assertThat(line.getCommittedAmount()).isZero();
         }
     }
 

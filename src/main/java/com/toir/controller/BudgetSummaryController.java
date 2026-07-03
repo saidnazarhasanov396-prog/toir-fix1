@@ -129,9 +129,9 @@ public class BudgetSummaryController {
         double totalActual = scopedLines.isEmpty()
                 ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum()
                 : scopedLines.stream().mapToDouble(line -> lineApprovedActualAmount(line, approvedByLine)).sum();
-        double totalCommitted = scopedLines.stream()
-                .mapToDouble(BudgetLine::getCommittedAmount)
-                .sum();
+        double totalCommitted = scopedLines.isEmpty()
+                ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalCommitted).sum()
+                : scopedLines.stream().mapToDouble(BudgetLine::getCommittedAmount).sum();
         double totalRemaining = FinanceBudgetMath.remainingBudget(totalPlanned, totalActual, totalCommitted);
         double totalAvailable = FinanceBudgetMath.remainingBudget(totalPlanned, totalActual, totalCommitted);
         double pendingReviewAmount = visibleActualCosts.stream()
