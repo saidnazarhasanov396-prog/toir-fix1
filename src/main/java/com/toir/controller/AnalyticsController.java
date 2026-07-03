@@ -1,5 +1,6 @@
 package com.toir.controller;
 import com.toir.dto.analytics.AnalyticsOverview;
+import com.toir.dto.analytics.AnalyticsDowntimeEventRow;
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.dto.analytics.FailureParetoResponse;
 import com.toir.dto.analytics.RcaEquipmentResponse;
@@ -33,6 +34,14 @@ public class AnalyticsController {
     @GetMapping("/overview")
     public ResponseEntity<AnalyticsOverview> overview() {
         return ResponseEntity.ok(service.overview());
+    }
+
+    @GetMapping("/downtime-events")
+    public ResponseEntity<Page<AnalyticsDowntimeEventRow>> downtimeEvents(
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(service.downtimeEvents(departmentId, page, size));
     }
 
     @GetMapping("/pareto/failures")
