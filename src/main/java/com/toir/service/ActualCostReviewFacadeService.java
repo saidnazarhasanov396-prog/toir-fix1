@@ -33,6 +33,8 @@ import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.CsvWriter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,6 +70,13 @@ public class ActualCostReviewFacadeService {
     private final FinancialApprovalRuleRepository financialApprovalRuleRepository;
     private final CounteragentService counteragentService;
     private final ScopeAccessService scopeAccessService;
+
+    private ActualCostReviewFacadeService self;
+
+    @Autowired
+    void setSelf(@Lazy ActualCostReviewFacadeService self) {
+        this.self = self;
+    }
 
     @Transactional(readOnly = true)
     public List<ActualCostReviewItem> reviewQueue(String search) {
@@ -211,7 +220,6 @@ public class ActualCostReviewFacadeService {
         return result;
     }
 
-    @Transactional
     public BulkActualCostReviewResponse bulkReview(List<UUID> ids, String action, UUID reviewerId, String reviewComment) {
         List<UUID> safeIds = ids != null ? ids : List.of();
         List<BulkActualCostReviewResponse.Success> successes = new ArrayList<>();
@@ -219,7 +227,9 @@ public class ActualCostReviewFacadeService {
         boolean approve = "APPROVE".equalsIgnoreCase(action);
         for (UUID id : safeIds) {
             try {
-                ActualCostDto dto = approve ? approve(id, reviewerId, reviewComment) : reject(id, reviewerId, reviewComment);
+                ActualCostDto dto = approve
+                        ? self.approve(id, reviewerId, reviewComment)
+                        : self.reject(id, reviewerId, reviewComment);
                 successes.add(new BulkActualCostReviewResponse.Success(id, dto.status().name()));
             } catch (RuntimeException ex) {
                 failures.add(new BulkActualCostReviewResponse.Failure(id, ex.getMessage()));
