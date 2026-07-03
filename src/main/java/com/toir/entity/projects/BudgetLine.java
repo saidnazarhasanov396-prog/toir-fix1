@@ -34,14 +34,17 @@ public class BudgetLine extends BaseEntity {
     private double committedAmount = 0.0;
 
     public double getRemainingAmount() {
-        return plannedAmount - committedAmount;
+        double remaining = plannedAmount - committedAmount;
+        return Math.max(0, remaining);
     }
 
     public double getAvailableForActual() {
-        return plannedAmount - actualAmount - committedAmount;
+        double available = plannedAmount - actualAmount - committedAmount;
+        return Math.max(0, available);
     }
 
     public double getAvailableForCommitment() {
-        return plannedAmount - committedAmount;
+        double available = plannedAmount - committedAmount;
+        return Math.max(0, available);
     }
 }
