@@ -66,10 +66,17 @@ public class ProcurementRequestController {
                 minAmount,
                 maxAmount);
         Comparator<ProcurementRequestDto> comparator = switch (sortBy == null ? "" : sortBy.trim()) {
+            case "source" -> Comparator.comparing(
+                    ProcurementRequestDto::source,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
             case "status" -> Comparator.comparing(
                     ProcurementRequestDto::status,
                     Comparator.nullsLast(Comparator.naturalOrder()));
+            case "linesCount" -> Comparator.comparingInt(dto -> dto.lines() == null ? 0 : dto.lines().size());
             case "totalAmount" -> Comparator.comparingDouble(ProcurementRequestDto::totalEstimatedCost);
+            case "budgetAllocationStatus" -> Comparator.comparing(
+                    ProcurementRequestDto::budgetAllocationStatus,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
             case "requestedAt" -> Comparator.comparing(
                     ProcurementRequestDto::submittedAt,
                     Comparator.nullsLast(Comparator.naturalOrder()));

@@ -28,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -105,6 +106,37 @@ class DefectControllerContractTest {
                 .andExpect(jsonPath("$.content[0].repairRequestId").value(repairRequestId.toString()));
 
         verify(service).search(equipmentId, repairRequestId, null, null, null, 0, 100, null);
+    }
+
+    @Test
+    void listWithSortPreservesCategoryAndSeverityFilters() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        when(service.search(equipmentId, null, null, "MECHANICAL", "HIGH", 0, 20, "pump", Sort.by(Sort.Direction.ASC, "severity")))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/defects")
+                        .param("equipmentId", equipmentId.toString())
+                        .param("category", "MECHANICAL")
+                        .param("severity", "HIGH")
+                        .param("search", "pump")
+                        .param("sortBy", "severity")
+                        .param("sortDir", "asc"))
+                .andExpect(status().isOk());
+
+        verify(service).search(equipmentId, null, null, "MECHANICAL", "HIGH", 0, 20, "pump", Sort.by(Sort.Direction.ASC, "severity"));
+    }
+
+    @Test
+    void listAllowsRecurrenceCountSort() throws Exception {
+        when(service.search(null, null, null, null, null, 0, 20, null, Sort.by(Sort.Direction.DESC, "recurrenceCount")))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/defects")
+                        .param("sortBy", "recurrenceCount")
+                        .param("sortDir", "desc"))
+                .andExpect(status().isOk());
+
+        verify(service).search(null, null, null, null, null, 0, 20, null, Sort.by(Sort.Direction.DESC, "recurrenceCount"));
     }
 
     @Test
