@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -105,12 +106,21 @@ class ProcurementBudgetAllocationServiceTest {
     }
 
     @Test
-    void allocateBudgetMarksRequestAsAllocated() {
-        var result = service.allocateBudget(requestId, budgetLineId, UUID.randomUUID(), "allocate");
+    void allocateBudgetMarksRequestAsAllocatedAndCommitsEstimate() {
+        UUID actorId = UUID.randomUUID();
+        var result = service.allocateBudget(requestId, budgetLineId, actorId, "allocate");
 
         assertThat(result.budgetLineId()).isEqualTo(budgetLineId);
         assertThat(result.budgetAllocationStatus()).isEqualTo("ALLOCATED");
         verify(budgetCommitmentService).assertCanCommit(budgetLine, 300);
+        verify(budgetCommitmentService).commitBudget(
+                budgetLineId,
+                300,
+                "PROCUREMENT_REQUEST",
+                requestId,
+                actorId,
+                "allocate"
+        );
         verify(budgetEventRepository).save(any(BudgetEvent.class));
     }
 
@@ -122,17 +132,28 @@ class ProcurementBudgetAllocationServiceTest {
         assertThatThrownBy(() -> service.allocateBudget(requestId, budgetLineId, UUID.randomUUID(), "allocate"))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Insufficient budget for commitment");
+
+        verify(budgetCommitmentService, never()).commitBudget(any(), any(Double.class), any(), any(), any(), any());
     }
 
     @Test
-    void unallocateBudgetClearsAllocationForSubmittedRequest() {
+    void unallocateBudgetClearsAllocationAndReleasesCommitmentForSubmittedRequest() {
+        UUID actorId = UUID.randomUUID();
         request.setBudgetLineId(budgetLineId);
         request.setBudgetAllocationStatus(BudgetAllocationStatus.ALLOCATED);
 
-        var result = service.unallocateBudget(requestId, UUID.randomUUID(), "unallocate");
+        var result = service.unallocateBudget(requestId, actorId, "unallocate");
 
         assertThat(result.budgetLineId()).isNull();
         assertThat(result.budgetAllocationStatus()).isEqualTo("UNALLOCATED");
+        verify(budgetCommitmentService).releaseBudget(
+                budgetLineId,
+                300,
+                "PROCUREMENT_REQUEST",
+                requestId,
+                actorId,
+                "unallocate"
+        );
         verify(budgetEventRepository).save(any(BudgetEvent.class));
     }
 

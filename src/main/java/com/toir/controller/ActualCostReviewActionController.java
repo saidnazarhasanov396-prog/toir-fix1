@@ -204,10 +204,11 @@ public class ActualCostReviewActionController {
                                                     @RequestParam(required = false) UUID counteragentId,
                                                     @RequestParam(required = false) UUID actualCostId,
                                                     @RequestParam(required = false) String actualCostIds,
-                                                    @RequestParam(required = false) String allocationStatus) {
+                                                    @RequestParam(required = false) String allocationStatus,
+                                                    @RequestParam(required = false) Integer year) {
         return csv("actual-cost-review-queue.csv",
                 service.csv("actual-cost-review-queue.csv", filterReviewItems(
-                        service.reviewQueue(search),
+                        service.reviewQueue(search, year),
                         status,
                         Boolean.TRUE.equals(overdueOnly),
                         approvalRoleCode,
@@ -236,10 +237,11 @@ public class ActualCostReviewActionController {
                                                           @RequestParam(required = false) String dateTo,
                                                           @RequestParam(required = false) UUID actualCostId,
                                                           @RequestParam(required = false) String actualCostIds,
-                                                          @RequestParam(required = false) String allocationStatus) {
+                                                          @RequestParam(required = false) String allocationStatus,
+                                                          @RequestParam(required = false) Integer year) {
         return csv("actual-cost-review-history-pack.csv",
                 service.csv("actual-cost-review-history-pack.csv", filterReviewItems(
-                        service.actualCostRegister(search),
+                        service.actualCostRegister(search, year),
                         status,
                         null,
                         null,
@@ -270,10 +272,11 @@ public class ActualCostReviewActionController {
                                                      @RequestParam(required = false) UUID counteragentId,
                                                      @RequestParam(required = false) UUID actualCostId,
                                                      @RequestParam(required = false) String actualCostIds,
-                                                     @RequestParam(required = false) String allocationStatus) {
+                                                     @RequestParam(required = false) String allocationStatus,
+                                                     @RequestParam(required = false) Integer year) {
         return csv("actual-cost-review-approval-pack.csv",
                 service.csv("actual-cost-review-approval-pack.csv", filterReviewItems(
-                        service.reviewQueue(search),
+                        service.reviewQueue(search, year),
                         status,
                         Boolean.TRUE.equals(overdueOnly),
                         approvalRoleCode,
@@ -336,10 +339,11 @@ public class ActualCostReviewActionController {
                                                     @RequestParam(required = false) String dateTo,
                                                     @RequestParam(required = false) UUID actualCostId,
                                                     @RequestParam(required = false) String actualCostIds,
-                                                    @RequestParam(required = false) String allocationStatus) {
+                                                    @RequestParam(required = false) String allocationStatus,
+                                                    @RequestParam(required = false) Integer year) {
         return csv("actual-costs.csv",
                 service.csv("actual-costs.csv", filterReviewItems(
-                        service.actualCostRegister(search),
+                        service.actualCostRegister(search, year),
                         status,
                         null,
                         null,

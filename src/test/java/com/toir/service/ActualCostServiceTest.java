@@ -388,6 +388,7 @@ class ActualCostServiceTest {
         ActualCost actualCost = new ActualCost();
         ReflectionTestUtils.setField(actualCost, "id", id);
         actualCost.setStatus(ActualCostStatus.PENDING);
+        actualCost.setSourceType(ActualCostSourceType.WORK_ORDER);
         actualCost.setBudgetLineId(budgetLineId);
         actualCost.setCostCategoryId(UUID.randomUUID());
         actualCost.setAmount(100);
@@ -407,6 +408,59 @@ class ActualCostServiceTest {
         assertThat(result.reviewedAt()).isNotNull();
         assertThat(line.getActualAmount()).isEqualTo(300);
         assertThat(line.getBudget().getTotalActual()).isEqualTo(300);
+        verify(budgetCommitmentService).releaseBudget(
+                eq(budgetLineId),
+                eq(100.0),
+                eq("ACTUAL_COST_PENDING"),
+                eq(id),
+                eq(reviewerId),
+                eq("Release commitment on actual cost approval")
+        );
+    }
+
+    @Test
+    void approveWithoutBudgetLineIsBlocked() {
+        UUID id = UUID.randomUUID();
+        ActualCost actualCost = new ActualCost();
+        ReflectionTestUtils.setField(actualCost, "id", id);
+        actualCost.setStatus(ActualCostStatus.PENDING);
+        actualCost.setAmount(100);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+
+        assertThatThrownBy(() -> service.review(id, true, UUID.randomUUID(), "Approved without allocation"))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("budget line allocation");
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createWithBudgetLineCommitsPendingAmount() {
+        UUID budgetLineId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(UUID.randomUUID());
+        BudgetLine line = budgetLine(budgetLineId, 500, 0, BudgetStatus.APPROVED);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
+        when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> {
+            ActualCost saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(financialApprovalRuleRepository.findFirstMatchingRule(any(), any())).thenReturn(Optional.empty());
+
+        service.create(dto(workOrderId, null, null, budgetLineId, 120));
+
+        verify(budgetCommitmentService).commitBudget(
+                eq(budgetLineId),
+                eq(120.0),
+                eq("ACTUAL_COST_PENDING"),
+                any(),
+                eq(null),
+                eq("Reserve on actual cost create")
+        );
     }
 
     @Test
@@ -490,7 +544,7 @@ class ActualCostServiceTest {
     }
 
     @Test
-    void rejectPendingCostWithCommentDoesNotMutateBudgetUsage() {
+    void rejectPendingCostWithCommentReleasesCommitmentWithoutMutatingBudgetUsage() {
         UUID id = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
         UUID budgetLineId = UUID.randomUUID();
@@ -498,8 +552,11 @@ class ActualCostServiceTest {
         actualCost.setId(id);
         actualCost.setStatus(ActualCostStatus.PENDING);
         actualCost.setBudgetLineId(budgetLineId);
+        actualCost.setSourceType(ActualCostSourceType.WORK_ORDER);
         actualCost.setAmount(100);
+        BudgetLine line = budgetLine(budgetLineId, 500, 200, BudgetStatus.APPROVED);
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
         when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ActualCostDto result = service.review(id, false, reviewerId, "Rejected: missing source invoice");
@@ -507,9 +564,17 @@ class ActualCostServiceTest {
         assertThat(result.status()).isEqualTo(ActualCostStatus.REJECTED);
         assertThat(result.reviewedById()).isEqualTo(reviewerId);
         assertThat(result.reviewComment()).isEqualTo("Rejected: missing source invoice");
+        verify(budgetCommitmentService).releaseBudget(
+                eq(budgetLineId),
+                eq(100.0),
+                eq("ACTUAL_COST_PENDING"),
+                eq(id),
+                eq(reviewerId),
+                eq("Release commitment on actual cost rejection")
+        );
         verify(budgetLineRepository, never()).save(any(BudgetLine.class));
         verify(maintenanceBudgetRepository, never()).save(any(MaintenanceBudget.class));
-        verify(budgetLineRepository, never()).findByIdAndIsDeletedFalse(any());
+        assertThat(line.getActualAmount()).isEqualTo(200);
     }
 
     @Test
@@ -610,14 +675,24 @@ class ActualCostServiceTest {
         UUID actorId = UUID.randomUUID();
         UUID budgetLineId = UUID.randomUUID();
         ActualCost actualCost = pendingActualCost(id, budgetLineId, UUID.randomUUID(), 120);
+        BudgetLine line = budgetLine(budgetLineId, 500, 200, BudgetStatus.APPROVED);
 
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
         when(repository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ActualCostDto result = service.requestCorrection(id, actorId, "Need source correction");
 
         assertThat(result.status()).isEqualTo(ActualCostStatus.REJECTED);
         assertThat(result.correctionReason()).isEqualTo("Need source correction");
+        verify(budgetCommitmentService).releaseBudget(
+                eq(budgetLineId),
+                eq(120.0),
+                eq("ACTUAL_COST_PENDING"),
+                eq(id),
+                eq(actorId),
+                eq("Release commitment on actual cost rejection")
+        );
         verify(budgetLineRepository, never()).save(any(BudgetLine.class));
         verify(maintenanceBudgetRepository, never()).save(any(MaintenanceBudget.class));
     }

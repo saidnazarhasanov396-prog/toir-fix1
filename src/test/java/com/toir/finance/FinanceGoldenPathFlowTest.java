@@ -4,6 +4,7 @@ import com.toir.entity.projects.BudgetEvent;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.BudgetStatus;
+import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.service.finance.BudgetCommitmentService;
@@ -35,6 +36,9 @@ class FinanceGoldenPathFlowTest {
     @Mock
     BudgetEventRepository budgetEventRepository;
 
+    @Mock
+    MaintenanceBudgetRepository maintenanceBudgetRepository;
+
     BudgetCommitmentService commitmentService;
 
     UUID lineId;
@@ -42,7 +46,8 @@ class FinanceGoldenPathFlowTest {
 
     @BeforeEach
     void setUp() {
-        commitmentService = new BudgetCommitmentService(budgetLineRepository, budgetEventRepository);
+        commitmentService = new BudgetCommitmentService(
+                budgetLineRepository, budgetEventRepository, maintenanceBudgetRepository);
         lineId = UUID.randomUUID();
         line = new BudgetLine();
         line.setId(lineId);
@@ -52,10 +57,13 @@ class FinanceGoldenPathFlowTest {
         MaintenanceBudget budget = new MaintenanceBudget();
         budget.setId(UUID.randomUUID());
         budget.setStatus(BudgetStatus.APPROVED);
+        budget.setTotalCommitted(0);
         line.setBudget(budget);
 
         when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
         when(budgetLineRepository.save(any(BudgetLine.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(maintenanceBudgetRepository.save(any(MaintenanceBudget.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -67,6 +75,7 @@ class FinanceGoldenPathFlowTest {
         commitmentService.commitBudget(lineId, estimate, "PROCUREMENT_REQUEST", UUID.randomUUID(),
                 UUID.randomUUID(), "Allocate procurement to budget line");
         assertThat(line.getCommittedAmount()).isEqualTo(estimate);
+        assertThat(line.getBudget().getTotalCommitted()).isEqualTo(estimate);
         assertThat(available()).isEqualTo(600_000);
 
         // Warehouse receipt creates PENDING actual cost — no budget movement yet

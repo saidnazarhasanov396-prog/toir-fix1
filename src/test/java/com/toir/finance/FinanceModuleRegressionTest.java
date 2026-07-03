@@ -3,6 +3,7 @@ package com.toir.finance;
 import com.toir.dto.budget.FinanceDashboardResponse;
 import com.toir.finance.FinanceBudgetMath;
 import com.toir.entity.Department;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.CostCategory;
@@ -19,6 +20,7 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
+import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.ActualCostService;
@@ -205,7 +207,97 @@ class FinanceModuleRegressionTest {
 
     @Nested
     @ExtendWith(MockitoExtension.class)
-    @Disabled("FAZA 2 — enable after ActualCostService releases commitment on reject")
+    class Phase2RejectRelease {
+
+        @Mock
+        com.toir.repository.actualCost.ActualCostRepository repository;
+        @Mock
+        com.toir.repository.projects.BudgetLineRepository budgetLineRepository;
+        @Mock
+        com.toir.service.FinanceScopeService financeScopeService;
+        @Mock
+        BudgetCommitmentService budgetCommitmentService;
+        @Mock
+        com.toir.repository.StockMovementRepository stockMovementRepository;
+        @Mock
+        com.toir.util.AuditBuilderService auditBuilderService;
+
+        @InjectMocks
+        ActualCostService service;
+
+        @Test
+        void rejectProcurementReceiptReleasesCommitment() {
+            UUID id = UUID.randomUUID();
+            UUID lineId = UUID.randomUUID();
+            UUID reviewerId = UUID.randomUUID();
+            ActualCost cost = new ActualCost();
+            ReflectionTestUtils.setField(cost, "id", id);
+            cost.setStatus(ActualCostStatus.PENDING);
+            cost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
+            cost.setSourceId(UUID.randomUUID());
+            cost.setBudgetLineId(lineId);
+            cost.setAmount(150_000);
+
+            BudgetLine line = new BudgetLine();
+            line.setId(lineId);
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setStatus(BudgetStatus.APPROVED);
+            line.setBudget(budget);
+
+            when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(cost));
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.review(id, false, reviewerId, "Rejected after receipt inspection");
+
+            verify(budgetCommitmentService).releaseBudget(
+                    eq(lineId),
+                    eq(150_000d),
+                    any(),
+                    any(),
+                    eq(reviewerId),
+                    eq("Release commitment on actual cost rejection")
+            );
+        }
+
+        @Test
+        void rejectDirectActualCostReleasesPendingCommitment() {
+            UUID id = UUID.randomUUID();
+            UUID lineId = UUID.randomUUID();
+            UUID reviewerId = UUID.randomUUID();
+            ActualCost cost = new ActualCost();
+            ReflectionTestUtils.setField(cost, "id", id);
+            cost.setStatus(ActualCostStatus.PENDING);
+            cost.setSourceType(ActualCostSourceType.WORK_ORDER);
+            cost.setBudgetLineId(lineId);
+            cost.setAmount(75_000);
+
+            BudgetLine line = new BudgetLine();
+            line.setId(lineId);
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setStatus(BudgetStatus.APPROVED);
+            line.setBudget(budget);
+
+            when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(cost));
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.review(id, false, reviewerId, "Rejected: invalid documentation");
+
+            verify(budgetCommitmentService).releaseBudget(
+                    eq(lineId),
+                    eq(75_000d),
+                    eq("ACTUAL_COST_PENDING"),
+                    eq(id),
+                    eq(reviewerId),
+                    eq("Release commitment on actual cost rejection")
+            );
+        }
+    }
+
+    @Nested
+    @ExtendWith(MockitoExtension.class)
+    @Disabled("FAZA 2 — merged into Phase2RejectRelease")
     class TargetPhase2ActualCostReject {
 
         @Mock
@@ -266,7 +358,199 @@ class FinanceModuleRegressionTest {
 
     @Nested
     @ExtendWith(MockitoExtension.class)
-    @Disabled("FAZA 3 — enable after allocate commits and approve does not")
+    class Phase3ProcurementAllocate {
+
+        @Mock
+        com.toir.repository.ProcurementRequestRepository procurementRequestRepository;
+        @Mock
+        BudgetLineRepository budgetLineRepository;
+        @Mock
+        com.toir.repository.projects.BudgetEventRepository budgetEventRepository;
+        @Mock
+        BudgetCommitmentService budgetCommitmentService;
+        @Mock
+        com.toir.service.ProcurementRequestService procurementRequestService;
+        @Mock
+        com.toir.util.AuditBuilderService auditBuilderService;
+        @Mock
+        com.toir.security.ScopeAccessService scopeAccessService;
+
+        @InjectMocks
+        ProcurementBudgetAllocationService service;
+
+        @Test
+        void allocateCommitsEstimatedCost() {
+            UUID requestId = UUID.randomUUID();
+            UUID lineId = UUID.randomUUID();
+            UUID actorId = UUID.randomUUID();
+            UUID departmentId = UUID.randomUUID();
+            ProcurementRequest request = new ProcurementRequest();
+            request.setId(requestId);
+            request.setStatus(ProcurementRequestStatus.SUBMITTED);
+            request.setDepartmentId(departmentId);
+            request.setBudgetAllocationStatus(BudgetAllocationStatus.UNALLOCATED);
+            request.setTotalEstimatedCost(250_000);
+
+            BudgetLine line = new BudgetLine();
+            line.setId(lineId);
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setId(UUID.randomUUID());
+            budget.setDepartmentId(departmentId);
+            budget.setStatus(BudgetStatus.APPROVED);
+            line.setBudget(budget);
+
+            when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+            when(procurementRequestRepository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(procurementRequestRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(procurementRequestService.toProcurementRequestDto(any()))
+                    .thenAnswer(inv -> com.toir.dto.procurement.ProcurementRequestDto.from(inv.getArgument(0)));
+
+            service.allocateBudget(requestId, lineId, actorId, "Allocate for Q2 spares");
+
+            verify(budgetCommitmentService).commitBudget(
+                    eq(lineId),
+                    eq(250_000d),
+                    eq("PROCUREMENT_REQUEST"),
+                    eq(requestId),
+                    eq(actorId),
+                    eq("Allocate for Q2 spares")
+            );
+        }
+    }
+
+    @Nested
+    @ExtendWith(MockitoExtension.class)
+    class Phase4BudgetTotalCommitted {
+
+        @Mock
+        BudgetLineRepository budgetLineRepository;
+
+        @Mock
+        BudgetEventRepository budgetEventRepository;
+
+        @Mock
+        com.toir.repository.maintenance.MaintenanceBudgetRepository maintenanceBudgetRepository;
+
+        @InjectMocks
+        BudgetCommitmentService service;
+
+        @Test
+        void commitAndReleaseKeepBudgetTotalCommittedInSyncWithLines() {
+            UUID lineId = UUID.randomUUID();
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setId(UUID.randomUUID());
+            budget.setStatus(BudgetStatus.APPROVED);
+            budget.setTotalCommitted(0);
+            BudgetLine line = new BudgetLine();
+            line.setId(lineId);
+            line.setBudget(budget);
+            line.setPlannedAmount(500_000);
+            line.setCommittedAmount(0);
+
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(budgetLineRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(maintenanceBudgetRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            service.commitBudget(lineId, 120_000, "PROCUREMENT_REQUEST", UUID.randomUUID(),
+                    UUID.randomUUID(), "Allocate");
+            assertThat(budget.getTotalCommitted()).isEqualTo(120_000);
+
+            service.releaseBudget(lineId, 120_000, "PROCUREMENT_REQUEST", UUID.randomUUID(),
+                    UUID.randomUUID(), "Unallocate");
+            assertThat(budget.getTotalCommitted()).isZero();
+            assertThat(line.getCommittedAmount()).isZero();
+        }
+    }
+
+    @Nested
+    class Phase5DepartmentScopedReview {
+
+        @Test
+        void policyRequiresDepartmentScopedReviewQueue() {
+            assertThat(FinanceUpgradePolicy.DEPARTMENT_SCOPED_REVIEW_QUEUE).isTrue();
+        }
+    }
+
+    @Nested
+    @ExtendWith(MockitoExtension.class)
+    class Phase6ApproveAndCommitRules {
+
+        @Mock
+        com.toir.repository.actualCost.ActualCostRepository repository;
+        @Mock
+        com.toir.repository.projects.BudgetLineRepository budgetLineRepository;
+        @Mock
+        com.toir.repository.maintenance.MaintenanceBudgetRepository maintenanceBudgetRepository;
+        @Mock
+        WorkOrderRepository workOrderRepository;
+        @Mock
+        com.toir.repository.projects.FinancialApprovalRuleRepository financialApprovalRuleRepository;
+        @Mock
+        com.toir.repository.actualCost.ActualCostReviewEventRepository reviewEventRepository;
+        @Mock
+        com.toir.service.FinanceScopeService financeScopeService;
+        @Mock
+        BudgetCommitmentService budgetCommitmentService;
+        @Mock
+        com.toir.util.AuditBuilderService auditBuilderService;
+        @Mock
+        com.toir.service.NotificationService notificationService;
+        @Mock
+        com.toir.service.repair.RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
+
+        @InjectMocks
+        ActualCostService service;
+
+        @Test
+        void policyRequiresBudgetLineOnApprove() {
+            assertThat(FinanceUpgradePolicy.REQUIRE_BUDGET_LINE_ON_APPROVE).isTrue();
+            assertThat(FinanceUpgradePolicy.DIRECT_ACTUAL_COST_COMMIT_ON_CREATE).isTrue();
+            assertThat(FinanceUpgradePolicy.RECEIPT_CATEGORY_FOLLOWS_BUDGET_LINE).isTrue();
+        }
+
+        @Test
+        void createCommitsWhenBudgetLinePresent() {
+            UUID id = UUID.randomUUID();
+            UUID lineId = UUID.randomUUID();
+            UUID workOrderId = UUID.randomUUID();
+            WorkOrder workOrder = new WorkOrder();
+            workOrder.setId(workOrderId);
+            workOrder.setDepartmentId(UUID.randomUUID());
+            BudgetLine line = new BudgetLine();
+            line.setId(lineId);
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setStatus(BudgetStatus.APPROVED);
+            line.setBudget(budget);
+
+            when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(financialApprovalRuleRepository.findFirstMatchingRule(any(), any())).thenReturn(Optional.empty());
+            when(repository.save(any())).thenAnswer(inv -> {
+                ActualCost saved = inv.getArgument(0);
+                ReflectionTestUtils.setField(saved, "id", id);
+                return saved;
+            });
+
+            service.create(new com.toir.dto.actualcost.ActualCostDto(
+                    null, workOrderId, null, null, null, null, lineId,
+                    UUID.randomUUID(), null, null, null, null, 90_000, null, null, null, null, null, null
+            ));
+
+            verify(budgetCommitmentService).commitBudget(
+                    eq(lineId),
+                    eq(90_000d),
+                    eq("ACTUAL_COST_PENDING"),
+                    eq(id),
+                    eq(null),
+                    eq("Reserve on actual cost create")
+            );
+        }
+    }
+
+    @Nested
+    @ExtendWith(MockitoExtension.class)
+    @Disabled("FAZA 3 — merged into Phase3ProcurementAllocate")
     class TargetPhase3ProcurementAllocate {
 
         @Mock

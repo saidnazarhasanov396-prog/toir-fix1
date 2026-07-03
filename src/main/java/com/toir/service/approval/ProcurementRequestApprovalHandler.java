@@ -61,15 +61,6 @@ public class ProcurementRequestApprovalHandler implements ApprovalActionHandler 
         request.setRejectionReason(null);
         ProcurementRequest saved = procurementRequestRepository.save(request);
 
-        budgetCommitmentService.commitBudget(
-                request.getBudgetLineId(),
-                request.getTotalEstimatedCost(),
-                "PROCUREMENT_REQUEST",
-                request.getId(),
-                terminalActor(approval),
-                "Budget commitment on procurement approval"
-        );
-
         taskGenerationService.generateReceiveForApprovedProcurement(saved);
     }
 
@@ -80,8 +71,7 @@ public class ProcurementRequestApprovalHandler implements ApprovalActionHandler 
         }
 
         if (request.getBudgetLineId() != null
-                && request.getBudgetAllocationStatus() == BudgetAllocationStatus.ALLOCATED
-                && request.getStatus() == ProcurementRequestStatus.APPROVED) {
+                && request.getBudgetAllocationStatus() == BudgetAllocationStatus.ALLOCATED) {
             budgetCommitmentService.releaseBudget(
                     request.getBudgetLineId(),
                     request.getTotalEstimatedCost(),

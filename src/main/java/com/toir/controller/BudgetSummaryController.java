@@ -129,9 +129,9 @@ public class BudgetSummaryController {
         double totalActual = scopedLines.isEmpty()
                 ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum()
                 : scopedLines.stream().mapToDouble(line -> lineApprovedActualAmount(line, approvedByLine)).sum();
-        double totalCommitted = scopedLines.stream()
-                .mapToDouble(BudgetLine::getCommittedAmount)
-                .sum();
+        double totalCommitted = scopedLines.isEmpty()
+                ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalCommitted).sum()
+                : scopedLines.stream().mapToDouble(BudgetLine::getCommittedAmount).sum();
         double totalRemaining = FinanceBudgetMath.remainingBudget(totalPlanned, totalActual, totalCommitted);
         double totalAvailable = FinanceBudgetMath.remainingBudget(totalPlanned, totalActual, totalCommitted);
         double pendingReviewAmount = visibleActualCosts.stream()
@@ -247,10 +247,11 @@ public class BudgetSummaryController {
             @RequestParam(required = false) UUID actualCostId,
             @RequestParam(required = false) String actualCostIds,
             @RequestParam(required = false) String allocationStatus,
+            @RequestParam(required = false) Integer year,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         List<ActualCostReviewItem> items = filterReviewItems(
-                actualCostReviewFacadeService.actualCostRegister(search),
+                actualCostReviewFacadeService.actualCostRegister(search, year),
                 status,
                 null,
                 null,
@@ -285,7 +286,7 @@ public class BudgetSummaryController {
             String dateTo,
             UUID actualCostId,
             String actualCostIds) {
-        return actualCostRegister(page, size, search, status, costCategoryId, null, null, dateFrom, dateTo, actualCostId, actualCostIds, null, null, "desc");
+        return actualCostRegister(page, size, search, status, costCategoryId, null, null, dateFrom, dateTo, actualCostId, actualCostIds, null, null, null, "desc");
     }
 
     @GetMapping("/actual-costs/review-queue")
@@ -305,10 +306,11 @@ public class BudgetSummaryController {
             @RequestParam(required = false) UUID actualCostId,
             @RequestParam(required = false) String actualCostIds,
             @RequestParam(required = false) String allocationStatus,
+            @RequestParam(required = false) Integer year,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         List<ActualCostReviewItem> pending = filterReviewItems(
-                actualCostReviewFacadeService.reviewQueue(search),
+                actualCostReviewFacadeService.reviewQueue(search, year),
                 status,
                 Boolean.TRUE.equals(overdueOnly),
                 approvalRoleCode,

@@ -5,6 +5,7 @@ import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,18 +37,23 @@ class BudgetCommitmentServiceTest {
     @Mock
     BudgetEventRepository budgetEventRepository;
 
+    @Mock
+    MaintenanceBudgetRepository maintenanceBudgetRepository;
+
     @InjectMocks
     BudgetCommitmentService service;
 
     private UUID budgetLineId;
     private BudgetLine line;
+    private MaintenanceBudget budget;
 
     @BeforeEach
     void setUp() {
         budgetLineId = UUID.randomUUID();
-        MaintenanceBudget budget = new MaintenanceBudget();
+        budget = new MaintenanceBudget();
         budget.setId(UUID.randomUUID());
         budget.setStatus(BudgetStatus.APPROVED);
+        budget.setTotalCommitted(200);
         line = new BudgetLine();
         line.setId(budgetLineId);
         line.setBudget(budget);
@@ -56,6 +62,8 @@ class BudgetCommitmentServiceTest {
         line.setCommittedAmount(200);
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
         when(budgetLineRepository.save(any(BudgetLine.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(maintenanceBudgetRepository.save(any(MaintenanceBudget.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -64,6 +72,7 @@ class BudgetCommitmentServiceTest {
                 UUID.randomUUID(), "commit");
 
         assertThat(line.getCommittedAmount()).isEqualTo(500);
+        assertThat(budget.getTotalCommitted()).isEqualTo(500);
         ArgumentCaptor<BudgetEvent> eventCaptor = ArgumentCaptor.forClass(BudgetEvent.class);
         verify(budgetEventRepository).save(eventCaptor.capture());
         assertThat(eventCaptor.getValue().getEventType()).isEqualTo("COMMITMENT_ADDED");
@@ -94,6 +103,7 @@ class BudgetCommitmentServiceTest {
                 UUID.randomUUID(), "release");
 
         assertThat(line.getCommittedAmount()).isZero();
+        assertThat(budget.getTotalCommitted()).isZero();
         verify(budgetEventRepository).save(any(BudgetEvent.class));
     }
 }

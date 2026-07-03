@@ -157,7 +157,7 @@ class FinancePbacScopeTest {
     void actualCostRegisterUsesScopedActualCosts() {
         ActualCost allowed = actualCost(UUID.randomUUID());
         ActualCostReviewItem item = reviewItem(allowed);
-        when(actualCostReviewFacadeService.actualCostRegister(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.actualCostRegister(null, null)).thenReturn(List.of(item));
         when(actualCostReviewFacadeService.registerSummary(List.of(item))).thenReturn(registerSummary(List.of(item)));
 
         var response = controller.actualCostRegister(0, 20, null, null, null, null, null, null, null);
