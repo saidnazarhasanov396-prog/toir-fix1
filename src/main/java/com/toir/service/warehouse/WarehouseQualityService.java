@@ -140,7 +140,7 @@ public class WarehouseQualityService {
                 request.getRequestedById(),
                 request.getReason(),
                 List.of(),
-                ApprovalTargetType.OTHER,
+                ApprovalTargetType.WAREHOUSE_WRITEOFF,
                 request.getId(),
                 ApprovalActionType.APPROVE
         ));
@@ -163,6 +163,18 @@ public class WarehouseQualityService {
         }
         request.setApprovedById(decision == null ? null : decision.approverId());
         request.setComment(decision == null ? request.getComment() : trimToNull(decision.comment()));
+        request.setStatus(WarehouseWriteoffStatus.APPROVED);
+        return WarehouseWriteoffRequestDto.from(writeoffRepository.save(request));
+    }
+
+    @Transactional
+    public WarehouseWriteoffRequestDto approveFromApprovalWorkflow(UUID id, UUID approverId, String comment) {
+        WarehouseWriteoffRequest request = loadWriteoff(id);
+        if (request.getStatus() != WarehouseWriteoffStatus.PENDING_APPROVAL) {
+            throw RestException.badRequest("Only pending writeoff requests can be approved");
+        }
+        request.setApprovedById(approverId);
+        request.setComment(trimToNull(comment));
         request.setStatus(WarehouseWriteoffStatus.APPROVED);
         return WarehouseWriteoffRequestDto.from(writeoffRepository.save(request));
     }
@@ -218,50 +230,68 @@ public class WarehouseQualityService {
                     decision == null ? null : decision.comment()
             ));
         }
-        if (request.getStockStatus() == WarehouseStockStatus.WRITEOFF_PENDING) {
-            List<WarehouseWriteoffAllocation> allocations = writeoffAllocationRepository
-                    .findAllByWriteoffRequestIdAndIsDeletedFalseOrderByCreatedAtAsc(request.getId());
-            if (allocations.isEmpty()) {
-                postStatusTransfer(
-                        request.getId(),
-                        request.getWarehouseId(),
-                        request.getSparePartId(),
-                        request.getBinId(),
-                        request.getLotNumber(),
-                        request.getSerialNumber(),
-                        request.getExpiryDate(),
-                        WarehouseStockStatus.WRITEOFF_PENDING,
-                        WarehouseStockStatus.AVAILABLE,
-                        request.getQuantity(),
-                        request.getDocumentNumber(),
-                        decision == null ? request.getReason() : decision.comment(),
-                        decision == null ? null : decision.approverId()
-                );
-                request.setStockStatus(WarehouseStockStatus.AVAILABLE);
-            } else {
-                WarehouseStockStatus restoredStatus = allocations.get(0).getSourceStockStatus();
-                for (WarehouseWriteoffAllocation allocation : allocations) {
-                    postWriteoffAllocationStatusTransfer(
-                            request,
-                            allocation,
-                            WarehouseStockStatus.WRITEOFF_PENDING,
-                            allocation.getSourceStockStatus(),
-                            StockLedgerMovementType.STATUS_TRANSFER_OUT,
-                            StockLedgerMovementType.STATUS_TRANSFER_IN,
-                            "warehouse-writeoff-reject-out:",
-                            "warehouse-writeoff-reject-in:",
-                            decision == null ? request.getReason() : decision.comment(),
-                            decision == null ? null : decision.approverId()
-                    );
-                }
-                request.setStockStatus(restoredStatus);
-            }
-            WarehouseStock stock = legacyStockProjectionService.sync(request.getWarehouseId(), request.getSparePartId());
-            lowStockRecommendationService.evaluateStockSafely(stock);
-        }
+        restorePendingWriteoffStock(
+                request,
+                decision == null ? request.getReason() : decision.comment(),
+                decision == null ? null : decision.approverId()
+        );
         request.setStatus(WarehouseWriteoffStatus.REJECTED);
         request.setComment(decision == null ? request.getComment() : trimToNull(decision.comment()));
         return WarehouseWriteoffRequestDto.from(writeoffRepository.save(request));
+    }
+
+    @Transactional
+    public WarehouseWriteoffRequestDto rejectFromApprovalWorkflow(UUID id, UUID approverId, String comment) {
+        WarehouseWriteoffRequest request = loadWriteoff(id);
+        restorePendingWriteoffStock(request, comment, approverId);
+        request.setStatus(WarehouseWriteoffStatus.REJECTED);
+        request.setComment(trimToNull(comment));
+        return WarehouseWriteoffRequestDto.from(writeoffRepository.save(request));
+    }
+
+    private void restorePendingWriteoffStock(WarehouseWriteoffRequest request, String reason, UUID checkedById) {
+        if (request.getStockStatus() != WarehouseStockStatus.WRITEOFF_PENDING) {
+            return;
+        }
+        List<WarehouseWriteoffAllocation> allocations = writeoffAllocationRepository
+                .findAllByWriteoffRequestIdAndIsDeletedFalseOrderByCreatedAtAsc(request.getId());
+        if (allocations.isEmpty()) {
+            postStatusTransfer(
+                    request.getId(),
+                    request.getWarehouseId(),
+                    request.getSparePartId(),
+                    request.getBinId(),
+                    request.getLotNumber(),
+                    request.getSerialNumber(),
+                    request.getExpiryDate(),
+                    WarehouseStockStatus.WRITEOFF_PENDING,
+                    WarehouseStockStatus.AVAILABLE,
+                    request.getQuantity(),
+                    request.getDocumentNumber(),
+                    reason,
+                    checkedById
+            );
+            request.setStockStatus(WarehouseStockStatus.AVAILABLE);
+        } else {
+            WarehouseStockStatus restoredStatus = allocations.get(0).getSourceStockStatus();
+            for (WarehouseWriteoffAllocation allocation : allocations) {
+                postWriteoffAllocationStatusTransfer(
+                        request,
+                        allocation,
+                        WarehouseStockStatus.WRITEOFF_PENDING,
+                        allocation.getSourceStockStatus(),
+                        StockLedgerMovementType.STATUS_TRANSFER_OUT,
+                        StockLedgerMovementType.STATUS_TRANSFER_IN,
+                        "warehouse-writeoff-reject-out:",
+                        "warehouse-writeoff-reject-in:",
+                        reason,
+                        checkedById
+                );
+            }
+            request.setStockStatus(restoredStatus);
+        }
+        WarehouseStock stock = legacyStockProjectionService.sync(request.getWarehouseId(), request.getSparePartId());
+        lowStockRecommendationService.evaluateStockSafely(stock);
     }
 
     private void postStatusTransfer(UUID operationId,

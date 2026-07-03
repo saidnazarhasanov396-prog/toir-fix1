@@ -29,6 +29,7 @@ import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
+import com.toir.repository.WarehouseWriteoffRequestRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
@@ -1298,7 +1299,8 @@ class ApprovalPbacScopeTest {
                 mock(ActualCostRepository.class),
                 mock(FinanceScopeService.class),
                 userRepository,
-                mock(com.toir.repository.equipment.EquipmentCommissioningActRepository.class)
+                mock(com.toir.repository.equipment.EquipmentCommissioningActRepository.class),
+                mock(WarehouseWriteoffRequestRepository.class)
         );
     }
 
