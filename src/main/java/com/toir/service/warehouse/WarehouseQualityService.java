@@ -12,6 +12,7 @@ import com.toir.dto.wms.WmsDocumentGroupRequest;
 import com.toir.entity.StockMovement;
 import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.entity.warehouse.WarehouseStockBalance;
+import com.toir.entity.warehouse.WarehouseWriteoffAllocation;
 import com.toir.entity.warehouse.WarehouseWriteoffRequest;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
@@ -23,6 +24,7 @@ import com.toir.enums.WarehouseWriteoffStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
+import com.toir.repository.WarehouseWriteoffAllocationRepository;
 import com.toir.repository.WarehouseWriteoffRequestRepository;
 import com.toir.service.LowStockRecommendationService;
 import com.toir.service.approval.ApprovalOrchestrator;
@@ -46,6 +48,7 @@ public class WarehouseQualityService {
     private final WarehouseStockBalanceRepository balanceRepository;
     private final StockMovementRepository stockMovementRepository;
     private final WarehouseWriteoffRequestRepository writeoffRepository;
+    private final WarehouseWriteoffAllocationRepository writeoffAllocationRepository;
     private final WmsDocumentPolicyService documentPolicyService;
     private final ApprovalOrchestrator approvalOrchestrator;
     private final LegacyStockProjectionService legacyStockProjectionService;
@@ -125,21 +128,7 @@ public class WarehouseQualityService {
             throw RestException.badRequest("Only draft writeoff requests can be submitted");
         }
         if (request.getStockStatus() != WarehouseStockStatus.WRITEOFF_PENDING) {
-            postStatusTransfer(
-                    request.getId(),
-                    request.getWarehouseId(),
-                    request.getSparePartId(),
-                    request.getBinId(),
-                    request.getLotNumber(),
-                    request.getSerialNumber(),
-                    request.getExpiryDate(),
-                    request.getStockStatus(),
-                    WarehouseStockStatus.WRITEOFF_PENDING,
-                    request.getQuantity(),
-                    request.getDocumentNumber(),
-                    request.getReason(),
-                    request.getRequestedById()
-            );
+            allocateWriteoffToPending(request);
             request.setStockStatus(WarehouseStockStatus.WRITEOFF_PENDING);
             WarehouseStock stock = legacyStockProjectionService.sync(request.getWarehouseId(), request.getSparePartId());
             lowStockRecommendationService.evaluateStockSafely(stock);
@@ -190,21 +179,29 @@ public class WarehouseQualityService {
                 true
         );
         StockMovement movement = stockMovementRepository.save(writeoffMovement(request));
-        toirStockService.postDecrease(new StockIssueCommand(
-                request.getWarehouseId(),
-                request.getSparePartId(),
-                request.getBinId(),
-                request.getQuantity(),
-                request.getLotNumber(),
-                request.getSerialNumber(),
-                request.getExpiryDate(),
-                WarehouseStockStatus.WRITEOFF_PENDING,
-                "WAREHOUSE_WRITEOFF",
-                request.getId(),
-                request.getDocumentNumber(),
-                request.getReason(),
-                "warehouse-writeoff:" + request.getId()
-        ), StockLedgerMovementType.WRITEOFF);
+        List<WarehouseWriteoffAllocation> allocations = writeoffAllocationRepository
+                .findAllByWriteoffRequestIdAndIsDeletedFalseOrderByCreatedAtAsc(request.getId());
+        if (allocations.isEmpty()) {
+            postSingleWriteoffDecrease(request);
+        } else {
+            for (WarehouseWriteoffAllocation allocation : allocations) {
+                toirStockService.postDecrease(new StockIssueCommand(
+                        allocation.getWarehouseId(),
+                        allocation.getSparePartId(),
+                        allocation.getBinId(),
+                        allocation.getQuantity(),
+                        allocation.getLotNumber(),
+                        allocation.getSerialNumber(),
+                        allocation.getExpiryDate(),
+                        WarehouseStockStatus.WRITEOFF_PENDING,
+                        "WAREHOUSE_WRITEOFF",
+                        request.getId(),
+                        request.getDocumentNumber(),
+                        request.getReason(),
+                        "warehouse-writeoff:" + request.getId() + ":" + allocation.getId()
+                ), StockLedgerMovementType.WRITEOFF);
+            }
+        }
         request.setStockMovementId(movement.getId());
         request.setStatus(WarehouseWriteoffStatus.POSTED);
         WarehouseStock stock = legacyStockProjectionService.sync(request.getWarehouseId(), request.getSparePartId());
@@ -222,22 +219,43 @@ public class WarehouseQualityService {
             ));
         }
         if (request.getStockStatus() == WarehouseStockStatus.WRITEOFF_PENDING) {
-            postStatusTransfer(
-                    request.getId(),
-                    request.getWarehouseId(),
-                    request.getSparePartId(),
-                    request.getBinId(),
-                    request.getLotNumber(),
-                    request.getSerialNumber(),
-                    request.getExpiryDate(),
-                    WarehouseStockStatus.WRITEOFF_PENDING,
-                    WarehouseStockStatus.AVAILABLE,
-                    request.getQuantity(),
-                    request.getDocumentNumber(),
-                    decision == null ? request.getReason() : decision.comment(),
-                    decision == null ? null : decision.approverId()
-            );
-            request.setStockStatus(WarehouseStockStatus.AVAILABLE);
+            List<WarehouseWriteoffAllocation> allocations = writeoffAllocationRepository
+                    .findAllByWriteoffRequestIdAndIsDeletedFalseOrderByCreatedAtAsc(request.getId());
+            if (allocations.isEmpty()) {
+                postStatusTransfer(
+                        request.getId(),
+                        request.getWarehouseId(),
+                        request.getSparePartId(),
+                        request.getBinId(),
+                        request.getLotNumber(),
+                        request.getSerialNumber(),
+                        request.getExpiryDate(),
+                        WarehouseStockStatus.WRITEOFF_PENDING,
+                        WarehouseStockStatus.AVAILABLE,
+                        request.getQuantity(),
+                        request.getDocumentNumber(),
+                        decision == null ? request.getReason() : decision.comment(),
+                        decision == null ? null : decision.approverId()
+                );
+                request.setStockStatus(WarehouseStockStatus.AVAILABLE);
+            } else {
+                WarehouseStockStatus restoredStatus = allocations.get(0).getSourceStockStatus();
+                for (WarehouseWriteoffAllocation allocation : allocations) {
+                    postWriteoffAllocationStatusTransfer(
+                            request,
+                            allocation,
+                            WarehouseStockStatus.WRITEOFF_PENDING,
+                            allocation.getSourceStockStatus(),
+                            StockLedgerMovementType.STATUS_TRANSFER_OUT,
+                            StockLedgerMovementType.STATUS_TRANSFER_IN,
+                            "warehouse-writeoff-reject-out:",
+                            "warehouse-writeoff-reject-in:",
+                            decision == null ? request.getReason() : decision.comment(),
+                            decision == null ? null : decision.approverId()
+                    );
+                }
+                request.setStockStatus(restoredStatus);
+            }
             WarehouseStock stock = legacyStockProjectionService.sync(request.getWarehouseId(), request.getSparePartId());
             lowStockRecommendationService.evaluateStockSafely(stock);
         }
@@ -291,6 +309,146 @@ public class WarehouseQualityService {
                 "quality-transfer-in:" + operationId
         ), StockLedgerMovementType.STATUS_TRANSFER_IN);
         updateTargetBalanceQuality(warehouseId, sparePartId, binId, lotNumber, serialNumber, expiryDate, toStatus, reason, checkedById);
+    }
+
+    private void allocateWriteoffToPending(WarehouseWriteoffRequest request) {
+        WarehouseStockStatus sourceStatus = request.getStockStatus() == null
+                ? WarehouseStockStatus.AVAILABLE
+                : request.getStockStatus();
+        List<WarehouseStockBalance> balances = balanceRepository.lockEligibleBalancesForWriteoff(
+                request.getWarehouseId(),
+                request.getSparePartId(),
+                sourceStatus,
+                request.getBinId(),
+                trimToNull(request.getLotNumber()),
+                trimToNull(request.getSerialNumber()),
+                request.getExpiryDate()
+        );
+        BigDecimal totalAvailable = balances.stream()
+                .map(this::allocatableQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (totalAvailable.compareTo(request.getQuantity()) < 0) {
+            throw RestException.badRequest("Insufficient " + sourceStatus + " stock for writeoff: available="
+                    + totalAvailable + ", requested=" + request.getQuantity());
+        }
+
+        BigDecimal remaining = request.getQuantity();
+        for (WarehouseStockBalance balance : balances) {
+            if (remaining.signum() == 0) {
+                break;
+            }
+            BigDecimal allocatedQty = allocatableQuantity(balance).min(remaining);
+            if (allocatedQty.signum() <= 0) {
+                continue;
+            }
+            WarehouseWriteoffAllocation allocation = writeoffAllocationRepository.save(writeoffAllocation(request, balance, allocatedQty));
+            postWriteoffAllocationStatusTransfer(
+                    request,
+                    allocation,
+                    sourceStatus,
+                    WarehouseStockStatus.WRITEOFF_PENDING,
+                    StockLedgerMovementType.STATUS_TRANSFER_OUT,
+                    StockLedgerMovementType.STATUS_TRANSFER_IN,
+                    "warehouse-writeoff-submit-out:",
+                    "warehouse-writeoff-submit-in:",
+                    request.getReason(),
+                    request.getRequestedById()
+            );
+            remaining = remaining.subtract(allocatedQty);
+        }
+    }
+
+    private WarehouseWriteoffAllocation writeoffAllocation(WarehouseWriteoffRequest request,
+                                                           WarehouseStockBalance balance,
+                                                           BigDecimal quantity) {
+        WarehouseWriteoffAllocation allocation = new WarehouseWriteoffAllocation();
+        allocation.setWriteoffRequestId(request.getId());
+        allocation.setSourceBalanceId(balance.getId());
+        allocation.setWarehouseId(balance.getWarehouseId());
+        allocation.setSparePartId(balance.getSparePartId());
+        allocation.setBinId(balance.getBinId());
+        allocation.setLotNumber(balance.getLotNumber());
+        allocation.setSerialNumber(balance.getSerialNumber());
+        allocation.setExpiryDate(balance.getExpiryDate());
+        allocation.setSourceStockStatus(balance.getStockStatus());
+        allocation.setQuantity(quantity);
+        return allocation;
+    }
+
+    private void postWriteoffAllocationStatusTransfer(WarehouseWriteoffRequest request,
+                                                      WarehouseWriteoffAllocation allocation,
+                                                      WarehouseStockStatus fromStatus,
+                                                      WarehouseStockStatus toStatus,
+                                                      StockLedgerMovementType outMovementType,
+                                                      StockLedgerMovementType inMovementType,
+                                                      String outKeyPrefix,
+                                                      String inKeyPrefix,
+                                                      String reason,
+                                                      UUID checkedById) {
+        toirStockService.postDecrease(new StockIssueCommand(
+                allocation.getWarehouseId(),
+                allocation.getSparePartId(),
+                allocation.getBinId(),
+                allocation.getQuantity(),
+                allocation.getLotNumber(),
+                allocation.getSerialNumber(),
+                allocation.getExpiryDate(),
+                fromStatus,
+                "QUALITY_STATUS_TRANSFER",
+                request.getId(),
+                request.getDocumentNumber(),
+                reason,
+                outKeyPrefix + allocation.getId()
+        ), outMovementType);
+        toirStockService.postIncrease(new StockReceiptCommand(
+                allocation.getWarehouseId(),
+                allocation.getSparePartId(),
+                allocation.getBinId(),
+                allocation.getQuantity(),
+                null,
+                allocation.getLotNumber(),
+                allocation.getSerialNumber(),
+                allocation.getExpiryDate(),
+                toStatus,
+                "QUALITY_STATUS_TRANSFER",
+                request.getId(),
+                request.getDocumentNumber(),
+                reason,
+                inKeyPrefix + allocation.getId()
+        ), inMovementType);
+        updateTargetBalanceQuality(
+                allocation.getWarehouseId(),
+                allocation.getSparePartId(),
+                allocation.getBinId(),
+                allocation.getLotNumber(),
+                allocation.getSerialNumber(),
+                allocation.getExpiryDate(),
+                toStatus,
+                reason,
+                checkedById
+        );
+    }
+
+    private void postSingleWriteoffDecrease(WarehouseWriteoffRequest request) {
+        toirStockService.postDecrease(new StockIssueCommand(
+                request.getWarehouseId(),
+                request.getSparePartId(),
+                request.getBinId(),
+                request.getQuantity(),
+                request.getLotNumber(),
+                request.getSerialNumber(),
+                request.getExpiryDate(),
+                WarehouseStockStatus.WRITEOFF_PENDING,
+                "WAREHOUSE_WRITEOFF",
+                request.getId(),
+                request.getDocumentNumber(),
+                request.getReason(),
+                "warehouse-writeoff:" + request.getId()
+        ), StockLedgerMovementType.WRITEOFF);
+    }
+
+    private BigDecimal allocatableQuantity(WarehouseStockBalance balance) {
+        return zero(balance.getQtyOnHand()).subtract(zero(balance.getQtyReserved()));
     }
 
     private void updateTargetBalanceQuality(UUID warehouseId,
@@ -391,6 +549,10 @@ public class WarehouseQualityService {
 
     private String nextWriteoffNumber() {
         return "WOFF-%05d".formatted(writeoffRepository.countByIsDeletedFalse() + 1);
+    }
+
+    private BigDecimal zero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private String trimToNull(String value) {
