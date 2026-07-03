@@ -30,6 +30,7 @@ public record SparePartDto(
         double currentStock,
         double reservedStock,
         double availableStock,
+        double nonAvailableStock,
         int warehouseCount,
         UUID typeId,
         String typeCode,
@@ -67,7 +68,7 @@ public record SparePartDto(
     ) {
         this(id, entityType, code, name, kind, unit == null ? null : unit.code(), unit == null ? null : unit.code(),
                 unit == null ? null : unit.name(), manufacturer, sku, specification, minStock, currentStock,
-                reservedStock, availableStock, warehouseCount, null, null, null, com.toir.enums.SparePartType.OTHER,
+                reservedStock, availableStock, 0, warehouseCount, null, null, null, com.toir.enums.SparePartType.OTHER,
                 null, null, null, null, null, null, null, null, null, null, List.of());
     }
 
@@ -97,6 +98,28 @@ public record SparePartDto(
             UnitRef unitRef,
             MxikRefDto mxik
     ) {
+        return from(
+                s,
+                currentStock,
+                reservedStock,
+                Math.max(0, currentStock - reservedStock),
+                0,
+                warehouseCount,
+                unitRef,
+                mxik
+        );
+    }
+
+    public static SparePartDto from(
+            SparePart s,
+            double currentStock,
+            double reservedStock,
+            double availableStock,
+            double nonAvailableStock,
+            int warehouseCount,
+            UnitRef unitRef,
+            MxikRefDto mxik
+    ) {
         SparePartType type = s.getType();
         String unit = s.getUnit();
         String unitCode = unitRef != null ? unitRef.code() : unit;
@@ -117,7 +140,8 @@ public record SparePartDto(
                 s.getMinStock(),
                 currentStock,
                 reservedStock,
-                Math.max(0, currentStock - reservedStock),
+                Math.max(0, availableStock),
+                Math.max(0, nonAvailableStock),
                 warehouseCount,
                 type == null ? null : type.getId(),
                 typeCode,
@@ -139,7 +163,7 @@ public record SparePartDto(
 
     public SparePartDto withPreferredCounteragentName(String preferredCounteragentName) {
         return new SparePartDto(id, entityType, code, name, kind, unit, unitCode, unitName, manufacturer, sku,
-                specification, minStock, currentStock, reservedStock, availableStock, warehouseCount,
+                specification, minStock, currentStock, reservedStock, availableStock, nonAvailableStock, warehouseCount,
                 typeId, typeCode, typeName, type, preferredCounteragentId, preferredCounteragentName,
                 leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, inventoryValue, criticality,
                 mxikId, mxik, warehousePolicies);
@@ -147,7 +171,7 @@ public record SparePartDto(
 
     public SparePartDto withWarehousePolicies(List<WarehouseStockPolicyDto> warehousePolicies) {
         return new SparePartDto(id, entityType, code, name, kind, unit, unitCode, unitName, manufacturer, sku,
-                specification, minStock, currentStock, reservedStock, availableStock, warehouseCount,
+                specification, minStock, currentStock, reservedStock, availableStock, nonAvailableStock, warehouseCount,
                 typeId, typeCode, typeName, type, preferredCounteragentId, preferredCounteragentName,
                 leadTimeDays, lastPurchasePrice, averageCost, lastPurchaseCost, inventoryValue, criticality,
                 mxikId, mxik, warehousePolicies == null ? List.of() : warehousePolicies);

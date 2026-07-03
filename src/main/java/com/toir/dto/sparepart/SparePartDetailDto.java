@@ -23,6 +23,7 @@ public record SparePartDetailDto(
         double totalQuantity,
         double totalReservedQty,
         double totalAvailableQty,
+        double totalNonAvailableQty,
         BigDecimal totalReceivedQuantity,
         BigDecimal totalIssuedQuantity,
         BigDecimal currentQuantity,

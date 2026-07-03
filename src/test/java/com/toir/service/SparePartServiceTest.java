@@ -17,6 +17,7 @@ import com.toir.enums.CounteragentStatus;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.InventoryItemKind;
 import com.toir.enums.SparePartType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.LocationRepository;
@@ -262,6 +263,41 @@ class SparePartServiceTest {
     }
 
     @Test
+    void findAllUsesWmsUsableAvailabilityForAvailableStock() {
+        UUID warehouseId = UUID.randomUUID();
+        SparePart part = sparePart(UUID.randomUUID(), "SP-WMS", "Bearing", InventoryItemKind.SPARE_PART);
+        WarehouseStock stock = stock(warehouseId, part.getId(), 10, 2);
+        wmsSnapshots.put(
+                new LegacyStockProjectionService.StockKey(warehouseId, part.getId()),
+                new WmsStockSnapshot(
+                        warehouseId,
+                        part.getId(),
+                        BigDecimal.valueOf(10),
+                        BigDecimal.valueOf(2),
+                        BigDecimal.valueOf(6),
+                        BigDecimal.ONE,
+                        Map.of(
+                                WarehouseStockStatus.AVAILABLE, BigDecimal.valueOf(6),
+                                WarehouseStockStatus.QUARANTINE, BigDecimal.valueOf(4)
+                        )
+                )
+        );
+        Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of(stock));
+
+        SparePartDto result = service.findAll(20, 0, null, "", null).getContent().getFirst();
+
+        assertThat(result.currentStock()).isEqualTo(10);
+        assertThat(result.reservedStock()).isEqualTo(2);
+        assertThat(result.availableStock()).isEqualTo(5);
+        assertThat(result.nonAvailableStock()).isEqualTo(4);
+    }
+
+    @Test
     void warehouseIdAndItemTypeUseIntersectionWithSearch() {
         UUID warehouseId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
@@ -381,6 +417,39 @@ class SparePartServiceTest {
         SparePartDto result = service.findById(sparePartId);
 
         assertThat(result.warehousePolicies()).containsExactly(policyDto);
+    }
+
+    @Test
+    void findByIdUsesWmsUsableAvailabilityForAvailableStock() {
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        SparePart part = sparePart(sparePartId, "SP-WMS-ID", "Policy Part", InventoryItemKind.SPARE_PART);
+        WarehouseStock stock = stock(warehouseId, sparePartId, 10, 2);
+        wmsSnapshots.put(
+                new LegacyStockProjectionService.StockKey(warehouseId, sparePartId),
+                new WmsStockSnapshot(
+                        warehouseId,
+                        sparePartId,
+                        BigDecimal.valueOf(10),
+                        BigDecimal.valueOf(2),
+                        BigDecimal.valueOf(6),
+                        BigDecimal.ONE,
+                        Map.of(
+                                WarehouseStockStatus.AVAILABLE, BigDecimal.valueOf(6),
+                                WarehouseStockStatus.BLOCKED, BigDecimal.valueOf(4)
+                        )
+                )
+        );
+
+        when(repository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(part));
+        when(stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId)).thenReturn(List.of(stock));
+
+        SparePartDto result = service.findById(sparePartId);
+
+        assertThat(result.currentStock()).isEqualTo(10);
+        assertThat(result.reservedStock()).isEqualTo(2);
+        assertThat(result.availableStock()).isEqualTo(5);
+        assertThat(result.nonAvailableStock()).isEqualTo(4);
     }
 
     @Test
@@ -898,6 +967,7 @@ class SparePartServiceTest {
         assertThat(result.totalQuantity()).isEqualTo(300);
         assertThat(result.totalReservedQty()).isEqualTo(40);
         assertThat(result.totalAvailableQty()).isEqualTo(260);
+        assertThat(result.totalNonAvailableQty()).isZero();
         assertThat(result.locations()).hasSize(1);
         assertThat(result.recentMovements()).hasSize(1);
         assertThat(result.recentMovements().getFirst().type()).isEqualTo(StockMovementType.RECEIPT);
