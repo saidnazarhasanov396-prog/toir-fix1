@@ -155,7 +155,9 @@ class DashboardServiceKpiTest {
         when(repairRequestRepository.search(null, null, null)).thenReturn(List.of(
                 request(departmentA, PriorityLevel.EMERGENCY, RequestStatus.OPEN),
                 request(departmentA, PriorityLevel.EMERGENCY, RequestStatus.CLOSED),
-                request(departmentB, PriorityLevel.HIGH, RequestStatus.OPEN)));
+                request(departmentB, PriorityLevel.HIGH, RequestStatus.OPEN),
+                request(departmentA, PriorityLevel.HIGH, RequestStatus.COMPLETED),
+                request(departmentB, PriorityLevel.HIGH, RequestStatus.COMPLETED)));
         when(workOrderRepository.search(null, null, null)).thenReturn(List.of(
                 workOrder(departmentA, equipmentA, WorkType.REPAIR, WorkOrderStatus.COMPLETED, currentMonth),
                 workOrder(departmentB, equipmentB, WorkType.REPAIR, WorkOrderStatus.CLOSED, previousMonth),
@@ -180,8 +182,9 @@ class DashboardServiceKpiTest {
         assertThat(result.counters().totalEmergencyRequests()).isEqualTo(2);
         assertThat(result.counters().repairsThisMonth()).isEqualTo(1);
         assertThat(result.counters().completedOrClosedWorkOrders()).isEqualTo(3);
-        assertThat(result.counters().completedRepairs()).isEqualTo(2);
+        assertThat(result.counters().completedRepairs()).isEqualTo(3);
         assertThat(result.counters().closedWorkOrders()).isEqualTo(1);
+        assertThat(result.planFact().completedRepairs()).isEqualTo(2);
         assertThat(result.kpis().downtimeHoursTotal()).isEqualTo(3.5);
         assertThat(result.kpis().downtimeEventsCount()).isEqualTo(3);
         assertThat(result.kpis().downtimeThisMonth()).isEqualTo(2.5);
