@@ -1,0 +1,80 @@
+package com.toir.controller;
+
+import com.toir.dto.dashboard.DashboardEmergencyEventDto;
+import com.toir.exception.GlobalExceptionHandler;
+import com.toir.service.DashboardLifecycleService;
+import com.toir.service.DashboardService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@ExtendWith(MockitoExtension.class)
+class DashboardControllerContractTest {
+
+    @Mock
+    DashboardService service;
+
+    @Mock
+    DashboardLifecycleService lifecycleService;
+
+    private MockMvc mockMvc;
+
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.standaloneSetup(new DashboardController(service, lifecycleService))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+    }
+
+    @Test
+    void emergencyEventsReturnsPagedRows() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+        DashboardEmergencyEventDto row = new DashboardEmergencyEventDto(
+                "rr:" + sourceId,
+                "REPAIR_REQUEST",
+                sourceId,
+                sourceId,
+                null,
+                null,
+                "RR-1",
+                "Emergency request",
+                "CLOSED",
+                "EMERGENCY",
+                departmentId,
+                UUID.randomUUID(),
+                Instant.parse("2026-07-03T05:00:00Z"),
+                "/repair-requests/" + sourceId
+        );
+        when(service.emergencyEvents(eq(departmentId), eq(0), eq(10), eq("REPAIR_REQUEST"), eq("RR-1")))
+                .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/v1/dashboards/emergencies")
+                        .param("departmentId", departmentId.toString())
+                        .param("page", "0")
+                        .param("size", "10")
+                        .param("sourceType", "REPAIR_REQUEST")
+                        .param("search", "RR-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].eventKey").value("rr:" + sourceId))
+                .andExpect(jsonPath("$.content[0].sourceType").value("REPAIR_REQUEST"))
+                .andExpect(jsonPath("$.content[0].detailPath").value("/repair-requests/" + sourceId));
+    }
+}

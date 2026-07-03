@@ -1,5 +1,6 @@
 package com.toir.controller;
 import com.toir.dto.dashboard.DashboardOverview;
+import com.toir.dto.dashboard.DashboardEmergencyEventDto;
 import com.toir.dto.dashboard.WorkOrdersByEquipmentTypeResponse;
 import com.toir.service.DashboardService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -10,6 +11,7 @@ import com.toir.service.DashboardLifecycleService;
 
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +34,17 @@ public class DashboardController {
             @RequestParam(required = false) UUID departmentId
     ) {
         return ResponseEntity.ok(service.overview(departmentId));
+    }
+
+    @GetMapping("/emergencies")
+    public ResponseEntity<Page<DashboardEmergencyEventDto>> emergencies(
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sourceType,
+            @RequestParam(required = false) String search
+    ) {
+        return ResponseEntity.ok(service.emergencyEvents(departmentId, page, size, sourceType, search));
     }
 
     @GetMapping("/work-orders/by-equipment-type")

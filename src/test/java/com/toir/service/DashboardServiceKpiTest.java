@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.dashboard.DashboardEmergencyEventDto;
 import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.SparePart;
@@ -199,6 +200,89 @@ class DashboardServiceKpiTest {
         assertThat(result.topProblemEquipment().getFirst().failureCount()).isEqualTo(2);
         assertThat(result.topProblemEquipment().getFirst().openDefects()).isEqualTo(1);
         assertThat(result.topProblemEquipment().getFirst().downtimeHours()).isEqualTo(3.0);
+    }
+
+    @Test
+    void emergencyEventsDeduplicateLinkedRepairRequestWorkOrderAndDowntime() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-07-03T04:00:00Z");
+
+        RepairRequest request = request(departmentId, PriorityLevel.EMERGENCY, RequestStatus.CLOSED);
+        request.setNumber("RR-1");
+        request.setTitle("Emergency request");
+        request.setEquipmentId(equipmentId);
+        request.setDetectedAt(now.minus(Duration.ofHours(3)));
+
+        WorkOrder linkedWorkOrder = workOrder(
+                departmentId, equipmentId, WorkType.REPAIR, WorkOrderStatus.CLOSED, now.minus(Duration.ofHours(2)));
+        linkedWorkOrder.setType(WorkOrderType.EMERGENCY);
+        linkedWorkOrder.setRepairRequestId(request.getId());
+        linkedWorkOrder.setNumber("WO-LINKED");
+
+        DowntimeEvent linkedDowntime = downtime(departmentId, equipmentId, now.minus(Duration.ofHours(1)), 60);
+        linkedDowntime.setType(DowntimeType.EMERGENCY);
+        linkedDowntime.setWorkOrderId(linkedWorkOrder.getId());
+
+        WorkOrder standaloneWorkOrder = workOrder(
+                departmentId, equipmentId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, now.minus(Duration.ofMinutes(30)));
+        standaloneWorkOrder.setType(WorkOrderType.EMERGENCY);
+        standaloneWorkOrder.setNumber("WO-STANDALONE");
+        standaloneWorkOrder.setTitle("Standalone work order");
+
+        DowntimeEvent standaloneDowntime = downtime(departmentId, equipmentId, now, 30);
+        standaloneDowntime.setType(DowntimeType.EMERGENCY);
+        standaloneDowntime.setDescription("Standalone downtime");
+
+        when(repairRequestRepository.search(null, null, null)).thenReturn(List.of(request));
+        when(workOrderRepository.search(null, null, null))
+                .thenReturn(List.of(linkedWorkOrder, standaloneWorkOrder));
+        when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(linkedDowntime, standaloneDowntime));
+
+        var overview = service.overview(null);
+        var events = service.emergencyEvents(null, 0, 10, null, null);
+
+        assertThat(overview.counters().totalEmergencyRequests()).isEqualTo(3);
+        assertThat(events.getTotalElements()).isEqualTo(3);
+        assertThat(events.getContent()).extracting(DashboardEmergencyEventDto::eventKey)
+                .containsExactlyInAnyOrder(
+                        "rr:" + request.getId(),
+                        "wo:" + standaloneWorkOrder.getId(),
+                        "dt:" + standaloneDowntime.getId());
+        assertThat(events.getContent()).extracting(DashboardEmergencyEventDto::sourceType)
+                .containsExactlyInAnyOrder("REPAIR_REQUEST", "WORK_ORDER", "DOWNTIME");
+    }
+
+    @Test
+    void emergencyEventsApplySourceDepartmentAndSearchFilters() {
+        UUID departmentA = UUID.randomUUID();
+        UUID departmentB = UUID.randomUUID();
+        UUID equipmentA = UUID.randomUUID();
+        Instant now = Instant.parse("2026-07-03T05:00:00Z");
+
+        RepairRequest pumpRequest = request(departmentA, PriorityLevel.EMERGENCY, RequestStatus.OPEN);
+        pumpRequest.setNumber("RR-PUMP");
+        pumpRequest.setTitle("Pump fire alarm");
+        pumpRequest.setEquipmentId(equipmentA);
+        pumpRequest.setDetectedAt(now);
+
+
+        when(repairRequestRepository.search(null, departmentA, null)).thenReturn(List.of(pumpRequest));
+        when(workOrderRepository.search(null, departmentA, null)).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                emergencyDowntime(departmentA, equipmentA, now.minus(Duration.ofMinutes(5)), "Pump downtime"),
+                emergencyDowntime(departmentB, UUID.randomUUID(), now, "Other department downtime")
+        ));
+
+        var repairRequestEvents = service.emergencyEvents(departmentA, 0, 10, "repair_request", "pump");
+        var downtimeEvents = service.emergencyEvents(departmentA, 0, 10, "DOWNTIME", null);
+
+        assertThat(repairRequestEvents.getTotalElements()).isEqualTo(1);
+        assertThat(repairRequestEvents.getContent().getFirst().sourceType()).isEqualTo("REPAIR_REQUEST");
+        assertThat(repairRequestEvents.getContent().getFirst().departmentId()).isEqualTo(departmentA);
+        assertThat(downtimeEvents.getTotalElements()).isEqualTo(1);
+        assertThat(downtimeEvents.getContent().getFirst().title()).isEqualTo("Pump downtime");
     }
 
     @Test
@@ -410,6 +494,18 @@ class DashboardServiceKpiTest {
         event.setStartAt(startAt);
         event.setDurationMinutes(durationMinutes);
         event.setType(DowntimeType.UNPLANNED);
+        return event;
+    }
+
+    private DowntimeEvent emergencyDowntime(
+            UUID departmentId,
+            UUID equipmentId,
+            Instant startAt,
+            String description
+    ) {
+        DowntimeEvent event = downtime(departmentId, equipmentId, startAt, 30);
+        event.setType(DowntimeType.EMERGENCY);
+        event.setDescription(description);
         return event;
     }
 
