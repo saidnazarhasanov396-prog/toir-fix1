@@ -5,7 +5,7 @@ import com.toir.entity.ApprovalStep;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalTargetType;
-import com.toir.service.warehouse.WarehouseQualityService;
+import com.toir.service.warehouse.WarehouseWriteoffApprovalWorkflowService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -17,8 +17,8 @@ import static org.mockito.Mockito.verify;
 
 class WarehouseWriteoffApprovalHandlerTest {
 
-    private final WarehouseQualityService warehouseQualityService = mock(WarehouseQualityService.class);
-    private final WarehouseWriteoffApprovalHandler handler = new WarehouseWriteoffApprovalHandler(warehouseQualityService);
+    private final WarehouseWriteoffApprovalWorkflowService writeoffApprovalWorkflowService = mock(WarehouseWriteoffApprovalWorkflowService.class);
+    private final WarehouseWriteoffApprovalHandler handler = new WarehouseWriteoffApprovalHandler(writeoffApprovalWorkflowService);
 
     @Test
     void supportsWarehouseWriteoffApproveAndReject() {
@@ -36,12 +36,12 @@ class WarehouseWriteoffApprovalHandlerTest {
         request.setActionType(ApprovalActionType.APPROVE);
         request.setSteps(List.of(step(actorId, ApprovalDecision.APPROVED, "ok")));
         assertThat(handler.execute(request)).contains("APPROVED");
-        verify(warehouseQualityService).approveFromApprovalWorkflow(targetId, actorId, "ok");
+        verify(writeoffApprovalWorkflowService).approve(targetId, actorId, "ok");
 
         request.setActionType(ApprovalActionType.REJECT);
         request.setSteps(List.of(step(actorId, ApprovalDecision.REJECTED, "no")));
         assertThat(handler.execute(request)).contains("REJECTED");
-        verify(warehouseQualityService).rejectFromApprovalWorkflow(targetId, actorId, "no");
+        verify(writeoffApprovalWorkflowService).reject(targetId, actorId, "no");
     }
 
     private ApprovalStep step(UUID actorId, ApprovalDecision decision, String comment) {

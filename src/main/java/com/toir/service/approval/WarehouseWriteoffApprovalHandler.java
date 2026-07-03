@@ -5,7 +5,7 @@ import com.toir.entity.ApprovalStep;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalTargetType;
-import com.toir.service.warehouse.WarehouseQualityService;
+import com.toir.service.warehouse.WarehouseWriteoffApprovalWorkflowService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -16,7 +16,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class WarehouseWriteoffApprovalHandler implements ApprovalActionHandler {
 
-    private final WarehouseQualityService warehouseQualityService;
+    private final WarehouseWriteoffApprovalWorkflowService writeoffApprovalWorkflowService;
 
     @Override
     public boolean supports(ApprovalTargetType targetType, ApprovalActionType actionType) {
@@ -28,10 +28,10 @@ public class WarehouseWriteoffApprovalHandler implements ApprovalActionHandler {
     public String execute(ApprovalRequest request) {
         UUID targetId = request.getTargetId() == null ? request.getDocumentId() : request.getTargetId();
         if (request.getActionType() == ApprovalActionType.REJECT) {
-            warehouseQualityService.rejectFromApprovalWorkflow(targetId, terminalActor(request), terminalComment(request));
+            writeoffApprovalWorkflowService.reject(targetId, terminalActor(request), terminalComment(request));
             return "{\"status\":\"REJECTED\"}";
         }
-        warehouseQualityService.approveFromApprovalWorkflow(targetId, terminalActor(request), terminalComment(request));
+        writeoffApprovalWorkflowService.approve(targetId, terminalActor(request), terminalComment(request));
         return "{\"status\":\"APPROVED\"}";
     }
 
