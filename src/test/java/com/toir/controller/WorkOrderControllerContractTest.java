@@ -493,6 +493,33 @@ class WorkOrderControllerContractTest {
     }
 
     @Test
+    void listWithUnplannedTypeScopeForwardsScope() throws Exception {
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, null, "UNPLANNED", null, null, 0, 20, null, null, null, Sort.by("updatedAt").descending()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("typeScope", "UNPLANNED"))
+                .andExpect(status().isOk());
+
+        verify(service).search(null, null, null, "UNPLANNED", null, null, 0, 20, null, null, null, Sort.by("updatedAt").descending());
+    }
+
+    @Test
+    void listWithExactTypeForwardsTypeAndTypeScope() throws Exception {
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.search(null, null, WorkOrderType.EMERGENCY, "UNPLANNED", null, null, 0, 20, null, null, null, Sort.by("updatedAt").descending()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/work-orders")
+                        .param("type", "EMERGENCY")
+                        .param("typeScope", "UNPLANNED"))
+                .andExpect(status().isOk());
+
+        verify(service).search(null, null, WorkOrderType.EMERGENCY, "UNPLANNED", null, null, 0, 20, null, null, null, Sort.by("updatedAt").descending());
+    }
+
+    @Test
     void listWithUpdatedAtSortReturns200() throws Exception {
         when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
         when(service.search(null, null, null, 0, 20, null, null, null, Sort.by("updatedAt").descending()))
@@ -1253,5 +1280,36 @@ class WorkOrderControllerContractTest {
                 .andExpect(jsonPath("$.completedOrders").value(2));
 
         verify(service).getStats(null, "COMPLETED_OR_CLOSED", null, null, null);
+    }
+
+    @Test
+    void statsWithUnplannedTypeScopeForwardsScope() throws Exception {
+        com.toir.dto.workorder.WorkOrderStatsResponse statsResponse = new com.toir.dto.workorder.WorkOrderStatsResponse(2, 2, 0, 0);
+
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.getStats(null, null, null, "UNPLANNED", null, null, null)).thenReturn(statsResponse);
+
+        mockMvc.perform(get("/api/v1/work-orders/stats")
+                        .param("typeScope", "UNPLANNED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalOrders").value(2));
+
+        verify(service).getStats(null, null, null, "UNPLANNED", null, null, null);
+    }
+
+    @Test
+    void statsWithExactTypeForwardsTypeAndTypeScope() throws Exception {
+        com.toir.dto.workorder.WorkOrderStatsResponse statsResponse = new com.toir.dto.workorder.WorkOrderStatsResponse(1, 1, 0, 0);
+
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(service.getStats(null, null, WorkOrderType.DEFECT, "UNPLANNED", null, null, null)).thenReturn(statsResponse);
+
+        mockMvc.perform(get("/api/v1/work-orders/stats")
+                        .param("type", "DEFECT")
+                        .param("typeScope", "UNPLANNED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalOrders").value(1));
+
+        verify(service).getStats(null, null, WorkOrderType.DEFECT, "UNPLANNED", null, null, null);
     }
 }
