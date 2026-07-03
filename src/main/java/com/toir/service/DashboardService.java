@@ -304,6 +304,9 @@ public class DashboardService {
                 .filter(IndustrialKpiAggregations::isCompletedRepair)
                 .filter(w -> w.getCompletedAt() != null && !w.getCompletedAt().isBefore(currentMonthStart))
                 .count();
+        long completedOrClosedWorkOrders = allWorkOrders.stream()
+                .filter(w -> w.getStatus() == WorkOrderStatus.COMPLETED || w.getStatus() == WorkOrderStatus.CLOSED)
+                .count();
         long completedRepairs = allWorkOrders.stream()
                 .filter(IndustrialKpiAggregations::isCompletedRepair)
                 .count();
@@ -391,6 +394,7 @@ public class DashboardService {
                 totalEmergencyRequests,
                 overduePpr,
                 repairsThisMonth,
+                completedOrClosedWorkOrders,
                 completedRepairs,
                 closedWorkOrders,
                 activeReservations,

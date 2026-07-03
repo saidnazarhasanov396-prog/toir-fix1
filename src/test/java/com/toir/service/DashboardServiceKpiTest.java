@@ -178,6 +178,7 @@ class DashboardServiceKpiTest {
         assertThat(result.counters().emergencyRequests()).isEqualTo(1);
         assertThat(result.counters().totalEmergencyRequests()).isEqualTo(2);
         assertThat(result.counters().repairsThisMonth()).isEqualTo(1);
+        assertThat(result.counters().completedOrClosedWorkOrders()).isEqualTo(3);
         assertThat(result.counters().completedRepairs()).isEqualTo(2);
         assertThat(result.counters().closedWorkOrders()).isEqualTo(1);
         assertThat(result.kpis().downtimeHoursTotal()).isEqualTo(3.5);
