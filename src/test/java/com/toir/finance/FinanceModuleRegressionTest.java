@@ -356,7 +356,70 @@ class FinanceModuleRegressionTest {
 
     @Nested
     @ExtendWith(MockitoExtension.class)
-    @Disabled("FAZA 3 — enable after allocate commits and approve does not")
+    class Phase3ProcurementAllocate {
+
+        @Mock
+        com.toir.repository.ProcurementRequestRepository procurementRequestRepository;
+        @Mock
+        BudgetLineRepository budgetLineRepository;
+        @Mock
+        com.toir.repository.projects.BudgetEventRepository budgetEventRepository;
+        @Mock
+        BudgetCommitmentService budgetCommitmentService;
+        @Mock
+        com.toir.service.ProcurementRequestService procurementRequestService;
+        @Mock
+        com.toir.util.AuditBuilderService auditBuilderService;
+        @Mock
+        com.toir.security.ScopeAccessService scopeAccessService;
+
+        @InjectMocks
+        ProcurementBudgetAllocationService service;
+
+        @Test
+        void allocateCommitsEstimatedCost() {
+            UUID requestId = UUID.randomUUID();
+            UUID lineId = UUID.randomUUID();
+            UUID actorId = UUID.randomUUID();
+            UUID departmentId = UUID.randomUUID();
+            ProcurementRequest request = new ProcurementRequest();
+            request.setId(requestId);
+            request.setStatus(ProcurementRequestStatus.SUBMITTED);
+            request.setDepartmentId(departmentId);
+            request.setBudgetAllocationStatus(BudgetAllocationStatus.UNALLOCATED);
+            request.setTotalEstimatedCost(250_000);
+
+            BudgetLine line = new BudgetLine();
+            line.setId(lineId);
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setId(UUID.randomUUID());
+            budget.setDepartmentId(departmentId);
+            budget.setStatus(BudgetStatus.APPROVED);
+            line.setBudget(budget);
+
+            when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+            when(procurementRequestRepository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(procurementRequestRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(procurementRequestService.toProcurementRequestDto(any()))
+                    .thenAnswer(inv -> com.toir.dto.procurement.ProcurementRequestDto.from(inv.getArgument(0)));
+
+            service.allocateBudget(requestId, lineId, actorId, "Allocate for Q2 spares");
+
+            verify(budgetCommitmentService).commitBudget(
+                    eq(lineId),
+                    eq(250_000d),
+                    eq("PROCUREMENT_REQUEST"),
+                    eq(requestId),
+                    eq(actorId),
+                    eq("Allocate for Q2 spares")
+            );
+        }
+    }
+
+    @Nested
+    @ExtendWith(MockitoExtension.class)
+    @Disabled("FAZA 3 — merged into Phase3ProcurementAllocate")
     class TargetPhase3ProcurementAllocate {
 
         @Mock

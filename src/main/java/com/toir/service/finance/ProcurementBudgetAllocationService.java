@@ -55,6 +55,14 @@ public class ProcurementBudgetAllocationService {
 
         validateBudgetLineForProcurement(line, request);
         budgetCommitmentService.assertCanCommit(line, request.getTotalEstimatedCost());
+        budgetCommitmentService.commitBudget(
+                budgetLineId,
+                request.getTotalEstimatedCost(),
+                "PROCUREMENT_REQUEST",
+                requestId,
+                actorUserId,
+                allocationCommitComment(comment)
+        );
 
         UUID oldBudgetLineId = request.getBudgetLineId();
         request.setBudgetLineId(budgetLineId);
@@ -90,6 +98,7 @@ public class ProcurementBudgetAllocationService {
         assertCanMutate(request);
 
         UUID oldBudgetLineId = request.getBudgetLineId();
+        double committedAmount = request.getTotalEstimatedCost();
         BudgetLine line = oldBudgetLineId == null
                 ? null
                 : budgetLineRepository.findByIdAndIsDeletedFalse(oldBudgetLineId).orElse(null);
@@ -102,6 +111,14 @@ public class ProcurementBudgetAllocationService {
         ProcurementRequest saved = procurementRequestRepository.save(request);
 
         if (line != null) {
+            budgetCommitmentService.releaseBudget(
+                    line.getId(),
+                    committedAmount,
+                    "PROCUREMENT_REQUEST",
+                    requestId,
+                    actorUserId,
+                    unallocationReleaseComment(comment)
+            );
             recordBudgetAllocationEvent(line, requestId, oldBudgetLineId, null, actorUserId,
                     "PROCUREMENT_BUDGET_UNALLOCATED", comment);
         }
@@ -138,6 +155,18 @@ public class ProcurementBudgetAllocationService {
         if (!scopeAccessService.isScopeAdmin() && request.getDepartmentId() != null) {
             scopeAccessService.assertCanAccessDepartment(request.getDepartmentId());
         }
+    }
+
+    private String allocationCommitComment(String comment) {
+        return comment == null || comment.isBlank()
+                ? "Allocate procurement to budget line"
+                : comment.trim();
+    }
+
+    private String unallocationReleaseComment(String comment) {
+        return comment == null || comment.isBlank()
+                ? "Unallocate procurement from budget line"
+                : comment.trim();
     }
 
     private void recordBudgetAllocationEvent(BudgetLine line, UUID procurementRequestId,
