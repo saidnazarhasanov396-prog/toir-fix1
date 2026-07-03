@@ -315,10 +315,14 @@ public class SparePartService {
                     List<WarehouseStock> stocks = stocksByPart.getOrDefault(part.getId(), List.of());
                     double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
                     double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
+                    double availableStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).availableQty().doubleValue()).sum();
+                    double nonAvailableStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).nonAvailableQty().doubleValue()).sum();
                     return enrichWarehousePolicies(enrichCounteragent(SparePartDto.from(
                             part,
                             currentStock,
                             reservedStock,
+                            availableStock,
+                            nonAvailableStock,
                             stocks.size(),
                             unitRefFor(part.getUnit(), unitRefsByToken),
                             MxikRefDto.from(mxikById.get(part.getMxikId()))
@@ -407,7 +411,10 @@ public class SparePartService {
         var stockSnapshots = legacyStockProjectionService.currentForSparePart(id);
         double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
         double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
-        return enrichWarehousePolicies(enrichCounteragent(SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit()),
+        double availableStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).availableQty().doubleValue()).sum();
+        double nonAvailableStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).nonAvailableQty().doubleValue()).sum();
+        return enrichWarehousePolicies(enrichCounteragent(SparePartDto.from(part, currentStock, reservedStock,
+                availableStock, nonAvailableStock, stocks.size(), unitRefFor(part.getUnit()),
                 MxikRefDto.from(mxik(part.getMxikId()).orElse(null)))));
     }
 
@@ -429,6 +436,9 @@ public class SparePartService {
         double totalQuantity = locations.stream().mapToDouble(SparePartLocationDto::quantity).sum();
         double totalReservedQty = locations.stream().mapToDouble(SparePartLocationDto::reservedQty).sum();
         double totalAvailableQty = locations.stream().mapToDouble(SparePartLocationDto::availableQty).sum();
+        double totalNonAvailableQty = context.stocks().stream()
+                .mapToDouble(stock -> snapshot(stock, context.snapshots()).nonAvailableQty().doubleValue())
+                .sum();
         InventoryTransactionSummary transactionSummary = transactionSummaryFor(part.getId(), totalQuantity);
 
         return new SparePartDetailDto(
@@ -447,6 +457,7 @@ public class SparePartService {
                 totalQuantity,
                 totalReservedQty,
                 totalAvailableQty,
+                totalNonAvailableQty,
                 transactionSummary.totalReceivedQuantity(),
                 transactionSummary.totalIssuedQuantity(),
                 transactionSummary.currentQuantity(),
