@@ -13,6 +13,7 @@ import com.toir.dto.workorder.WorkOrderTaskStatusUpdateRequest;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WorkOrderType;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.security.AuthenticatedUser;
@@ -73,6 +74,7 @@ public class WorkOrderController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ')")
     public ResponseEntity<Page<WorkOrderDto>> list(
             @RequestParam(required = false) WorkOrderStatus status,
+            @RequestParam(required = false) WorkOrderType type,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) UUID repairCampaignId,
@@ -83,13 +85,31 @@ public class WorkOrderController {
             @RequestParam(required = false) Instant plannedFrom,
             @RequestParam(required = false) Instant plannedTo,
             @RequestParam(required = false) String statusScope,
+            @RequestParam(required = false) String typeScope,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         Sort sort = SortUtils.sort(sortBy, sortDir, SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
         boolean hasStatusScope = statusScope != null && !statusScope.isBlank();
+        boolean hasTypeFilter = type != null || (typeScope != null && !typeScope.isBlank());
         if (repairCampaignId != null || repairCampaignStageId != null) {
             return ResponseEntity
-                    .ok(hasStatusScope
+                    .ok(hasTypeFilter
+                            ? service.searchByCampaign(
+                                    status,
+                                    statusScope,
+                                    type,
+                                    typeScope,
+                                    scopedDepartment(departmentId),
+                                    equipmentId,
+                                    page,
+                                    size,
+                                    search,
+                                    plannedFrom,
+                                    plannedTo,
+                                    sort,
+                                    repairCampaignId,
+                                    repairCampaignStageId)
+                            : hasStatusScope
                             ? service.searchByCampaign(
                                     status,
                                     statusScope,
@@ -119,7 +139,21 @@ public class WorkOrderController {
         String requestedSort = sortBy == null ? null : sortBy.trim();
         if (requestedSort == null || requestedSort.isBlank() || "updatedAt".equals(requestedSort)) {
             return ResponseEntity
-                    .ok(hasStatusScope
+                    .ok(hasTypeFilter
+                            ? service.search(
+                                    status,
+                                    statusScope,
+                                    type,
+                                    typeScope,
+                                    scopedDepartment(departmentId),
+                                    equipmentId,
+                                    page,
+                                    size,
+                                    search,
+                                    plannedFrom,
+                                    plannedTo,
+                                    sort)
+                            : hasStatusScope
                             ? service.search(
                                     status,
                                     statusScope,
@@ -144,7 +178,21 @@ public class WorkOrderController {
         }
         if (SortUtils.field(requestedSort, SORT_FIELDS) == null) {
             return ResponseEntity
-                    .ok(hasStatusScope
+                    .ok(hasTypeFilter
+                            ? service.search(
+                                    status,
+                                    statusScope,
+                                    type,
+                                    typeScope,
+                                    scopedDepartment(departmentId),
+                                    equipmentId,
+                                    page,
+                                    size,
+                                    search,
+                                    plannedFrom,
+                                    plannedTo,
+                                    sort)
+                            : hasStatusScope
                             ? service.search(
                                     status,
                                     statusScope,
@@ -168,7 +216,21 @@ public class WorkOrderController {
                                     sort));
         }
         return ResponseEntity
-                .ok(hasStatusScope
+                .ok(hasTypeFilter
+                        ? service.searchSorted(
+                                status,
+                                statusScope,
+                                type,
+                                typeScope,
+                                scopedDepartment(departmentId),
+                                equipmentId,
+                                page,
+                                size,
+                                search,
+                                plannedFrom,
+                                plannedTo,
+                                sort)
+                        : hasStatusScope
                         ? service.searchSorted(
                                 status,
                                 statusScope,
@@ -214,11 +276,16 @@ public class WorkOrderController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ')")
     public ResponseEntity<WorkOrderStatsResponse> stats(
             @RequestParam(required = false) WorkOrderStatus status,
+            @RequestParam(required = false) WorkOrderType type,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String statusScope) {
-        return ResponseEntity.ok(statusScope != null && !statusScope.isBlank()
+            @RequestParam(required = false) String statusScope,
+            @RequestParam(required = false) String typeScope) {
+        boolean hasTypeFilter = type != null || (typeScope != null && !typeScope.isBlank());
+        return ResponseEntity.ok(hasTypeFilter
+                ? service.getStats(status, statusScope, type, typeScope, scopedDepartment(departmentId), equipmentId, search)
+                : statusScope != null && !statusScope.isBlank()
                 ? service.getStats(status, statusScope, scopedDepartment(departmentId), equipmentId, search)
                 : service.getStats(status, scopedDepartment(departmentId), equipmentId, search));
     }

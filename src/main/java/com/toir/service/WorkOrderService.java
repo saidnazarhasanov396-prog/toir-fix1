@@ -53,6 +53,7 @@ import com.toir.repository.ReservationRepository;
 import com.toir.repository.SafetyPermitRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
+import com.toir.repository.WorkOrderStatsProjection;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.WorkExecutionRepository;
@@ -161,6 +162,7 @@ public class WorkOrderService {
 
     private static final ZoneId CALENDAR_ZONE = ZoneId.of("Asia/Tashkent");
     private static final String COMPLETED_OR_CLOSED_STATUS_SCOPE = "COMPLETED_OR_CLOSED";
+    private static final String UNPLANNED_TYPE_SCOPE = "UNPLANNED";
 
     private final WorkOrderRepository repository;
     private final EquipmentRepository equipmentRepository;
@@ -279,10 +281,18 @@ public class WorkOrderService {
     @Transactional(readOnly = true)
     public Page<WorkOrderDto> search(WorkOrderStatus status, String statusScope, UUID departmentId, UUID equipmentId, int page,
                                      int pageSize, String search, Instant plannedFrom, Instant plannedTo, Sort sort) {
+        return search(status, statusScope, null, null, departmentId, equipmentId, page, pageSize, search, plannedFrom, plannedTo, sort);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WorkOrderDto> search(WorkOrderStatus status, String statusScope, WorkOrderType type, String typeScope,
+                                     UUID departmentId, UUID equipmentId, int page, int pageSize, String search,
+                                     Instant plannedFrom, Instant plannedTo, Sort sort) {
         var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
         var nativeQueryPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         String normalizedSearch = normalizeSearch(search);
         String statusStr = status == null ? null : status.name();
+        TypeFilter typeFilter = resolveTypeFilter(type, typeScope);
         Page<WorkOrder> resultPage = repository.searchPaginated(
                 statusStr,
                 completedOrClosedOnly(status, statusScope),
@@ -291,6 +301,8 @@ public class WorkOrderService {
                 normalizedSearch,
                 plannedFrom,
                 plannedTo,
+                typeFilter.typeName(),
+                typeFilter.unplannedOnly(),
                 nativeQueryPageable);
         return toDtoPage(resultPage);
     }
@@ -300,7 +312,7 @@ public class WorkOrderService {
                                            int pageSize, String search, Instant plannedFrom, Instant plannedTo, Sort sort) {
         var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
         Page<WorkOrder> resultPage = repository.findAll(
-                workOrderListSpecification(status, null, departmentId, equipmentId, normalizeSearch(search), plannedFrom, plannedTo, null, null),
+                workOrderListSpecification(status, null, TypeFilter.none(), departmentId, equipmentId, normalizeSearch(search), plannedFrom, plannedTo, null, null),
                 pageable);
         return toDtoPage(resultPage);
     }
@@ -308,9 +320,17 @@ public class WorkOrderService {
     @Transactional(readOnly = true)
     public Page<WorkOrderDto> searchSorted(WorkOrderStatus status, String statusScope, UUID departmentId, UUID equipmentId, int page,
                                            int pageSize, String search, Instant plannedFrom, Instant plannedTo, Sort sort) {
+        return searchSorted(status, statusScope, null, null, departmentId, equipmentId, page, pageSize, search, plannedFrom, plannedTo, sort);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WorkOrderDto> searchSorted(WorkOrderStatus status, String statusScope, WorkOrderType type, String typeScope,
+                                           UUID departmentId, UUID equipmentId, int page, int pageSize, String search,
+                                           Instant plannedFrom, Instant plannedTo, Sort sort) {
         var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
+        TypeFilter typeFilter = resolveTypeFilter(type, typeScope);
         Page<WorkOrder> resultPage = repository.findAll(
-                workOrderListSpecification(status, statusScope, departmentId, equipmentId, normalizeSearch(search), plannedFrom, plannedTo, null, null),
+                workOrderListSpecification(status, statusScope, typeFilter, departmentId, equipmentId, normalizeSearch(search), plannedFrom, plannedTo, null, null),
                 pageable);
         return toDtoPage(resultPage);
     }
@@ -331,7 +351,7 @@ public class WorkOrderService {
     ) {
         var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
         Page<WorkOrder> resultPage = repository.findAll(
-                workOrderListSpecification(status, null, departmentId, equipmentId, normalizeSearch(search), plannedFrom,
+                workOrderListSpecification(status, null, TypeFilter.none(), departmentId, equipmentId, normalizeSearch(search), plannedFrom,
                         plannedTo, repairCampaignId, repairCampaignStageId),
                 pageable);
         return toDtoPage(resultPage);
@@ -352,9 +372,31 @@ public class WorkOrderService {
             UUID repairCampaignId,
             UUID repairCampaignStageId
     ) {
+        return searchByCampaign(status, statusScope, null, null, departmentId, equipmentId, page, pageSize, search,
+                plannedFrom, plannedTo, sort, repairCampaignId, repairCampaignStageId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WorkOrderDto> searchByCampaign(
+            WorkOrderStatus status,
+            String statusScope,
+            WorkOrderType type,
+            String typeScope,
+            UUID departmentId,
+            UUID equipmentId,
+            int page,
+            int pageSize,
+            String search,
+            Instant plannedFrom,
+            Instant plannedTo,
+            Sort sort,
+            UUID repairCampaignId,
+            UUID repairCampaignStageId
+    ) {
         var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
+        TypeFilter typeFilter = resolveTypeFilter(type, typeScope);
         Page<WorkOrder> resultPage = repository.findAll(
-                workOrderListSpecification(status, statusScope, departmentId, equipmentId, normalizeSearch(search), plannedFrom,
+                workOrderListSpecification(status, statusScope, typeFilter, departmentId, equipmentId, normalizeSearch(search), plannedFrom,
                         plannedTo, repairCampaignId, repairCampaignStageId),
                 pageable);
         return toDtoPage(resultPage);
@@ -362,6 +404,7 @@ public class WorkOrderService {
 
     private Specification<WorkOrder> workOrderListSpecification(WorkOrderStatus status,
                                                                 String statusScope,
+                                                                TypeFilter typeFilter,
                                                                 UUID departmentId,
                                                                 UUID equipmentId,
                                                                 String search,
@@ -376,6 +419,11 @@ public class WorkOrderService {
                 predicates.add(cb.equal(root.get("status"), status));
             } else if (completedOrClosedOnly(null, statusScope)) {
                 predicates.add(root.get("status").in(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED));
+            }
+            if (typeFilter != null && typeFilter.type() != null) {
+                predicates.add(cb.equal(root.get("type"), typeFilter.type()));
+            } else if (typeFilter != null && typeFilter.unplannedOnly()) {
+                predicates.add(root.get("type").in(WorkOrderType.EMERGENCY, WorkOrderType.DEFECT));
             }
             if (departmentId != null) {
                 predicates.add(cb.equal(root.get("departmentId"), departmentId));
@@ -499,6 +547,27 @@ public class WorkOrderService {
                 departmentId,
                 equipmentId,
                 normalizedSearch);
+        return toStatsResponse(stats);
+    }
+
+    @Transactional(readOnly = true)
+    public WorkOrderStatsResponse getStats(WorkOrderStatus status, String statusScope, WorkOrderType type, String typeScope,
+                                           UUID departmentId, UUID equipmentId, String search) {
+        String statusStr = status == null ? null : status.name();
+        String normalizedSearch = normalizeSearch(search);
+        TypeFilter typeFilter = resolveTypeFilter(type, typeScope);
+        var stats = repository.getWorkOrderStats(
+                statusStr,
+                completedOrClosedOnly(status, statusScope),
+                departmentId,
+                equipmentId,
+                normalizedSearch,
+                typeFilter.typeName(),
+                typeFilter.unplannedOnly());
+        return toStatsResponse(stats);
+    }
+
+    private WorkOrderStatsResponse toStatsResponse(WorkOrderStatsProjection stats) {
         return new WorkOrderStatsResponse(
                 stats.getTotalOrders() == null ? 0 : stats.getTotalOrders(),
                 stats.getOpenOrders() == null ? 0 : stats.getOpenOrders(),
@@ -515,6 +584,30 @@ public class WorkOrderService {
             return true;
         }
         throw RestException.badRequest("Unsupported work order statusScope: " + statusScope);
+    }
+
+    private TypeFilter resolveTypeFilter(WorkOrderType type, String typeScope) {
+        if (type != null) {
+            return new TypeFilter(type, false);
+        }
+        if (typeScope == null || typeScope.isBlank()) {
+            return TypeFilter.none();
+        }
+        String normalizedScope = typeScope.trim().toUpperCase(Locale.ROOT);
+        if (UNPLANNED_TYPE_SCOPE.equals(normalizedScope)) {
+            return new TypeFilter(null, true);
+        }
+        throw RestException.badRequest("Unsupported work order typeScope: " + typeScope);
+    }
+
+    private record TypeFilter(WorkOrderType type, boolean unplannedOnly) {
+        static TypeFilter none() {
+            return new TypeFilter(null, false);
+        }
+
+        String typeName() {
+            return type == null ? null : type.name();
+        }
     }
 
     @Transactional(readOnly = true)
