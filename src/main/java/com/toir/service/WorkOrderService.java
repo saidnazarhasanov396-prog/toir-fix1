@@ -136,6 +136,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -159,6 +160,7 @@ public class WorkOrderService {
     }
 
     private static final ZoneId CALENDAR_ZONE = ZoneId.of("Asia/Tashkent");
+    private static final String COMPLETED_OR_CLOSED_STATUS_SCOPE = "COMPLETED_OR_CLOSED";
 
     private final WorkOrderRepository repository;
     private final EquipmentRepository equipmentRepository;
@@ -275,11 +277,40 @@ public class WorkOrderService {
     }
 
     @Transactional(readOnly = true)
+    public Page<WorkOrderDto> search(WorkOrderStatus status, String statusScope, UUID departmentId, UUID equipmentId, int page,
+                                     int pageSize, String search, Instant plannedFrom, Instant plannedTo, Sort sort) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
+        var nativeQueryPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        String normalizedSearch = normalizeSearch(search);
+        String statusStr = status == null ? null : status.name();
+        Page<WorkOrder> resultPage = repository.searchPaginated(
+                statusStr,
+                completedOrClosedOnly(status, statusScope),
+                departmentId,
+                equipmentId,
+                normalizedSearch,
+                plannedFrom,
+                plannedTo,
+                nativeQueryPageable);
+        return toDtoPage(resultPage);
+    }
+
+    @Transactional(readOnly = true)
     public Page<WorkOrderDto> searchSorted(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page,
                                            int pageSize, String search, Instant plannedFrom, Instant plannedTo, Sort sort) {
         var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
         Page<WorkOrder> resultPage = repository.findAll(
-                workOrderListSpecification(status, departmentId, equipmentId, normalizeSearch(search), plannedFrom, plannedTo, null, null),
+                workOrderListSpecification(status, null, departmentId, equipmentId, normalizeSearch(search), plannedFrom, plannedTo, null, null),
+                pageable);
+        return toDtoPage(resultPage);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WorkOrderDto> searchSorted(WorkOrderStatus status, String statusScope, UUID departmentId, UUID equipmentId, int page,
+                                           int pageSize, String search, Instant plannedFrom, Instant plannedTo, Sort sort) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
+        Page<WorkOrder> resultPage = repository.findAll(
+                workOrderListSpecification(status, statusScope, departmentId, equipmentId, normalizeSearch(search), plannedFrom, plannedTo, null, null),
                 pageable);
         return toDtoPage(resultPage);
     }
@@ -300,13 +331,37 @@ public class WorkOrderService {
     ) {
         var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
         Page<WorkOrder> resultPage = repository.findAll(
-                workOrderListSpecification(status, departmentId, equipmentId, normalizeSearch(search), plannedFrom,
+                workOrderListSpecification(status, null, departmentId, equipmentId, normalizeSearch(search), plannedFrom,
+                        plannedTo, repairCampaignId, repairCampaignStageId),
+                pageable);
+        return toDtoPage(resultPage);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<WorkOrderDto> searchByCampaign(
+            WorkOrderStatus status,
+            String statusScope,
+            UUID departmentId,
+            UUID equipmentId,
+            int page,
+            int pageSize,
+            String search,
+            Instant plannedFrom,
+            Instant plannedTo,
+            Sort sort,
+            UUID repairCampaignId,
+            UUID repairCampaignStageId
+    ) {
+        var pageable = PaginationUtils.pageRequest(page, pageSize, sort);
+        Page<WorkOrder> resultPage = repository.findAll(
+                workOrderListSpecification(status, statusScope, departmentId, equipmentId, normalizeSearch(search), plannedFrom,
                         plannedTo, repairCampaignId, repairCampaignStageId),
                 pageable);
         return toDtoPage(resultPage);
     }
 
     private Specification<WorkOrder> workOrderListSpecification(WorkOrderStatus status,
+                                                                String statusScope,
                                                                 UUID departmentId,
                                                                 UUID equipmentId,
                                                                 String search,
@@ -319,6 +374,8 @@ public class WorkOrderService {
             predicates.add(cb.isFalse(root.get("isDeleted")));
             if (status != null) {
                 predicates.add(cb.equal(root.get("status"), status));
+            } else if (completedOrClosedOnly(null, statusScope)) {
+                predicates.add(root.get("status").in(WorkOrderStatus.COMPLETED, WorkOrderStatus.CLOSED));
             }
             if (departmentId != null) {
                 predicates.add(cb.equal(root.get("departmentId"), departmentId));
@@ -429,14 +486,35 @@ public class WorkOrderService {
 
     @Transactional(readOnly = true)
     public WorkOrderStatsResponse getStats(WorkOrderStatus status, UUID departmentId, UUID equipmentId, String search) {
+        return getStats(status, null, departmentId, equipmentId, search);
+    }
+
+    @Transactional(readOnly = true)
+    public WorkOrderStatsResponse getStats(WorkOrderStatus status, String statusScope, UUID departmentId, UUID equipmentId, String search) {
         String statusStr = status == null ? null : status.name();
         String normalizedSearch = normalizeSearch(search);
-        var stats = repository.getWorkOrderStats(statusStr, departmentId, equipmentId, normalizedSearch);
+        var stats = repository.getWorkOrderStats(
+                statusStr,
+                completedOrClosedOnly(status, statusScope),
+                departmentId,
+                equipmentId,
+                normalizedSearch);
         return new WorkOrderStatsResponse(
                 stats.getTotalOrders() == null ? 0 : stats.getTotalOrders(),
                 stats.getOpenOrders() == null ? 0 : stats.getOpenOrders(),
                 stats.getCompletedOrders() == null ? 0 : stats.getCompletedOrders(),
                 stats.getOverdueOrders() == null ? 0 : stats.getOverdueOrders());
+    }
+
+    private boolean completedOrClosedOnly(WorkOrderStatus status, String statusScope) {
+        if (status != null || statusScope == null || statusScope.isBlank()) {
+            return false;
+        }
+        String normalizedScope = statusScope.trim().toUpperCase(Locale.ROOT);
+        if (COMPLETED_OR_CLOSED_STATUS_SCOPE.equals(normalizedScope)) {
+            return true;
+        }
+        throw RestException.badRequest("Unsupported work order statusScope: " + statusScope);
     }
 
     @Transactional(readOnly = true)
