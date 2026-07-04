@@ -81,7 +81,11 @@ public class VehicleService {
     private final EmployeeRepository employeeRepository;
     private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
 
-    private static final Set<String> NUMERIC_SORT_FIELDS = Set.of(
+    private static final Set<String> DTO_SORT_FIELDS = Set.of(
+            "status",
+            "vehicleType",
+            "insuranceExpiryDate",
+            "technicalInspectionExpiryDate",
             "assignedDriverUsageLimitMinutes",
             "manufactureYear",
             "averageDailyUsage",
@@ -118,8 +122,8 @@ public class VehicleService {
                                         UUID mxikId, String search, int page, int pageSize, String sortBy, String sortDir) {
         int safePage = Math.max(page, 0);
         int safePageSize = Math.max(pageSize, 1);
-        boolean numericSort = isNumericSort(sortBy);
-        Pageable pageable = numericSort
+        boolean dtoSort = isDtoSort(sortBy);
+        Pageable pageable = dtoSort
                 ? Pageable.unpaged()
                 : org.springframework.data.domain.PageRequest.of(safePage, safePageSize);
         Page<Equipment> equipmentPage = mxikId == null
@@ -152,7 +156,7 @@ public class VehicleService {
                 })
                 .filter(Objects::nonNull)
                 .toList();
-        if (numericSort) {
+        if (dtoSort) {
             List<VehicleSummaryDto> sorted = items.stream()
                     .sorted(vehicleComparator(sortBy, sortDir))
                     .toList();
@@ -161,15 +165,19 @@ public class VehicleService {
         return new FixedTotalPage<>(items, enrichedEquipmentPage.getPageable(), enrichedEquipmentPage.getTotalElements());
     }
 
-    private boolean isNumericSort(String sortBy) {
+    private boolean isDtoSort(String sortBy) {
         if (sortBy == null || sortBy.isBlank()) {
             return false;
         }
-        return NUMERIC_SORT_FIELDS.contains(sortBy.trim());
+        return DTO_SORT_FIELDS.contains(sortBy.trim());
     }
 
     private Comparator<VehicleSummaryDto> vehicleComparator(String sortBy, String sortDir) {
         Comparator<VehicleSummaryDto> comparator = switch (sortBy.trim()) {
+            case "status" -> nullableComparator(VehicleSummaryDto::status);
+            case "vehicleType" -> nullableComparator(VehicleSummaryDto::vehicleType);
+            case "insuranceExpiryDate" -> nullableComparator(VehicleSummaryDto::insuranceExpiryDate);
+            case "technicalInspectionExpiryDate" -> nullableComparator(VehicleSummaryDto::technicalInspectionExpiryDate);
             case "assignedDriverUsageLimitMinutes" -> nullableComparator(VehicleSummaryDto::assignedDriverUsageLimitMinutes);
             case "manufactureYear" -> nullableComparator(VehicleSummaryDto::manufactureYear);
             case "averageDailyUsage" -> nullableComparator(VehicleSummaryDto::averageDailyUsage);

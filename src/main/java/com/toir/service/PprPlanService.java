@@ -85,7 +85,7 @@ public class PprPlanService {
             EnumSet.of(PlanStatus.DRAFT, PlanStatus.GENERATED);
     private static final Set<PlanStatus> PLAN_EXECUTION_STATUSES =
             EnumSet.of(PlanStatus.APPROVED, PlanStatus.IN_PROGRESS);
-    private static final Set<String> NUMERIC_SORT_FIELDS = Set.of("taskCount", "intervalHours");
+    private static final Set<String> LIST_SORT_FIELDS = Set.of("taskCount", "intervalHours", "status", "fromDate", "pprType");
 
 
     @Transactional(readOnly = true)
@@ -142,7 +142,7 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public Page<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId, int page, int size, String sortBy, String sortDir) {
-        if (isNumericSort(sortBy)) {
+        if (isListSort(sortBy)) {
             return PaginationUtils.page(sortIfRequested(findAll(year, month, day, departmentId), sortBy, sortDir), page, size);
         }
         validateDateFilterParts(year, month, day);
@@ -179,7 +179,7 @@ public class PprPlanService {
         if (equipmentId == null) {
             return findAll(year, month, day, departmentId, page, size, sortBy, sortDir);
         }
-        if (isNumericSort(sortBy)) {
+        if (isListSort(sortBy)) {
             return PaginationUtils.page(sortIfRequested(findAll(year, month, day, departmentId, equipmentId), sortBy, sortDir), page, size);
         }
         validateDateFilterParts(year, month, day);
@@ -208,21 +208,33 @@ public class PprPlanService {
         ));
     }
 
-    private boolean isNumericSort(String sortBy) {
+    private boolean isListSort(String sortBy) {
         if (sortBy == null || sortBy.isBlank()) {
             return false;
         }
-        return NUMERIC_SORT_FIELDS.contains(sortBy.trim());
+        return LIST_SORT_FIELDS.contains(sortBy.trim());
     }
 
     private List<PprPlanDto> sortIfRequested(List<PprPlanDto> plans, String sortBy, String sortDir) {
-        if (!isNumericSort(sortBy)) {
+        if (!isListSort(sortBy)) {
             return plans;
         }
         Comparator<PprPlanDto> comparator = switch (sortBy.trim()) {
             case "taskCount" -> Comparator.comparingLong(PprPlanDto::taskCount);
             case "intervalHours" -> Comparator.comparing(
                     PprPlanDto::intervalHours,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "status" -> Comparator.comparing(
+                    PprPlanDto::status,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "fromDate" -> Comparator.comparing(
+                    PprPlanDto::fromDate,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "pprType" -> Comparator.comparing(
+                    PprPlanDto::pprType,
                     Comparator.nullsLast(Comparator.naturalOrder())
             );
             default -> throw RestException.badRequest("Unsupported PPR plan sort: " + sortBy);
