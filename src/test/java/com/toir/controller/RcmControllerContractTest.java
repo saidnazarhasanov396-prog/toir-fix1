@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.dto.analytics.MetricExplanationStepDto;
 import com.toir.dto.rcm.EquipmentRiskScore;
+import com.toir.dto.rcm.RcmFailureForecastDto;
 import com.toir.dto.rcm.RiskExplanationDto;
 import com.toir.dto.rcm.RiskReasonCategory;
 import com.toir.dto.rcm.RiskReasonCode;
@@ -126,6 +127,16 @@ class RcmControllerContractTest {
                         new MetricExplanationStepDto("Final risk", 28, "/100")
                 )
         );
+        RcmFailureForecastDto forecast = new RcmFailureForecastDto(
+                "WITHIN_30_DAYS",
+                "Expected within 30 days",
+                Instant.parse("2026-07-20T00:00:00Z"),
+                120.0,
+                1800.0,
+                Instant.parse("2026-05-06T00:00:00Z"),
+                "MTBF + latest unplanned/emergency downtime",
+                "HIGH"
+        );
         when(service.computeAll("probability", "asc")).thenReturn(List.of(new EquipmentRiskScore(
                 equipmentId,
                 "EQ-200",
@@ -139,6 +150,7 @@ class RcmControllerContractTest {
                 3,
                 1800,
                 6,
+                forecast,
                 explanation
         )));
 
@@ -149,6 +161,9 @@ class RcmControllerContractTest {
                 .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
                 .andExpect(jsonPath("$.content[0].probability").value(4))
                 .andExpect(jsonPath("$.content[0].probabilityPercent").value(80))
+                .andExpect(jsonPath("$.content[0].failureForecast.status").value("WITHIN_30_DAYS"))
+                .andExpect(jsonPath("$.content[0].failureForecast.remainingHours").value(120.0))
+                .andExpect(jsonPath("$.content[0].failureForecast.expectedFailureAt").value("2026-07-20T00:00:00Z"))
                 .andExpect(jsonPath("$.content[0].reasons[0].code").value("OPEN_DEFECTS_HIGH"))
                 .andExpect(jsonPath("$.content[0].reasons[0].value").value(3))
                 .andExpect(jsonPath("$.content[0].explanation.reasons[0].code").value("OPEN_DEFECTS_HIGH"))

@@ -2,6 +2,7 @@ package com.toir.controller;
 
 import com.toir.dto.knowledge.KnowledgeArticleDto;
 import com.toir.dto.knowledge.KnowledgeArticleLinkDto;
+import com.toir.dto.knowledge.KnowledgeArticleSearchRequest;
 import com.toir.dto.knowledge.KnowledgeContextResponse;
 import com.toir.dto.knowledge.KnowledgeStatsResponse;
 import com.toir.entity.KnowledgeArticle;
@@ -15,6 +16,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -28,29 +31,128 @@ public class KnowledgeController {
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_READ')")
     public ResponseEntity<Page<KnowledgeArticleDto>> list(
+            @RequestParam(name = "q", required = false) String q,
             @RequestParam(name = "equipmentId", required = false) UUID equipmentId,
             @RequestParam(name = "equipmentTypeId", required = false) UUID equipmentTypeId,
-            @RequestParam(name = "kind", required = false) String kind,
+            @RequestParam(name = "kind", required = false) List<String> kinds,
+            @RequestParam(name = "targetType", required = false) KnowledgeTargetType targetType,
+            @RequestParam(name = "targetId", required = false) UUID targetId,
+            @RequestParam(name = "defectId", required = false) UUID defectId,
+            @RequestParam(name = "workOrderId", required = false) UUID workOrderId,
+            @RequestParam(name = "tag", required = false) List<String> tags,
+            @RequestParam(name = "createdFrom", required = false) Instant createdFrom,
+            @RequestParam(name = "createdTo", required = false) Instant createdTo,
+            @RequestParam(name = "updatedFrom", required = false) Instant updatedFrom,
+            @RequestParam(name = "updatedTo", required = false) Instant updatedTo,
+            @RequestParam(name = "hasLinks", required = false) Boolean hasLinks,
+            @RequestParam(name = "sort", required = false) String sort,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size
     ) {
+        if (!hasAdvancedFilters(q, kinds, targetType, targetId, defectId, workOrderId, tags,
+                createdFrom, createdTo, updatedFrom, updatedTo, hasLinks, sort)) {
+            return ResponseEntity.ok(service.list(equipmentId, equipmentTypeId, legacyKind(kinds), page, size));
+        }
 
-        return ResponseEntity.ok(service.list(
+        return ResponseEntity.ok(service.search(new KnowledgeArticleSearchRequest(
+                q,
+                kinds,
+                targetType,
+                targetId,
                 equipmentId,
                 equipmentTypeId,
-                kind,
+                defectId,
+                workOrderId,
+                tags,
+                createdFrom,
+                createdTo,
+                updatedFrom,
+                updatedTo,
+                hasLinks,
                 page,
-                size
-        ));
+                size,
+                sort
+        )));
+    }
+
+    private String legacyKind(List<String> kinds) {
+        if (kinds == null || kinds.isEmpty()) {
+            return null;
+        }
+        String kind = kinds.getFirst();
+        return kind == null || kind.isBlank() ? null : kind.trim();
+    }
+
+    private boolean hasAdvancedFilters(String q,
+                                       List<String> kinds,
+                                       KnowledgeTargetType targetType,
+                                       UUID targetId,
+                                       UUID defectId,
+                                       UUID workOrderId,
+                                       List<String> tags,
+                                       Instant createdFrom,
+                                       Instant createdTo,
+                                       Instant updatedFrom,
+                                       Instant updatedTo,
+                                       Boolean hasLinks,
+                                       String sort) {
+        return (q != null && !q.isBlank())
+                || (kinds != null && kinds.size() > 1)
+                || targetType != null
+                || targetId != null
+                || defectId != null
+                || workOrderId != null
+                || (tags != null && !tags.isEmpty())
+                || createdFrom != null
+                || createdTo != null
+                || updatedFrom != null
+                || updatedTo != null
+                || hasLinks != null
+                || (sort != null && !sort.isBlank());
     }
 
     @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('KNOWLEDGE_READ')")
     public ResponseEntity<KnowledgeStatsResponse> stats(
+            @RequestParam(name = "q", required = false) String q,
             @RequestParam(name = "equipmentId", required = false) UUID equipmentId,
             @RequestParam(name = "equipmentTypeId", required = false) UUID equipmentTypeId,
-            @RequestParam(name = "kind", required = false) String kind
+            @RequestParam(name = "kind", required = false) List<String> kinds,
+            @RequestParam(name = "targetType", required = false) KnowledgeTargetType targetType,
+            @RequestParam(name = "targetId", required = false) UUID targetId,
+            @RequestParam(name = "defectId", required = false) UUID defectId,
+            @RequestParam(name = "workOrderId", required = false) UUID workOrderId,
+            @RequestParam(name = "tag", required = false) List<String> tags,
+            @RequestParam(name = "createdFrom", required = false) Instant createdFrom,
+            @RequestParam(name = "createdTo", required = false) Instant createdTo,
+            @RequestParam(name = "updatedFrom", required = false) Instant updatedFrom,
+            @RequestParam(name = "updatedTo", required = false) Instant updatedTo,
+            @RequestParam(name = "hasLinks", required = false) Boolean hasLinks
     ) {
-        return ResponseEntity.ok(service.getStats(equipmentId, equipmentTypeId, kind));
+        if (!hasAdvancedFilters(q, kinds, targetType, targetId, defectId, workOrderId, tags,
+                createdFrom, createdTo, updatedFrom, updatedTo, hasLinks, null)) {
+            return ResponseEntity.ok(service.getStats(equipmentId, equipmentTypeId, legacyKind(kinds)));
+        }
+
+        return ResponseEntity.ok(service.getStats(new KnowledgeArticleSearchRequest(
+                q,
+                kinds,
+                targetType,
+                targetId,
+                equipmentId,
+                equipmentTypeId,
+                defectId,
+                workOrderId,
+                tags,
+                createdFrom,
+                createdTo,
+                updatedFrom,
+                updatedTo,
+                hasLinks,
+                0,
+                1,
+                null
+        )));
     }
 
     @GetMapping("/context")

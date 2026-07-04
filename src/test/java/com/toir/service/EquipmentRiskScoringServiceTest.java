@@ -33,7 +33,8 @@ class EquipmentRiskScoringServiceTest {
                 10,
                 12,
                 0,
-                0
+                0,
+                null
         );
 
         EquipmentRiskScoringResult result = service.score(evidence);
@@ -73,7 +74,8 @@ class EquipmentRiskScoringServiceTest {
                 2,
                 0,
                 0,
-                0
+                0,
+                null
         );
 
         EquipmentRiskScoringResult result = service.score(evidence);
@@ -105,7 +107,8 @@ class EquipmentRiskScoringServiceTest {
                 30,
                 30,
                 3,
-                1
+                1,
+                null
         );
 
         EquipmentRiskScoringResult result = service.score(evidence);

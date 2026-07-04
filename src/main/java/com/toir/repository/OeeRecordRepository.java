@@ -45,4 +45,48 @@ public interface OeeRecordRepository extends JpaRepository<OeeRecord, UUID> {
 
     @Query(value = "SELECT * FROM oee_records WHERE shift_start BETWEEN :from AND :to AND is_deleted = false ORDER BY shift_start ASC", nativeQuery = true)
     List<OeeRecord> findAllByShiftStartBetweenAndIsDeletedFalse(@Param("from") Instant from, @Param("to") Instant to);
+
+
+    @Query("""
+            select r
+            from OeeRecord r
+            where r.isDeleted = false
+              and (:equipmentId is null or r.equipmentId = :equipmentId)
+              and (:from is null or r.shiftStart >= :from)
+              and (:to is null or r.shiftStart <= :to)
+              and (:equipmentSearch is null or exists (
+                  select 1 from Equipment e
+                  where e.id = r.equipmentId
+                    and e.isDeleted = false
+                    and (
+                        lower(coalesce(e.code, '')) like :equipmentSearch
+                        or lower(coalesce(e.name, '')) like :equipmentSearch
+                        or lower(coalesce(e.inventoryNumber, '')) like :equipmentSearch
+                        or lower(coalesce(e.technicalNumber, '')) like :equipmentSearch
+                        or lower(coalesce(e.serialNumber, '')) like :equipmentSearch
+                    )
+              ))
+              and (:departmentId is null or exists (
+                  select 1 from Equipment e
+                  where e.id = r.equipmentId
+                    and e.isDeleted = false
+                    and coalesce(e.responsibleDepartmentId, e.departmentId) = :departmentId
+              ))
+              and (:equipmentTypeId is null or exists (
+                  select 1 from Equipment e
+                  where e.id = r.equipmentId
+                    and e.isDeleted = false
+                    and e.equipmentTypeId = :equipmentTypeId
+              ))
+            order by r.shiftStart desc
+            """)
+    List<OeeRecord> search(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("equipmentSearch") String equipmentSearch,
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentTypeId") UUID equipmentTypeId,
+            @Param("from") Instant from,
+            @Param("to") Instant to
+    );
+
 }

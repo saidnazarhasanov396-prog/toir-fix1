@@ -120,7 +120,7 @@ class KnowledgeControllerContractTest {
 
     @Test
     void listWithBlankKindReturns200() throws Exception {
-        when(service.list(isNull(), isNull(), eq("   "), eq(0), eq(10)))
+        when(service.list(isNull(), isNull(), isNull(), eq(0), eq(10)))
                 .thenReturn(page(List.of(), 0, 10, 0));
 
         mockMvc.perform(get("/api/v1/knowledge")

@@ -17,6 +17,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -27,7 +29,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -61,52 +65,62 @@ class KnowledgeServiceTest {
 
     @Test
     void listWithNoFiltersReturnsEmptyPage() {
-        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(repository.search(any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
 
         Page<KnowledgeArticleDto> page = service.list(null, null, null, 0, 10);
 
         assertThat(page.getContent()).isEmpty();
         assertThat(page.getTotalElements()).isZero();
-        verify(repository).findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        verify(repository).search(any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void listWithEquipmentFilterReturns200CompatibleData() {
         UUID equipmentId = UUID.randomUUID();
-        when(repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId))
-                .thenReturn(List.of(article("KB-1", "Pump alignment")));
+        when(repository.search(any(), anyBoolean(), any(), any(), any(), eq(equipmentId), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(article("KB-1", "Pump alignment")), PageRequest.of(0, 10), 1));
 
         Page<KnowledgeArticleDto> page = service.list(equipmentId, null, null, 0, 10);
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).code()).isEqualTo("KB-1");
-        verify(repository).findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
+        verify(repository).search(any(), anyBoolean(), any(), any(), any(), eq(equipmentId), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void listWithEquipmentTypeFilterReturns200CompatibleData() {
         UUID equipmentTypeId = UUID.randomUUID();
-        when(repository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId))
-                .thenReturn(List.of(article("KB-1T", "Type guide")));
+        when(repository.search(any(), anyBoolean(), any(), any(), any(), any(), eq(equipmentTypeId), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(article("KB-1T", "Type guide")), PageRequest.of(0, 10), 1));
 
         Page<KnowledgeArticleDto> page = service.list(null, equipmentTypeId, null, 0, 10);
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).code()).isEqualTo("KB-1T");
-        verify(repository).findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId);
+        verify(repository).search(any(), anyBoolean(), any(), any(), any(), any(), eq(equipmentTypeId), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void listWithBlankKindFallsBackToDefaultQueryAndNormalizesTags() {
         KnowledgeArticle article = article("KB-2", "No tags item");
         article.setTags(null);
-        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(article));
+        when(repository.search(any(), eq(true), any(), any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(article), PageRequest.of(0, 10), 1));
 
         Page<KnowledgeArticleDto> page = service.list(null, null, "   ", 0, 10);
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).tags()).isEmpty();
-        verify(repository).findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        verify(repository).search(any(), eq(true), any(), any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any());
         verify(repository, never()).findAllByKindAndIsDeletedFalse("   ");
     }
 
@@ -114,14 +128,16 @@ class KnowledgeServiceTest {
     void listWithKindFilterUsesKindQuery() {
         KnowledgeArticle procedure = article("KB-3", "Procedure");
         procedure.setKind("PROCEDURE");
-        when(repository.findAllByKindAndIsDeletedFalse("PROCEDURE"))
-                .thenReturn(List.of(procedure));
+        when(repository.search(any(), eq(false), any(), any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(procedure), PageRequest.of(0, 10), 1));
 
         Page<KnowledgeArticleDto> page = service.list(null, null, "PROCEDURE", 0, 10);
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).kind()).isEqualTo("PROCEDURE");
-        verify(repository).findAllByKindAndIsDeletedFalse("PROCEDURE");
+        verify(repository).search(any(), eq(false), any(), any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

@@ -24,6 +24,7 @@ import com.toir.repository.CriticalityClassRepository;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.RcmSnapshotRepository;
 import com.toir.repository.ReliabilityMetricRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
@@ -35,6 +36,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -70,6 +72,9 @@ class RcmServiceTest {
     RepairRequestRepository repairRequestRepository;
 
     @Mock
+    WorkOrderRepository workOrderRepository;
+
+    @Mock
     MaintenanceDueEventRepository maintenanceDueEventRepository;
 
     @Mock
@@ -86,6 +91,7 @@ class RcmServiceTest {
                 defectRepository,
                 reliabilityMetricRepository,
                 downtimeEventRepository,
+                workOrderRepository,
                 repairRequestRepository,
                 maintenanceDueEventRepository
         );
@@ -94,6 +100,7 @@ class RcmServiceTest {
                 snapshotRepository,
                 evidenceService,
                 new EquipmentRiskScoringService(),
+                new RcmFailureForecastService(),
                 metricExplanationService
         );
     }
@@ -152,6 +159,7 @@ class RcmServiceTest {
         ));
         when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
         when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
         when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
 
@@ -240,6 +248,7 @@ class RcmServiceTest {
                 .thenReturn(List.of(reliabilityMetric(equipmentId, 1500, 30)));
         when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId)))
                 .thenReturn(List.of(downtimeEvent(equipmentId, 30 * 60)));
+        when(workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
         when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId)))
                 .thenReturn(List.of(repairRequest(equipmentId, PriorityLevel.EMERGENCY, RequestStatus.OPEN)));
         when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
@@ -260,6 +269,84 @@ class RcmServiceTest {
                         "OPEN_HIGH_REPAIR_REQUEST",
                         "EQUIPMENT_UNAVAILABLE"
                 );
+    }
+
+    @Test
+    void riskScoreIncludesMtbfBasedFailureForecastWhenLastFailureExists() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        Instant lastFailure = Instant.now().minus(Duration.ofHours(90));
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(reliabilityMetric(equipmentId, 100, 4)));
+        when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(downtimeEvent(equipmentId, lastFailure)));
+        when(workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+
+        EquipmentRiskScore score = service.computeAll("ru").getFirst();
+
+        assertThat(score.failureForecast()).isNotNull();
+        assertThat(score.failureForecast().status()).isEqualTo("WITHIN_7_DAYS");
+        assertThat(score.failureForecast().expectedFailureAt()).isEqualTo(lastFailure.plus(Duration.ofHours(100)));
+        assertThat(score.failureForecast().mtbfHours()).isEqualTo(100);
+        assertThat(score.failureForecast().lastFailureAt()).isEqualTo(lastFailure);
+    }
+
+    @Test
+    void riskScoreUsesCalculatedReliabilityWhenStoredMetricIsMissing() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        equipment.setOperationStartDate(LocalDate.now().minusDays(30));
+        Instant lastFailure = Instant.now().minus(Duration.ofDays(2));
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(downtimeEvent(equipmentId, lastFailure)));
+        when(workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+
+        EquipmentRiskScore score = service.computeAll("ru").getFirst();
+
+        assertThat(score.mtbfHours()).isGreaterThan(0);
+        assertThat(score.failureForecast().status()).isNotEqualTo("INSUFFICIENT_DATA");
+        assertThat(score.failureForecast().mtbfHours()).isEqualTo(score.mtbfHours());
+    }
+
+    @Test
+    void riskScoreShowsImmediateActionWithoutDateWhenOpenDefectsDriveProbability() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                openDefect(equipmentId),
+                openDefect(equipmentId),
+                openDefect(equipmentId),
+                openDefect(equipmentId),
+                openDefect(equipmentId)
+        ));
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+
+        EquipmentRiskScore score = service.computeAll("ru").getFirst();
+
+        assertThat(score.probability()).isEqualTo(5);
+        assertThat(score.failureForecast().status()).isEqualTo("DUE_NOW_FROM_OPEN_DEFECTS");
+        assertThat(score.failureForecast().expectedFailureAt()).isNull();
+        assertThat(score.failureForecast().label()).contains("Срок не рассчитан");
     }
 
     @Test
@@ -400,6 +487,17 @@ class RcmServiceTest {
         return event;
     }
 
+    private DowntimeEvent downtimeEvent(UUID equipmentId, Instant failureAt) {
+        DowntimeEvent event = new DowntimeEvent();
+        event.setEquipmentId(equipmentId);
+        event.setDepartmentId(UUID.randomUUID());
+        event.setStartAt(failureAt.minus(Duration.ofHours(2)));
+        event.setEndAt(failureAt);
+        event.setDurationMinutes(120);
+        event.setType(DowntimeType.UNPLANNED);
+        return event;
+    }
+
     private RepairRequest repairRequest(UUID equipmentId, PriorityLevel priority, RequestStatus status) {
         RepairRequest request = new RepairRequest();
         request.setEquipmentId(equipmentId);
@@ -427,6 +525,7 @@ class RcmServiceTest {
         when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+        when(workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(any())).thenReturn(List.of());
         when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(any())).thenReturn(List.of());
         when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
     }
