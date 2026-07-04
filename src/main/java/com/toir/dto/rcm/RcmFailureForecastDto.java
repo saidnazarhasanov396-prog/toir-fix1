@@ -1,5 +1,6 @@
 package com.toir.dto.rcm;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
@@ -8,10 +9,10 @@ import java.time.Instant;
 public record RcmFailureForecastDto(
         String status,
         String label,
-        Instant expectedFailureAt,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Instant expectedFailureAt,
         Double remainingHours,
         Double mtbfHours,
-        Instant lastFailureAt,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Instant lastFailureAt,
         String basis,
         String confidence
 ) {

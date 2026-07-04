@@ -51,8 +51,7 @@ public class KnowledgeController {
     ) {
         if (!hasAdvancedFilters(q, kinds, targetType, targetId, defectId, workOrderId, tags,
                 createdFrom, createdTo, updatedFrom, updatedTo, hasLinks, sort)) {
-            String legacyKind = kinds == null || kinds.isEmpty() ? null : kinds.getFirst();
-            return ResponseEntity.ok(service.list(equipmentId, equipmentTypeId, legacyKind, page, size));
+            return ResponseEntity.ok(service.list(equipmentId, equipmentTypeId, legacyKind(kinds), page, size));
         }
 
         return ResponseEntity.ok(service.search(new KnowledgeArticleSearchRequest(
@@ -74,6 +73,14 @@ public class KnowledgeController {
                 size,
                 sort
         )));
+    }
+
+    private String legacyKind(List<String> kinds) {
+        if (kinds == null || kinds.isEmpty()) {
+            return null;
+        }
+        String kind = kinds.getFirst();
+        return kind == null || kind.isBlank() ? null : kind.trim();
     }
 
     private boolean hasAdvancedFilters(String q,
@@ -124,8 +131,7 @@ public class KnowledgeController {
     ) {
         if (!hasAdvancedFilters(q, kinds, targetType, targetId, defectId, workOrderId, tags,
                 createdFrom, createdTo, updatedFrom, updatedTo, hasLinks, null)) {
-            String legacyKind = kinds == null || kinds.isEmpty() ? null : kinds.getFirst();
-            return ResponseEntity.ok(service.getStats(equipmentId, equipmentTypeId, legacyKind));
+            return ResponseEntity.ok(service.getStats(equipmentId, equipmentTypeId, legacyKind(kinds)));
         }
 
         return ResponseEntity.ok(service.getStats(new KnowledgeArticleSearchRequest(

@@ -11,6 +11,8 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.service.KnowledgeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.Year;
@@ -20,6 +22,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -46,7 +49,9 @@ class KnowledgePbacScopeTest {
 
     @Test
     void broadKnowledgeReadRemainsGlobalWhenNoScopedFilterIsRequested() {
-        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(article(null)));
+        when(repository.search(any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(article(null)), PageRequest.of(0, 20), 1));
 
         service.list(null, null, null, 0, 20);
 
