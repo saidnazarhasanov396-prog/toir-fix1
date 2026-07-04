@@ -1,11 +1,21 @@
 package com.toir.repository;
 
 import com.toir.entity.OeeRecord;
+import com.toir.entity.equipment.Equipment;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,7 +23,7 @@ import org.springframework.stereotype.Repository;
 
 
 @Repository
-public interface OeeRecordRepository extends JpaRepository<OeeRecord, UUID> {
+public interface OeeRecordRepository extends JpaRepository<OeeRecord, UUID>, JpaSpecificationExecutor<OeeRecord> {
     @Query(value = "SELECT * FROM oee_records WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<OeeRecord> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
@@ -46,47 +56,120 @@ public interface OeeRecordRepository extends JpaRepository<OeeRecord, UUID> {
     @Query(value = "SELECT * FROM oee_records WHERE shift_start BETWEEN :from AND :to AND is_deleted = false ORDER BY shift_start ASC", nativeQuery = true)
     List<OeeRecord> findAllByShiftStartBetweenAndIsDeletedFalse(@Param("from") Instant from, @Param("to") Instant to);
 
+    default List<OeeRecord> search(
+            UUID equipmentId,
+            String equipmentSearch,
+            UUID departmentId,
+            UUID equipmentTypeId,
+            Instant from,
+            Instant to
+    ) {
+        return findAll(
+                searchSpecification(equipmentId, equipmentSearch, departmentId, equipmentTypeId, from, to),
+                Sort.by(Sort.Direction.DESC, "shiftStart")
+        );
+    }
 
-    @Query("""
-            select r
-            from OeeRecord r
-            where r.isDeleted = false
-              and (:equipmentId is null or r.equipmentId = :equipmentId)
-              and (:from is null or r.shiftStart >= :from)
-              and (:to is null or r.shiftStart <= :to)
-              and (:equipmentSearch is null or exists (
-                  select 1 from Equipment e
-                  where e.id = r.equipmentId
-                    and e.isDeleted = false
-                    and (
-                        lower(coalesce(e.code, '')) like :equipmentSearch
-                        or lower(coalesce(e.name, '')) like :equipmentSearch
-                        or lower(coalesce(e.inventoryNumber, '')) like :equipmentSearch
-                        or lower(coalesce(e.technicalNumber, '')) like :equipmentSearch
-                        or lower(coalesce(e.serialNumber, '')) like :equipmentSearch
-                    )
-              ))
-              and (:departmentId is null or exists (
-                  select 1 from Equipment e
-                  where e.id = r.equipmentId
-                    and e.isDeleted = false
-                    and coalesce(e.responsibleDepartmentId, e.departmentId) = :departmentId
-              ))
-              and (:equipmentTypeId is null or exists (
-                  select 1 from Equipment e
-                  where e.id = r.equipmentId
-                    and e.isDeleted = false
-                    and e.equipmentTypeId = :equipmentTypeId
-              ))
-            order by r.shiftStart desc
-            """)
-    List<OeeRecord> search(
-            @Param("equipmentId") UUID equipmentId,
-            @Param("equipmentSearch") String equipmentSearch,
-            @Param("departmentId") UUID departmentId,
-            @Param("equipmentTypeId") UUID equipmentTypeId,
-            @Param("from") Instant from,
-            @Param("to") Instant to
-    );
+    private static Specification<OeeRecord> searchSpecification(
+            UUID equipmentId,
+            String equipmentSearch,
+            UUID departmentId,
+            UUID equipmentTypeId,
+            Instant from,
+            Instant to
+    ) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.isFalse(root.get("isDeleted")));
+
+            if (equipmentId != null) {
+                predicates.add(cb.equal(root.get("equipmentId"), equipmentId));
+            }
+            if (from != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("shiftStart"), from));
+            }
+            if (to != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("shiftStart"), to));
+            }
+            if (equipmentSearch != null) {
+                predicates.add(equipmentSearchMatches(root, query, cb, equipmentSearch));
+            }
+            if (departmentId != null) {
+                predicates.add(equipmentDepartmentMatches(root, query, cb, departmentId));
+            }
+            if (equipmentTypeId != null) {
+                predicates.add(equipmentTypeMatches(root, query, cb, equipmentTypeId));
+            }
+
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+    }
+
+    private static Predicate equipmentSearchMatches(
+            Root<OeeRecord> root,
+            jakarta.persistence.criteria.CriteriaQuery<?> query,
+            CriteriaBuilder cb,
+            String equipmentSearch
+    ) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<Equipment> equipment = subquery.from(Equipment.class);
+        subquery.select(cb.literal(1));
+        subquery.where(
+                cb.equal(equipment.get("id"), root.get("equipmentId")),
+                cb.isFalse(equipment.get("isDeleted")),
+                cb.or(
+                        contains(cb, equipment.get("code"), equipmentSearch),
+                        contains(cb, equipment.get("name"), equipmentSearch),
+                        contains(cb, equipment.get("inventoryNumber"), equipmentSearch),
+                        contains(cb, equipment.get("technicalNumber"), equipmentSearch),
+                        contains(cb, equipment.get("serialNumber"), equipmentSearch)
+                )
+        );
+        return cb.exists(subquery);
+    }
+
+    private static Predicate equipmentDepartmentMatches(
+            Root<OeeRecord> root,
+            jakarta.persistence.criteria.CriteriaQuery<?> query,
+            CriteriaBuilder cb,
+            UUID departmentId
+    ) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<Equipment> equipment = subquery.from(Equipment.class);
+        subquery.select(cb.literal(1));
+        subquery.where(
+                cb.equal(equipment.get("id"), root.get("equipmentId")),
+                cb.isFalse(equipment.get("isDeleted")),
+                cb.or(
+                        cb.equal(equipment.get("responsibleDepartmentId"), departmentId),
+                        cb.and(
+                                cb.isNull(equipment.get("responsibleDepartmentId")),
+                                cb.equal(equipment.get("departmentId"), departmentId)
+                        )
+                )
+        );
+        return cb.exists(subquery);
+    }
+
+    private static Predicate equipmentTypeMatches(
+            Root<OeeRecord> root,
+            jakarta.persistence.criteria.CriteriaQuery<?> query,
+            CriteriaBuilder cb,
+            UUID equipmentTypeId
+    ) {
+        Subquery<Integer> subquery = query.subquery(Integer.class);
+        Root<Equipment> equipment = subquery.from(Equipment.class);
+        subquery.select(cb.literal(1));
+        subquery.where(
+                cb.equal(equipment.get("id"), root.get("equipmentId")),
+                cb.isFalse(equipment.get("isDeleted")),
+                cb.equal(equipment.get("equipmentTypeId"), equipmentTypeId)
+        );
+        return cb.exists(subquery);
+    }
+
+    private static Predicate contains(CriteriaBuilder cb, Expression<String> value, String pattern) {
+        return cb.like(cb.lower(cb.coalesce(value, "")), pattern);
+    }
 
 }
