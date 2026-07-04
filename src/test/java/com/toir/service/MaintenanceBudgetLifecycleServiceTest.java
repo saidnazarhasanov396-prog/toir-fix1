@@ -174,6 +174,23 @@ class MaintenanceBudgetLifecycleServiceTest {
                 .hasMessageContaining("below approved actual and committed amounts");
     }
 
+    @Test
+    void reviseAllowedOnLockedBudgetForResponsibleFinanceUser() {
+        UUID budgetId = UUID.randomUUID();
+        UUID lineId = UUID.randomUUID();
+        MaintenanceBudget budget = budget(budgetId, BudgetStatus.LOCKED);
+        BudgetLine line = line(lineId, budget, 500, 0);
+        budget.getLines().add(line);
+        budget.setTotalPlanned(500);
+        when(repository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(budget));
+        when(lineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+
+        MaintenanceBudgetDto result = service.reviseLine(budgetId, lineId, 800, UUID.randomUUID(), "unplanned absorb");
+
+        assertThat(line.getPlannedAmount()).isEqualTo(800);
+        assertThat(result.totalPlanned()).isEqualTo(800);
+    }
+
     private MaintenanceBudget budget(UUID id, BudgetStatus status) {
         MaintenanceBudget budget = new MaintenanceBudget();
         budget.setId(id);
