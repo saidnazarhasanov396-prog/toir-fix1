@@ -7,6 +7,7 @@ import com.toir.entity.equipment.CriticalityClass;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.DowntimeType;
 import com.toir.enums.MaintenanceDueEventStatus;
@@ -16,6 +17,7 @@ import com.toir.enums.RequestStatus;
 import com.toir.repository.CriticalityClassRepository;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.ReliabilityMetricRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.repair.RepairRequestRepository;
@@ -45,6 +47,7 @@ public class EquipmentRiskEvidenceService {
     private final DefectRepository defectRepository;
     private final ReliabilityMetricRepository reliabilityMetricRepository;
     private final DowntimeEventRepository downtimeEventRepository;
+    private final WorkOrderRepository workOrderRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final MaintenanceDueEventRepository maintenanceDueEventRepository;
 
@@ -71,10 +74,23 @@ public class EquipmentRiskEvidenceService {
                 .collect(Collectors.groupingBy(Defect::getEquipmentId));
 
         Map<UUID, ReliabilityMetric> metricByEquipment = latestMetricsByEquipment(equipmentIdSet);
-        Map<UUID, Double> downtimeHoursByEquipment = recentDowntimeHoursByEquipment(equipmentIds);
-        Map<UUID, Instant> lastFailureAtByEquipment = lastFailureAtByEquipment(equipmentIds);
-        Map<UUID, Long> openHighRepairRequestsByEquipment = openHighRepairRequestsByEquipment(equipmentIds);
+        List<DowntimeEvent> downtimeEvents = downtimeEventsFor(equipmentIds);
+        List<WorkOrder> workOrders = workOrdersFor(equipmentIds);
+        List<RepairRequest> repairRequests = repairRequestsFor(equipmentIds);
+        Map<UUID, List<DowntimeEvent>> downtimesByEquipment = downtimeEvents.stream()
+                .filter(event -> event.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(DowntimeEvent::getEquipmentId));
+        Map<UUID, List<WorkOrder>> workOrdersByEquipment = workOrders.stream()
+                .filter(workOrder -> workOrder.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(WorkOrder::getEquipmentId));
+        Map<UUID, List<RepairRequest>> repairRequestsByEquipment = repairRequests.stream()
+                .filter(request -> request.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(RepairRequest::getEquipmentId));
+        Map<UUID, Double> downtimeHoursByEquipment = recentDowntimeHoursByEquipment(downtimeEvents);
+        Map<UUID, Instant> lastFailureAtByEquipment = lastFailureAtByEquipment(downtimeEvents);
+        Map<UUID, Long> openHighRepairRequestsByEquipment = openHighRepairRequestsByEquipment(repairRequests);
         Map<UUID, Long> overdueMaintenanceByEquipment = overdueMaintenanceByEquipment(equipmentIdSet);
+        Instant now = Instant.now();
 
         Map<UUID, EquipmentRiskEvidence> evidenceByEquipment = new HashMap<>();
         for (Equipment item : equipment) {
@@ -83,6 +99,20 @@ public class EquipmentRiskEvidenceService {
                     : criticalityById.get(item.getCriticalityClassId());
             List<Defect> openDefects = openDefectsByEquipment.getOrDefault(item.getId(), List.of());
             ReliabilityMetric metric = metricByEquipment.get(item.getId());
+            ReliabilityDowntimeCalculator.EquipmentReliability calculated = ReliabilityDowntimeCalculator.calculate(
+                    item,
+                    downtimesByEquipment.getOrDefault(item.getId(), List.of()),
+                    workOrdersByEquipment.getOrDefault(item.getId(), List.of()),
+                    repairRequestsByEquipment.getOrDefault(item.getId(), List.of()),
+                    now);
+            double mtbfHours = metricOrCalculatedHours(
+                    metric != null ? metric.getMtbfHours() : null,
+                    calculated.mtbfHours(),
+                    calculated.failureEvents());
+            double mttrHours = metricOrCalculatedHours(
+                    metric != null ? metric.getMttrHours() : null,
+                    calculated.mttrHours(),
+                    calculated.failureEvents());
 
             evidenceByEquipment.put(item.getId(), new EquipmentRiskEvidence(
                     item.getId(),
@@ -97,8 +127,8 @@ public class EquipmentRiskEvidenceService {
                     criticalityClass == null ? 0 : nz(criticalityClass.getEnergyImpact()),
                     openDefects.size(),
                     openDefects.stream().filter(defect -> defect.getRecurrenceCount() > 0).count(),
-                    metric != null && metric.getMtbfHours() != null ? metric.getMtbfHours() : 0,
-                    metric != null && metric.getMttrHours() != null ? metric.getMttrHours() : 0,
+                    mtbfHours,
+                    mttrHours,
                     downtimeHoursByEquipment.getOrDefault(item.getId(), 0.0),
                     overdueMaintenanceByEquipment.getOrDefault(item.getId(), 0L),
                     openHighRepairRequestsByEquipment.getOrDefault(item.getId(), 0L),
@@ -149,12 +179,34 @@ public class EquipmentRiskEvidenceService {
         return first;
     }
 
-    private Map<UUID, Double> recentDowntimeHoursByEquipment(Collection<UUID> equipmentIds) {
+    private List<DowntimeEvent> downtimeEventsFor(Collection<UUID> equipmentIds) {
         if (equipmentIds.isEmpty()) {
-            return Map.of();
+            return List.of();
         }
+        List<DowntimeEvent> events = downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds);
+        return events == null ? List.of() : events;
+    }
+
+    private List<WorkOrder> workOrdersFor(Collection<UUID> equipmentIds) {
+        if (equipmentIds.isEmpty()) {
+            return List.of();
+        }
+        List<WorkOrder> workOrders = workOrderRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds);
+        return workOrders == null ? List.of() : workOrders;
+    }
+
+    private List<RepairRequest> repairRequestsFor(Collection<UUID> equipmentIds) {
+        if (equipmentIds.isEmpty()) {
+            return List.of();
+        }
+        List<RepairRequest> requests = repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds);
+        return requests == null ? List.of() : requests;
+    }
+
+    private Map<UUID, Double> recentDowntimeHoursByEquipment(Collection<DowntimeEvent> downtimeEvents) {
         Instant cutoff = Instant.now().minus(RECENT_DOWNTIME_WINDOW);
-        return downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
+        return downtimeEvents.stream()
+                .filter(event -> event.getEquipmentId() != null)
                 .filter(event -> event.getStartAt() != null && !event.getStartAt().isBefore(cutoff))
                 .collect(Collectors.groupingBy(
                         DowntimeEvent::getEquipmentId,
@@ -162,11 +214,9 @@ public class EquipmentRiskEvidenceService {
                 ));
     }
 
-    private Map<UUID, Instant> lastFailureAtByEquipment(Collection<UUID> equipmentIds) {
-        if (equipmentIds.isEmpty()) {
-            return Map.of();
-        }
-        return downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
+    private Map<UUID, Instant> lastFailureAtByEquipment(Collection<DowntimeEvent> downtimeEvents) {
+        return downtimeEvents.stream()
+                .filter(event -> event.getEquipmentId() != null)
                 .filter(event -> event.getType() == DowntimeType.UNPLANNED || event.getType() == DowntimeType.EMERGENCY)
                 .filter(event -> event.getStartAt() != null)
                 .collect(Collectors.toMap(
@@ -176,11 +226,9 @@ public class EquipmentRiskEvidenceService {
                 ));
     }
 
-    private Map<UUID, Long> openHighRepairRequestsByEquipment(Collection<UUID> equipmentIds) {
-        if (equipmentIds.isEmpty()) {
-            return Map.of();
-        }
-        return repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
+    private Map<UUID, Long> openHighRepairRequestsByEquipment(Collection<RepairRequest> repairRequests) {
+        return repairRequests.stream()
+                .filter(request -> request.getEquipmentId() != null)
                 .filter(request -> isOpenRepairRequest(request.getStatus()))
                 .filter(request -> isHighRepairPriority(request.getPriority()))
                 .collect(Collectors.groupingBy(RepairRequest::getEquipmentId, Collectors.counting()));
@@ -229,6 +277,16 @@ public class EquipmentRiskEvidenceService {
         }
         if (event.getStartAt() != null && event.getEndAt() != null && event.getEndAt().isAfter(event.getStartAt())) {
             return Duration.between(event.getStartAt(), event.getEndAt()).toMinutes() / 60.0;
+        }
+        return 0;
+    }
+
+    private double metricOrCalculatedHours(Double storedValue, Double calculatedValue, int calculatedFailureEvents) {
+        if (storedValue != null) {
+            return storedValue;
+        }
+        if (calculatedFailureEvents > 0 && calculatedValue != null) {
+            return calculatedValue;
         }
         return 0;
     }
