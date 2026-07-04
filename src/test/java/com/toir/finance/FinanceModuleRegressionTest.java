@@ -549,6 +549,141 @@ class FinanceModuleRegressionTest {
     }
 
     @Nested
+    class Phase7EndToEndValidation {
+
+        @Test
+        void allUpgradePoliciesEnabledForSignOff() {
+            assertThat(FinanceUpgradePolicy.UNIFIED_AVAILABLE_FORMULA).isTrue();
+            assertThat(FinanceUpgradePolicy.PROCUREMENT_COMMIT_ON_ALLOCATE).isTrue();
+            assertThat(FinanceUpgradePolicy.DIRECT_ACTUAL_COST_COMMIT_ON_CREATE).isTrue();
+            assertThat(FinanceUpgradePolicy.PROCUREMENT_RECEIPT_COMMIT_ON_CREATE).isFalse();
+            assertThat(FinanceUpgradePolicy.RELEASE_COMMITMENT_ON_ACTUAL_REJECT).isTrue();
+            assertThat(FinanceUpgradePolicy.REQUIRE_BUDGET_LINE_ON_APPROVE).isTrue();
+            assertThat(FinanceUpgradePolicy.RECEIPT_CATEGORY_FOLLOWS_BUDGET_LINE).isTrue();
+            assertThat(FinanceUpgradePolicy.DEPARTMENT_SCOPED_REVIEW_QUEUE).isTrue();
+            assertThat(FinanceUpgradePolicy.ACTUAL_METRIC_APPROVED_ONLY).isTrue();
+        }
+
+        @Test
+        void reportsAndSummaryShareRemainingFormula() {
+            double planned = 230_000;
+            double approved = 300_000;
+            double committed = 50_000;
+
+            double reportRemaining = FinanceBudgetMath.remainingBudget(planned, approved, committed);
+            double summaryAvailable = FinanceBudgetMath.remainingBudget(planned, approved, committed);
+
+            assertThat(reportRemaining).isEqualTo(-120_000);
+            assertThat(summaryAvailable).isEqualTo(reportRemaining);
+            assertThat(FinanceBudgetMath.availableAmount(planned, approved, committed)).isZero();
+        }
+    }
+
+    @Nested
+    @ExtendWith(MockitoExtension.class)
+    class Phase7CommitmentChainValidation {
+
+        @Mock
+        BudgetLineRepository budgetLineRepository;
+        @Mock
+        BudgetEventRepository budgetEventRepository;
+        @Mock
+        MaintenanceBudgetRepository maintenanceBudgetRepository;
+
+        BudgetCommitmentService commitmentService;
+        UUID lineId;
+        BudgetLine line;
+
+        @BeforeEach
+        void setUp() {
+            commitmentService = new BudgetCommitmentService(
+                    budgetLineRepository, budgetEventRepository, maintenanceBudgetRepository);
+            lineId = UUID.randomUUID();
+            line = new BudgetLine();
+            line.setId(lineId);
+            line.setPlannedAmount(1_000_000);
+            line.setActualAmount(0);
+            line.setCommittedAmount(0);
+            MaintenanceBudget budget = new MaintenanceBudget();
+            budget.setId(UUID.randomUUID());
+            budget.setStatus(BudgetStatus.APPROVED);
+            budget.setTotalCommitted(0);
+            line.setBudget(budget);
+
+            when(budgetLineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+            when(budgetLineRepository.save(any(BudgetLine.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(maintenanceBudgetRepository.save(any(MaintenanceBudget.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+        }
+
+        @Test
+        void fullProcurementChain_allocateReceiptApproveReject() {
+            UUID procurementId = UUID.randomUUID();
+            double estimate = 400_000;
+            double receiptAmount = 400_000;
+
+            commitmentService.commitBudget(lineId, estimate, "PROCUREMENT_REQUEST", procurementId,
+                    UUID.randomUUID(), "Allocate");
+            assertThat(line.getCommittedAmount()).isEqualTo(estimate);
+            assertThat(line.getBudget().getTotalCommitted()).isEqualTo(estimate);
+            assertThat(remaining()).isEqualTo(600_000);
+
+            commitmentService.releaseBudget(lineId, receiptAmount, "PROCUREMENT_RECEIPT", procurementId,
+                    UUID.randomUUID(), "Approve receipt");
+            line.setActualAmount(line.getActualAmount() + receiptAmount);
+
+            assertThat(line.getCommittedAmount()).isZero();
+            assertThat(line.getActualAmount()).isEqualTo(receiptAmount);
+            assertThat(remaining()).isEqualTo(600_000);
+
+            commitmentService.commitBudget(lineId, 100_000, "PROCUREMENT_REQUEST", UUID.randomUUID(),
+                    UUID.randomUUID(), "Second allocate");
+            commitmentService.releaseBudget(lineId, 100_000, "PROCUREMENT_RECEIPT", UUID.randomUUID(),
+                    UUID.randomUUID(), "Reject receipt");
+
+            assertThat(line.getCommittedAmount()).isZero();
+            assertThat(line.getActualAmount()).isEqualTo(receiptAmount);
+            assertThat(remaining()).isEqualTo(600_000);
+        }
+
+        @Test
+        void workOrderCreateReservesBudgetThenApproveMovesToActual() {
+            double cost = 150_000;
+
+            commitmentService.commitBudget(lineId, cost, "ACTUAL_COST_PENDING", UUID.randomUUID(),
+                    UUID.randomUUID(), "Reserve on create");
+            assertThat(line.getCommittedAmount()).isEqualTo(cost);
+            assertThat(remaining()).isEqualTo(850_000);
+
+            commitmentService.releaseBudget(lineId, cost, "ACTUAL_COST_PENDING", UUID.randomUUID(),
+                    UUID.randomUUID(), "Release on approve");
+            line.setActualAmount(line.getActualAmount() + cost);
+
+            assertThat(line.getCommittedAmount()).isZero();
+            assertThat(line.getActualAmount()).isEqualTo(cost);
+            assertThat(remaining()).isEqualTo(850_000);
+        }
+
+        @Test
+        void overCommitIsBlockedByAvailableGuard() {
+            commitmentService.commitBudget(lineId, 900_000, "PROCUREMENT_REQUEST", UUID.randomUUID(),
+                    UUID.randomUUID(), "First allocate");
+
+            org.junit.jupiter.api.Assertions.assertThrows(com.toir.exception.RestException.class, () ->
+                    commitmentService.commitBudget(lineId, 200_000, "PROCUREMENT_REQUEST", UUID.randomUUID(),
+                            UUID.randomUUID(), "Would over-commit"));
+
+            assertThat(line.getCommittedAmount()).isEqualTo(900_000);
+            assertThat(remaining()).isEqualTo(100_000);
+        }
+
+        private double remaining() {
+            return FinanceBudgetMath.remainingBudget(
+                    line.getPlannedAmount(), line.getActualAmount(), line.getCommittedAmount());
+        }
+    }
+
+    @Nested
     @ExtendWith(MockitoExtension.class)
     @Disabled("FAZA 3 — merged into Phase3ProcurementAllocate")
     class TargetPhase3ProcurementAllocate {
