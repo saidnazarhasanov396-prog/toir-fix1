@@ -4,7 +4,6 @@ import com.toir.entity.BaseEntity;
 import com.toir.enums.InventoryCountScopeType;
 import com.toir.enums.InventoryCountSessionStatus;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.PrePersist;
@@ -15,7 +14,6 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.UUID;
 
-@Entity
 @Table(name = "inventory_count_sessions")
 @Getter
 @Setter
