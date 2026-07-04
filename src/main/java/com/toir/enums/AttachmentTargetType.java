@@ -16,10 +16,6 @@ public enum AttachmentTargetType {
     PURCHASE_ORDER,
     STOCK_MOVEMENT,
     EQUIPMENT_COMMISSIONING,
-    INVENTORY_COUNT_SESSION,
-    WAREHOUSE_TASK,
-    WAREHOUSE_BIN,
-    WAREHOUSE_WRITEOFF,
     HR_EMPLOYEE;
 
     public static AttachmentTargetType from(String value) {

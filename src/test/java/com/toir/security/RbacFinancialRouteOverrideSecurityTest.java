@@ -2,6 +2,7 @@ package com.toir.security;
 
 import com.toir.controller.ActualCostReviewRouteOverrideController;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideCreateRequest;
+import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.ActualCostReviewRouteOverrideService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,9 @@ class RbacFinancialRouteOverrideSecurityTest {
 
     @MockBean
     ActualCostReviewRouteOverrideService overrideService;
+
+    @MockBean
+    ActualCostReviewFacadeService facadeService;
 
     @TestConfiguration
     static class SecurityBeans {

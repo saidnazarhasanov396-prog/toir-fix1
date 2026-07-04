@@ -112,6 +112,41 @@ class NotificationFacadeServiceTest {
     }
 
     @Test
+    void listSortsBySeverity() {
+        UUID recipientId = UUID.randomUUID();
+        NotificationDto info = notification(
+                recipientId,
+                "Info",
+                "Info notification",
+                NotificationStatus.SENT,
+                NotificationSeverity.INFO,
+                "WorkOrder"
+        );
+        NotificationDto warning = notification(
+                recipientId,
+                "Warning",
+                "Warning notification",
+                NotificationStatus.SENT,
+                NotificationSeverity.WARNING,
+                "WorkOrder"
+        );
+        NotificationDto critical = notification(
+                recipientId,
+                "Critical",
+                "Critical notification",
+                NotificationStatus.SENT,
+                NotificationSeverity.CRITICAL,
+                "WorkOrder"
+        );
+
+        when(notificationService.findForUser(recipientId)).thenReturn(List.of(info, critical, warning));
+
+        var result = service.list(recipientId, 0, 10, null, null, null, null, false, "severity", "desc");
+
+        assertThat(result.getContent()).containsExactly(critical, warning, info);
+    }
+
+    @Test
     void summaryReturnsRealFinancialReviewAndCriticalCounts() {
         UUID recipientId = UUID.randomUUID();
         NotificationDto criticalUnread = notification(

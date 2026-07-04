@@ -75,6 +75,9 @@ public class NotificationFacadeService {
             case "type" -> Comparator.comparing(
                     NotificationDto::entityType,
                     Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            case "severity" -> Comparator.comparing(
+                    NotificationDto::severity,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
             case "read" -> Comparator.comparing(n -> n.status() == NotificationStatus.READ);
             case "createdAt" -> Comparator.comparing(
                     NotificationDto::createdAt,

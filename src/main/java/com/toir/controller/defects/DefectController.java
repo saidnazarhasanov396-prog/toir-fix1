@@ -34,6 +34,7 @@ public class DefectController {
     private static final Map<String, String> SORT_FIELDS = Map.of(
             "status", "status",
             "severity", "severity",
+            "recurrenceCount", "recurrenceCount",
             "detectedAt", "detectedAt",
             "createdAt", "createdAt"
     );
@@ -61,7 +62,7 @@ public class DefectController {
             return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, status, category, severity, page, size, search));
         }
         Sort sort = SortUtils.sort(sortBy, sortDir, SORT_FIELDS, "updatedAt", Sort.Direction.DESC);
-        return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, status, page, size, search, sort));
+        return ResponseEntity.ok(service.search(equipmentId, resolvedRepairRequestId, status, category, severity, page, size, search, sort));
     }
 
     @GetMapping("/stats")

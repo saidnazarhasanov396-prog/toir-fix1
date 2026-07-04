@@ -112,8 +112,13 @@ public class DefectService {
 
     @Transactional(readOnly = true)
     public Page<DefectResponse> search(UUID equipmentId, UUID repairRequestId, DefectStatus status, int page, int size, String search, Sort sort) {
+        return search(equipmentId, repairRequestId, status, null, null, page, size, search, sort);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<DefectResponse> search(UUID equipmentId, UUID repairRequestId, DefectStatus status, String category, String severity, int page, int size, String search, Sort sort) {
         var pageable = PaginationUtils.pageRequest(page, size, sort == null ? Sort.by(Sort.Direction.DESC, "updatedAt") : sort);
-        Page<Defect> resultPage = repository.findAll(defectListSpecification(equipmentId, repairRequestId, status, search), pageable);
+        Page<Defect> resultPage = repository.findAll(defectListSpecification(equipmentId, repairRequestId, status, category, severity, search), pageable);
         if (!scopeAccessService.isScopeAdmin()) {
             List<Defect> scopedContent = resultPage.getContent()
                     .stream()
@@ -127,6 +132,8 @@ public class DefectService {
     private Specification<Defect> defectListSpecification(UUID equipmentId,
                                                           UUID repairRequestId,
                                                           DefectStatus status,
+                                                          String category,
+                                                          String severity,
                                                           String search) {
         return (root, query, cb) -> {
             List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
@@ -139,6 +146,12 @@ public class DefectService {
             }
             if (status != null) {
                 predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (category != null && !category.isBlank()) {
+                predicates.add(cb.equal(cb.upper(root.get("category")), category.trim().toUpperCase(Locale.ROOT)));
+            }
+            if (severity != null && !severity.isBlank()) {
+                predicates.add(cb.equal(cb.upper(root.get("severity")), severity.trim().toUpperCase(Locale.ROOT)));
             }
             if (search != null && !search.isBlank()) {
                 String pattern = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";

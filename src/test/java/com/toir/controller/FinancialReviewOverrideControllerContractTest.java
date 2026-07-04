@@ -1,7 +1,11 @@
 package com.toir.controller;
 
 import com.toir.dto.actualcostrouteoverride.*;
+import com.toir.dto.financialreview.BulkRouteOverrideApplyResponse;
+import com.toir.dto.financialreview.BulkRouteOverrideClearResponse;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.security.AuthenticatedUser;
+import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.ActualCostReviewRouteOverrideService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +22,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -28,12 +33,14 @@ class FinancialReviewOverrideControllerContractTest {
 
     @Mock
     ActualCostReviewRouteOverrideService service;
+    @Mock
+    ActualCostReviewFacadeService facadeService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new ActualCostReviewRouteOverrideController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new ActualCostReviewRouteOverrideController(service, facadeService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -149,4 +156,94 @@ class FinancialReviewOverrideControllerContractTest {
 
         verify(service).findAll(eq(expectedFilter));
     }
+
+    @Test
+    void bulkApplyUsesFacadeSoRouteEventsAreRecorded() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID overrideId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        var user = user(actorId);
+        var request = new ActualCostReviewRouteOverrideController.BulkApplyRequest(
+                List.of(actualCostId),
+                departmentId,
+                "FINANCE_MANAGER",
+                "SYSTEM_ADMIN",
+                12,
+                "Manual reassignment"
+        );
+        when(facadeService.applyRouteOverride(any(ActualCostReviewRouteOverrideCreateRequest.class), eq(actorId)))
+                .thenReturn(new ActualCostReviewRouteOverrideResponseDto(
+                        overrideId,
+                        null,
+                        departmentId,
+                        "FINANCE_MANAGER",
+                        "SYSTEM_ADMIN",
+                        12,
+                        "Manual reassignment",
+                        true,
+                        actorId,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                ));
+
+        var response = new ActualCostReviewRouteOverrideController(service, facadeService)
+                .bulkApply(user, request)
+                .getBody();
+
+        verify(facadeService).applyRouteOverride(eq(new ActualCostReviewRouteOverrideCreateRequest(
+                actualCostId,
+                departmentId,
+                "FINANCE_MANAGER",
+                "SYSTEM_ADMIN",
+                12,
+                "Manual reassignment"
+        )), eq(actorId));
+        verifyNoInteractions(service);
+        org.assertj.core.api.Assertions.assertThat(response).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(response.successes())
+                .extracting(BulkRouteOverrideApplyResponse.Success::overrideId)
+                .containsExactly(overrideId);
+    }
+
+    @Test
+    void bulkClearUsesCurrentUserActorThroughFacade() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID clearedOverrideId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        var user = user(actorId);
+        var request = new ActualCostReviewRouteOverrideController.BulkClearRequest(
+                List.of(actualCostId),
+                "Clear expired override"
+        );
+        when(facadeService.clearRouteOverride(actualCostId, actorId, "Clear expired override"))
+                .thenReturn(List.of(clearedOverrideId));
+
+        var response = new ActualCostReviewRouteOverrideController(service, facadeService)
+                .bulkClear(user, request)
+                .getBody();
+
+        verify(facadeService).clearRouteOverride(actualCostId, actorId, "Clear expired override");
+        verifyNoInteractions(service);
+        org.assertj.core.api.Assertions.assertThat(response).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(response.successes())
+                .extracting(BulkRouteOverrideClearResponse.Success::clearedOverrideIds)
+                .containsExactly(List.of(clearedOverrideId));
+    }
+
+    private AuthenticatedUser user(UUID id) {
+        return new AuthenticatedUser(
+                id.toString(),
+                "finance.manager",
+                "finance.manager@example.test",
+                "Finance Manager",
+                null,
+                "FINANCE_MANAGER",
+                List.of("FINANCE_ROUTE_OVERRIDE_APPLY", "FINANCE_ROUTE_OVERRIDE_CLEAR")
+        );
+    }
+
 }

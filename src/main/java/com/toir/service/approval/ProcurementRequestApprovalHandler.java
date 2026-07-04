@@ -11,7 +11,6 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.service.finance.BudgetCommitmentService;
-import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -25,7 +24,6 @@ import java.util.UUID;
 public class ProcurementRequestApprovalHandler implements ApprovalActionHandler {
 
     private final ProcurementRequestRepository procurementRequestRepository;
-    private final WarehouseTaskGenerationService taskGenerationService;
     private final BudgetCommitmentService budgetCommitmentService;
 
     @Override
@@ -61,7 +59,15 @@ public class ProcurementRequestApprovalHandler implements ApprovalActionHandler 
         request.setRejectionReason(null);
         ProcurementRequest saved = procurementRequestRepository.save(request);
 
-        taskGenerationService.generateReceiveForApprovedProcurement(saved);
+        budgetCommitmentService.commitBudget(
+                request.getBudgetLineId(),
+                request.getTotalEstimatedCost(),
+                "PROCUREMENT_REQUEST",
+                request.getId(),
+                terminalActor(approval),
+                "Budget commitment on procurement approval"
+        );
+
     }
 
     private void reject(ProcurementRequest request, String comment) {

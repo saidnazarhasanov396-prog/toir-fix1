@@ -37,7 +37,6 @@ import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.CounteragentStatus;
 import com.toir.enums.WarehouseStockStatus;
-import com.toir.enums.WarehouseTaskSourceType;
 import com.toir.enums.WmsDocumentOperationType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.RestException;
@@ -57,7 +56,6 @@ import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
-import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import com.toir.service.warehouse.WmsStockSnapshot;
@@ -149,8 +147,6 @@ class ProcurementRequestServiceTest {
     WmsStockCoordinateValidator coordinateValidator;
     @Mock
     WmsDocumentPolicyService documentPolicyService;
-    @Mock
-    WarehouseTaskGenerationService taskGenerationService;
 
     ProcurementRequestService service;
 
@@ -178,8 +174,7 @@ class ProcurementRequestServiceTest {
                 toirStockService,
                 legacyStockProjectionService,
                 coordinateValidator,
-                documentPolicyService,
-                taskGenerationService
+                documentPolicyService
         );
     }
 
@@ -441,7 +436,6 @@ class ProcurementRequestServiceTest {
         var result = service.approve(requestId);
 
         assertThat(result.status()).isEqualTo(ProcurementRequestStatus.APPROVED);
-        verify(taskGenerationService).generateReceiveForApprovedProcurement(request);
     }
 
     @Test
@@ -719,21 +713,6 @@ class ProcurementRequestServiceTest {
         assertThat(command.serialNumber()).isEqualTo("SN-8");
         assertThat(command.expiryDate()).isEqualTo(expiryDate);
         assertThat(command.stockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
-        ArgumentCaptor<WarehouseTaskGenerationService.ReceiptPutawayCommand> putawayCaptor =
-                ArgumentCaptor.forClass(WarehouseTaskGenerationService.ReceiptPutawayCommand.class);
-        verify(taskGenerationService).generatePutawayForReceipt(putawayCaptor.capture());
-        WarehouseTaskGenerationService.ReceiptPutawayCommand putawayCommand = putawayCaptor.getValue();
-        assertThat(putawayCommand.generationKey()).isEqualTo("procurement-putaway:" + movement.getId());
-        assertThat(putawayCommand.warehouseId()).isEqualTo(warehouseId);
-        assertThat(putawayCommand.sparePartId()).isEqualTo(sparePartId);
-        assertThat(putawayCommand.fromBinId()).isEqualTo(binId);
-        assertThat(putawayCommand.quantity()).isEqualByComparingTo("4");
-        assertThat(putawayCommand.lotNumber()).isEqualTo("LOT-7");
-        assertThat(putawayCommand.serialNumber()).isEqualTo("SN-8");
-        assertThat(putawayCommand.expiryDate()).isEqualTo(expiryDate);
-        assertThat(putawayCommand.stockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
-        assertThat(putawayCommand.sourceType()).isEqualTo(WarehouseTaskSourceType.PROCUREMENT_REQUEST);
-        assertThat(putawayCommand.sourceId()).isEqualTo(requestId);
         verify(coordinateValidator).assertCanReceiveOrMoveInto(warehouseId, binId, WarehouseStockStatus.QUARANTINE);
         verify(documentPolicyService).validateReceiptDocuments(
                 eq(WmsDocumentOperationType.PROCUREMENT_RECEIPT),

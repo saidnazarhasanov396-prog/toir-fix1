@@ -94,10 +94,6 @@ public class FileAssetAccessService {
             case "purchaseorder" -> Optional.of(AttachmentTargetType.PURCHASE_ORDER);
             case "stockmovement", "stockmovementdocument" -> Optional.of(AttachmentTargetType.STOCK_MOVEMENT);
             case "equipmentcommissioning" -> Optional.of(AttachmentTargetType.EQUIPMENT_COMMISSIONING);
-            case "inventorycountsession" -> Optional.of(AttachmentTargetType.INVENTORY_COUNT_SESSION);
-            case "warehousetask" -> Optional.of(AttachmentTargetType.WAREHOUSE_TASK);
-            case "warehousebin" -> Optional.of(AttachmentTargetType.WAREHOUSE_BIN);
-            case "warehousewriteoff" -> Optional.of(AttachmentTargetType.WAREHOUSE_WRITEOFF);
             case "hremployee", "employee", "employeepicture" -> Optional.of(AttachmentTargetType.HR_EMPLOYEE);
             default -> Optional.empty();
         };

@@ -245,6 +245,57 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, UU
     long countMovesSince(@Param("warehouseId") UUID warehouseId,
                          @Param("from") Instant from);
 
+
+    @Query("""
+            select sm
+            from StockMovement sm
+            where sm.isDeleted = false
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+              and (:sparePartId is null or sm.sparePartId = :sparePartId)
+              and (:stockStatus is null or sm.stockStatus = :stockStatus)
+            order by sm.occurredAt desc, sm.updatedAt desc
+            """)
+    Page<StockMovement> searchStockMoves(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("sparePartId") UUID sparePartId,
+            @Param("stockStatus") WarehouseStockStatus stockStatus,
+            Pageable pageable);
+
+    @Query("""
+            select count(sm)
+            from StockMovement sm
+            where sm.isDeleted = false
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+            """)
+    long countStockMoves(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select count(sm)
+            from StockMovement sm
+            where sm.isDeleted = false
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+              and sm.occurredAt >= :from
+            """)
+    long countStockMovesSince(@Param("warehouseId") UUID warehouseId,
+                              @Param("from") Instant from);
+
+    @Query("""
+            select count(distinct sm.sparePartId)
+            from StockMovement sm
+            where sm.isDeleted = false
+              and sm.sparePartId is not null
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+            """)
+    long countMovedSparePartsAll(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select coalesce(sum(sm.quantity), 0)
+            from StockMovement sm
+            where sm.isDeleted = false
+              and (:warehouseId is null or sm.warehouseId = :warehouseId)
+            """)
+    Double sumStockMoveQuantity(@Param("warehouseId") UUID warehouseId);
+
     @Query(value = "SELECT * FROM stock_movements WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<StockMovement> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 

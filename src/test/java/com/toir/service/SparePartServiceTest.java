@@ -474,6 +474,24 @@ class SparePartServiceTest {
     }
 
     @Test
+    void entityTypeSortKeepsStableOrderWhenDtoEntityTypesMatch() {
+        SparePart sparePart = sparePart(UUID.randomUUID(), "SP-TYPE", "Spare", InventoryItemKind.SPARE_PART);
+        SparePart material = sparePart(UUID.randomUUID(), "MAT-TYPE", "Material", InventoryItemKind.MATERIAL);
+        Page<SparePart> page = new PageImpl<>(List.of(sparePart, material));
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of());
+
+        Page<SparePartDto> result = service.findAll(1, 0, null, null, null, "", null, "entityType", "asc");
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).extracting(SparePartDto::id)
+                .containsExactly(sparePart.getId());
+    }
+
+    @Test
     void unsupportedSortFallsBackToDefaultPageOrder() {
         SparePart part = sparePart(UUID.randomUUID(), "SP-DEFAULT", "Default", InventoryItemKind.SPARE_PART);
         Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);

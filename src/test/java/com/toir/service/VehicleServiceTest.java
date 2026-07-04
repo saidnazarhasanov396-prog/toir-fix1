@@ -55,6 +55,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -1479,6 +1480,129 @@ class VehicleServiceTest {
         assertThat(result.getContent().getFirst().mxikId()).isEqualTo(mxikId);
         assertThat(result.getContent().getFirst().mxik()).isNotNull();
         assertThat(result.getContent().getFirst().mxik().kod()).isEqualTo("8703");
+    }
+
+    @Test
+    void listSortsByStatusBeforePagination() {
+        UUID activeId = UUID.randomUUID();
+        UUID repairId = UUID.randomUUID();
+        UUID outOfServiceId = UUID.randomUUID();
+        Equipment active = equipment(activeId, "VH-ACTIVE", "Active truck", "INV-VH-ACTIVE");
+        active.setStatus(EquipmentStatus.ACTIVE);
+        Equipment repair = equipment(repairId, "VH-REPAIR", "Repair truck", "INV-VH-REPAIR");
+        repair.setStatus(EquipmentStatus.IN_REPAIR);
+        Equipment outOfService = equipment(outOfServiceId, "VH-OUT", "Out truck", "INV-VH-OUT");
+        outOfService.setStatus(EquipmentStatus.OUT_OF_SERVICE);
+        Page<Equipment> equipmentPage = new PageImpl<>(
+                List.of(outOfService, active, repair),
+                Pageable.unpaged(),
+                3
+        );
+        Page<EquipmentDto> enrichedEquipmentPage = new PageImpl<>(
+                List.of(EquipmentDto.from(outOfService), EquipmentDto.from(active), EquipmentDto.from(repair)),
+                Pageable.unpaged(),
+                3
+        );
+
+        when(vehicleDetailsRepository.searchVehicleEquipment(
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(EquipmentCategory.VEHICLE),
+                isNull(),
+                eq(Pageable.unpaged())
+        )).thenReturn(equipmentPage);
+        when(equipmentService.enrich(equipmentPage)).thenReturn(enrichedEquipmentPage);
+        when(vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(outOfServiceId, activeId, repairId)))
+                .thenReturn(List.of(
+                        details(outOfServiceId, "01A901AA", "VIN-OUT"),
+                        details(activeId, "01A902AA", "VIN-ACTIVE"),
+                        details(repairId, "01A903AA", "VIN-REPAIR")
+                ));
+
+        Page<VehicleSummaryDto> result = service.list(null, null, null, null, 0, 20, "status", "asc");
+
+        assertThat(result.getContent()).extracting(VehicleSummaryDto::status)
+                .containsExactly(EquipmentStatus.ACTIVE, EquipmentStatus.IN_REPAIR, EquipmentStatus.OUT_OF_SERVICE);
+    }
+
+
+    @Test
+    void listSortsByVehicleTypeBeforePagination() {
+        UUID truckId = UUID.randomUUID();
+        UUID passengerId = UUID.randomUUID();
+        Equipment truck = equipment(truckId, "VH-TRUCK", "Truck", "INV-VH-TRUCK");
+        Equipment passenger = equipment(passengerId, "VH-CAR", "Passenger car", "INV-VH-CAR");
+        VehicleDetails truckDetails = details(truckId, "01A921AA", "VIN-TRUCK");
+        truckDetails.setVehicleType(VehicleType.TRUCK);
+        VehicleDetails passengerDetails = details(passengerId, "01A922AA", "VIN-CAR");
+        passengerDetails.setVehicleType(VehicleType.PASSENGER_CAR);
+        Page<Equipment> equipmentPage = new PageImpl<>(
+                List.of(truck, passenger),
+                Pageable.unpaged(),
+                2
+        );
+        Page<EquipmentDto> enrichedEquipmentPage = new PageImpl<>(
+                List.of(EquipmentDto.from(truck), EquipmentDto.from(passenger)),
+                Pageable.unpaged(),
+                2
+        );
+
+        when(vehicleDetailsRepository.searchVehicleEquipment(
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(EquipmentCategory.VEHICLE),
+                isNull(),
+                eq(Pageable.unpaged())
+        )).thenReturn(equipmentPage);
+        when(equipmentService.enrich(equipmentPage)).thenReturn(enrichedEquipmentPage);
+        when(vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(truckId, passengerId)))
+                .thenReturn(List.of(truckDetails, passengerDetails));
+
+        Page<VehicleSummaryDto> result = service.list(null, null, null, null, 0, 20, "vehicleType", "asc");
+
+        assertThat(result.getContent()).extracting(VehicleSummaryDto::vehicleType)
+                .containsExactly(VehicleType.PASSENGER_CAR, VehicleType.TRUCK);
+    }
+
+    @Test
+    void listSortsByInsuranceExpiryDateBeforePagination() {
+        UUID earlyId = UUID.randomUUID();
+        UUID lateId = UUID.randomUUID();
+        Equipment early = equipment(earlyId, "VH-EARLY", "Early insurance", "INV-VH-EARLY");
+        Equipment late = equipment(lateId, "VH-LATE", "Late insurance", "INV-VH-LATE");
+        VehicleDetails earlyDetails = details(earlyId, "01A911AA", "VIN-EARLY");
+        earlyDetails.setInsuranceExpiryDate(LocalDate.of(2026, 1, 15));
+        VehicleDetails lateDetails = details(lateId, "01A912AA", "VIN-LATE");
+        lateDetails.setInsuranceExpiryDate(LocalDate.of(2026, 12, 15));
+        Page<Equipment> equipmentPage = new PageImpl<>(
+                List.of(late, early),
+                Pageable.unpaged(),
+                2
+        );
+        Page<EquipmentDto> enrichedEquipmentPage = new PageImpl<>(
+                List.of(EquipmentDto.from(late), EquipmentDto.from(early)),
+                Pageable.unpaged(),
+                2
+        );
+
+        when(vehicleDetailsRepository.searchVehicleEquipment(
+                isNull(),
+                isNull(),
+                isNull(),
+                eq(EquipmentCategory.VEHICLE),
+                isNull(),
+                eq(Pageable.unpaged())
+        )).thenReturn(equipmentPage);
+        when(equipmentService.enrich(equipmentPage)).thenReturn(enrichedEquipmentPage);
+        when(vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(lateId, earlyId)))
+                .thenReturn(List.of(lateDetails, earlyDetails));
+
+        Page<VehicleSummaryDto> result = service.list(null, null, null, null, 0, 20, "insuranceExpiryDate", "asc");
+
+        assertThat(result.getContent()).extracting(VehicleSummaryDto::equipmentId)
+                .containsExactly(earlyId, lateId);
     }
 
     @Test

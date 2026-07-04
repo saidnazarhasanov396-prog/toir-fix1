@@ -8,7 +8,10 @@ import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideRespons
 import com.toir.dto.common.PageResponseWithSummary;
 import com.toir.dto.financialreview.BulkRouteOverrideApplyResponse;
 import com.toir.dto.financialreview.BulkRouteOverrideClearResponse;
+import com.toir.security.AuthenticatedUser;
+import com.toir.security.CurrentUser;
 import com.toir.security.RequiresSensitiveAccess;
+import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.ActualCostReviewRouteOverrideService;
 import com.toir.util.PaginationUtils;
 import com.toir.util.CsvWriter;
@@ -39,6 +42,7 @@ import java.util.stream.Collectors;
 public class ActualCostReviewRouteOverrideController {
 
     private final ActualCostReviewRouteOverrideService service;
+    private final ActualCostReviewFacadeService facadeService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_ROUTE_OVERRIDE_READ')")
@@ -73,16 +77,20 @@ public class ActualCostReviewRouteOverrideController {
     @PostMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_ROUTE_OVERRIDE_APPLY')")
     public ResponseEntity<ActualCostReviewRouteOverrideResponseDto> apply(
+            @CurrentUser AuthenticatedUser user,
             @Valid @RequestBody ActualCostReviewRouteOverrideCreateRequest r) {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body(service.apply(r));
+                .body(facadeService.applyRouteOverride(r, currentUserId(user)));
     }
 
     @PostMapping("/{id}/deactivate")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_ROUTE_OVERRIDE_CLEAR')")
-    public ResponseEntity<ActualCostReviewRouteOverrideDto> deactivate(@PathVariable UUID id, @RequestParam UUID userId, @RequestParam String comment) {
-        return ResponseEntity.ok(service.deactivate(id, userId, comment));
+    public ResponseEntity<ActualCostReviewRouteOverrideDto> deactivate(
+            @PathVariable UUID id,
+            @CurrentUser AuthenticatedUser user,
+            @RequestParam String comment) {
+        return ResponseEntity.ok(facadeService.clearRouteOverrideByOverrideId(id, currentUserId(user), comment));
     }
 
     @GetMapping(value = "/export", produces = "text/csv;charset=UTF-8")
@@ -124,20 +132,22 @@ public class ActualCostReviewRouteOverrideController {
 
     @PostMapping("/bulk-apply")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_ROUTE_OVERRIDE_APPLY')")
-    public ResponseEntity<BulkRouteOverrideApplyResponse> bulkApply(@RequestBody BulkApplyRequest request) {
-        List<UUID> ids = request != null ? request.ids() : List.of();
+    public ResponseEntity<BulkRouteOverrideApplyResponse> bulkApply(
+            @CurrentUser AuthenticatedUser user,
+            @RequestBody BulkApplyRequest request) {
+        List<UUID> ids = request != null && request.ids() != null ? request.ids() : List.of();
         List<BulkRouteOverrideApplyResponse.Success> successes = new ArrayList<>();
         List<BulkRouteOverrideApplyResponse.Failure> failures = new ArrayList<>();
         for (UUID id : ids) {
             try {
-                ActualCostReviewRouteOverrideResponseDto response = service.apply(new ActualCostReviewRouteOverrideCreateRequest(
+                ActualCostReviewRouteOverrideResponseDto response = facadeService.applyRouteOverride(new ActualCostReviewRouteOverrideCreateRequest(
                         id,
                         request.departmentId(),
                         request.approvalRoleCode(),
                         request.escalationRoleCode(),
                         request.thresholdHours(),
                         request.comment()
-                ));
+                ), currentUserId(user));
                 successes.add(new BulkRouteOverrideApplyResponse.Success(id, response.id()));
             } catch (RuntimeException ex) {
                 failures.add(new BulkRouteOverrideApplyResponse.Failure(id, ex.getMessage()));
@@ -148,19 +158,25 @@ public class ActualCostReviewRouteOverrideController {
 
     @PostMapping("/bulk-clear")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('FINANCE_ROUTE_OVERRIDE_CLEAR')")
-    public ResponseEntity<BulkRouteOverrideClearResponse> bulkClear(@RequestBody BulkClearRequest request) {
-        List<UUID> ids = request != null ? request.ids() : List.of();
+    public ResponseEntity<BulkRouteOverrideClearResponse> bulkClear(
+            @CurrentUser AuthenticatedUser user,
+            @RequestBody BulkClearRequest request) {
+        List<UUID> ids = request != null && request.ids() != null ? request.ids() : List.of();
         List<BulkRouteOverrideClearResponse.Success> successes = new ArrayList<>();
         List<BulkRouteOverrideClearResponse.Failure> failures = new ArrayList<>();
         for (UUID id : ids) {
             try {
-                List<UUID> cleared = service.deactivateActiveForActualCost(id, new UUID(0, 0), request.comment());
+                List<UUID> cleared = facadeService.clearRouteOverride(id, currentUserId(user), request.comment());
                 successes.add(new BulkRouteOverrideClearResponse.Success(id, cleared));
             } catch (RuntimeException ex) {
                 failures.add(new BulkRouteOverrideClearResponse.Failure(id, ex.getMessage()));
             }
         }
         return ResponseEntity.ok(new BulkRouteOverrideClearResponse("CLEAR", ids.size(), successes.size(), failures.size(), successes, failures));
+    }
+
+    private UUID currentUserId(AuthenticatedUser user) {
+        return user != null ? UUID.fromString(user.id()) : new UUID(0, 0);
     }
 
     private ActualCostReviewRouteOverrideRegistrySummary summary(List<ActualCostReviewRouteOverrideResponseDto> items) {
