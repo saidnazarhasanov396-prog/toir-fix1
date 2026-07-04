@@ -802,6 +802,12 @@ class ProcurementRequestServiceTest {
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CostCategory materials = new CostCategory();
+        materials.setId(UUID.randomUUID());
+        materials.setCode("MATERIALS");
+        when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS")).thenReturn(Optional.of(materials));
+        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(any(), any()))
+                .thenReturn(Optional.empty());
 
         ProcurementReceiptResponse result = service.receiveStock(requestId, new ProcurementReceiptRequest(
                 List.of(new ProcurementReceiptLineRequest(line.getId(), 2, binId, null, null, null, null)),
@@ -821,6 +827,15 @@ class ProcurementRequestServiceTest {
         verify(stockMovementRepository).save(movementCaptor.capture());
         StockMovement movement = movementCaptor.getValue();
         assertThat(movement.getType()).isEqualTo(StockMovementType.EQUIPMENT_IN);
+
+        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
+        verify(actualCostRepository).save(costCaptor.capture());
+        ActualCost cost = costCaptor.getValue();
+        assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.PROCUREMENT_RECEIPT);
+        assertThat(cost.getSourceId()).isEqualTo(movement.getId());
+        assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
+        assertThat(cost.getAmount()).isEqualTo(10_000_000.0);
+        assertThat(cost.getCostCategoryId()).isEqualTo(materials.getId());
         assertThat(movement.getSparePartId()).isNull();
         assertThat(movement.getEquipmentTypeId()).isEqualTo(equipmentTypeId);
         assertThat(movement.getSourceLineId()).isEqualTo(line.getId());
@@ -854,6 +869,59 @@ class ProcurementRequestServiceTest {
                 });
         verify(stockRepository, never()).save(any());
         verify(toirStockService, never()).postReceipt(any());
+    }
+
+    @Test
+    void receivingEquipmentUsesBudgetLineAndCreatesPendingActualCostForFinanceApprove() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        UUID budgetCategoryId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        ProcurementRequestLine line = equipmentLine(equipmentTypeId, "Pump", 1, 3_000_000.0);
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
+        request.setType(ProcurementRequestType.EQUIPMENT);
+        request.setBudgetLineId(budgetLineId);
+        BudgetLine budgetLine = new BudgetLine();
+        budgetLine.setId(budgetLineId);
+        budgetLine.setCostCategoryId(budgetCategoryId);
+        budgetLine.setBudget(new MaintenanceBudget());
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(budgetLine));
+        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.receiveStock(requestId, new ProcurementReceiptRequest(
+                List.of(new ProcurementReceiptLineRequest(line.getId(), 1, binId, null, null, null, null)),
+                LocalDate.of(2026, 6, 18),
+                "ACT-EQ-2",
+                null,
+                "allocated equipment receipt"
+        ));
+
+        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
+        verify(actualCostRepository).save(costCaptor.capture());
+        ActualCost cost = costCaptor.getValue();
+        assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.PROCUREMENT_RECEIPT);
+        assertThat(cost.getBudgetLineId()).isEqualTo(budgetLineId);
+        assertThat(cost.getCostCategoryId()).isEqualTo(budgetCategoryId);
+        assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
+        assertThat(cost.getAmount()).isEqualTo(3_000_000.0);
     }
 
     @Test

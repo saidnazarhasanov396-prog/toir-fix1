@@ -691,6 +691,8 @@ public class ProcurementRequestService {
             }
             line.setReceivedQuantity(line.getReceivedQuantity() + quantity);
             line.setRemainingQuantity(Math.max(0, line.getQuantity() - line.getReceivedQuantity()));
+            // Same finance path as spare parts: receipt creates PENDING actual cost for finance approve.
+            syncProcurementReceiptActualCost(request, line, quantity, movement);
         }
         return new ReceiptResult(movementIds, equipmentIds);
     }
