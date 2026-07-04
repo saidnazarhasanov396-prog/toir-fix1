@@ -21,6 +21,7 @@ public record EquipmentRiskScore(
         long openDefects,
         double mtbfHours,
         double mttrHours,
+        RcmFailureForecastDto failureForecast,
         RiskExplanationDto explanation,
         List<RiskReasonDto> reasons
 ) {
@@ -41,7 +42,7 @@ public record EquipmentRiskScore(
                               double mtbfHours,
                               double mttrHours) {
         this(equipmentId, equipmentCode, equipmentName, criticalityClass, criticalityClassName,
-                consequence, probability, riskScore, repairPriority, openDefects, mtbfHours, mttrHours, null, List.of());
+                consequence, probability, riskScore, repairPriority, openDefects, mtbfHours, mttrHours, null, null, List.of());
     }
 
     public EquipmentRiskScore(UUID equipmentId,
@@ -59,7 +60,26 @@ public record EquipmentRiskScore(
                               RiskExplanationDto explanation) {
         this(equipmentId, equipmentCode, equipmentName, criticalityClass, criticalityClassName,
                 consequence, probability, riskScore, repairPriority, openDefects, mtbfHours, mttrHours,
-                explanation, explanation == null ? List.of() : explanation.reasons());
+                null, explanation, explanation == null ? List.of() : explanation.reasons());
+    }
+
+    public EquipmentRiskScore(UUID equipmentId,
+                              String equipmentCode,
+                              String equipmentName,
+                              String criticalityClass,
+                              String criticalityClassName,
+                              int consequence,
+                              int probability,
+                              int riskScore,
+                              Integer repairPriority,
+                              long openDefects,
+                              double mtbfHours,
+                              double mttrHours,
+                              RcmFailureForecastDto failureForecast,
+                              RiskExplanationDto explanation) {
+        this(equipmentId, equipmentCode, equipmentName, criticalityClass, criticalityClassName,
+                consequence, probability, riskScore, repairPriority, openDefects, mtbfHours, mttrHours,
+                failureForecast, explanation, explanation == null ? List.of() : explanation.reasons());
     }
 
     @JsonProperty("probabilityPercent")

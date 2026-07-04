@@ -8,6 +8,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.DowntimeType;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.PriorityLevel;
@@ -71,6 +72,7 @@ public class EquipmentRiskEvidenceService {
 
         Map<UUID, ReliabilityMetric> metricByEquipment = latestMetricsByEquipment(equipmentIdSet);
         Map<UUID, Double> downtimeHoursByEquipment = recentDowntimeHoursByEquipment(equipmentIds);
+        Map<UUID, Instant> lastFailureAtByEquipment = lastFailureAtByEquipment(equipmentIds);
         Map<UUID, Long> openHighRepairRequestsByEquipment = openHighRepairRequestsByEquipment(equipmentIds);
         Map<UUID, Long> overdueMaintenanceByEquipment = overdueMaintenanceByEquipment(equipmentIdSet);
 
@@ -99,7 +101,8 @@ public class EquipmentRiskEvidenceService {
                     metric != null && metric.getMttrHours() != null ? metric.getMttrHours() : 0,
                     downtimeHoursByEquipment.getOrDefault(item.getId(), 0.0),
                     overdueMaintenanceByEquipment.getOrDefault(item.getId(), 0L),
-                    openHighRepairRequestsByEquipment.getOrDefault(item.getId(), 0L)
+                    openHighRepairRequestsByEquipment.getOrDefault(item.getId(), 0L),
+                    lastFailureAtByEquipment.get(item.getId())
             ));
         }
 
@@ -156,6 +159,20 @@ public class EquipmentRiskEvidenceService {
                 .collect(Collectors.groupingBy(
                         DowntimeEvent::getEquipmentId,
                         Collectors.summingDouble(this::durationHours)
+                ));
+    }
+
+    private Map<UUID, Instant> lastFailureAtByEquipment(Collection<UUID> equipmentIds) {
+        if (equipmentIds.isEmpty()) {
+            return Map.of();
+        }
+        return downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(equipmentIds).stream()
+                .filter(event -> event.getType() == DowntimeType.UNPLANNED || event.getType() == DowntimeType.EMERGENCY)
+                .filter(event -> event.getStartAt() != null)
+                .collect(Collectors.toMap(
+                        DowntimeEvent::getEquipmentId,
+                        event -> event.getEndAt() != null ? event.getEndAt() : event.getStartAt(),
+                        (left, right) -> left.isAfter(right) ? left : right
                 ));
     }
 

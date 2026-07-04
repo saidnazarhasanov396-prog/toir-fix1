@@ -35,6 +35,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -94,6 +95,7 @@ class RcmServiceTest {
                 snapshotRepository,
                 evidenceService,
                 new EquipmentRiskScoringService(),
+                new RcmFailureForecastService(),
                 metricExplanationService
         );
     }
@@ -263,6 +265,58 @@ class RcmServiceTest {
     }
 
     @Test
+    void riskScoreIncludesMtbfBasedFailureForecastWhenLastFailureExists() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+        Instant lastFailure = Instant.now().minus(Duration.ofHours(90));
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(reliabilityMetric(equipmentId, 100, 4)));
+        when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(downtimeEvent(equipmentId, lastFailure)));
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+
+        EquipmentRiskScore score = service.computeAll("ru").getFirst();
+
+        assertThat(score.failureForecast()).isNotNull();
+        assertThat(score.failureForecast().status()).isEqualTo("WITHIN_7_DAYS");
+        assertThat(score.failureForecast().expectedFailureAt()).isEqualTo(lastFailure.plus(Duration.ofHours(100)));
+        assertThat(score.failureForecast().mtbfHours()).isEqualTo(100);
+        assertThat(score.failureForecast().lastFailureAt()).isEqualTo(lastFailure);
+    }
+
+    @Test
+    void riskScoreShowsImmediateActionWithoutDateWhenOpenDefectsDriveProbability() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId);
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(criticalityClassRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                openDefect(equipmentId),
+                openDefect(equipmentId),
+                openDefect(equipmentId),
+                openDefect(equipmentId),
+                openDefect(equipmentId)
+        ));
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(repairRequestRepository.findAllByEquipmentIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(maintenanceDueEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+
+        EquipmentRiskScore score = service.computeAll("ru").getFirst();
+
+        assertThat(score.probability()).isEqualTo(5);
+        assertThat(score.failureForecast().status()).isEqualTo("DUE_NOW_FROM_OPEN_DEFECTS");
+        assertThat(score.failureForecast().expectedFailureAt()).isNull();
+        assertThat(score.failureForecast().label()).contains("Срок не рассчитан");
+    }
+
+    @Test
     void getHistoryUnknownEquipmentReturns404() {
         UUID equipmentId = UUID.randomUUID();
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.empty());
@@ -396,6 +450,17 @@ class RcmServiceTest {
         event.setDepartmentId(UUID.randomUUID());
         event.setStartAt(Instant.now().minusSeconds(3600));
         event.setDurationMinutes(durationMinutes);
+        event.setType(DowntimeType.UNPLANNED);
+        return event;
+    }
+
+    private DowntimeEvent downtimeEvent(UUID equipmentId, Instant failureAt) {
+        DowntimeEvent event = new DowntimeEvent();
+        event.setEquipmentId(equipmentId);
+        event.setDepartmentId(UUID.randomUUID());
+        event.setStartAt(failureAt.minus(Duration.ofHours(2)));
+        event.setEndAt(failureAt);
+        event.setDurationMinutes(120);
         event.setType(DowntimeType.UNPLANNED);
         return event;
     }
