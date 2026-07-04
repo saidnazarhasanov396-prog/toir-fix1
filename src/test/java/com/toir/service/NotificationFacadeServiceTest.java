@@ -112,6 +112,58 @@ class NotificationFacadeServiceTest {
     }
 
     @Test
+    void summaryReturnsRealFinancialReviewAndCriticalCounts() {
+        UUID recipientId = UUID.randomUUID();
+        NotificationDto criticalUnread = notification(
+                recipientId,
+                "Critical alert",
+                "Critical message",
+                NotificationStatus.SENT,
+                NotificationSeverity.CRITICAL,
+                "WorkOrder"
+        );
+        NotificationDto warningUnread = notification(
+                recipientId,
+                "Warning alert",
+                "Warning message",
+                NotificationStatus.SENT,
+                NotificationSeverity.WARNING,
+                "WorkOrder"
+        );
+        NotificationDto costDueSoon = notification(
+                recipientId,
+                "Actual cost pending review",
+                "Requires finance review",
+                NotificationStatus.SENT,
+                NotificationSeverity.INFO,
+                "ActualCost"
+        );
+        NotificationDto costOverdue = notification(
+                recipientId,
+                "Actual cost overdue",
+                "Overdue finance review",
+                NotificationStatus.SENT,
+                NotificationSeverity.CRITICAL,
+                "ActualCost"
+        );
+
+        when(notificationService.countUnread(recipientId)).thenReturn(4L);
+        when(notificationService.findForUser(recipientId))
+                .thenReturn(List.of(criticalUnread, warningUnread, costDueSoon, costOverdue));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(actualCostReviewFacadeService.reviewQueue(any())).thenReturn(List.of());
+
+        var result = service.summary(recipientId);
+
+        assertThat(result.unread()).isEqualTo(4);
+        assertThat(result.critical()).isEqualTo(2);
+        assertThat(result.openEscalations()).isEqualTo(3);
+        assertThat(result.financialReviewQueue()).isEqualTo(2);
+        assertThat(result.financialReviewDueSoon()).isEqualTo(1);
+        assertThat(result.financialReviewOverdue()).isEqualTo(1);
+    }
+
+    @Test
     void financialReviewInboxReturnsOwnCostNotificationsForRegularUser() {
         UUID recipientId = UUID.randomUUID();
         NotificationDto costNotification = notification(
