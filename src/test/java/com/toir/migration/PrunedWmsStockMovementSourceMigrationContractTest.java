@@ -16,7 +16,8 @@ class PrunedWmsStockMovementSourceMigrationContractTest {
     void migrationNormalizesRemovedWarehouseWriteoffStockMovementSource() throws Exception {
         String sql = Files.readString(MIGRATION);
 
-        assertThat(sql).contains("UPDATE stock_movements");
+        assertThat(sql).contains("UPDATE warehouse_stock_ledger_metadata");
+        assertThat(sql).doesNotContain("UPDATE stock_movements");
         assertThat(sql).contains("source_type = 'MANUAL'");
         assertThat(sql).contains("WHERE source_type = 'WAREHOUSE_WRITEOFF'");
         assertThat(sql).doesNotContain("source_id = NULL");
