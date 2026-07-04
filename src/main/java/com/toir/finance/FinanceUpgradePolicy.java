@@ -40,4 +40,16 @@ public final class FinanceUpgradePolicy {
 
     /** Prefer "available" naming over legacy "totalRemaining = planned - committed". */
     public static final boolean PREFER_AVAILABLE_NAMING = true;
+
+    /**
+     * Work-order material usage does not create WO actual costs — procurement receipt finance owns
+     * spare-part / equipment purchase spend. WO finance covers labor and contractor only.
+     */
+    public static final boolean WORK_ORDER_EXCLUDES_PROCUREMENT_MATERIAL_COSTS = true;
+
+    /**
+     * Budget plan revise is allowed for responsible finance users on APPROVED and LOCKED budgets
+     * (optional absorb of unplanned costs; not automatic).
+     */
+    public static final boolean BUDGET_REVISE_ALLOWED_WHEN_LOCKED = true;
 }
