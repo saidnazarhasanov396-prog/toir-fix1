@@ -110,16 +110,18 @@ public class NotificationFacadeService {
                         || n.severity() == NotificationSeverity.WARNING)
                 .count();
 
-        FinancialReviewInboxSummary finance = financialReviewInbox(
-                recipientId, 0, Integer.MAX_VALUE, (FinancialReviewInboxFilter) null).summary();
+        // Badge must match Review Queue: only PENDING actual costs in finance scope.
+        List<ActualCostReviewItem> pendingQueue = pendingReviewQueueItems();
+        long overdue = pendingQueue.stream().filter(ActualCostReviewItem::isOverdue).count();
+        long dueSoon = pendingQueue.stream().filter(item -> !item.isOverdue()).count();
 
         return new NotificationSummaryDto(
                 unread,
                 critical,
                 openEscalations,
-                finance.total(),
-                finance.dueSoon(),
-                finance.overdue()
+                pendingQueue.size(),
+                dueSoon,
+                overdue
         );
     }
 
@@ -142,10 +144,30 @@ public class NotificationFacadeService {
         FinancialReviewInboxFilter safeFilter = filter != null
                 ? filter
                 : new FinancialReviewInboxFilter(null, null, null, null, null, null);
-        List<NotificationDto> notifications = financialReviewNotifications(recipientId);
+
+        // Only PENDING actual costs (same source as Review Queue). Drop stale COST notifications.
+        List<ActualCostReviewItem> pendingQueue = pendingReviewQueueItems();
+        java.util.Map<String, ActualCostReviewItem> pendingById = pendingQueue.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        item -> item.id().toString(),
+                        item -> item,
+                        (a, b) -> a
+                ));
+
+        List<NotificationDto> activeNotifications = financialReviewNotifications(recipientId).stream()
+                .filter(notification -> hasText(notification.entityId())
+                        && pendingById.containsKey(notification.entityId().trim()))
+                .toList();
+        Set<String> notifiedIds = notifiedEntityIds(activeNotifications);
+
         List<FinancialReviewInboxItem> items = Stream.concat(
-                notifications.stream().map(this::toFinancialReviewInboxItem),
-                syntheticInboxItemsFromReviewQueue(notifiedEntityIds(notifications)).stream()
+                activeNotifications.stream().map(notification -> toFinancialReviewInboxItem(
+                        notification,
+                        pendingById.get(notification.entityId().trim())
+                )),
+                pendingQueue.stream()
+                        .filter(item -> !notifiedIds.contains(item.id().toString()))
+                        .map(this::toSyntheticInboxItem)
         )
                 .filter(item -> matchesInboxItemFilter(item, safeFilter))
                 .toList();
@@ -273,11 +295,13 @@ public class NotificationFacadeService {
         return ids;
     }
 
-    private List<FinancialReviewInboxItem> syntheticInboxItemsFromReviewQueue(Set<String> notifiedEntityIds) {
+    /**
+     * Pending finance review items visible to the current user (department scope already applied).
+     * Approver/reject roles and scope admins see the full scoped queue; others only role-matched items.
+     */
+    private List<ActualCostReviewItem> pendingReviewQueueItems() {
         return actualCostReviewFacadeService.reviewQueue(null).stream()
                 .filter(this::matchesReviewQueueItem)
-                .filter(item -> !notifiedEntityIds.contains(item.id().toString()))
-                .map(this::toSyntheticInboxItem)
                 .toList();
     }
 
@@ -356,7 +380,14 @@ public class NotificationFacadeService {
         return true;
     }
 
-    private FinancialReviewInboxItem toFinancialReviewInboxItem(NotificationDto notification) {
+    private FinancialReviewInboxItem toFinancialReviewInboxItem(NotificationDto notification,
+                                                                ActualCostReviewItem pending) {
+        String kind = pending != null
+                ? (pending.isOverdue() ? "OVERDUE" : "DUE_SOON")
+                : kind(notification);
+        NotificationSeverity severity = pending != null && pending.isOverdue()
+                ? NotificationSeverity.CRITICAL
+                : notification.severity();
         return new FinancialReviewInboxItem(
                 notification.id(),
                 notification.recipientId(),
@@ -364,17 +395,17 @@ public class NotificationFacadeService {
                 notification.message(),
                 notification.channel(),
                 notification.status(),
-                notification.severity(),
+                severity,
                 notification.entityType(),
                 notification.entityId(),
                 notification.readAt(),
                 notification.createdAt(),
-                kind(notification),
+                kind,
+                pending != null ? pending.approvalRoleCode() : null,
+                pending != null ? pending.escalationRoleCode() : null,
                 null,
-                null,
-                null,
-                null,
-                null,
+                pending != null ? 4 : null,
+                pending != null ? pending.hoursToOverdue() : null,
                 actionPath(notification),
                 notification.acknowledgedAt() != null,
                 notification.acknowledgedAt(),
