@@ -1,6 +1,8 @@
 package com.toir.service;
 
 import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideCreateRequest;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
 import com.toir.entity.Counteragent;
 import com.toir.entity.Department;
 import com.toir.entity.contractors.ContractorWork;
@@ -401,6 +403,85 @@ class ActualCostReviewFacadeServiceTest {
 
         assertThat(items).isEmpty();
         verify(eventRepository).findAllByEventCodeAndIsDeletedFalseOrderByOccurredAtDesc("HANDOVER");
+    }
+
+
+    @Test
+    void applyRouteOverrideRequestPersistsOverrideAppliedEvent() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID overrideId = UUID.randomUUID();
+        var request = new ActualCostReviewRouteOverrideCreateRequest(
+                actualCostId,
+                departmentId,
+                "FINANCE_MANAGER",
+                "SYSTEM_ADMIN",
+                18,
+                "Manual route change"
+        );
+        when(routeOverrideService.apply(request)).thenReturn(new ActualCostReviewRouteOverrideResponseDto(
+                overrideId,
+                null,
+                departmentId,
+                "FINANCE_MANAGER",
+                "SYSTEM_ADMIN",
+                18,
+                "Manual route change",
+                true,
+                actorId,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        var response = service.applyRouteOverride(request, actorId);
+
+        ArgumentCaptor<ActualCostReviewEvent> eventCaptor = ArgumentCaptor.forClass(ActualCostReviewEvent.class);
+        verify(eventRepository).save(eventCaptor.capture());
+        assertThat(response.id()).isEqualTo(overrideId);
+        assertThat(eventCaptor.getValue().getActualCostId()).isEqualTo(actualCostId);
+        assertThat(eventCaptor.getValue().getRouteOverrideId()).isEqualTo(overrideId);
+        assertThat(eventCaptor.getValue().getActorUserId()).isEqualTo(actorId);
+        assertThat(eventCaptor.getValue().getEventGroup()).isEqualTo("ROUTE");
+        assertThat(eventCaptor.getValue().getEventCode()).isEqualTo("OVERRIDE_APPLIED");
+        assertThat(eventCaptor.getValue().getDescription()).isEqualTo("Manual route change");
+    }
+
+    @Test
+    void clearRouteOverrideByOverrideIdPersistsOverrideClearedEvent() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID overrideId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        when(routeOverrideService.deactivate(overrideId, actorId, "Back to default route"))
+                .thenReturn(new ActualCostReviewRouteOverrideDto(
+                        overrideId,
+                        actualCostId,
+                        null,
+                        "FINANCE_MANAGER",
+                        null,
+                        24,
+                        "Original override",
+                        false,
+                        null,
+                        actorId,
+                        "Back to default route",
+                        Instant.parse("2026-06-02T10:00:00Z")
+                ));
+
+        var response = service.clearRouteOverrideByOverrideId(overrideId, actorId, "Back to default route");
+
+        ArgumentCaptor<ActualCostReviewEvent> eventCaptor = ArgumentCaptor.forClass(ActualCostReviewEvent.class);
+        verify(eventRepository).save(eventCaptor.capture());
+        assertThat(response.id()).isEqualTo(overrideId);
+        assertThat(eventCaptor.getValue().getActualCostId()).isEqualTo(actualCostId);
+        assertThat(eventCaptor.getValue().getRouteOverrideId()).isEqualTo(overrideId);
+        assertThat(eventCaptor.getValue().getActorUserId()).isEqualTo(actorId);
+        assertThat(eventCaptor.getValue().getEventGroup()).isEqualTo("ROUTE");
+        assertThat(eventCaptor.getValue().getEventCode()).isEqualTo("OVERRIDE_CLEARED");
+        assertThat(eventCaptor.getValue().getDescription()).isEqualTo("Back to default route");
     }
 
     @Test

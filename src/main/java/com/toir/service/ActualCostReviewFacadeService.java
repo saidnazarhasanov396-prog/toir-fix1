@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideCreateRequest;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideResponseDto;
 import com.toir.dto.budget.ActualCostHandoverSummary;
 import com.toir.dto.budget.ActualCostRegisterSummary;
@@ -301,16 +302,21 @@ public class ActualCostReviewFacadeService {
     public ActualCostReviewRouteOverrideResponseDto applyRouteOverride(UUID actualCostId, UUID departmentId,
                                                                        String approvalRoleCode, String escalationRoleCode,
                                                                        Integer thresholdHours, String comment, UUID actorId) {
-        ActualCostReviewRouteOverrideResponseDto response = routeOverrideService.apply(new ActualCostReviewRouteOverrideCreateRequest(
+        return applyRouteOverride(new ActualCostReviewRouteOverrideCreateRequest(
                 actualCostId,
                 departmentId,
                 approvalRoleCode,
                 escalationRoleCode,
                 thresholdHours,
                 comment
-        ));
-        recordEvent(actualCostId, null, response.id(), actorId, "SYSTEM", "ROUTE", "OVERRIDE_APPLIED",
-                "Actual cost route override applied", comment, null, null);
+        ), actorId);
+    }
+
+    @Transactional
+    public ActualCostReviewRouteOverrideResponseDto applyRouteOverride(ActualCostReviewRouteOverrideCreateRequest request, UUID actorId) {
+        ActualCostReviewRouteOverrideResponseDto response = routeOverrideService.apply(request);
+        recordEvent(request.actualCostId(), null, response.id(), actorId, "SYSTEM", "ROUTE", "OVERRIDE_APPLIED",
+                "Actual cost route override applied", request.comment(), null, null);
         return response;
     }
 
@@ -321,6 +327,14 @@ public class ActualCostReviewFacadeService {
             recordEvent(actualCostId, null, overrideId, actorId, "SYSTEM", "ROUTE", "OVERRIDE_CLEARED",
                     "Actual cost route override cleared", comment, null, null);
         }
+        return cleared;
+    }
+
+    @Transactional
+    public ActualCostReviewRouteOverrideDto clearRouteOverrideByOverrideId(UUID overrideId, UUID actorId, String comment) {
+        ActualCostReviewRouteOverrideDto cleared = routeOverrideService.deactivate(overrideId, actorId, comment);
+        recordEvent(cleared.actualCostId(), null, overrideId, actorId, "SYSTEM", "ROUTE", "OVERRIDE_CLEARED",
+                "Actual cost route override cleared", comment, null, null);
         return cleared;
     }
 
