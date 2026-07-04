@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PrunedWmsStockMovementSourceMigrationContractTest {
 
     private static final Path MIGRATION = Path.of(
-            "src/main/resources/db/migration/V20260704_2__normalize_pruned_wms_stock_movement_sources.sql");
+            "src/main/resources/db/migration/V20260704_3__normalize_pruned_wms_stock_movement_sources.sql");
 
     @Test
     void migrationNormalizesRemovedWarehouseWriteoffStockMovementSource() throws Exception {
