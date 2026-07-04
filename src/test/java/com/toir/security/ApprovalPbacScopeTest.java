@@ -54,7 +54,6 @@ import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.service.repair.RepairRequestService;
-import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -90,9 +89,7 @@ class ApprovalPbacScopeTest {
     MaintenanceBudgetRepository maintenanceBudgetRepository;
     WorkOrderService workOrderService;
     PprPlanService pprPlanService;
-    ProcurementRequestService procurementRequestService;
-    WarehouseTaskGenerationService warehouseTaskGenerationService;
-    RepairRequestService repairRequestService;
+    ProcurementRequestService procurementRequestService;    RepairRequestService repairRequestService;
     MaintenanceAutomationService maintenanceAutomationService;
     MaintenanceRegulationService maintenanceRegulationService;
     ScopeAccessService scopeAccessService;
@@ -114,9 +111,7 @@ class ApprovalPbacScopeTest {
         maintenanceBudgetRepository = mock(MaintenanceBudgetRepository.class);
         workOrderService = mock(WorkOrderService.class);
         pprPlanService = mock(PprPlanService.class);
-        procurementRequestService = mock(ProcurementRequestService.class);
-        warehouseTaskGenerationService = mock(WarehouseTaskGenerationService.class);
-        repairRequestService = mock(RepairRequestService.class);
+        procurementRequestService = mock(ProcurementRequestService.class);        repairRequestService = mock(RepairRequestService.class);
         maintenanceAutomationService = mock(MaintenanceAutomationService.class);
         maintenanceRegulationService = mock(MaintenanceRegulationService.class);
         scopeAccessService = mock(ScopeAccessService.class);
@@ -133,7 +128,6 @@ class ApprovalPbacScopeTest {
                         new PprPlanApprovalHandler(pprPlanService),
                         new ProcurementRequestApprovalHandler(
                                 procurementRequestRepository,
-                                warehouseTaskGenerationService,
                                 mock(com.toir.service.finance.BudgetCommitmentService.class)),
                         new MaintenanceBudgetApprovalHandler(maintenanceBudgetRepository),
                         new MaintenanceDueEventApprovalHandler(maintenanceAutomationService)

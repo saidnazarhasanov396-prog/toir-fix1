@@ -11,7 +11,6 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.service.finance.BudgetCommitmentService;
-import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,8 +38,6 @@ class ProcurementRequestApprovalHandlerTest {
     @Mock
     ProcurementRequestRepository procurementRequestRepository;
 
-    @Mock
-    WarehouseTaskGenerationService taskGenerationService;
 
     @Mock
     BudgetCommitmentService budgetCommitmentService;
@@ -79,7 +76,6 @@ class ProcurementRequestApprovalHandlerTest {
                 any(),
                 eq("Budget commitment on procurement approval")
         );
-        verify(taskGenerationService).generateReceiveForApprovedProcurement(request);
     }
 
     @Test
@@ -92,7 +88,6 @@ class ProcurementRequestApprovalHandlerTest {
                 .hasMessageContaining("must be allocated to a budget line before approval");
 
         verify(budgetCommitmentService, never()).commitBudget(any(), any(Double.class), any(), any(), any(), any());
-        verify(taskGenerationService, never()).generateReceiveForApprovedProcurement(any());
     }
 
     private ApprovalRequest approval(ApprovalActionType actionType) {

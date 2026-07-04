@@ -22,7 +22,6 @@ import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.PurchaseOrderStatus;
 import com.toir.enums.StockMovementSourceType;
-import com.toir.enums.WarehouseTaskSourceType;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WmsDocumentOperationType;
 import com.toir.exception.RestException;
@@ -36,7 +35,6 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
-import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import org.junit.jupiter.api.BeforeEach;
@@ -80,7 +78,6 @@ class PurchaseOrderServiceTest {
     @Mock LowStockRecommendationService lowStockRecommendationService;
     @Mock WmsStockCoordinateValidator coordinateValidator;
     @Mock WmsDocumentPolicyService documentPolicyService;
-    @Mock WarehouseTaskGenerationService taskGenerationService;
 
     PurchaseOrderService service;
 
@@ -101,8 +98,7 @@ class PurchaseOrderServiceTest {
                 legacyStockProjectionService,
                 lowStockRecommendationService,
                 coordinateValidator,
-                documentPolicyService,
-                taskGenerationService
+                documentPolicyService
         );
     }
 
@@ -305,21 +301,6 @@ class PurchaseOrderServiceTest {
         assertThat(coreReceipt.serialNumber()).isEqualTo("SN-8");
         assertThat(coreReceipt.expiryDate()).isEqualTo(expiryDate);
         assertThat(coreReceipt.idempotencyKey()).isEqualTo("purchase-order-receipt:" + movement.getId());
-        ArgumentCaptor<WarehouseTaskGenerationService.ReceiptPutawayCommand> putawayCaptor =
-                ArgumentCaptor.forClass(WarehouseTaskGenerationService.ReceiptPutawayCommand.class);
-        verify(taskGenerationService).generatePutawayForReceipt(putawayCaptor.capture());
-        WarehouseTaskGenerationService.ReceiptPutawayCommand putawayCommand = putawayCaptor.getValue();
-        assertThat(putawayCommand.generationKey()).isEqualTo("purchase-order-putaway:" + movement.getId());
-        assertThat(putawayCommand.warehouseId()).isEqualTo(warehouseId);
-        assertThat(putawayCommand.sparePartId()).isEqualTo(sparePartId);
-        assertThat(putawayCommand.fromBinId()).isEqualTo(binId);
-        assertThat(putawayCommand.quantity()).isEqualByComparingTo("4");
-        assertThat(putawayCommand.lotNumber()).isEqualTo("LOT-7");
-        assertThat(putawayCommand.serialNumber()).isEqualTo("SN-8");
-        assertThat(putawayCommand.expiryDate()).isEqualTo(expiryDate);
-        assertThat(putawayCommand.stockStatus()).isEqualTo(WarehouseStockStatus.AVAILABLE);
-        assertThat(putawayCommand.sourceType()).isEqualTo(WarehouseTaskSourceType.PURCHASE_ORDER);
-        assertThat(putawayCommand.sourceId()).isEqualTo(orderId);
         verify(lowStockRecommendationService).evaluateStockSafely(stock);
         verify(coordinateValidator).assertCanReceiveOrMoveInto(warehouseId, binId, WarehouseStockStatus.AVAILABLE);
         verify(documentPolicyService).validateReceiptDocuments(

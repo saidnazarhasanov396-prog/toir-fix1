@@ -20,7 +20,6 @@ import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
-import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import com.toir.util.AuditBuilderService;
@@ -64,7 +63,6 @@ class ProcurementRequestSearchTest {
     @Mock LegacyStockProjectionService legacyStockProjectionService;
     @Mock WmsStockCoordinateValidator coordinateValidator;
     @Mock WmsDocumentPolicyService documentPolicyService;
-    @Mock WarehouseTaskGenerationService taskGenerationService;
 
     ProcurementRequestService service;
 
@@ -91,8 +89,7 @@ class ProcurementRequestSearchTest {
                 toirStockService,
                 legacyStockProjectionService,
                 coordinateValidator,
-                documentPolicyService,
-                taskGenerationService
+                documentPolicyService
         );
     }
 

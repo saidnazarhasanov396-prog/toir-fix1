@@ -44,7 +44,6 @@ import com.toir.service.maintanance.MaintenanceBudgetService;
 import com.toir.service.users.RoleService;
 import com.toir.service.users.UserService;
 import com.toir.service.warehouse.ToirWarehouseQueryService;
-import com.toir.service.warehouse.WmsOperationsQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -119,8 +118,6 @@ class RbacSensitiveModulesSecurityTest {
     @MockBean
     ToirWarehouseQueryService warehouseQueryService;
 
-    @MockBean
-    WmsOperationsQueryService wmsOperationsQueryService;
     @MockBean
     SparePartService sparePartService;
     @MockBean
