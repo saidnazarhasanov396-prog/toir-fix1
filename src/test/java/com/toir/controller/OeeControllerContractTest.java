@@ -69,7 +69,7 @@ class OeeControllerContractTest {
                 .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
                 .andExpect(jsonPath("$.totalElements").value(1));
 
-        verify(service).list(argThat(filter -> "shiftStart".equals(filter.sortBy()) && "desc".equals(filter.sortDir())));
+        verify(service).list(argThat((OeeFilter filter) -> "shiftStart".equals(filter.sortBy()) && "desc".equals(filter.sortDir())));
     }
 
     @Test
@@ -90,7 +90,7 @@ class OeeControllerContractTest {
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content").isEmpty());
 
-        verify(service).list(argThat(filter ->
+        verify(service).list(argThat((OeeFilter filter) ->
                 "compressor".equals(filter.equipmentSearch())
                         && departmentId.equals(filter.departmentId())
                         && equipmentTypeId.equals(filter.equipmentTypeId())
@@ -115,7 +115,7 @@ class OeeControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recordCount").value(0));
 
-        verify(service).summary(argThat(filter ->
+        verify(service).summary(argThat((OeeFilter filter) ->
                 "compressor".equals(filter.equipmentSearch())
                         && from.equals(filter.from())
                         && to.equals(filter.to())
