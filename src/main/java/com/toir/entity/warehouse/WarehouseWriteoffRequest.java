@@ -4,7 +4,6 @@ import com.toir.entity.BaseEntity;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WarehouseWriteoffStatus;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.PrePersist;
@@ -16,7 +15,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
-@Entity
 @Table(name = "warehouse_writeoff_requests")
 @Getter
 @Setter

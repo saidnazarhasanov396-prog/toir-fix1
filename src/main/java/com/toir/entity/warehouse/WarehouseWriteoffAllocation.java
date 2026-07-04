@@ -3,7 +3,6 @@ package com.toir.entity.warehouse;
 import com.toir.entity.BaseEntity;
 import com.toir.enums.WarehouseStockStatus;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
@@ -14,7 +13,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
-@Entity
 @Table(name = "warehouse_writeoff_allocations")
 @Getter
 @Setter

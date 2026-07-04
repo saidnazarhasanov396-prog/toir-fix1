@@ -4,7 +4,6 @@ import com.toir.entity.BaseEntity;
 import com.toir.enums.WarehouseStockStatus;
 import com.toir.enums.WarehouseTaskLineStatus;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
@@ -18,7 +17,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
-@Entity
 @Table(name = "warehouse_task_lines")
 @Getter
 @Setter

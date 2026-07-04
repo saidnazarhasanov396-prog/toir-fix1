@@ -2,14 +2,12 @@ package com.toir.entity.warehouse;
 
 import com.toir.entity.BaseEntity;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.util.UUID;
 
-@Entity
 @Table(name = "wms_label_events")
 @Getter
 @Setter

@@ -4,7 +4,6 @@ import com.toir.entity.BaseEntity;
 import com.toir.enums.InventoryCountLineStatus;
 import com.toir.enums.WarehouseStockStatus;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.PrePersist;
@@ -17,7 +16,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
-@Entity
 @Table(name = "inventory_count_lines")
 @Getter
 @Setter
