@@ -403,7 +403,6 @@ public class ApprovalService implements ApprovalOrchestrator {
             case PLANNED_SHUTDOWN -> "select null as code, name as title from planned_shutdowns where id = ? and is_deleted = false";
             case REPAIR_CAMPAIGN -> "select code as code, name as title from repair_campaigns where id = ? and is_deleted = false";
             case EQUIPMENT_COMMISSIONING -> "select act_number as code, concat('Equipment ', equipment_id) as title from equipment_commissioning_acts where id = ? and is_deleted = false";
-            case WAREHOUSE_WRITEOFF -> "select request_number as code, reason as title from warehouse_writeoff_requests where id = ? and is_deleted = false";
             default -> null;
         };
     }
@@ -1260,7 +1259,6 @@ public class ApprovalService implements ApprovalOrchestrator {
             case PLANNED_SHUTDOWN -> "PlannedShutdown";
             case REPAIR_CAMPAIGN -> "RepairCampaign";
             case EQUIPMENT_COMMISSIONING -> "EquipmentCommissioningAct";
-            case WAREHOUSE_WRITEOFF -> "WarehouseWriteoff";
             default -> "ApprovalRequest";
         };
     }
