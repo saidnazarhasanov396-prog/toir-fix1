@@ -64,6 +64,7 @@ class MaintenanceBudgetControllerContractTest {
                 BudgetStatus.DRAFT,
                 1_000,
                 100,
+                0,
                 List.of(new BudgetLineDto(UUID.randomUUID(), categoryId, "Materials", "Pump materials", 250, 0))
         );
         when(service.findFiltered(2026, 6, null, null, "desc")).thenReturn(List.of(dto));
@@ -164,6 +165,7 @@ class MaintenanceBudgetControllerContractTest {
                 status,
                 1_000,
                 100,
+                0,
                 List.of()
         );
     }

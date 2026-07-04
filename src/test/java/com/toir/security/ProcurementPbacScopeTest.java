@@ -89,6 +89,8 @@ class ProcurementPbacScopeTest {
         scopeAccessService = mock(ScopeAccessService.class);
         lowStockRecommendationService = mock(LowStockRecommendationService.class);
         actualCostRepository = mock(ActualCostRepository.class);
+        com.toir.repository.projects.BudgetLineRepository budgetLineRepository =
+                mock(com.toir.repository.projects.BudgetLineRepository.class);
         costCategoryRepository = mock(CostCategoryRepository.class);
         counteragentService = mock(CounteragentService.class);
         legacyStockProjectionService = mock(LegacyStockProjectionService.class);
@@ -108,6 +110,7 @@ class ProcurementPbacScopeTest {
                 scopeAccessService,
                 lowStockRecommendationService,
                 actualCostRepository,
+                budgetLineRepository,
                 costCategoryRepository,
                 counteragentService,
                 mock(ToirStockService.class),

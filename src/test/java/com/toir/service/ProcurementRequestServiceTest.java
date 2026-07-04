@@ -16,7 +16,9 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.CostCategory;
+import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.entity.warehouse.WarehouseStock;
@@ -132,6 +134,9 @@ class ProcurementRequestServiceTest {
     ActualCostRepository actualCostRepository;
 
     @Mock
+    com.toir.repository.projects.BudgetLineRepository budgetLineRepository;
+
+    @Mock
     CostCategoryRepository costCategoryRepository;
 
     @Mock
@@ -163,6 +168,7 @@ class ProcurementRequestServiceTest {
                 scopeAccessService,
                 lowStockRecommendationService,
                 actualCostRepository,
+                budgetLineRepository,
                 costCategoryRepository,
                 counteragentService,
                 toirStockService,
@@ -898,6 +904,41 @@ class ProcurementRequestServiceTest {
         assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
         assertThat(cost.getAmount()).isEqualTo(22.0);
         assertThat(cost.getNotes()).contains(requestId.toString());
+    }
+
+    @Test
+    void receivingLineUsesBudgetLineCategoryWhenAllocated() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        UUID budgetCategoryId = UUID.randomUUID();
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED,
+                List.of(line(sparePartId, 2, 11.0)));
+        request.setBudgetLineId(budgetLineId);
+        BudgetLine budgetLine = new BudgetLine();
+        budgetLine.setId(budgetLineId);
+        budgetLine.setCostCategoryId(budgetCategoryId);
+        budgetLine.setBudget(new MaintenanceBudget());
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId))
+                .thenReturn(stock(warehouseId, sparePartId, 3));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(budgetLine));
+        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.markReceived(requestId);
+
+        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
+        verify(actualCostRepository).save(costCaptor.capture());
+        assertThat(costCaptor.getValue().getCostCategoryId()).isEqualTo(budgetCategoryId);
     }
 
     @Test

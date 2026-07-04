@@ -18,6 +18,7 @@ public record MaintenanceBudgetDto(
         BudgetStatus status,
         double totalPlanned,
         double totalActual,
+        double totalCommitted,
         List<BudgetLineDto> lines
 ) {
     public static MaintenanceBudgetDto from(MaintenanceBudget b) {
@@ -43,6 +44,7 @@ public record MaintenanceBudgetDto(
                 b.getStatus(),
                 b.getTotalPlanned(),
                 b.getTotalActual(),
+                b.getTotalCommitted(),
                 b.getLines().stream()
                         .map(line -> BudgetLineDto.from(line, safeNames.get(line.getCostCategoryId())))
                         .toList()

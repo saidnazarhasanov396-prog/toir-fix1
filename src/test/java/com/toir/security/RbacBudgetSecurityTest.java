@@ -395,7 +395,7 @@ class RbacBudgetSecurityTest {
     }
 
     private MaintenanceBudgetDto budgetDto(UUID id) {
-        return new MaintenanceBudgetDto(id, 2026, 5, UUID.randomUUID(), null, BudgetStatus.DRAFT, 1000.0, 0.0, List.of());
+        return new MaintenanceBudgetDto(id, 2026, 5, UUID.randomUUID(), null, BudgetStatus.DRAFT, 1000.0, 0.0, 0.0, List.of());
     }
 
     private BudgetLineDto budgetLineDto() {

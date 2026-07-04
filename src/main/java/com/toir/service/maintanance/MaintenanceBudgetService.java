@@ -409,7 +409,9 @@ public class MaintenanceBudgetService {
     }
 
     private void assertBudgetCanChangePlan(MaintenanceBudget budget) {
-        Set<BudgetStatus> editable = EnumSet.of(BudgetStatus.DRAFT, BudgetStatus.REJECTED, BudgetStatus.APPROVED);
+        // LOCKED included: responsible finance users (BUDGET_REVISE) may raise plan for unplanned costs.
+        Set<BudgetStatus> editable = EnumSet.of(
+                BudgetStatus.DRAFT, BudgetStatus.REJECTED, BudgetStatus.APPROVED, BudgetStatus.LOCKED);
         if (!editable.contains(budget.getStatus())) {
             throw RestException.badRequest("Budget plan cannot be changed from status " + budget.getStatus());
         }

@@ -77,8 +77,7 @@ public class ProcurementRequestApprovalHandler implements ApprovalActionHandler 
         }
 
         if (request.getBudgetLineId() != null
-                && request.getBudgetAllocationStatus() == BudgetAllocationStatus.ALLOCATED
-                && request.getStatus() == ProcurementRequestStatus.APPROVED) {
+                && request.getBudgetAllocationStatus() == BudgetAllocationStatus.ALLOCATED) {
             budgetCommitmentService.releaseBudget(
                     request.getBudgetLineId(),
                     request.getTotalEstimatedCost(),

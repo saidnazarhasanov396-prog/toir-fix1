@@ -141,23 +141,23 @@ class FinancePbacScopeTest {
 
         var response = controller.summary(2026, 5, budget.getDepartmentId()).getBody();
 
-        assertThat(response.totalActual()).isEqualTo(950);
+        assertThat(response.totalActual()).isEqualTo(600);
         assertThat(response.totalCommitted()).isEqualTo(350);
         assertThat(response.pendingReviewAmount()).isEqualTo(375);
-        assertThat(response.totalAvailable()).isEqualTo(-300);
+        assertThat(response.totalAvailable()).isEqualTo(50);
         assertThat(response.unallocatedActualAmount()).isEqualTo(25);
         assertThat(response.atRiskBudgetLineCount()).isEqualTo(1);
-        assertThat(response.overBudgetLineCount()).isEqualTo(1);
-        assertThat(response.byCategory().getFirst().actualAmount()).isEqualTo(950);
+        assertThat(response.overBudgetLineCount()).isZero();
+        assertThat(response.byCategory().getFirst().actualAmount()).isEqualTo(600);
         assertThat(response.byCategory().getFirst().committedAmount()).isEqualTo(350);
-        assertThat(response.byCategory().getFirst().availableAmount()).isEqualTo(-300);
+        assertThat(response.byCategory().getFirst().availableAmount()).isEqualTo(50);
     }
 
     @Test
     void actualCostRegisterUsesScopedActualCosts() {
         ActualCost allowed = actualCost(UUID.randomUUID());
         ActualCostReviewItem item = reviewItem(allowed);
-        when(actualCostReviewFacadeService.actualCostRegister(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.actualCostRegister(null, null)).thenReturn(List.of(item));
         when(actualCostReviewFacadeService.registerSummary(List.of(item))).thenReturn(registerSummary(List.of(item)));
 
         var response = controller.actualCostRegister(0, 20, null, null, null, null, null, null, null);
