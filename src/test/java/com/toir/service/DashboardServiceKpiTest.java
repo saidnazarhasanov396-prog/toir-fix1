@@ -56,6 +56,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -409,6 +410,43 @@ class DashboardServiceKpiTest {
         var result = service.overview(departmentId);
 
         assertThat(result.kpis().pprCompletionRate()).isCloseTo(25.0, within(0.001));
+    }
+
+    @Test
+    void overviewReturnsRatiosForPercentKpis() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                equipment(equipmentId, departmentId, "Pump A")));
+
+        List<WorkOrder> workOrders = new ArrayList<>();
+        for (int i = 0; i < 9; i++) {
+            WorkOrder workOrder = workOrder(departmentId, equipmentId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, monthStart());
+            workOrder.setType(i % 2 == 0 ? WorkOrderType.EMERGENCY : WorkOrderType.DEFECT);
+            workOrders.add(workOrder);
+        }
+        for (int i = 9; i < 100; i++) {
+            WorkOrder workOrder = workOrder(departmentId, equipmentId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, monthStart());
+            workOrder.setType(WorkOrderType.PLANNED);
+            workOrders.add(workOrder);
+        }
+        when(workOrderRepository.search(null, departmentId, null)).thenReturn(workOrders);
+
+        com.toir.entity.PprTask completed = pprTask(equipmentId, com.toir.enums.PprTaskStatus.COMPLETED);
+        com.toir.entity.PprTask planned = pprTask(equipmentId, com.toir.enums.PprTaskStatus.PLANNED);
+        com.toir.entity.PprTask overdue = pprTask(equipmentId, com.toir.enums.PprTaskStatus.OVERDUE);
+        when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(completed, planned, overdue));
+
+        var result = service.overview(departmentId);
+
+        assertThat(result.kpis().unplannedRepairShare()).isCloseTo(9.0, within(0.001));
+        assertThat(result.kpis().unplannedRepairRatio().numerator()).isEqualTo(9);
+        assertThat(result.kpis().unplannedRepairRatio().denominator()).isEqualTo(100);
+        assertThat(result.kpis().pprCompletionRatio().numerator()).isEqualTo(1);
+        assertThat(result.kpis().pprCompletionRatio().denominator()).isEqualTo(3);
+        assertThat(result.kpis().overdueWorkRatio().numerator()).isEqualTo(1);
+        assertThat(result.kpis().overdueWorkRatio().denominator()).isEqualTo(3);
     }
 
     private Instant monthStart() {

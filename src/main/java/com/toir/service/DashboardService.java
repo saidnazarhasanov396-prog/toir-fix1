@@ -513,7 +513,10 @@ public class DashboardService {
 
         Kpis kpis = new Kpis(mtbfAvg, mttrAvg, unplannedShare, downtimeTotalHours,
                 downtimeEventsCount, downtimeThisMonth,
-                avgReactionHours, avgResolutionHours, pprCompletionRate, overdueWorkShare);
+                avgReactionHours, avgResolutionHours, pprCompletionRate, overdueWorkShare,
+                new Ratio(unplannedWO, totalWO),
+                new Ratio(pprDone, pprTotal),
+                new Ratio(pprOver, pprTotal));
 
         List<Defect> allDefects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> d.getStatus() != DefectStatus.CANCELLED)

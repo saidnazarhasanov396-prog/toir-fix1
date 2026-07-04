@@ -73,6 +73,8 @@ public record DashboardOverview(
 
     public record PlanFact(long plannedTasks, long completedTasks, long completedRepairs) {}
 
+    public record Ratio(long numerator, long denominator) {}
+
     public record Kpis(
             double mtbfAverage,
             double mttrAverage,
@@ -83,7 +85,10 @@ public record DashboardOverview(
             double avgReactionHours,
             double avgResolutionHours,
             double pprCompletionRate,
-            double overdueWorkShare
+            double overdueWorkShare,
+            Ratio unplannedRepairRatio,
+            Ratio pprCompletionRatio,
+            Ratio overdueWorkRatio
     ) {}
 
     public record TopProblemEquipment(

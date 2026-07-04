@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.dashboard.DashboardEmergencyEventDto;
+import com.toir.dto.dashboard.DashboardOverview;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.DashboardLifecycleService;
 import com.toir.service.DashboardService;
@@ -14,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -40,6 +42,43 @@ class DashboardControllerContractTest {
         mockMvc = MockMvcBuilders.standaloneSetup(new DashboardController(service, lifecycleService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void overviewReturnsKpiRatioFields() throws Exception {
+        DashboardOverview overview = new DashboardOverview(
+                new DashboardOverview.Counters(
+                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO, 0, 0, 0, 0, 0, 0, 0),
+                new DashboardOverview.PlanFact(0, 0, 0),
+                new DashboardOverview.Kpis(
+                        0, 0, 9.0, 0, 0, 0, 0, 0, 33.333, 33.333,
+                        new DashboardOverview.Ratio(9, 100),
+                        new DashboardOverview.Ratio(1, 3),
+                        new DashboardOverview.Ratio(1, 3)),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                new DashboardOverview.MaintenanceDueCounts(0, 0, 0, 0, 0),
+                List.of());
+        when(service.overview(null)).thenReturn(overview);
+
+        mockMvc.perform(get("/api/v1/dashboards/overview"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.kpis.unplannedRepairRatio.numerator").value(9))
+                .andExpect(jsonPath("$.kpis.unplannedRepairRatio.denominator").value(100))
+                .andExpect(jsonPath("$.kpis.pprCompletionRatio.numerator").value(1))
+                .andExpect(jsonPath("$.kpis.pprCompletionRatio.denominator").value(3))
+                .andExpect(jsonPath("$.kpis.overdueWorkRatio.numerator").value(1))
+                .andExpect(jsonPath("$.kpis.overdueWorkRatio.denominator").value(3));
     }
 
     @Test
