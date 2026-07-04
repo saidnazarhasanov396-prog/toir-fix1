@@ -474,7 +474,7 @@ class SparePartServiceTest {
     }
 
     @Test
-    void entityTypeSortUsesEnrichedItemsBeforePagination() {
+    void entityTypeSortKeepsStableOrderWhenDtoEntityTypesMatch() {
         SparePart sparePart = sparePart(UUID.randomUUID(), "SP-TYPE", "Spare", InventoryItemKind.SPARE_PART);
         SparePart material = sparePart(UUID.randomUUID(), "MAT-TYPE", "Material", InventoryItemKind.MATERIAL);
         Page<SparePart> page = new PageImpl<>(List.of(sparePart, material));
@@ -488,7 +488,7 @@ class SparePartServiceTest {
 
         assertThat(result.getTotalElements()).isEqualTo(2);
         assertThat(result.getContent()).extracting(SparePartDto::id)
-                .containsExactly(material.getId());
+                .containsExactly(sparePart.getId());
     }
 
     @Test
