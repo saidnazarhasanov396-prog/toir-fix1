@@ -4,7 +4,6 @@ import com.toir.entity.BaseEntity;
 import com.toir.enums.WarehouseBinType;
 import com.toir.enums.WarehouseQualityZoneType;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
@@ -16,7 +15,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-@Entity
 @Table(name = "warehouse_bins",
         uniqueConstraints = @UniqueConstraint(columnNames = {"warehouse_id", "code"}))
 @Getter
