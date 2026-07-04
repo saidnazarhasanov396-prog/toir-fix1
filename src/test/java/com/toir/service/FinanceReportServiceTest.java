@@ -105,6 +105,31 @@ class FinanceReportServiceTest {
     }
 
     @Test
+    void dashboardRemainingBudgetSubtractsCommitted() {
+        UUID departmentId = UUID.randomUUID();
+        UUID categoryId = UUID.randomUUID();
+        UUID budgetId = UUID.randomUUID();
+        UUID lineId = UUID.randomUUID();
+        MaintenanceBudget budget = budget(budgetId, departmentId);
+        BudgetLine line = line(lineId, budget, categoryId, 1_000);
+        line.setCommittedAmount(300);
+        budget.getLines().add(line);
+
+        when(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(budget));
+        when(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(line));
+        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                cost(lineId, categoryId, ActualCostStatus.APPROVED, 200)
+        ));
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(department(departmentId)));
+        when(costCategoryRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(category(categoryId)));
+
+        FinanceDashboardResponse dashboard = service.dashboard(2026, 6, departmentId);
+
+        assertThat(dashboard.totalCommitted()).isEqualTo(300);
+        assertThat(dashboard.remainingBudget()).isEqualTo(500);
+    }
+
+    @Test
     void departmentReportCsvIncludesFiltersAndReconciliationIds() {
         UUID departmentId = UUID.randomUUID();
         UUID categoryId = UUID.randomUUID();

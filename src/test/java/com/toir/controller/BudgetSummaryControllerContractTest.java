@@ -139,7 +139,7 @@ class BudgetSummaryControllerContractTest {
         reviewer.setFullName("Finance Reviewer");
 
         ActualCostReviewItem item = reviewItem(actualCost, "Finance Reviewer");
-        when(actualCostReviewFacadeService.actualCostRegister(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.actualCostRegister(null, null)).thenReturn(List.of(item));
         when(actualCostReviewFacadeService.registerSummary(List.of(item))).thenReturn(registerSummary(List.of(item)));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/register"))
@@ -158,7 +158,7 @@ class BudgetSummaryControllerContractTest {
         ActualCost actualCost = actualCost(actualCostId);
 
         ActualCostReviewItem item = reviewItem(actualCost, null);
-        when(actualCostReviewFacadeService.actualCostRegister(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.actualCostRegister(null, null)).thenReturn(List.of(item));
         when(actualCostReviewFacadeService.registerSummary(List.of(item))).thenReturn(registerSummary(List.of(item)));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/register"))
@@ -181,7 +181,7 @@ class BudgetSummaryControllerContractTest {
         ActualCostReviewItem wrongCounteragent = reviewItemWithContext(
                 UUID.randomUUID(), departmentId, UUID.randomUUID(), "APPROVED", "FINANCE_MANAGER", false, 18);
 
-        when(actualCostReviewFacadeService.actualCostRegister("pump"))
+        when(actualCostReviewFacadeService.actualCostRegister("pump", null))
                 .thenReturn(List.of(wrongDepartment, matching, wrongCounteragent));
         when(actualCostReviewFacadeService.registerSummary(any()))
                 .thenAnswer(invocation -> registerSummary(invocation.getArgument(0)));
@@ -204,7 +204,7 @@ class BudgetSummaryControllerContractTest {
         ActualCostReviewItem unallocated = reviewItem(unallocatedCost, null);
         ActualCostReviewItem allocated = reviewItem(allocatedCost, null);
 
-        when(actualCostReviewFacadeService.actualCostRegister(null))
+        when(actualCostReviewFacadeService.actualCostRegister(null, null))
                 .thenReturn(List.of(allocated, unallocated));
         when(actualCostReviewFacadeService.registerSummary(any()))
                 .thenAnswer(invocation -> registerSummary(invocation.getArgument(0)));
@@ -229,7 +229,7 @@ class BudgetSummaryControllerContractTest {
         ActualCostReviewItem wrongRole = reviewItemWithContext(
                 UUID.randomUUID(), departmentId, counteragentId, "PENDING", "ACCOUNTANT", false, 2);
 
-        when(actualCostReviewFacadeService.reviewQueue("pump"))
+        when(actualCostReviewFacadeService.reviewQueue("pump", null))
                 .thenReturn(List.of(overdue, matching, wrongRole));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue")
@@ -252,7 +252,7 @@ class BudgetSummaryControllerContractTest {
         ActualCostReviewItem unallocated = reviewItem(unallocatedCost, null);
         ActualCostReviewItem allocated = reviewItem(allocatedCost, null);
 
-        when(actualCostReviewFacadeService.reviewQueue(null))
+        when(actualCostReviewFacadeService.reviewQueue(null, null))
                 .thenReturn(List.of(unallocated, allocated));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue")
@@ -269,7 +269,7 @@ class BudgetSummaryControllerContractTest {
         ActualCostReviewItem item = reviewItemWithContext(
                 actualCostId, UUID.randomUUID(), UUID.randomUUID(), "PENDING", "FINANCE_MANAGER", false, 12);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(actualCostReviewFacadeService.reviewQueue(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.reviewQueue(null, null)).thenReturn(List.of(item));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue")
                         .param("myQueue", "true"))
@@ -289,7 +289,7 @@ class BudgetSummaryControllerContractTest {
                 List.of(new SimpleGrantedAuthority("ACTUAL_COST_REJECT"))
         ));
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(actualCostReviewFacadeService.reviewQueue(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.reviewQueue(null, null)).thenReturn(List.of(item));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue")
                         .param("myQueue", "true"))
@@ -478,7 +478,7 @@ class BudgetSummaryControllerContractTest {
     }
 
     @Test
-    void summaryCountsPendingCostInTotalActual() throws Exception {
+    void summaryExcludesPendingFromTotalActual() throws Exception {
         UUID budgetId = UUID.randomUUID();
         UUID lineId = UUID.randomUUID();
         UUID costCategoryId = UUID.randomUUID();
@@ -520,12 +520,13 @@ class BudgetSummaryControllerContractTest {
 
         var response = controller.summary(2026, null, null).getBody();
 
-        assertThat(response.totalActual()).isEqualTo(300.0);
+        assertThat(response.totalActual()).isZero();
+        assertThat(response.pendingReviewAmount()).isEqualTo(300.0);
         assertThat(response.totalPlanned()).isEqualTo(1000.0);
     }
 
     @Test
-    void summaryCountsApprovedAndPendingButNotRejected() throws Exception {
+    void summaryCountsApprovedOnlyInTotalActual() throws Exception {
         UUID budgetId = UUID.randomUUID();
         UUID lineId = UUID.randomUUID();
         UUID costCategoryId = UUID.randomUUID();
@@ -583,7 +584,8 @@ class BudgetSummaryControllerContractTest {
 
         var response = controller.summary(2026, null, null).getBody();
 
-        assertThat(response.totalActual()).isEqualTo(800.0);
+        assertThat(response.totalActual()).isEqualTo(500.0);
+        assertThat(response.pendingReviewAmount()).isEqualTo(300.0);
     }
 
     @Test

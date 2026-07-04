@@ -57,6 +57,7 @@ class ProcurementRequestSearchTest {
     @Mock ScopeAccessService scopeAccessService;
     @Mock LowStockRecommendationService lowStockRecommendationService;
     @Mock ActualCostRepository actualCostRepository;
+    @Mock com.toir.repository.projects.BudgetLineRepository budgetLineRepository;
     @Mock CostCategoryRepository costCategoryRepository;
     @Mock CounteragentService counteragentService;
     @Mock ToirStockService toirStockService;
@@ -84,6 +85,7 @@ class ProcurementRequestSearchTest {
                 scopeAccessService,
                 lowStockRecommendationService,
                 actualCostRepository,
+                budgetLineRepository,
                 costCategoryRepository,
                 counteragentService,
                 toirStockService,

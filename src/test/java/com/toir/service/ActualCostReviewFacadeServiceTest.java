@@ -1,12 +1,15 @@
 package com.toir.service;
 
 import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.dto.financialreview.ActualCostReviewItem;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideCreateRequest;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
 import com.toir.entity.Counteragent;
 import com.toir.entity.Department;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.projects.BudgetLine;
+import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostReviewEvent;
 import com.toir.entity.projects.CostCategory;
@@ -73,6 +76,10 @@ class ActualCostReviewFacadeServiceTest {
     WorkOrderRepository workOrderRepository;
     @Mock
     ContractorWorkRepository contractorWorkRepository;
+    @Mock
+    com.toir.repository.projects.BudgetLineRepository budgetLineRepository;
+    @Mock
+    com.toir.repository.repair.RepairRequestRepository repairRequestRepository;
     @Mock
     DepartmentRepository departmentRepository;
     @Mock
@@ -224,8 +231,6 @@ class ActualCostReviewFacadeServiceTest {
         when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(List.of(actualCost));
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(false);
         when(financeScopeService.filterActualCosts(List.of(actualCost))).thenReturn(List.of(actualCost));
         when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId))
                 .thenReturn(Optional.empty());
@@ -244,7 +249,7 @@ class ActualCostReviewFacadeServiceTest {
     }
 
     @Test
-    void reviewQueueReturnsAllPendingCostsForApprover() {
+    void reviewQueueAppliesScopeFilterForApprover() {
         List<ActualCost> pendingCosts = List.of(
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID()),
@@ -253,12 +258,12 @@ class ActualCostReviewFacadeServiceTest {
         when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(pendingCosts);
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(true);
+        when(financeScopeService.filterActualCosts(pendingCosts)).thenReturn(List.of(pendingCosts.getFirst()));
         stubMinimalReviewQueueMapping();
 
-        assertThat(service.reviewQueue(null)).hasSize(3);
+        assertThat(service.reviewQueue(null)).hasSize(1);
 
-        verify(financeScopeService, never()).filterActualCosts(any());
+        verify(financeScopeService).filterActualCosts(pendingCosts);
     }
 
     @Test
@@ -271,8 +276,6 @@ class ActualCostReviewFacadeServiceTest {
         when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(pendingCosts);
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(false);
         when(financeScopeService.filterActualCosts(pendingCosts)).thenReturn(List.of(pendingCosts.getFirst()));
         stubMinimalReviewQueueMapping();
 
@@ -282,7 +285,7 @@ class ActualCostReviewFacadeServiceTest {
     }
 
     @Test
-    void reviewQueueReturnsAllPendingCostsForRejectRole() {
+    void reviewQueueAppliesScopeFilterForRejectRole() {
         List<ActualCost> pendingCosts = List.of(
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID()),
@@ -291,13 +294,12 @@ class ActualCostReviewFacadeServiceTest {
         when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(pendingCosts);
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(true);
+        when(financeScopeService.filterActualCosts(pendingCosts)).thenReturn(List.of(pendingCosts.get(1)));
         stubMinimalReviewQueueMapping();
 
-        assertThat(service.reviewQueue(null)).hasSize(3);
+        assertThat(service.reviewQueue(null)).hasSize(1);
 
-        verify(financeScopeService, never()).filterActualCosts(any());
+        verify(financeScopeService).filterActualCosts(pendingCosts);
     }
 
     @Test
@@ -317,6 +319,49 @@ class ActualCostReviewFacadeServiceTest {
         assertThat(service.reviewQueue(null)).hasSize(5);
 
         verify(financeScopeService, never()).filterActualCosts(any());
+    }
+
+    @Test
+    void reviewQueueFiltersByYearWhenProvided() {
+        ActualCost in2026 = minimalPendingCost(UUID.randomUUID());
+        in2026.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
+        ActualCost in2025 = minimalPendingCost(UUID.randomUUID());
+        in2025.setCostDate(Instant.parse("2025-06-01T00:00:00Z"));
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
+                .thenReturn(List.of(in2026, in2025));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null, 2026)).hasSize(1);
+        assertThat(service.reviewQueue(null, 2026).getFirst().id()).isEqualTo(in2026.getId());
+    }
+
+    @Test
+    void reviewQueueResolvesDepartmentFromBudgetLineBeforeWorkOrder() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        UUID budgetDepartmentId = UUID.randomUUID();
+        UUID workOrderDepartmentId = UUID.randomUUID();
+        ActualCost actualCost = pendingActualCost(actualCostId, workOrderId, 500.0, Instant.now());
+        actualCost.setBudgetLineId(budgetLineId);
+        WorkOrder workOrder = workOrder(workOrderId, workOrderDepartmentId);
+        Department budgetDepartment = department(budgetDepartmentId);
+
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
+                .thenReturn(List.of(actualCost));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId))
+                .thenReturn(Optional.empty());
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(budgetLine(budgetLineId, budgetDepartmentId)));
+        when(departmentRepository.findByIdAndIsDeletedFalse(budgetDepartmentId)).thenReturn(Optional.of(budgetDepartment));
+        when(financialApprovalRuleRepository.findFirstMatchingRule(budgetDepartmentId, 500.0)).thenReturn(Optional.empty());
+
+        var item = service.reviewQueue(null).getFirst();
+
+        assertThat(item.department()).isInstanceOf(ActualCostReviewItem.Ref.class);
+        assertThat(((ActualCostReviewItem.Ref) item.department()).id()).isEqualTo(budgetDepartmentId);
     }
 
     @Test
@@ -591,6 +636,15 @@ class ActualCostReviewFacadeServiceTest {
         department.setCode("D-1");
         department.setName("Mechanical");
         return department;
+    }
+
+    private BudgetLine budgetLine(UUID lineId, UUID departmentId) {
+        BudgetLine line = new BudgetLine();
+        ReflectionTestUtils.setField(line, "id", lineId);
+        MaintenanceBudget budget = new MaintenanceBudget();
+        budget.setDepartmentId(departmentId);
+        line.setBudget(budget);
+        return line;
     }
 
     private ActualCostReviewEvent handoverEvent(UUID actualCostId, UUID notificationId, UUID actorId) {

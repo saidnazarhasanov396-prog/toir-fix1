@@ -28,4 +28,16 @@ public interface BudgetLineRepository extends JpaRepository<BudgetLine, UUID> {
     @Query(value = "SELECT COUNT(*) FROM budget_lines WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 
+    @Query(value = """
+            SELECT * FROM budget_lines
+            WHERE budget_id = cast(:budgetId as uuid)
+              AND cost_category_id = cast(:costCategoryId as uuid)
+              AND is_deleted = false
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """, nativeQuery = true)
+    Optional<BudgetLine> findFirstByBudgetIdAndCostCategoryIdAndIsDeletedFalse(
+            @Param("budgetId") UUID budgetId,
+            @Param("costCategoryId") UUID costCategoryId);
+
 }

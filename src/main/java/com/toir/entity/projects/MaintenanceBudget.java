@@ -36,6 +36,9 @@ public class MaintenanceBudget extends BaseEntity {
     @Column(name = "total_actual", nullable = false)
     private double totalActual;
 
+    @Column(name = "total_committed", nullable = false)
+    private double totalCommitted;
+
     @OneToMany(mappedBy = "budget", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<BudgetLine> lines = new ArrayList<>();
 }

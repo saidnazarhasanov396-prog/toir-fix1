@@ -96,7 +96,31 @@ public class NotificationFacadeService {
     @Transactional(readOnly = true)
     public NotificationSummaryDto summary(UUID recipientId) {
         long unread = recipientId != null ? notificationService.countUnread(recipientId) : 0;
-        return new NotificationSummaryDto(unread, 0, 0, 0, 0, 0);
+
+        List<NotificationDto> personal = recipientId != null
+                ? notificationService.findForUser(recipientId)
+                : List.of();
+        long critical = personal.stream()
+                .filter(n -> n.status() != NotificationStatus.READ)
+                .filter(n -> n.severity() == NotificationSeverity.CRITICAL)
+                .count();
+        long openEscalations = personal.stream()
+                .filter(n -> n.status() != NotificationStatus.READ)
+                .filter(n -> n.severity() == NotificationSeverity.CRITICAL
+                        || n.severity() == NotificationSeverity.WARNING)
+                .count();
+
+        FinancialReviewInboxSummary finance = financialReviewInbox(
+                recipientId, 0, Integer.MAX_VALUE, (FinancialReviewInboxFilter) null).summary();
+
+        return new NotificationSummaryDto(
+                unread,
+                critical,
+                openEscalations,
+                finance.total(),
+                finance.dueSoon(),
+                finance.overdue()
+        );
     }
 
     @Transactional(readOnly = true)

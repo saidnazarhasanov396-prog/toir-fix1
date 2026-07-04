@@ -7,6 +7,7 @@ import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ public class BudgetCommitmentService {
 
     private final BudgetLineRepository budgetLineRepository;
     private final BudgetEventRepository budgetEventRepository;
+    private final MaintenanceBudgetRepository maintenanceBudgetRepository;
 
     public void assertCanCommit(BudgetLine line, double amount) {
         validateBudgetLineForCommitment(line);
@@ -39,6 +41,7 @@ public class BudgetCommitmentService {
         double oldCommitted = line.getCommittedAmount();
         line.setCommittedAmount(oldCommitted + amount);
         budgetLineRepository.save(line);
+        adjustBudgetTotalCommitted(line.getBudget(), amount);
 
         recordBudgetEvent(line, "COMMITMENT_ADDED", oldCommitted,
                 line.getCommittedAmount(), sourceType, sourceId, actorUserId, comment);
@@ -55,6 +58,9 @@ public class BudgetCommitmentService {
         double newCommitted = oldCommitted - effectiveRelease;
         line.setCommittedAmount(newCommitted);
         budgetLineRepository.save(line);
+        if (effectiveRelease > EPSILON) {
+            adjustBudgetTotalCommitted(line.getBudget(), -effectiveRelease);
+        }
 
         recordBudgetEvent(line, "COMMITMENT_REMOVED", oldCommitted, newCommitted,
                 sourceType, sourceId, actorUserId, comment);
@@ -76,6 +82,15 @@ public class BudgetCommitmentService {
             throw RestException.badRequest(
                     "Insufficient budget for commitment: available=" + available + ", requested=" + amount);
         }
+    }
+
+    private void adjustBudgetTotalCommitted(MaintenanceBudget budget, double delta) {
+        if (budget == null || budget.getId() == null || Math.abs(delta) <= EPSILON) {
+            return;
+        }
+        double nextTotal = Math.max(0, budget.getTotalCommitted() + delta);
+        budget.setTotalCommitted(nextTotal);
+        maintenanceBudgetRepository.save(budget);
     }
 
     private void recordBudgetEvent(BudgetLine line, String eventType, double oldCommitted,

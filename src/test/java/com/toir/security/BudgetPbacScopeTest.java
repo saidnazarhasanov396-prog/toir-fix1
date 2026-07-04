@@ -191,6 +191,7 @@ class BudgetPbacScopeTest {
                 BudgetStatus.DRAFT,
                 0,
                 0,
+                0,
                 List.of()
         ))).isInstanceOf(AccessDeniedException.class);
 

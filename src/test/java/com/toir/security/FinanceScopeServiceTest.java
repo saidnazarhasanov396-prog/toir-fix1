@@ -142,6 +142,48 @@ class FinanceScopeServiceTest {
         assertThat(result).isEmpty();
     }
 
+    @Test
+    void filterActualCostsUsesBudgetLineDepartmentWhenWorkOrderDiffers() {
+        UUID budgetDepartmentId = UUID.randomUUID();
+        UUID workOrderDepartmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        ActualCost cost = actualCost(UUID.randomUUID());
+        cost.setBudgetLineId(budgetLineId);
+        cost.setWorkOrderId(workOrderId);
+
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId))
+                .thenReturn(Optional.of(budgetLine(budgetLineId, budgetDepartmentId)));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, workOrderDepartmentId)));
+        when(scopeAccessService.canAccessDepartment(budgetDepartmentId)).thenReturn(true);
+
+        var result = service.filterActualCosts(List.of(cost));
+
+        assertThat(result).containsExactly(cost);
+    }
+
+    @Test
+    void filterActualCostsDeniesWhenPrimaryBudgetLineDepartmentForbiddenEvenIfWorkOrderAccessible() {
+        UUID budgetDepartmentId = UUID.randomUUID();
+        UUID workOrderDepartmentId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        ActualCost cost = actualCost(UUID.randomUUID());
+        cost.setBudgetLineId(budgetLineId);
+        cost.setWorkOrderId(workOrderId);
+
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId))
+                .thenReturn(Optional.of(budgetLine(budgetLineId, budgetDepartmentId)));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(workOrder(workOrderId, workOrderDepartmentId)));
+        when(scopeAccessService.canAccessDepartment(budgetDepartmentId)).thenReturn(false);
+
+        var result = service.filterActualCosts(List.of(cost));
+
+        assertThat(result).isEmpty();
+    }
+
     private MaintenanceBudget budget(UUID id, UUID departmentId) {
         MaintenanceBudget budget = new MaintenanceBudget();
         budget.setId(id);

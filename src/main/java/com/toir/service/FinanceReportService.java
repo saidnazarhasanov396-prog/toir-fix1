@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.budget.FinanceDashboardResponse;
+import com.toir.finance.FinanceBudgetMath;
 import com.toir.dto.budget.FinanceReportRow;
 import com.toir.entity.Department;
 import com.toir.entity.contractors.ContractorWork;
@@ -182,7 +183,8 @@ public class FinanceReportService {
             categoryTotals.committedAmount += line.getCommittedAmount();
         }
         for (ActualCost cost : dataset.actualCosts()) {
-            addActualCost(totalsByCategory.computeIfAbsent(cost.getCostCategoryId(), key -> new MutableTotals()), cost);
+            UUID categoryId = resolveReportCategoryId(cost, dataset.lineById());
+            addActualCost(totalsByCategory.computeIfAbsent(categoryId, key -> new MutableTotals()), cost);
         }
         return totalsByCategory.entrySet().stream()
                 .map(entry -> {
@@ -388,6 +390,16 @@ public class FinanceReportService {
         return null;
     }
 
+    private UUID resolveReportCategoryId(ActualCost cost, Map<UUID, BudgetLine> lineById) {
+        if (cost.getBudgetLineId() != null) {
+            BudgetLine line = lineById.get(cost.getBudgetLineId());
+            if (line != null && line.getCostCategoryId() != null) {
+                return line.getCostCategoryId();
+            }
+        }
+        return cost.getCostCategoryId();
+    }
+
     private Comparator<FinanceReportRow> rowComparator() {
         return Comparator.comparing(
                 FinanceReportRow::groupName,
@@ -466,7 +478,7 @@ public class FinanceReportService {
             long actualCostCount
     ) {
         private double remainingBudget() {
-            return plannedAmount - approvedActualAmount;
+            return FinanceBudgetMath.remainingBudget(plannedAmount, approvedActualAmount, committedAmount);
         }
 
         private double forecastRemaining() {
@@ -474,15 +486,16 @@ public class FinanceReportService {
         }
 
         private double variance() {
-            return plannedAmount - approvedActualAmount;
+            return FinanceBudgetMath.variance(plannedAmount, approvedActualAmount);
         }
 
         private double burnRate() {
-            return plannedAmount > 0 ? approvedActualAmount / plannedAmount : 0;
+            return FinanceBudgetMath.burnRate(plannedAmount, approvedActualAmount);
         }
 
         private double riskAmount() {
-            return Math.max(approvedActualAmount + pendingActualAmount - plannedAmount, 0);
+            return FinanceBudgetMath.riskAmount(
+                    plannedAmount, approvedActualAmount, pendingActualAmount, committedAmount);
         }
     }
 }

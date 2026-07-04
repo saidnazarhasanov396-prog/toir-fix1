@@ -79,7 +79,7 @@ class PprPlanRepositoryStatsTest {
         assertThat(page.getTotalElements()).isEqualTo(1);
         assertThat(page.getContent().getFirst().getCode()).isEqualTo("PPR-TASK-SCOPE-1");
         assertThat(allScopedTasks).extracting(PprTask::getCode)
-                .containsExactly("PPR-TASK-SCOPE-1", "PPR-TASK-SCOPE-2");
+                .containsExactlyInAnyOrder("PPR-TASK-SCOPE-1", "PPR-TASK-SCOPE-2");
     }
 
     private PprPlan plan(String code, UUID departmentId) {

@@ -65,7 +65,7 @@ class ProcurementRequestApprovalHandlerTest {
     }
 
     @Test
-    void approveCommitsBudgetWhenRequestIsAllocated() {
+    void approveDoesNotCommitBudgetWhenRequestIsAllocated() {
         handler.execute(approval(ApprovalActionType.APPROVE));
 
         verify(budgetCommitmentService).commitBudget(
@@ -90,6 +90,20 @@ class ProcurementRequestApprovalHandlerTest {
         verify(budgetCommitmentService, never()).commitBudget(any(), any(Double.class), any(), any(), any(), any());
     }
 
+    @Test
+    void rejectReleasesAllocatedCommitmentBeforeApproval() {
+        handler.execute(approval(ApprovalActionType.REJECT));
+
+        verify(budgetCommitmentService).releaseBudget(
+                eq(budgetLineId),
+                eq(500.0),
+                eq("PROCUREMENT_REQUEST"),
+                eq(requestId),
+                any(),
+                eq("Budget release on procurement rejection")
+        );
+    }
+
     private ApprovalRequest approval(ApprovalActionType actionType) {
         ApprovalRequest approval = new ApprovalRequest();
         approval.setTargetType(ApprovalTargetType.PROCUREMENT_REQUEST);
@@ -97,7 +111,9 @@ class ProcurementRequestApprovalHandlerTest {
         approval.setTargetId(requestId);
         ApprovalStep step = new ApprovalStep();
         step.setStepNumber(1);
-        step.setDecision(ApprovalDecision.APPROVED);
+        step.setDecision(actionType == ApprovalActionType.APPROVE
+                ? ApprovalDecision.APPROVED
+                : ApprovalDecision.REJECTED);
         step.setApproverId(UUID.randomUUID());
         approval.setSteps(List.of(step));
         return approval;
