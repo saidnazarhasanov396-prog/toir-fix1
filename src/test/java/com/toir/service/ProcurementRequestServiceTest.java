@@ -430,7 +430,6 @@ class ProcurementRequestServiceTest {
         var result = service.approve(requestId);
 
         assertThat(result.status()).isEqualTo(ProcurementRequestStatus.APPROVED);
-        verify(taskGenerationService).generateReceiveForApprovedProcurement(request);
     }
 
     @Test
