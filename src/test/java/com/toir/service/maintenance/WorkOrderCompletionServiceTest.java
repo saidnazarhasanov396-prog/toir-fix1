@@ -1,23 +1,22 @@
 package com.toir.service.maintenance;
 
+import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.entity.LaborEntry;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
-import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.enums.ActualCostSourceType;
-import com.toir.enums.ActualCostStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.repository.LaborEntryRepository;
-import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
+import com.toir.service.ActualCostService;
 import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,7 +49,7 @@ import static org.mockito.Mockito.when;
 class WorkOrderCompletionServiceTest {
 
     @Mock
-    ActualCostRepository actualCostRepository;
+    ActualCostService actualCostService;
     @Mock
     CostCategoryRepository costCategoryRepository;
     @Mock
@@ -84,7 +83,6 @@ class WorkOrderCompletionServiceTest {
         workOrder.setNumber("WO-1");
         workOrder.setDepartmentId(departmentId);
         workOrder.setBudgetLineId(plannedBudgetLineId);
-        when(actualCostRepository.save(any(ActualCost.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -106,9 +104,7 @@ class WorkOrderCompletionServiceTest {
 
         service.createActualCostsOnCompletion(workOrder);
 
-        verify(actualCostRepository, never()).save(any(ActualCost.class));
-        verify(actualCostRepository, never()).findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
-                eq(ActualCostSourceType.MATERIAL_ISSUE), any());
+        verify(actualCostService, never()).syncPendingFromWorkOrderCompletion(any());
     }
 
     @Test
@@ -139,21 +135,17 @@ class WorkOrderCompletionServiceTest {
                 .thenReturn(List.of(contractorWork));
         when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("LABOR")).thenReturn(Optional.of(labor));
         when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("CTR")).thenReturn(Optional.of(contractor));
-        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
-                eq(ActualCostSourceType.LABOR_ENTRY), eq(laborEntryId))).thenReturn(Optional.empty());
-        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
-                eq(ActualCostSourceType.COUNTERAGENT_WORK), eq(contractorWorkId))).thenReturn(Optional.empty());
 
         service.createActualCostsOnCompletion(workOrder);
 
-        ArgumentCaptor<ActualCost> captor = ArgumentCaptor.forClass(ActualCost.class);
-        verify(actualCostRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+        ArgumentCaptor<ActualCostDto> captor = ArgumentCaptor.forClass(ActualCostDto.class);
+        verify(actualCostService, org.mockito.Mockito.times(2)).syncPendingFromWorkOrderCompletion(captor.capture());
         assertThat(captor.getAllValues()).allSatisfy(cost -> {
-            assertThat(cost.getBudgetLineId()).isEqualTo(plannedBudgetLineId);
-            assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
+            assertThat(cost.budgetLineId()).isEqualTo(plannedBudgetLineId);
+            assertThat(cost.workOrderId()).isEqualTo(workOrder.getId());
         });
         assertThat(captor.getAllValues())
-                .extracting(ActualCost::getAmount)
+                .extracting(ActualCostDto::amount)
                 .containsExactlyInAnyOrder(100.0, 500.0);
         verify(budgetLineRepository, never()).save(any(BudgetLine.class));
         verify(maintenanceBudgetRepository, never()).save(any(MaintenanceBudget.class));
@@ -203,8 +195,6 @@ class WorkOrderCompletionServiceTest {
             line.setId(unplannedLineId);
             return line;
         });
-        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
-                eq(ActualCostSourceType.LABOR_ENTRY), eq(laborEntryId))).thenReturn(Optional.empty());
 
         service.createActualCostsOnCompletion(workOrder);
 
@@ -214,11 +204,11 @@ class WorkOrderCompletionServiceTest {
         assertThat(lineCaptor.getValue().getActualAmount()).isZero();
         assertThat(lineCaptor.getValue().getCostCategoryId()).isEqualTo(unplanned.getId());
 
-        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
-        verify(actualCostRepository).save(costCaptor.capture());
-        assertThat(costCaptor.getValue().getBudgetLineId()).isEqualTo(unplannedLineId);
-        assertThat(costCaptor.getValue().getAmount()).isEqualTo(100.0);
-        assertThat(costCaptor.getValue().getStatus()).isEqualTo(ActualCostStatus.PENDING);
+        ArgumentCaptor<ActualCostDto> costCaptor = ArgumentCaptor.forClass(ActualCostDto.class);
+        verify(actualCostService).syncPendingFromWorkOrderCompletion(costCaptor.capture());
+        assertThat(costCaptor.getValue().budgetLineId()).isEqualTo(unplannedLineId);
+        assertThat(costCaptor.getValue().amount()).isEqualTo(100.0);
+        assertThat(costCaptor.getValue().sourceType()).isEqualTo(ActualCostSourceType.LABOR_ENTRY);
         assertThat(budget.getTotalPlanned()).isEqualTo(1_000_000);
         assertThat(budget.getTotalActual()).isZero();
     }
@@ -248,19 +238,17 @@ class WorkOrderCompletionServiceTest {
         when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("UNPLANNED")).thenReturn(Optional.of(unplanned));
         when(maintenanceBudgetRepository.findAllByDepartmentIdAndYearAndIsDeletedFalse(any(), any(Integer.class)))
                 .thenReturn(List.of());
-        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
-                eq(ActualCostSourceType.LABOR_ENTRY), eq(laborEntryId))).thenReturn(Optional.empty());
 
         assertThatCode(() -> service.createActualCostsOnCompletion(workOrder)).doesNotThrowAnyException();
 
-        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
-        verify(actualCostRepository).save(costCaptor.capture());
-        assertThat(costCaptor.getValue().getBudgetLineId()).isNull();
-        assertThat(costCaptor.getValue().getStatus()).isEqualTo(ActualCostStatus.PENDING);
+        ArgumentCaptor<ActualCostDto> costCaptor = ArgumentCaptor.forClass(ActualCostDto.class);
+        verify(actualCostService).syncPendingFromWorkOrderCompletion(costCaptor.capture());
+        assertThat(costCaptor.getValue().budgetLineId()).isNull();
+        assertThat(costCaptor.getValue().amount()).isEqualTo(10.0);
     }
 
     @Test
-    void createActualCostsOnCompletion_doesNotOverwriteApprovedCost() {
+    void createActualCostsOnCompletion_passesLaborAndContractorSourceTypes() {
         when(repairCampaignBudgetLineResolver.resolveForWorkOrder(workOrder)).thenReturn(plannedBudgetLineId);
 
         UUID laborEntryId = UUID.randomUUID();
@@ -270,11 +258,6 @@ class WorkOrderCompletionServiceTest {
         laborEntry.setHours(2);
         laborEntry.setRate(50.0);
 
-        ActualCost approved = new ActualCost();
-        approved.setId(UUID.randomUUID());
-        approved.setStatus(ActualCostStatus.APPROVED);
-        approved.setAmount(100.0);
-
         when(repairMaterialUsageRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrder.getId()))
                 .thenReturn(List.of());
         when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrder.getId()))
@@ -283,12 +266,13 @@ class WorkOrderCompletionServiceTest {
                 .thenReturn(List.of());
         when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("LABOR"))
                 .thenReturn(Optional.of(category("LABOR")));
-        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
-                eq(ActualCostSourceType.LABOR_ENTRY), eq(laborEntryId))).thenReturn(Optional.of(approved));
 
         service.createActualCostsOnCompletion(workOrder);
 
-        verify(actualCostRepository, never()).save(any(ActualCost.class));
+        ArgumentCaptor<ActualCostDto> costCaptor = ArgumentCaptor.forClass(ActualCostDto.class);
+        verify(actualCostService).syncPendingFromWorkOrderCompletion(costCaptor.capture());
+        assertThat(costCaptor.getValue().sourceType()).isEqualTo(ActualCostSourceType.LABOR_ENTRY);
+        assertThat(costCaptor.getValue().sourceId()).isEqualTo(laborEntryId);
     }
 
     private CostCategory category(String code) {
