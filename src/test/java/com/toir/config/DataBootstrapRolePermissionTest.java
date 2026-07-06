@@ -62,6 +62,12 @@ class DataBootstrapRolePermissionTest {
                         PermissionConstants.WORK_ORDER_START,
                         PermissionConstants.WORK_ORDER_COMPLETE
                 );
+        assertThat(roles.get("FINANCE_MANAGER").getPermissions())
+                .contains(
+                        PermissionConstants.ACTUAL_COST_APPROVE,
+                        PermissionConstants.BUDGET_APPROVE,
+                        PermissionConstants.APPROVAL_APPROVE
+                );
         assertThat(roles.get("SYSTEM_ADMIN").getPermissions())
                 .containsExactly(PermissionConstants.WILDCARD);
     }

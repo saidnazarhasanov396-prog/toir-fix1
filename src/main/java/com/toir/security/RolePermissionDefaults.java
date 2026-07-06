@@ -107,7 +107,11 @@ public final class RolePermissionDefaults {
                 PermissionConstants.KNOWLEDGE_READ,
                 PermissionConstants.ANALYTICS_READ,
                 PermissionConstants.NOTIFICATION_READ,
-                PermissionConstants.NOTIFICATION_MARK_READ
+                PermissionConstants.NOTIFICATION_MARK_READ,
+                PermissionConstants.STOCK_READ,
+                PermissionConstants.STOCK_MOVE,
+                PermissionConstants.MATERIAL_USAGE_READ,
+                PermissionConstants.MATERIAL_USAGE_ISSUE
         ));
         defaults.put("TECHNICIAN", List.of(
                 PermissionConstants.READ_LEGACY,

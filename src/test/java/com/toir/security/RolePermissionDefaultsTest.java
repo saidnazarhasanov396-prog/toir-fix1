@@ -113,6 +113,28 @@ class RolePermissionDefaultsTest {
                 );
     }
 
+    @Test
+    void foremanDefaultsAllowMaterialReserveAndIssue() {
+        assertThat(RolePermissionDefaults.forRole("FOREMAN"))
+                .contains(
+                        PermissionConstants.STOCK_READ,
+                        PermissionConstants.STOCK_MOVE,
+                        PermissionConstants.MATERIAL_USAGE_READ,
+                        PermissionConstants.MATERIAL_USAGE_ISSUE
+                );
+    }
+
+    @Test
+    void financeManagerDefaultsIncludeApprovalPermissions() {
+        assertThat(RolePermissionDefaults.forRole("FINANCE_MANAGER"))
+                .contains(
+                        PermissionConstants.ACTUAL_COST_APPROVE,
+                        PermissionConstants.BUDGET_APPROVE,
+                        PermissionConstants.APPROVAL_APPROVE,
+                        PermissionConstants.APPROVAL_REJECT
+                );
+    }
+
     private List<String> defaultRoleCodes() throws Exception {
         String source = Files.readString(ROLE_PERMISSION_DEFAULTS);
         Matcher matcher = Pattern.compile("defaults\\.put\\(\\\"([^\\\"]+)\\\"").matcher(source);

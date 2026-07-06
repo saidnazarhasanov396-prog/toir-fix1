@@ -168,6 +168,38 @@ public class ActualCostService {
         return ActualCostDto.from(saved);
     }
 
+    /**
+     * Upserts PENDING actual costs produced when a work order is completed.
+     * New rows use the standard create path (review events, notifications, budget commitment).
+     * Existing PENDING rows are updated in place; APPROVED rows are left unchanged.
+     */
+    @Transactional
+    public void syncPendingFromWorkOrderCompletion(ActualCostDto request) {
+        if (request == null || request.amount() <= 0 || request.costCategoryId() == null) {
+            return;
+        }
+        if (request.sourceType() == null || request.sourceId() == null) {
+            throw RestException.badRequest("Work order completion sync requires sourceType and sourceId");
+        }
+
+        var existing = repository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                request.sourceType(),
+                request.sourceId()
+        );
+        if (existing.isPresent()) {
+            ActualCost cost = existing.get();
+            if (cost.getStatus() == ActualCostStatus.APPROVED) {
+                return;
+            }
+            applyWorkOrderCompletionFields(cost, request);
+            financeScopeService.assertCanMutateActualCost(cost);
+            repository.save(cost);
+            return;
+        }
+
+        create(request);
+    }
+
     @Transactional
     public ActualCostDto review(UUID id, boolean approve, UUID reviewerId, String comment) {
         ActualCost c = repository.findByIdAndIsDeletedFalse(id)
@@ -611,5 +643,21 @@ public class ActualCostService {
         event.setNextThresholdHours(thresholdHours);
         event.setOccurredAt(Instant.now());
         reviewEventRepository.save(event);
+    }
+
+    private void applyWorkOrderCompletionFields(ActualCost cost, ActualCostDto request) {
+        cost.setWorkOrderId(request.workOrderId());
+        cost.setRepairRequestId(request.repairRequestId());
+        cost.setContractorWorkId(request.contractorWorkId());
+        cost.setSourceType(request.sourceType());
+        cost.setSourceId(request.sourceId());
+        cost.setBudgetLineId(request.budgetLineId());
+        cost.setCostCategoryId(request.costCategoryId());
+        cost.setAmount(request.amount());
+        cost.setNotes(request.notes());
+        cost.setStatus(ActualCostStatus.PENDING);
+        if (request.costDate() != null) {
+            cost.setCostDate(request.costDate());
+        }
     }
 }
