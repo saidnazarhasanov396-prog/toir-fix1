@@ -12,6 +12,7 @@ import com.toir.dto.approval.ReturnApprovalRequest;
 import com.toir.dto.approval.UpdateApprovalRequest;
 import com.toir.enums.ApprovalStatus;
 import com.toir.exception.RestException;
+import com.toir.security.ApprovalSecurityExpressions;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.ApprovalService;
 import com.toir.service.approval.ApprovalAnalyticsService;
@@ -94,7 +95,7 @@ public class ApprovalController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_CREATE')")
+    @PreAuthorize(ApprovalSecurityExpressions.CAN_CREATE)
     public ResponseEntity<ApprovalRequestDto> create(@Valid @RequestBody CreateApprovalRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request));
     }
@@ -119,25 +120,25 @@ public class ApprovalController {
     }
 
     @PostMapping("/request")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_CREATE')")
+    @PreAuthorize(ApprovalSecurityExpressions.CAN_CREATE)
     public ResponseEntity<ApprovalRequestDto> request(@Valid @RequestBody ApprovalStartRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.requestApproval(request));
     }
 
     @PostMapping("/start")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_CREATE')")
+    @PreAuthorize(ApprovalSecurityExpressions.CAN_CREATE)
     public ResponseEntity<ApprovalRequestDto> start(@Valid @RequestBody ApprovalStartRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.requestApproval(request));
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_APPROVE')")
+    @PreAuthorize(ApprovalSecurityExpressions.CAN_APPROVE)
     public ResponseEntity<ApprovalRequestDto> approve(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
         return decisionResponse(service.approve(id, principalOnlyDecision(decision)));
     }
 
     @PostMapping("/{id}/steps/{stepId}/approve")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_APPROVE')")
+    @PreAuthorize(ApprovalSecurityExpressions.CAN_APPROVE)
     public ResponseEntity<ApprovalRequestDto> approveStep(@PathVariable UUID id,
                                                           @PathVariable UUID stepId,
                                                           @Valid @RequestBody(required = false) DecisionRequest decision) {
@@ -145,13 +146,13 @@ public class ApprovalController {
     }
 
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_REJECT')")
+    @PreAuthorize(ApprovalSecurityExpressions.CAN_REJECT)
     public ResponseEntity<ApprovalRequestDto> reject(@PathVariable UUID id, @Valid @RequestBody DecisionRequest decision) {
         return decisionResponse(service.reject(id, principalOnlyDecision(decision)));
     }
 
     @PostMapping("/{id}/steps/{stepId}/reject")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_REJECT')")
+    @PreAuthorize(ApprovalSecurityExpressions.CAN_REJECT)
     public ResponseEntity<ApprovalRequestDto> rejectStep(@PathVariable UUID id,
                                                          @PathVariable UUID stepId,
                                                          @Valid @RequestBody(required = false) DecisionRequest decision) {

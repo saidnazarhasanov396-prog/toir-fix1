@@ -6,6 +6,7 @@ import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.enums.ApprovalActionType;
 import com.toir.repository.ApprovalTemplateRepository;
+import com.toir.security.ApprovalDomainPermissions;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -35,6 +36,13 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                                 request.getTargetType()
                         ))
                 .map(this::stepsFromTemplate)
+                .filter(steps -> !steps.isEmpty())
+                .orElseGet(() -> permissionFallbackSteps(request));
+    }
+
+    private List<CreateApprovalRequest.StepInput> permissionFallbackSteps(ApprovalRequest request) {
+        return ApprovalDomainPermissions.approvePermissionFor(request.getTargetType())
+                .map(permission -> List.of(new CreateApprovalRequest.StepInput(null, permission)))
                 .orElse(List.of());
     }
 

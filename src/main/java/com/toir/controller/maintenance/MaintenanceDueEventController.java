@@ -4,8 +4,8 @@ import com.toir.dto.maintenancedue.CancelMaintenanceDueEventRequest;
 import com.toir.dto.maintenancedue.MaintenanceDueEventDto;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
-import com.toir.exception.RestException;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
 import java.time.Instant;
 import java.util.UUID;
@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MaintenanceDueEventController {
 
     private final MaintenanceDueEventService service;
+    private final MaintenanceAutomationService automationService;
     private final ScopeAccessService scopeAccessService;
 
     @GetMapping
@@ -65,7 +66,10 @@ public class MaintenanceDueEventController {
     @PostMapping("/{id}/work-order")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_CREATE') or hasAuthority('MAINTENANCE_EVENT_APPROVE')")
     public ResponseEntity<MaintenanceDueEventDto> createWorkOrder(@PathVariable UUID id) {
-        throw RestException.conflict("Use /api/v1/approvals/request to create an approval request");
+        return ResponseEntity.ok(automationService.createWorkOrderFromEvent(
+                id,
+                scopeAccessService.currentUserIdOrNull()
+        ));
     }
 
 }

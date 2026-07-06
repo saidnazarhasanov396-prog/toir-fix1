@@ -212,6 +212,24 @@ class RbacMaintenanceAutomationSecurityTest {
                 .andExpect(status().isNoContent());
     }
 
+    @Test
+    @WithMockUser(authorities = PermissionConstants.WORK_ORDER_CREATE)
+    void workOrderCreateCanCreateWorkOrderFromDueEvent() throws Exception {
+        UUID eventId = UUID.randomUUID();
+        when(maintenanceAutomationService.createWorkOrderFromEvent(eq(eventId), isNull()))
+                .thenReturn(dueEventDto(eventId));
+
+        mockMvc.perform(post("/api/v1/maintenance-due-events/{id}/work-order", eventId))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.USER_READ)
+    void unrelatedPermissionCannotCreateWorkOrderFromDueEvent() throws Exception {
+        mockMvc.perform(post("/api/v1/maintenance-due-events/{id}/work-order", UUID.randomUUID()))
+                .andExpect(status().isForbidden());
+    }
+
     private String regulationPayload(boolean automationConfig) {
         return """
                 {
