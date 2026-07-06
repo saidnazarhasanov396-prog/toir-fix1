@@ -3,11 +3,14 @@ package com.toir.service.maintenanceworkspace;
 import com.toir.dto.maintenanceworkspace.MaintenancePlannerBacklogItem;
 import com.toir.dto.maintenanceworkspace.MaintenancePlannerCapacityResponse;
 import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceFilter;
+import com.toir.dto.workorder.WorkOrderMaterialReadinessDto;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.users.BrigadeMember;
+import com.toir.enums.MaterialReadinessStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.service.WorkOrderMaterialReadinessService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -25,6 +28,9 @@ class MaintenancePlannerServiceTest {
 
     @Mock
     WorkOrderRepository workOrderRepository;
+
+    @Mock
+    WorkOrderMaterialReadinessService materialReadinessService;
 
     @Test
     void backlogFiltersItemsAndCapacityUsesFilteredBacklog() {
@@ -68,7 +74,10 @@ class MaintenancePlannerServiceTest {
         );
         when(workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
                 .thenReturn(List.of(matchingReady, blockedMaterial, otherDepartment));
-        MaintenancePlannerService service = new MaintenancePlannerService(workOrderRepository);
+        readiness(matchingReady, MaterialReadinessStatus.READY, false);
+        readiness(blockedMaterial, MaterialReadinessStatus.SHORTAGE, true);
+        readiness(otherDepartment, MaterialReadinessStatus.READY, false);
+        MaintenancePlannerService service = new MaintenancePlannerService(workOrderRepository, materialReadinessService);
         MaintenanceWorkspaceFilter filter = new MaintenanceWorkspaceFilter(
                 "pump",
                 departmentId,
@@ -121,13 +130,28 @@ class MaintenancePlannerServiceTest {
         );
         when(workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
                 .thenReturn(List.of(matchingBlocked, otherDepartmentBlocked));
-        MaintenancePlannerService service = new MaintenancePlannerService(workOrderRepository);
+        readiness(matchingBlocked, MaterialReadinessStatus.SHORTAGE, true);
+        readiness(otherDepartmentBlocked, MaterialReadinessStatus.SHORTAGE, true);
+        MaintenancePlannerService service = new MaintenancePlannerService(workOrderRepository, materialReadinessService);
 
         List<MaintenancePlannerBacklogItem> items = service.materialReadiness(
                 new MaintenanceWorkspaceFilter(null, departmentId, null, null, null, null, null, null, null, null, null)
         );
 
         assertThat(items).extracting("workOrderId").containsExactly(matchingBlocked.getId());
+    }
+
+
+    private void readiness(WorkOrder workOrder, MaterialReadinessStatus status, boolean blocking) {
+        when(materialReadinessService.getReadiness(workOrder.getId()))
+                .thenReturn(new WorkOrderMaterialReadinessDto(
+                        workOrder.getId(),
+                        workOrder.getEquipmentId(),
+                        status,
+                        blocking,
+                        Instant.parse("2026-07-06T00:00:00Z"),
+                        List.of()
+                ));
     }
 
     private WorkOrder workOrder(

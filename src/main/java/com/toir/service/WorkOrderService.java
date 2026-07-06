@@ -26,6 +26,7 @@ import com.toir.entity.maintenance.WorkOrderDocument;
 import com.toir.entity.maintenance.WorkOrderTask;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.entity.projects.ActualCost;
 import com.toir.entity.CertificationType;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.repair.RepairCampaign;
@@ -54,6 +55,7 @@ import com.toir.repository.SafetyPermitRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderStatsProjection;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.WorkExecutionRepository;
@@ -63,6 +65,9 @@ import com.toir.repository.repair.RepairCampaignStageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestTemplateActionRepository;
+import com.toir.enums.ActualCostStatus;
+import com.toir.enums.CloseReadinessGroupStatus;
+import com.toir.enums.CloseReadinessSeverity;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.DefectListStatus;
 import com.toir.enums.EquipmentStatus;
@@ -191,6 +196,7 @@ public class WorkOrderService {
     private final RepairMaterialUsageRepository repairMaterialUsageRepository;
     private final LaborEntryRepository laborEntryRepository;
     private final ReservationRepository reservationRepository;
+    private final ActualCostRepository actualCostRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseEquipmentItemRepository warehouseEquipmentItemRepository;
     private final WarehouseEquipmentItemService warehouseEquipmentItemService;
@@ -1367,45 +1373,89 @@ public class WorkOrderService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public WorkOrderCloseReadinessDto getCloseReadiness(UUID id) {
+        WorkOrder entity = getOrThrow(id);
+        ClosureReadiness readiness = buildCloseReadiness(entity, true);
+        return new WorkOrderCloseReadinessDto(
+                entity.getId(),
+                entity.getStatus() == null ? null : entity.getStatus().name(),
+                readiness.ready(),
+                Instant.now(),
+                readiness.blockers(),
+                readiness.warnings(),
+                readiness.groups()
+        );
+    }
+
     private void assertClosureEvidenceReady(WorkOrder entity) {
-        ClosureReadiness readiness = buildClosureReadiness(entity);
+        ClosureReadiness readiness = buildCloseReadiness(entity, false);
         if (!readiness.ready()) {
             throw RestException.badRequest("Cannot close work order; missing evidence: "
-                    + String.join("; ", readiness.missingEvidence()));
+                    + readiness.blockers().stream()
+                    .map(WorkOrderCloseReadinessItemDto::message)
+                    .collect(Collectors.joining("; ")));
         }
     }
 
-    private ClosureReadiness buildClosureReadiness(WorkOrder entity) {
-        List<String> missingEvidence = new java.util.ArrayList<>();
+    private ClosureReadiness buildCloseReadiness(WorkOrder entity, boolean includePreCloseChecks) {
+        List<WorkOrderCloseReadinessItemDto> blockers = new ArrayList<>();
+        List<WorkOrderCloseReadinessItemDto> warnings = new ArrayList<>();
+        Map<String, CloseReadinessGroupStatus> groups = closeReadinessGroups();
+
+        if (includePreCloseChecks) {
+            if (entity.getStatus() == WorkOrderStatus.CLOSED) {
+                addBlocker(blockers, groups, "ALREADY_CLOSED",
+                        "Work order is already closed.", "equipment", "review-status", "overview");
+            } else if (entity.getStatus() == WorkOrderStatus.CANCELLED) {
+                addBlocker(blockers, groups, "INVALID_STATUS_FOR_CLOSE",
+                        "Cancelled work orders cannot be closed.", "equipment", "review-status", "overview");
+            } else if (entity.getStatus() != WorkOrderStatus.COMPLETED) {
+                addBlocker(blockers, groups, "WORK_ORDER_NOT_CLOSEABLE",
+                        "Work order can be closed only after it reaches Completed status.",
+                        "equipment", "review-status", "overview");
+            }
+            if (entity.getResult() == null || entity.getResult().isBlank()) {
+                addBlocker(blockers, groups, "MISSING_RESULT",
+                        "Result is required to close a work order.", "acts", "enter-result", "closure");
+            }
+        }
 
         List<String> incompleteTasks = incompleteTaskNames(entity);
         if (!incompleteTasks.isEmpty()) {
-            missingEvidence.add("Incomplete tasks/checklist items: " + String.join(", ", incompleteTasks));
+            addBlocker(blockers, groups, "INCOMPLETE_TASKS",
+                    "Incomplete tasks/checklist items: " + String.join(", ", incompleteTasks),
+                    "tasks", "review-tasks", "tasks");
         }
 
         safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(entity.getId())
                 .filter(permit -> permit.getStatus() != SafetyPermitStatus.CLOSED)
-                .ifPresent(permit -> missingEvidence.add(
+                .ifPresent(permit -> addBlocker(blockers, groups, "OPEN_SAFETY_PERMIT",
                         "Safety permit must be CLOSED"
-                                + (permit.getStatus() == null ? "" : " (current: " + permit.getStatus() + ")")
-                ));
+                                + (permit.getStatus() == null ? "" : " (current: " + permit.getStatus() + ")"),
+                        "safety", "close-safety-permit", "safety"));
 
         completionActRepository.findByWorkOrderIdAndIsDeletedFalse(entity.getId())
                 .filter(act -> act.getSignedAt() == null || act.getSignedById() == null)
-                .ifPresent(act -> missingEvidence.add("Completion act must be signed"));
+                .ifPresent(act -> addBlocker(blockers, groups, "COMPLETION_ACT_NOT_SIGNED",
+                        "Completion act must be signed.", "acts", "sign-completion-act", "closure"));
 
         if (!repairAcceptanceRepository.existsAcceptedFinalByWorkOrderId(entity.getId())) {
-            missingEvidence.add("Final repair acceptance must be ACCEPTED");
+            addBlocker(blockers, groups, "FINAL_ACCEPTANCE_NOT_ACCEPTED",
+                    "Final repair acceptance must be ACCEPTED.", "acts", "review-acceptance", "closure");
         }
 
         Optional<String> safetyChecklistBlocker = safetyChecklistService.closeBlocker(entity);
         if (safetyChecklistBlocker != null) {
-            safetyChecklistBlocker.ifPresent(missingEvidence::add);
+            safetyChecklistBlocker.ifPresent(message -> addBlocker(blockers, groups, "SAFETY_CHECKLIST_BLOCKER",
+                    message, "safety", "review-safety-checklist", "safety"));
         }
 
         if (requiresLaborEvidence(entity) && safeList(laborEntryRepository
                 .findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(entity.getId())).isEmpty()) {
-            missingEvidence.add("At least one labor entry is required for " + entity.getWorkType() + " work order");
+            addBlocker(blockers, groups, "MISSING_LABOR_ENTRIES",
+                    "At least one labor entry is required for " + entity.getWorkType() + " work order.",
+                    "labor", "review-labor", "labor");
         }
 
         List<String> activeReservations = safeList(reservationRepository
@@ -1415,11 +1465,77 @@ public class WorkOrderService {
                 .map(reservation -> reservation.getId() == null ? "active reservation" : reservation.getId().toString())
                 .toList();
         if (!activeReservations.isEmpty()) {
-            missingEvidence.add("Material reservations must be issued, released or cancelled: "
-                    + String.join(", ", activeReservations));
+            addBlocker(blockers, groups, "ACTIVE_MATERIAL_RESERVATIONS",
+                    "Material reservations must be issued, released or cancelled: "
+                            + String.join(", ", activeReservations),
+                    "materials", "review-materials", "resources");
         }
 
-        return new ClosureReadiness(missingEvidence.isEmpty(), missingEvidence);
+        List<ActualCost> actualCosts = safeList(actualCostRepository
+                .findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(entity.getId()));
+        long pendingCosts = actualCosts.stream()
+                .filter(cost -> cost.getStatus() == ActualCostStatus.PENDING)
+                .count();
+        if (pendingCosts > 0) {
+            addWarning(warnings, groups, "PENDING_ACTUAL_COSTS",
+                    "Pending actual costs require finance review.", "finance", "review-costs", "finance");
+        } else if (actualCosts.stream().anyMatch(cost -> cost.getStatus() != ActualCostStatus.APPROVED)) {
+            addWarning(warnings, groups, "UNAPPROVED_ACTUAL_COSTS",
+                    "Unapproved actual costs require finance review.", "finance", "review-costs", "finance");
+        }
+
+        return new ClosureReadiness(blockers.isEmpty(), List.copyOf(blockers), List.copyOf(warnings), Map.copyOf(groups));
+    }
+
+    private Map<String, CloseReadinessGroupStatus> closeReadinessGroups() {
+        Map<String, CloseReadinessGroupStatus> groups = new LinkedHashMap<>();
+        groups.put("tasks", CloseReadinessGroupStatus.READY);
+        groups.put("acts", CloseReadinessGroupStatus.READY);
+        groups.put("materials", CloseReadinessGroupStatus.READY);
+        groups.put("labor", CloseReadinessGroupStatus.READY);
+        groups.put("safety", CloseReadinessGroupStatus.READY);
+        groups.put("finance", CloseReadinessGroupStatus.READY);
+        groups.put("equipment", CloseReadinessGroupStatus.READY);
+        groups.put("ppr", CloseReadinessGroupStatus.READY);
+        return groups;
+    }
+
+    private void addBlocker(List<WorkOrderCloseReadinessItemDto> blockers,
+                            Map<String, CloseReadinessGroupStatus> groups,
+                            String code,
+                            String message,
+                            String group,
+                            String targetAction,
+                            String targetTab) {
+        blockers.add(new WorkOrderCloseReadinessItemDto(
+                code,
+                message,
+                CloseReadinessSeverity.BLOCKING,
+                group,
+                targetAction,
+                targetTab
+        ));
+        groups.put(group, CloseReadinessGroupStatus.BLOCKED);
+    }
+
+    private void addWarning(List<WorkOrderCloseReadinessItemDto> warnings,
+                            Map<String, CloseReadinessGroupStatus> groups,
+                            String code,
+                            String message,
+                            String group,
+                            String targetAction,
+                            String targetTab) {
+        warnings.add(new WorkOrderCloseReadinessItemDto(
+                code,
+                message,
+                CloseReadinessSeverity.WARNING,
+                group,
+                targetAction,
+                targetTab
+        ));
+        groups.computeIfPresent(group, (key, current) -> current == CloseReadinessGroupStatus.BLOCKED
+                ? current
+                : CloseReadinessGroupStatus.WARNING);
     }
 
     private boolean requiresLaborEvidence(WorkOrder workOrder) {
@@ -1478,7 +1594,13 @@ public class WorkOrderService {
                 .toList();
     }
 
-    private record ClosureReadiness(boolean ready, List<String> missingEvidence) {}
+    private record ClosureReadiness(
+            boolean ready,
+            List<WorkOrderCloseReadinessItemDto> blockers,
+            List<WorkOrderCloseReadinessItemDto> warnings,
+            Map<String, CloseReadinessGroupStatus> groups
+    ) {
+    }
 
     @Transactional
     public WorkOrderDto recalculateLinkedPprPlanForWorkOrder(UUID id) {

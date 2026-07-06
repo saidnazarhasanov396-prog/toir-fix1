@@ -7,6 +7,7 @@ import com.toir.dto.workorder.CompleteWorkOrderRequest;
 import com.toir.dto.workorder.CompletionMeterSnapshotRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
+import com.toir.dto.workorder.WorkOrderCloseReadinessDto;
 import com.toir.dto.workorder.WorkOrderTaskDto;
 import com.toir.dto.workorder.WorkOrderTaskStatusUpdateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,6 +20,7 @@ import com.toir.entity.FileAsset;
 import com.toir.entity.LaborEntry;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.entity.projects.ActualCost;
 import com.toir.entity.Reservation;
 import com.toir.entity.SafetyPermit;
 import com.toir.entity.UploadedFile;
@@ -44,6 +46,7 @@ import com.toir.entity.users.UserCertification;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.EquipmentNodeType;
+import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.CounteragentStatus;
 import com.toir.enums.FileCategory;
@@ -84,6 +87,7 @@ import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.WarehouseEquipmentItemRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.WorkExecutionRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectListRepository;
@@ -225,6 +229,9 @@ class WorkOrderServiceTest {
 
     @Mock
     ReservationRepository reservationRepository;
+
+    @Mock
+    ActualCostRepository actualCostRepository;
 
     @Mock
     WarehouseRepository warehouseRepository;
@@ -3535,6 +3542,124 @@ class WorkOrderServiceTest {
                 .hasMessageContaining("Material reservations must be issued, released or cancelled");
         verify(repository, never()).save(any(WorkOrder.class));
     }
+
+
+
+    @Test
+    void closeReadinessReadyWhenCloseEvidenceIsSatisfied() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        workOrder.setResult("completed");
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(repairAcceptanceRepository.existsAcceptedFinalByWorkOrderId(workOrderId)).thenReturn(true);
+        when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId))
+                .thenReturn(List.of(laborEntry(workOrderId)));
+        when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+        when(actualCostRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+
+        WorkOrderCloseReadinessDto readiness = service.getCloseReadiness(workOrderId);
+
+        assertThat(readiness.ready()).isTrue();
+        assertThat(readiness.blockers()).isEmpty();
+        assertThat(readiness.warnings()).isEmpty();
+        assertThat(readiness.groups()).containsEntry("tasks", com.toir.enums.CloseReadinessGroupStatus.READY);
+        assertThat(readiness.groups()).containsEntry("materials", com.toir.enums.CloseReadinessGroupStatus.READY);
+    }
+
+    @Test
+    void closeReadinessReportsInvalidStatusMissingResultAndIncompleteTasks() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.APPROVED, null, null);
+        workOrder.getTasks().add(workOrderTask(workOrder, "Inspect coupling", TaskExecutionStatus.IN_PROGRESS));
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId))
+                .thenReturn(List.of());
+        when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+        when(actualCostRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+
+        WorkOrderCloseReadinessDto readiness = service.getCloseReadiness(workOrderId);
+
+        assertThat(readiness.ready()).isFalse();
+        assertThat(readiness.blockers()).extracting("code")
+                .contains("WORK_ORDER_NOT_CLOSEABLE", "MISSING_RESULT", "INCOMPLETE_TASKS");
+        assertThat(readiness.groups()).containsEntry("equipment", com.toir.enums.CloseReadinessGroupStatus.BLOCKED);
+        assertThat(readiness.groups()).containsEntry("acts", com.toir.enums.CloseReadinessGroupStatus.BLOCKED);
+        assertThat(readiness.groups()).containsEntry("tasks", com.toir.enums.CloseReadinessGroupStatus.BLOCKED);
+    }
+
+    @Test
+    void closeReadinessReportsSafetyActLaborAndMaterialBlockersConsistentWithClose() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        workOrder.setResult("completed");
+        Reservation reservation = new Reservation();
+        reservation.setId(UUID.randomUUID());
+        reservation.setWorkOrderId(workOrderId);
+        reservation.setStatus(ReservationStatus.ACTIVE);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(safetyPermit(workOrderId, SafetyPermitStatus.ISSUED)));
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(completionAct(workOrderId, false)));
+        when(repairAcceptanceRepository.existsAcceptedFinalByWorkOrderId(workOrderId)).thenReturn(false);
+        when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId))
+                .thenReturn(List.of());
+        when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of(reservation));
+        when(actualCostRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+
+        WorkOrderCloseReadinessDto readiness = service.getCloseReadiness(workOrderId);
+
+        assertThat(readiness.ready()).isFalse();
+        assertThat(readiness.blockers()).extracting("code")
+                .contains(
+                        "OPEN_SAFETY_PERMIT",
+                        "COMPLETION_ACT_NOT_SIGNED",
+                        "FINAL_ACCEPTANCE_NOT_ACCEPTED",
+                        "MISSING_LABOR_ENTRIES",
+                        "ACTIVE_MATERIAL_RESERVATIONS"
+                );
+        assertThat(readiness.groups()).containsEntry("safety", com.toir.enums.CloseReadinessGroupStatus.BLOCKED);
+        assertThat(readiness.groups()).containsEntry("acts", com.toir.enums.CloseReadinessGroupStatus.BLOCKED);
+        assertThat(readiness.groups()).containsEntry("labor", com.toir.enums.CloseReadinessGroupStatus.BLOCKED);
+        assertThat(readiness.groups()).containsEntry("materials", com.toir.enums.CloseReadinessGroupStatus.BLOCKED);
+    }
+
+    @Test
+    void closeReadinessReportsPendingActualCostsAsWarningOnly() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.DIAGNOSTICS, WorkOrderStatus.COMPLETED, null, null);
+        workOrder.setResult("completed");
+        ActualCost pendingCost = new ActualCost();
+        pendingCost.setId(UUID.randomUUID());
+        pendingCost.setWorkOrderId(workOrderId);
+        pendingCost.setStatus(ActualCostStatus.PENDING);
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(repairAcceptanceRepository.existsAcceptedFinalByWorkOrderId(workOrderId)).thenReturn(true);
+        when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+        when(actualCostRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of(pendingCost));
+
+        WorkOrderCloseReadinessDto readiness = service.getCloseReadiness(workOrderId);
+
+        assertThat(readiness.ready()).isTrue();
+        assertThat(readiness.blockers()).isEmpty();
+        assertThat(readiness.warnings()).extracting("code").containsExactly("PENDING_ACTUAL_COSTS");
+        assertThat(readiness.groups()).containsEntry("finance", com.toir.enums.CloseReadinessGroupStatus.WARNING);
+    }
+
 
     @Test
     void closeClosesDefectWhenAllLinkedWorkOrdersTerminalAndDefectResolved() {
