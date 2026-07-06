@@ -68,7 +68,6 @@ class WorkOrderMaterialReadinessServiceTest {
         workOrder = new WorkOrder();
         workOrder.setId(workOrderId);
         workOrder.setEquipmentId(equipmentId);
-        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
     }
 
     @Test
@@ -257,6 +256,7 @@ class WorkOrderMaterialReadinessServiceTest {
             List<RepairMaterialUsage> usages,
             List<RepairMaterialReturn> returns
     ) {
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(requirementRepository.findActiveByWorkOrderId(workOrderId)).thenReturn(requirements);
         when(reservationRepository.findAllByWorkOrderIdAndStatusAndIsDeletedFalseOrderByUpdatedAtDesc(
                 workOrderId,
