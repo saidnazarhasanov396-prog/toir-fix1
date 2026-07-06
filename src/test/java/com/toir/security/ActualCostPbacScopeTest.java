@@ -20,6 +20,7 @@ import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.projects.FinancialApprovalRuleRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.ActualCostService;
+import com.toir.service.WebhookService;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.NotificationService;
 import com.toir.service.repair.RepairCampaignBudgetLineResolver;
@@ -77,6 +78,7 @@ class ActualCostPbacScopeTest {
                 mock(com.toir.service.finance.BudgetCommitmentService.class);
         com.toir.repository.StockMovementRepository stockMovementRepository =
                 mock(com.toir.repository.StockMovementRepository.class);
+        WebhookService webhookService = mock(WebhookService.class);
         FinanceScopeService financeScopeService = new FinanceScopeService(
                 scopeAccessService,
                 repository,
@@ -100,7 +102,8 @@ class ActualCostPbacScopeTest {
                 notificationService,
                 repairCampaignBudgetLineResolver,
                 budgetCommitmentService,
-                stockMovementRepository
+                stockMovementRepository,
+                webhookService
         );
     }
 

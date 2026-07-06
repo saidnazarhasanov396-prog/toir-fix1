@@ -221,6 +221,8 @@ class FinanceModuleRegressionTest {
         com.toir.repository.StockMovementRepository stockMovementRepository;
         @Mock
         com.toir.util.AuditBuilderService auditBuilderService;
+        @Mock
+        com.toir.service.WebhookService webhookService;
 
         @InjectMocks
         ActualCostService service;
@@ -498,6 +500,8 @@ class FinanceModuleRegressionTest {
         com.toir.service.NotificationService notificationService;
         @Mock
         com.toir.service.repair.RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
+        @Mock
+        com.toir.service.WebhookService webhookService;
 
         @InjectMocks
         ActualCostService service;

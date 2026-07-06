@@ -96,6 +96,9 @@ class ActualCostServiceTest {
     @Mock
     com.toir.repository.StockMovementRepository stockMovementRepository;
 
+    @Mock
+    WebhookService webhookService;
+
     @InjectMocks
     ActualCostService service;
 

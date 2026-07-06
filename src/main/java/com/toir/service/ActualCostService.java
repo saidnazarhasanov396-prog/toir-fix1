@@ -66,6 +66,7 @@ public class ActualCostService {
     private final RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
     private final BudgetCommitmentService budgetCommitmentService;
     private final StockMovementRepository stockMovementRepository;
+    private final WebhookService webhookService;
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
@@ -164,6 +165,7 @@ public class ActualCostService {
                 "ActualCost",
                 saved.getId().toString()
         );
+        webhookService.publish("ACTUAL_COST_PENDING", ActualCostDto.from(saved));
 
         return ActualCostDto.from(saved);
     }
@@ -243,6 +245,10 @@ public class ActualCostService {
                 "Фактическая стоимость обновлена",
                 c,
                 saved
+        );
+        webhookService.publish(
+                approve ? "ACTUAL_COST_APPROVED" : "ACTUAL_COST_REJECTED",
+                ActualCostDto.from(saved)
         );
         return ActualCostDto.from(saved);
     }
