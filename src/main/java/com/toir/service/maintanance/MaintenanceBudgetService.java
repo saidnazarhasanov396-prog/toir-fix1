@@ -17,6 +17,7 @@ import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.WebhookService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -44,6 +45,7 @@ public class MaintenanceBudgetService {
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
     private final BudgetEventRepository budgetEventRepository;
+    private final WebhookService webhookService;
 
     @Transactional(readOnly = true)
     public List<MaintenanceBudgetDto> findByYear(int year) {
@@ -352,7 +354,16 @@ public class MaintenanceBudgetService {
                 actorUserId,
                 comment
         );
+        publishBudgetWebhook(newStatus, MaintenanceBudgetDto.from(saved));
         return MaintenanceBudgetDto.from(saved);
+    }
+
+    private void publishBudgetWebhook(BudgetStatus newStatus, MaintenanceBudgetDto budget) {
+        if (newStatus == BudgetStatus.APPROVED) {
+            webhookService.publish("BUDGET_APPROVED", budget);
+        } else if (newStatus == BudgetStatus.REJECTED) {
+            webhookService.publish("BUDGET_REJECTED", budget);
+        }
     }
 
     private Map<UUID, String> costCategoryNamesById(List<MaintenanceBudget> budgets) {

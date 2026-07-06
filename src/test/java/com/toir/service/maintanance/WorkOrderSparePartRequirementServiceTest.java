@@ -500,6 +500,56 @@ class WorkOrderSparePartRequirementServiceTest {
         verifyNoInteractions(repairMaterialUsageRepository);
     }
 
+    @Test
+    void createManual_savesManualRequirement() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WorkOrder workOrder = workOrder(workOrderId);
+        SparePart sparePart = new SparePart();
+        sparePart.setId(sparePartId);
+        sparePart.setCode("SP-1");
+        sparePart.setName("Bearing");
+
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
+        when(repository.save(any(WorkOrderSparePartRequirement.class))).thenAnswer(invocation -> {
+            WorkOrderSparePartRequirement saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            saved.setSparePart(sparePart);
+            return saved;
+        });
+
+        var result = service.createManual(
+                workOrderId,
+                new com.toir.dto.workorder.WorkOrderSparePartRequirementRequest(sparePartId, 3.0, "pcs", "HIGH", "manual")
+        );
+
+        assertThat(result.sourceType()).isEqualTo(WorkOrderSparePartRequirementSourceType.MANUAL);
+        assertThat(result.requiredQty()).isEqualTo(3.0);
+        assertThat(result.sparePartId()).isEqualTo(sparePartId);
+    }
+
+    @Test
+    void updateManual_rejectsTemplateRequirement() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID requirementId = UUID.randomUUID();
+        WorkOrder workOrder = workOrder(workOrderId);
+        WorkOrderSparePartRequirement requirement = requirement(requirementId, workOrderId, UUID.randomUUID());
+        requirement.setSourceType(WorkOrderSparePartRequirementSourceType.TEMPLATE_REQUIRED_SPARE_PART);
+
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findByIdAndWorkOrderIdAndIsDeletedFalse(requirementId, workOrderId))
+                .thenReturn(Optional.of(requirement));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.updateManual(
+                workOrderId,
+                requirementId,
+                new com.toir.dto.workorder.WorkOrderSparePartRequirementRequest(UUID.randomUUID(), 1.0, "pcs", null, null)
+        )).isInstanceOf(com.toir.exception.RestException.class);
+    }
+
     // ─── Helpers ───────────────────────────────────────────
 
     private WorkOrder workOrder(UUID id) {

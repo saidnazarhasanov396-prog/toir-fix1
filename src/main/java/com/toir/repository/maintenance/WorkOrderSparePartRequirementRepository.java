@@ -37,4 +37,6 @@ public interface WorkOrderSparePartRequirementRepository
             UUID workOrderId,
             WorkOrderSparePartRequirementSourceType sourceType,
             UUID regulationRequirementId);
+
+    Optional<WorkOrderSparePartRequirement> findByIdAndWorkOrderIdAndIsDeletedFalse(UUID id, UUID workOrderId);
 }

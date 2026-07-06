@@ -12,6 +12,7 @@ import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.WebhookService;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,7 @@ class MaintenanceBudgetLifecycleServiceTest {
         AuditBuilderService auditBuilderService = mock(AuditBuilderService.class);
         scopeAccessService = mock(ScopeAccessService.class);
         budgetEventRepository = mock(BudgetEventRepository.class);
+        WebhookService webhookService = mock(WebhookService.class);
         service = new MaintenanceBudgetService(
                 repository,
                 lineRepository,
@@ -52,7 +54,8 @@ class MaintenanceBudgetLifecycleServiceTest {
                 costCategoryRepository,
                 auditBuilderService,
                 scopeAccessService,
-                budgetEventRepository
+                budgetEventRepository,
+                webhookService
         );
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repository.save(any(MaintenanceBudget.class))).thenAnswer(invocation -> invocation.getArgument(0));

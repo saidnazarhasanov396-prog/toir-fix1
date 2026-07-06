@@ -12,6 +12,7 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
+import com.toir.service.WebhookService;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,7 +56,8 @@ class BudgetPbacScopeTest {
                 costCategoryRepository,
                 auditBuilderService,
                 scopeAccessService,
-                mock(BudgetEventRepository.class));
+                mock(BudgetEventRepository.class),
+                mock(WebhookService.class));
     }
 
     @Test
