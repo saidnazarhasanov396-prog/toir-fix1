@@ -439,7 +439,6 @@ public final class RolePermissionDefaults {
                 PermissionConstants.EQUIPMENT_READ,
                 PermissionConstants.KNOWLEDGE_READ
         );
-        defaults.put("TECHNICIAN", performerPermissions);
         defaults.put("MECHANIC", performerPermissions);
         return Map.copyOf(defaults);
     }

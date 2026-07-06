@@ -4,10 +4,12 @@ import com.toir.dto.maintenanceworkspace.MaintenancePlannerBacklogItem;
 import com.toir.dto.maintenanceworkspace.MaintenancePlannerCapacityResponse;
 import com.toir.dto.maintenanceworkspace.MaintenancePlannerScheduleRequest;
 import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceFilter;
+import com.toir.dto.workorder.WorkOrderMaterialReadinessDto;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.service.WorkOrderMaterialReadinessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,7 @@ import java.util.UUID;
 public class MaintenancePlannerService {
 
     private final WorkOrderRepository workOrderRepository;
+    private final WorkOrderMaterialReadinessService materialReadinessService;
 
     @Transactional(readOnly = true)
     public List<MaintenancePlannerBacklogItem> backlog() {
@@ -81,11 +84,13 @@ public class MaintenancePlannerService {
     }
 
     private MaintenancePlannerBacklogItem item(WorkOrder workOrder) {
-        String material = workOrder.getWarehouseId() == null ? "BLOCKED" : "READY";
+        WorkOrderMaterialReadinessDto materialReadiness =
+                materialReadinessService.getReadiness(workOrder.getId());
+        String material = materialReadiness.overallStatus().name();
         String labor = workOrder.getPerformer() == null ? "BLOCKED" : "READY";
         String approval = workOrder.getStatus() == WorkOrderStatus.DRAFT ? "BLOCKED" : "READY";
         String downtime = workOrder.getStartPlannedAt() == null || workOrder.getEndPlannedAt() == null ? "PENDING" : "READY";
-        String blocker = firstBlocker(material, labor, approval, downtime);
+        String blocker = firstBlocker(materialReadiness.blocking(), material, labor, approval, downtime);
         return new MaintenancePlannerBacklogItem(
                 workOrder.getId(),
                 workOrder.getNumber(),
@@ -107,9 +112,9 @@ public class MaintenancePlannerService {
         );
     }
 
-    private String firstBlocker(String material, String labor, String approval, String downtime) {
-        if (!"READY".equals(material)) {
-            return "Warehouse is not selected for material readiness";
+    private String firstBlocker(boolean materialBlocking, String material, String labor, String approval, String downtime) {
+        if (materialBlocking) {
+            return "Material readiness is " + material;
         }
         if (!"READY".equals(labor)) {
             return "Performer is not assigned";
