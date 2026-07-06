@@ -1292,7 +1292,8 @@ class ApprovalPbacScopeTest {
                 mock(ActualCostRepository.class),
                 mock(FinanceScopeService.class),
                 userRepository,
-                mock(com.toir.repository.equipment.EquipmentCommissioningActRepository.class)
+                mock(com.toir.repository.equipment.EquipmentCommissioningActRepository.class),
+                new SecurityAccessService()
         );
     }
 
