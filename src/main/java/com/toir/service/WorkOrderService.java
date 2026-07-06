@@ -122,6 +122,7 @@ import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
@@ -154,6 +155,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class WorkOrderService {
 
     private static final String MODULE = "work-order";
@@ -1053,7 +1055,7 @@ public class WorkOrderService {
         completeLinkedPprTask(entity);
 
         WorkOrder saved = repository.save(entity);
-        createMaintenanceCompletionAnchor(saved, request, dueEvent);
+        MaintenanceCompletionAnchor completionAnchor = createMaintenanceCompletionAnchor(saved, request, dueEvent);
         completeLinkedMaintenanceDueEvent(dueEvent);
         persistCompletionMeterReadings(saved, completionMeterSnapshots, request);
         syncLinkedOnComplete(saved);
@@ -1064,7 +1066,7 @@ public class WorkOrderService {
                     "Work order completed: " + saved.getNumber()
             );
         }
-        triggerMaintenanceRecalculation(saved);
+        triggerMaintenanceRecalculation(saved, completionAnchor);
 
         auditBuilderService.log(
                 "work_order",
@@ -1162,9 +1164,9 @@ public class WorkOrderService {
         return maintenanceDueEventService.getOrThrow(workOrder.getMaintenanceDueEventId());
     }
 
-    private void createMaintenanceCompletionAnchor(WorkOrder workOrder,
-                                                   CompleteWorkOrderRequest request,
-                                                   MaintenanceDueEvent dueEvent) {
+    private MaintenanceCompletionAnchor createMaintenanceCompletionAnchor(WorkOrder workOrder,
+                                                                         CompleteWorkOrderRequest request,
+                                                                         MaintenanceDueEvent dueEvent) {
         UUID regulationId = request.regulationId();
         UUID equipmentMaintenanceRuleId = request.equipmentMaintenanceRuleId();
         Instant plannedDueAt = request.plannedDueAt();
@@ -1198,7 +1200,7 @@ public class WorkOrderService {
             ));
         }
         if (regulationId == null && equipmentMaintenanceRuleId == null) {
-            return;
+            return null;
         }
         MaintenanceCompletionAnchor anchor = findExistingMaintenanceCompletionAnchor(workOrder, dueEvent)
                 .orElseGet(MaintenanceCompletionAnchor::new);
@@ -1217,7 +1219,7 @@ public class WorkOrderService {
         anchor.setMeterSnapshots(toMeterSnapshotsJson(meterSnapshots));
         anchor.setSource("WORK_ORDER");
         anchor.setNote(request.summary());
-        maintenanceCompletionAnchorRepository.save(anchor);
+        return maintenanceCompletionAnchorRepository.save(anchor);
     }
 
     private List<ResolvedCompletionMeterSnapshot> resolveCompletionMeterSnapshots(WorkOrder workOrder,
@@ -1343,14 +1345,39 @@ public class WorkOrderService {
         maintenanceDueEventService.completeFromWorkOrder(dueEvent, "Work order completed");
     }
 
-    private void triggerMaintenanceRecalculation(WorkOrder workOrder) {
-        if (workOrder.getMaintenanceDueEventId() == null || workOrder.getEquipmentId() == null) {
+    private void triggerMaintenanceRecalculation(WorkOrder workOrder, MaintenanceCompletionAnchor completionAnchor) {
+        if (!hasPlannedMaintenanceContext(workOrder, completionAnchor)) {
+            return;
+        }
+        if (workOrder.getEquipmentId() == null) {
+            log.warn("Skipping maintenance recalculation for workOrderId={} because equipmentId is missing", workOrder.getId());
             return;
         }
         MaintenanceAutomationService automationService = maintenanceAutomationServiceProvider.getIfAvailable();
-        if (automationService != null) {
-            automationService.evaluateEquipment(workOrder.getEquipmentId(), MaintenanceTriggerSource.WORK_ORDER_COMPLETED);
+        if (automationService == null) {
+            log.warn("Skipping maintenance recalculation for workOrderId={} equipmentId={} because MaintenanceAutomationService is unavailable",
+                    workOrder.getId(), workOrder.getEquipmentId());
+            return;
         }
+        automationService.evaluateEquipment(workOrder.getEquipmentId(), MaintenanceTriggerSource.WORK_ORDER_COMPLETED);
+    }
+
+    private boolean hasPlannedMaintenanceContext(WorkOrder workOrder, MaintenanceCompletionAnchor completionAnchor) {
+        if (workOrder.getMaintenanceDueEventId() != null || workOrder.getPprTaskId() != null) {
+            return true;
+        }
+        if (completionAnchor != null && (completionAnchor.getMaintenanceDueEventId() != null
+                || completionAnchor.getPprTaskId() != null
+                || completionAnchor.getRegulationId() != null
+                || completionAnchor.getEquipmentMaintenanceRuleId() != null)) {
+            return true;
+        }
+        return hasTemplateTaskContext(workOrder);
+    }
+
+    private boolean hasTemplateTaskContext(WorkOrder workOrder) {
+        return workOrder.getTasks() != null && workOrder.getTasks().stream().anyMatch(task ->
+                task.getSourceTemplateId() != null || task.getSourceOperationId() != null);
     }
 
     private String toMeterSnapshotsJson(List<CompletionMeterSnapshotRequest> snapshots) {

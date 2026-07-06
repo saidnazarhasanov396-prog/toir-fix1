@@ -2947,6 +2947,79 @@ class WorkOrderServiceTest {
         assertThat(existing.getWorkOrderId()).isEqualTo(workOrderId);
     }
 
+
+    @Test
+    void completePprTaskWithoutDueEventStillTriggersMaintenanceRecalculation() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        UUID linkedTaskId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+        workOrder.setPprTaskId(linkedTaskId);
+
+        PprPlan plan = pprPlan(planId, PlanStatus.APPROVED);
+        PprTask linkedTask = pprTask(linkedTaskId, plan, com.toir.enums.PprTaskStatus.IN_PROGRESS);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pprTaskRepository.findByIdAndIsDeletedFalse(linkedTaskId)).thenReturn(Optional.of(linkedTask));
+        when(pprTaskRepository.findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(planId))
+                .thenReturn(java.util.List.of(linkedTask));
+        when(pprTaskRepository.save(any(PprTask.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(pprPlanRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(maintenanceCompletionAnchorRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.empty());
+        when(maintenanceCompletionAnchorRepository.save(any(MaintenanceCompletionAnchor.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(maintenanceAutomationServiceProvider.getIfAvailable()).thenReturn(maintenanceAutomationService);
+        when(maintenanceAutomationService.evaluateEquipment(workOrder.getEquipmentId(), MaintenanceTriggerSource.WORK_ORDER_COMPLETED))
+                .thenReturn(new MaintenanceAutomationService.EvaluationResult(1, 0, 0, 0, 0));
+        stubLifecycleDtoLookups(workOrder);
+
+        WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
+
+        assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
+        verify(maintenanceCompletionAnchorRepository).save(any(MaintenanceCompletionAnchor.class));
+        verify(maintenanceAutomationService).evaluateEquipment(
+                workOrder.getEquipmentId(),
+                MaintenanceTriggerSource.WORK_ORDER_COMPLETED
+        );
+    }
+
+    @Test
+    void completeWithRequestRegulationWithoutDueEventTriggersMaintenanceRecalculation() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(workOrderId, WorkType.REPAIR, WorkOrderStatus.IN_PROGRESS, null, null);
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(maintenanceCompletionAnchorRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.empty());
+        when(maintenanceCompletionAnchorRepository.save(any(MaintenanceCompletionAnchor.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(maintenanceAutomationServiceProvider.getIfAvailable()).thenReturn(maintenanceAutomationService);
+        when(maintenanceAutomationService.evaluateEquipment(workOrder.getEquipmentId(), MaintenanceTriggerSource.WORK_ORDER_COMPLETED))
+                .thenReturn(new MaintenanceAutomationService.EvaluationResult(1, 0, 0, 0, 0));
+        stubLifecycleDtoLookups(workOrder);
+
+        service.complete(workOrderId, new CompleteWorkOrderRequest(
+                "done",
+                "summary",
+                null,
+                regulationId,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        verify(maintenanceAutomationService).evaluateEquipment(
+                workOrder.getEquipmentId(),
+                MaintenanceTriggerSource.WORK_ORDER_COMPLETED
+        );
+    }
+
     @Test
     void manualWorkOrderWithoutEventCompletesWithoutMaintenanceAnchor() {
         UUID workOrderId = UUID.randomUUID();
@@ -2994,7 +3067,8 @@ class WorkOrderServiceTest {
         verify(maintenanceCompletionAnchorRepository).save(anchorCaptor.capture());
         assertThat(anchorCaptor.getValue().getRegulationId()).isEqualTo(regulationId);
         assertThat(anchorCaptor.getValue().getMaintenanceDueEventId()).isNull();
-        verifyNoInteractions(maintenanceDueEventService, maintenanceAutomationServiceProvider);
+        verifyNoInteractions(maintenanceDueEventService);
+        verify(maintenanceAutomationServiceProvider).getIfAvailable();
     }
 
     @Test
