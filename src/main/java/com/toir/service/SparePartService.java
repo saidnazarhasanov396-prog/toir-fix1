@@ -85,7 +85,11 @@ public class SparePartService {
     private final WarehouseStockPolicyService warehouseStockPolicyService;
 
     private static final List<String> DTO_SORT_FIELDS = List.of(
+            "name",
+            "code",
             "entityType",
+            "manufacturer",
+            "preferredCounteragentName",
             "minStock",
             "currentStock",
             "reservedStock",
@@ -340,8 +344,24 @@ public class SparePartService {
 
     private Comparator<SparePartDto> sparePartComparator(String sortBy, String sortDir) {
         Comparator<SparePartDto> comparator = switch (sortBy.trim()) {
+            case "name" -> Comparator.comparing(
+                    SparePartDto::name,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+            case "code" -> Comparator.comparing(
+                    SparePartDto::code,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
             case "entityType" -> Comparator.comparing(
                     SparePartDto::entityType,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+            case "manufacturer" -> Comparator.comparing(
+                    SparePartDto::manufacturer,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+            case "preferredCounteragentName" -> Comparator.comparing(
+                    SparePartDto::preferredCounteragentName,
                     Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
             );
             case "minStock" -> Comparator.comparingDouble(SparePartDto::minStock);

@@ -508,6 +508,46 @@ class SparePartServiceTest {
         assertThat(result.getPageable().isPaged()).isTrue();
     }
 
+
+    @Test
+    void catalogVisibleTextSortsUseEnrichedDtoValuesBeforePagination() {
+        SparePart alpha = sparePart(UUID.randomUUID(), "SP-002", "Alpha", InventoryItemKind.SPARE_PART);
+        alpha.setManufacturer("Zeta");
+        alpha.setPreferredCounteragentId(UUID.randomUUID());
+        SparePart beta = sparePart(UUID.randomUUID(), "SP-001", "Beta", InventoryItemKind.SPARE_PART);
+        beta.setManufacturer("Acme");
+        beta.setPreferredCounteragentId(UUID.randomUUID());
+        Page<SparePart> page = new PageImpl<>(List.of(alpha, beta));
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of());
+        Counteragent zedSupplier = new Counteragent();
+        zedSupplier.setName("Zed Supplier");
+        Counteragent ableSupplier = new Counteragent();
+        ableSupplier.setName("Able Supplier");
+        when(counteragentService.load(alpha.getPreferredCounteragentId())).thenReturn(zedSupplier);
+        when(counteragentService.load(beta.getPreferredCounteragentId())).thenReturn(ableSupplier);
+
+        assertThat(service.findAll(1, 0, null, null, null, "", null, "name", "desc")
+                .getContent())
+                .extracting(SparePartDto::id)
+                .containsExactly(beta.getId());
+        assertThat(service.findAll(1, 0, null, null, null, "", null, "code", "asc")
+                .getContent())
+                .extracting(SparePartDto::id)
+                .containsExactly(beta.getId());
+        assertThat(service.findAll(1, 0, null, null, null, "", null, "manufacturer", "asc")
+                .getContent())
+                .extracting(SparePartDto::id)
+                .containsExactly(beta.getId());
+        assertThat(service.findAll(1, 0, null, null, null, "", null, "preferredCounteragentName", "asc")
+                .getContent())
+                .extracting(SparePartDto::id)
+                .containsExactly(beta.getId());
+    }
+
     @Test
     void findAllReturnsSeparateUnitCodeAndNameFromDictionary() {
         SparePart part = sparePart(UUID.randomUUID(), "SP-L", "Oil", InventoryItemKind.MATERIAL);

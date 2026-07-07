@@ -89,7 +89,7 @@ class InventoryReplenishmentRecommendationControllerContractTest {
                 List.of()
         );
 
-        when(service.recommendations(eq(15), eq(from), eq(to), eq(warehouseId), eq(true), eq(1), eq(10)))
+        when(service.recommendations(eq(15), eq(from), eq(to), eq(warehouseId), eq(true), eq(1), eq(10), eq("totalShortageQty"), eq("desc")))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(1, 10), 11));
 
         mockMvc.perform(get("/api/v1/warehouse/replenishment-recommendations")
@@ -99,7 +99,9 @@ class InventoryReplenishmentRecommendationControllerContractTest {
                         .param("warehouseId", warehouseId.toString())
                         .param("onlyDeficit", "true")
                         .param("page", "1")
-                        .param("size", "10"))
+                        .param("size", "10")
+                        .param("sortBy", "totalShortageQty")
+                        .param("sortDir", "desc"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].sparePartId").value(sparePartId.toString()))
                 .andExpect(jsonPath("$.content[0].warehouseId").value(warehouseId.toString()))
@@ -110,7 +112,7 @@ class InventoryReplenishmentRecommendationControllerContractTest {
                 .andExpect(jsonPath("$.content[0].reason").value("LOW_STOCK_AND_MAINTENANCE_FORECAST"))
                 .andExpect(jsonPath("$.totalElements").value(11));
 
-        verify(service).recommendations(eq(15), eq(from), eq(to), eq(warehouseId), eq(true), eq(1), eq(10));
+        verify(service).recommendations(eq(15), eq(from), eq(to), eq(warehouseId), eq(true), eq(1), eq(10), eq("totalShortageQty"), eq("desc"));
     }
 
     @Test

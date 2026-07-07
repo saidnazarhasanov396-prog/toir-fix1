@@ -41,9 +41,11 @@ public class InventoryReplenishmentRecommendationController {
             @RequestParam(required = false) UUID warehouseId,
             @RequestParam(required = false) Boolean onlyDeficit,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDir
     ) {
-        return ResponseEntity.ok(service.recommendations(days, from, to, warehouseId, onlyDeficit, page, size));
+        return ResponseEntity.ok(service.recommendations(days, from, to, warehouseId, onlyDeficit, page, size, sortBy, sortDir));
     }
 
     @PostMapping("/procurement-requests")

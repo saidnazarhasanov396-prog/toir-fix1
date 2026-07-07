@@ -206,6 +206,62 @@ class InventoryReplenishmentRecommendationServiceTest {
         assertThat(forecastRow.severity()).isEqualTo(NotificationSeverity.INFO);
     }
 
+
+    @Test
+    void recommendationsSortBeforePaginationByComputedAndTextFields() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID alphaId = UUID.randomUUID();
+        UUID betaId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-05T00:00:00Z");
+        ReorderSuggestionDto alpha = new ReorderSuggestionDto(
+                UUID.randomUUID(),
+                warehouseId,
+                "Zulu warehouse",
+                alphaId,
+                "Alpha bearing",
+                "SP-002",
+                "pcs",
+                12.0,
+                3.0,
+                5.0,
+                8.0,
+                10.0,
+                9.0,
+                10.0,
+                "WARNING"
+        );
+        ReorderSuggestionDto beta = new ReorderSuggestionDto(
+                UUID.randomUUID(),
+                warehouseId,
+                "Alpha warehouse",
+                betaId,
+                "Beta bearing",
+                "SP-001",
+                "pcs",
+                20.0,
+                15.0,
+                5.0,
+                8.0,
+                10.0,
+                5.0,
+                10.0,
+                "CRITICAL"
+        );
+
+        when(reorderService.allSuggestions(warehouseId)).thenReturn(List.of(alpha, beta));
+        when(forecastService.forecast(any()))
+                .thenReturn(new SparePartForecastSummaryDto(now, now.plusSeconds(30L * 24 * 60 * 60), List.of()));
+
+        assertThat(service.recommendations(30, now, null, warehouseId, true, 0, 1, "warehouseName", "asc")
+                .getContent())
+                .extracting(InventoryReplenishmentRecommendationDto::sparePartId)
+                .containsExactly(betaId);
+        assertThat(service.recommendations(30, now, null, warehouseId, true, 0, 1, "nonAvailableStock", "desc")
+                .getContent())
+                .extracting(InventoryReplenishmentRecommendationDto::sparePartId)
+                .containsExactly(alphaId);
+    }
+
     @Test
     void recommendationsUseReorderRecommendedQuantityForCatalogMinLowStockRows() {
         UUID warehouseId = UUID.randomUUID();
