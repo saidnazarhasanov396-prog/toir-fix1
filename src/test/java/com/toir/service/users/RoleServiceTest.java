@@ -1,6 +1,8 @@
 package com.toir.service.users;
 
+import com.toir.dto.role.RoleDto;
 import com.toir.dto.role.RoleRequest;
+import com.toir.entity.users.Role;
 import com.toir.exception.RestException;
 import com.toir.repository.users.RoleRepository;
 import com.toir.util.AuditBuilderService;
@@ -12,12 +14,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class RoleServiceTest {
@@ -30,6 +34,32 @@ class RoleServiceTest {
 
     @InjectMocks
     RoleService service;
+
+
+    @Test
+    void findAllReturnsActiveRolesWithLocalizedNamesAndPermissions() {
+        Role mechanic = new Role();
+        mechanic.setId(UUID.randomUUID());
+        mechanic.setCode("MECHANIC");
+        mechanic.setName("Механик");
+        mechanic.setNameEn("Mechanic");
+        mechanic.setNameUz("Mexanik");
+        mechanic.setDescription("Repairs equipment");
+        mechanic.setPermissions(List.of("WORK_ORDER_READ", "REPAIR_REQUEST_UPDATE"));
+
+        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(mechanic));
+
+        List<RoleDto> roles = service.findAll();
+
+        assertThat(roles).hasSize(1);
+        RoleDto dto = roles.get(0);
+        assertThat(dto.code()).isEqualTo("MECHANIC");
+        assertThat(dto.name()).isEqualTo("Механик");
+        assertThat(dto.nameEn()).isEqualTo("Mechanic");
+        assertThat(dto.nameUz()).isEqualTo("Mexanik");
+        assertThat(dto.permissions()).containsExactly("WORK_ORDER_READ", "REPAIR_REQUEST_UPDATE");
+        verify(repository).findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+    }
 
     @Test
     void createRejectsClientProvidedCode() {
