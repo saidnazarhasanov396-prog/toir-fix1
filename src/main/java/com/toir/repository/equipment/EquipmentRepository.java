@@ -419,4 +419,6 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
             @Param("decommissionedStatus") EquipmentStatus decommissionedStatus
     );
 
+
+
 }
