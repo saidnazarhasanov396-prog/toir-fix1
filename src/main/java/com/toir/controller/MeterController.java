@@ -45,8 +45,11 @@ public class MeterController {
     public ResponseEntity<Page<MeterTriggerMatch>> triggers(@RequestParam(required = false) UUID equipmentId,
                                                             @RequestParam(required = false) String equipmentSearch,
                                                             @RequestParam(defaultValue = "0") int page,
-                                                            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(PaginationUtils.page(triggerService.dueTriggers(equipmentId, equipmentSearch), page, size));
+                                                            @RequestParam(defaultValue = "20") int size,
+                                                            @RequestParam(required = false) String lang,
+                                                            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        String responseLang = lang != null ? lang : acceptLanguage;
+        return ResponseEntity.ok(PaginationUtils.page(triggerService.dueTriggers(equipmentId, equipmentSearch, responseLang), page, size));
     }
 
     @GetMapping

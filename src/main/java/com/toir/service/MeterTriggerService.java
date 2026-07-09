@@ -30,6 +30,29 @@ public class MeterTriggerService {
 
 
     public List<MeterTriggerMatch> dueTriggers(UUID equipmentId) {
+        return dueTriggersForEquipment(equipmentId, null);
+    }
+
+    public List<MeterTriggerMatch> dueTriggers(UUID equipmentId, String equipmentSearch, String lang) {
+        if (equipmentId != null) {
+            return dueTriggersForEquipment(equipmentId, lang);
+        }
+        if (equipmentSearch == null || equipmentSearch.isBlank()) {
+            throw RestException.badRequest("equipmentId or equipmentSearch is required");
+        }
+        String pattern = "%" + equipmentSearch.trim().toLowerCase() + "%";
+        List<UUID> equipmentIds = equipmentRepository.findIdsByBusinessSearch(pattern);
+        if (equipmentIds.isEmpty()) {
+            return List.of();
+        }
+        return dueTriggersForEquipment(equipmentIds.get(0), lang);
+    }
+
+    public List<MeterTriggerMatch> dueTriggers(UUID equipmentId, String equipmentSearch) {
+        return dueTriggers(equipmentId, equipmentSearch, null);
+    }
+
+    private List<MeterTriggerMatch> dueTriggersForEquipment(UUID equipmentId, String lang) {
         if (equipmentId == null) {
             throw RestException.badRequest("equipmentId or equipmentSearch is required");
         }
@@ -41,7 +64,7 @@ public class MeterTriggerService {
         for (EquipmentMaintenanceEffectiveRule rule : rules) {
             for (EquipmentMeter meter : meters) {
                 if (meter.getMeterType() != rule.triggerMeterType()) continue;
-                MaintenanceDueCalculationDto dueCalculation = dueCalculationService.calculate(rule);
+                MaintenanceDueCalculationDto dueCalculation = dueCalculationService.calculate(rule, lang);
                 double interval = dueCalculation.meterInterval() == null ? rule.triggerMeterInterval() : dueCalculation.meterInterval();
                 double current = dueCalculation.meterCurrentValue() == null ? meter.getCurrentValue() : dueCalculation.meterCurrentValue();
                 double remaining = dueCalculation.meterRemaining() == null ? interval : dueCalculation.meterRemaining();
@@ -54,21 +77,6 @@ public class MeterTriggerService {
             }
         }
         return result;
-    }
-
-    public List<MeterTriggerMatch> dueTriggers(UUID equipmentId, String equipmentSearch) {
-        if (equipmentId != null) {
-            return dueTriggers(equipmentId);
-        }
-        if (equipmentSearch == null || equipmentSearch.isBlank()) {
-            throw RestException.badRequest("equipmentId or equipmentSearch is required");
-        }
-        String pattern = "%" + equipmentSearch.trim().toLowerCase() + "%";
-        List<UUID> equipmentIds = equipmentRepository.findIdsByBusinessSearch(pattern);
-        if (equipmentIds.isEmpty()) {
-            return List.of();
-        }
-        return dueTriggers(equipmentIds.get(0));
     }
 
 }

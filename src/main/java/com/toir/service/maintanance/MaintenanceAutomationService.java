@@ -1,6 +1,8 @@
 package com.toir.service.maintanance;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
+import com.toir.dto.maintenanceplanning.MaintenanceDueStructuredExplanationDto;
 import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.maintenancedue.MaintenanceDueEventDto;
 import com.toir.dto.workorder.WorkOrderDto;
@@ -50,6 +52,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -84,6 +87,7 @@ public class MaintenanceAutomationService {
     private final MaintenanceAutomationNotificationService notificationService;
     private final ObjectProvider<ApprovalService> approvalServiceProvider;
     private final OperationalEquipmentPolicy operationalEquipmentPolicy;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public EvaluationResult evaluateEquipment(UUID equipmentId, MaintenanceTriggerSource source) {
@@ -310,6 +314,7 @@ public class MaintenanceAutomationService {
         event.setMeterInterval(due.meterInterval());
         event.setMeterRemaining(due.meterRemaining());
         event.setExplanation(due.explanation());
+        applyReasonCode(event, due.structuredExplanation());
         if (isNew) {
             event.setDetectedAt(Instant.now());
             event.setStatus(initialStatus(rule, due.status()));
@@ -651,17 +656,33 @@ public class MaintenanceAutomationService {
         return LocalDateTime.ofInstant(dueAt, ZoneId.systemDefault()).with(LocalTime.of(18, 0));
     }
 
+    private void applyReasonCode(MaintenanceDueEvent event, MaintenanceDueStructuredExplanationDto structured) {
+        if (structured == null) {
+            event.setReasonCode(null);
+            event.setReasonParams(null);
+            return;
+        }
+        event.setReasonCode(structured.reasonCode());
+        Map<String, Object> params = structured.reasonParams();
+        if (params == null || params.isEmpty()) {
+            event.setReasonParams(null);
+            return;
+        }
+        try {
+            event.setReasonParams(objectMapper.writeValueAsString(params));
+        } catch (Exception ex) {
+            event.setReasonParams(null);
+        }
+    }
+
     private String cycleKey(UUID equipmentId, EquipmentMaintenanceEffectiveRule rule, MaintenanceDueCalculationDto due) {
         if (due.status() == MaintenanceDueStatus.BLOCKED) {
-            String explanation = due.explanation() == null ? "" : due.explanation().toLowerCase(Locale.ROOT);
-            if (explanation.contains("calendar")) {
-                return calendarCycleScope(equipmentId, rule) + ":CALENDAR:BLOCKED:" + calendarBlockedReason(explanation);
-            }
-            if (due.meterType() != null) {
+            String blockingCode = due.structuredExplanation() == null ? null : due.structuredExplanation().blockingCode();
+            if ("MISSING_ACTIVE_METER".equals(blockingCode) && due.meterType() != null) {
                 String scope = cycleScope(equipmentId, rule);
                 return "%s:METER:%s:BLOCKED:MISSING_METER".formatted(scope, due.meterType().name());
             }
-            return calendarCycleScope(equipmentId, rule) + ":CALENDAR:BLOCKED:UNKNOWN";
+            return calendarCycleScope(equipmentId, rule) + ":CALENDAR:BLOCKED:" + calendarBlockedReason(due);
         }
         if (due.dueByMeter()
                 && due.meterType() != null
@@ -695,11 +716,12 @@ public class MaintenanceAutomationService {
         return "%s:%s".formatted(equipmentId, scopeId);
     }
 
-    private String calendarBlockedReason(String explanation) {
-        if (explanation.contains("initial completion anchor")) {
+    private String calendarBlockedReason(MaintenanceDueCalculationDto due) {
+        String reasonCode = due.structuredExplanation() == null ? null : due.structuredExplanation().reasonCode();
+        if ("REQUIRE_INITIAL_ANCHOR".equals(reasonCode)) {
             return "INITIAL_ANCHOR_REQUIRED";
         }
-        if (explanation.contains("no completion anchor") || explanation.contains("no anchor")) {
+        if ("NO_COMPLETION_ANCHOR".equals(reasonCode)) {
             return "NO_ANCHOR";
         }
         return "UNKNOWN";

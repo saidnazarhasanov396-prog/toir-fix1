@@ -56,6 +56,11 @@ public class EquipmentMaintenanceProfileService {
 
     @Transactional(readOnly = true)
     public EquipmentMaintenanceProfileDto getProfile(UUID equipmentId) {
+        return getProfile(equipmentId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public EquipmentMaintenanceProfileDto getProfile(UUID equipmentId, String lang) {
         Equipment equipment = equipmentOrThrow(equipmentId);
         List<MaintenanceRegulationDto> inheritedRules = regulationRepository
                 .findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(equipment.getEquipmentTypeId())
@@ -69,7 +74,7 @@ public class EquipmentMaintenanceProfileService {
                 .toList();
         List<EffectiveMaintenanceRuleDto> effectiveRules = effectiveRuleResolver.resolveApplicable(equipmentId)
                 .stream()
-                .map(this::fromEffectiveRule)
+                .map(rule -> fromEffectiveRule(rule, lang))
                 .toList();
         return new EquipmentMaintenanceProfileDto(
                 equipment.getId(),
@@ -81,6 +86,10 @@ public class EquipmentMaintenanceProfileService {
     }
 
     private EffectiveMaintenanceRuleDto fromEffectiveRule(EquipmentMaintenanceEffectiveRule rule) {
+        return fromEffectiveRule(rule, null);
+    }
+
+    private EffectiveMaintenanceRuleDto fromEffectiveRule(EquipmentMaintenanceEffectiveRule rule, String lang) {
         return new EffectiveMaintenanceRuleDto(
                 rule.equipmentMaintenanceRuleId() == null ? rule.regulationId() : rule.equipmentMaintenanceRuleId(),
                 rule.regulationId(),
@@ -104,7 +113,7 @@ public class EquipmentMaintenanceProfileService {
                 rule.recalculationPolicy(),
                 rule.source(),
                 rule.overrideReason(),
-                maintenanceDueCalculationService.calculate(rule)
+                maintenanceDueCalculationService.calculate(rule, lang)
         );
     }
 

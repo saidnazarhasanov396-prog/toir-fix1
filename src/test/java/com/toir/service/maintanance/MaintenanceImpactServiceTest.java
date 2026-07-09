@@ -4,6 +4,7 @@ import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
 import com.toir.enums.MaintenanceDueStatus;
@@ -56,16 +57,16 @@ class MaintenanceImpactServiceTest {
         Equipment blockedEquipment = equipment(UUID.randomUUID(), equipmentTypeId, "EQ-2");
         when(equipmentRepository.findAllForMaintenanceRegulations(equipmentTypeId))
                 .thenReturn(List.of(dueEquipment, blockedEquipment));
-        when(dueCalculationService.calculate(eq(dueEquipment.getId()), any(MaintenanceRegulation.class)))
+        when(dueCalculationService.calculate(eq(dueEquipment.getId()), any(MaintenanceRegulation.class), any()))
                 .thenReturn(calculation(dueEquipment.getId(), MaintenanceDueStatus.DUE, "due soon"));
-        when(dueCalculationService.calculate(eq(blockedEquipment.getId()), any(MaintenanceRegulation.class)))
+        when(dueCalculationService.calculate(eq(blockedEquipment.getId()), any(MaintenanceRegulation.class), any()))
                 .thenReturn(calculation(blockedEquipment.getId(), MaintenanceDueStatus.BLOCKED, "meter reading missing"));
         when(applicabilityService.evaluate(eq(dueEquipment), any(MaintenanceRegulation.class), any(), any()))
                 .thenReturn(new MaintenanceRegulationApplicabilityService.ApplicabilityResult(
-                        true, false, false, "due soon", MaintenanceDueStatus.DUE));
+                        true, false, false, "due soon", MaintenanceDueStatus.DUE, null, null));
         when(applicabilityService.evaluate(eq(blockedEquipment), any(MaintenanceRegulation.class), any(), any()))
                 .thenReturn(new MaintenanceRegulationApplicabilityService.ApplicabilityResult(
-                        true, true, true, "meter reading missing", MaintenanceDueStatus.BLOCKED));
+                        true, true, true, "meter reading missing", MaintenanceDueStatus.BLOCKED, null, null));
 
         var preview = service.preview(request(equipmentTypeId));
 
@@ -74,7 +75,8 @@ class MaintenanceImpactServiceTest {
         assertThat(preview.blockedCount()).isEqualTo(1);
         assertThat(preview.missingMetersCount()).isEqualTo(1);
         assertThat(preview.duplicatePolicy()).isEqualTo(DuplicatePolicy.ONE_ITEM_PER_CYCLE);
-        assertThat(preview.automationSummary()).isEqualTo("Action: CREATE_TASK, approval result: CREATE_TASK, duplicates: ONE_ITEM_PER_CYCLE");
+        assertThat(preview.automationAction()).isEqualTo(AutomationAction.CREATE_TASK);
+        assertThat(preview.approvalResultAction()).isEqualTo(ApprovalResultAction.CREATE_TASK);
         assertThat(preview.items()).extracting("equipmentCode").containsExactly("EQ-1", "EQ-2");
     }
 
@@ -86,18 +88,19 @@ class MaintenanceImpactServiceTest {
         Equipment equipment = equipment(UUID.randomUUID(), equipmentTypeId, "EQ-1");
         when(regulationRepository.findByIdAndIsDeletedFalse(regulationId)).thenReturn(Optional.of(regulation));
         when(equipmentRepository.findAllForMaintenanceRegulations(equipmentTypeId)).thenReturn(List.of(equipment));
-        when(dueCalculationService.calculate(equipment.getId(), regulation))
+        when(dueCalculationService.calculate(eq(equipment.getId()), eq(regulation), any()))
                 .thenReturn(calculation(equipment.getId(), MaintenanceDueStatus.UPCOMING, "upcoming"));
         when(applicabilityService.evaluate(eq(equipment), eq(regulation), any(), any()))
                 .thenReturn(new MaintenanceRegulationApplicabilityService.ApplicabilityResult(
-                        true, false, false, "upcoming", MaintenanceDueStatus.UPCOMING));
+                        true, false, false, "upcoming", MaintenanceDueStatus.UPCOMING, null, null));
 
         var impact = service.impact(regulationId);
 
         assertThat(impact.regulationId()).isEqualTo(regulationId);
         assertThat(impact.affectedEquipment()).isEqualTo(1);
         assertThat(impact.duplicatePolicy()).isEqualTo(DuplicatePolicy.ONE_OPEN_ITEM_PER_RULE);
-        assertThat(impact.automationSummary()).isEqualTo("Action: REQUIRE_APPROVAL, approval result: CREATE_TASK, duplicates: ONE_OPEN_ITEM_PER_RULE");
+        assertThat(impact.automationAction()).isEqualTo(AutomationAction.REQUIRE_APPROVAL);
+        assertThat(impact.approvalResultAction()).isEqualTo(ApprovalResultAction.CREATE_TASK);
         assertThat(impact.items()).hasSize(1);
     }
 

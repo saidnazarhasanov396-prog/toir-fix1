@@ -79,7 +79,7 @@ class MeterControllerContractTest {
 
     @Test
     void triggersWithoutAnyEquipmentFilterShouldReturnBadRequest() throws Exception {
-        when(triggerService.dueTriggers(null, null))
+        when(triggerService.dueTriggers(null, null, null))
                 .thenThrow(RestException.badRequest("equipmentId or equipmentSearch is required"));
 
         mockMvc.perform(get("/api/v1/meters/triggers"))

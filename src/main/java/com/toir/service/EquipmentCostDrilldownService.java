@@ -284,29 +284,33 @@ public class EquipmentCostDrilldownService {
                                  Map<UUID, WorkOrder> workOrders,
                                  Map<UUID, RepairRequest> repairRequests,
                                  Map<UUID, ContractorWork> contractorWorks) {
+        // Note: sourceDisplay only carries entity-specific numbers/titles now - the source *type*
+        // itself (e.g. "Material issue") is rendered separately by the frontend via the translated
+        // costSourceType i18n group (equipmentCostDrilldown.sourceTypes.*), so it must not be baked
+        // into this free-text field as English.
         if (contractorWorkId != null && contractorWorks.containsKey(contractorWorkId)) {
             ContractorWork contractorWork = contractorWorks.get(contractorWorkId);
-            return joinNonBlank("Counteragent work", contractorWork.getDescription());
+            return blankToNull(contractorWork.getDescription());
         }
-        if (cost.getSourceType() == ActualCostSourceType.MATERIAL_ISSUE) {
+        if (cost.getSourceType() == ActualCostSourceType.MATERIAL_ISSUE
+                || cost.getSourceType() == ActualCostSourceType.LABOR_ENTRY) {
             return workOrderId != null && workOrders.containsKey(workOrderId)
-                    ? joinNonBlank("Material issue", joinNonBlank(workOrders.get(workOrderId).getNumber(), workOrders.get(workOrderId).getTitle()))
-                    : sourceTypeLabel(cost.getSourceType());
-        }
-        if (cost.getSourceType() == ActualCostSourceType.LABOR_ENTRY) {
-            return workOrderId != null && workOrders.containsKey(workOrderId)
-                    ? joinNonBlank("Labor entry", joinNonBlank(workOrders.get(workOrderId).getNumber(), workOrders.get(workOrderId).getTitle()))
-                    : sourceTypeLabel(cost.getSourceType());
+                    ? blankToNull(joinNonBlank(workOrders.get(workOrderId).getNumber(), workOrders.get(workOrderId).getTitle()))
+                    : null;
         }
         if (workOrderId != null && workOrders.containsKey(workOrderId)) {
             WorkOrder workOrder = workOrders.get(workOrderId);
-            return joinNonBlank(workOrder.getNumber(), workOrder.getTitle());
+            return blankToNull(joinNonBlank(workOrder.getNumber(), workOrder.getTitle()));
         }
         if (repairRequestId != null && repairRequests.containsKey(repairRequestId)) {
             RepairRequest repairRequest = repairRequests.get(repairRequestId);
-            return joinNonBlank(repairRequest.getNumber(), repairRequest.getTitle());
+            return blankToNull(joinNonBlank(repairRequest.getNumber(), repairRequest.getTitle()));
         }
-        return sourceTypeLabel(cost.getSourceType());
+        return null;
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() || "-".equals(value) ? null : value;
     }
 
     private UUID directWorkOrderId(ActualCost cost) {
@@ -391,18 +395,22 @@ public class EquipmentCostDrilldownService {
         return joinNonBlank(category.code(), category.name());
     }
 
+    /**
+     * Raw {@code ActualCostSourceType} code (not an English label) - the frontend translates it via
+     * the {@code costSourceType} i18n group instead of trusting server-rendered text.
+     */
     private String sourceTypeLabel(ActualCostSourceType sourceType) {
         if (sourceType == null) {
-            return "Unspecified";
+            return "UNSPECIFIED";
         }
         return switch (sourceType) {
-            case WORK_ORDER -> "Work order";
-            case REPAIR_REQUEST -> "Repair request";
-            case COUNTERAGENT_WORK, CONTRACTOR_WORK -> "Counteragent work";
-            case MATERIAL_ISSUE -> "Material issue";
-            case LABOR_ENTRY -> "Labor entry";
-            case PROCUREMENT_RECEIPT -> "Procurement receipt";
-            case WORK_ORDER_MANUAL_WITH_REASON -> "Manual work order cost";
+            case WORK_ORDER -> "WORK_ORDER";
+            case REPAIR_REQUEST -> "REPAIR_REQUEST";
+            case COUNTERAGENT_WORK, CONTRACTOR_WORK -> "COUNTERAGENT_WORK";
+            case MATERIAL_ISSUE -> "MATERIAL_ISSUE";
+            case LABOR_ENTRY -> "LABOR_ENTRY";
+            case PROCUREMENT_RECEIPT -> "PROCUREMENT_RECEIPT";
+            case WORK_ORDER_MANUAL_WITH_REASON -> "WORK_ORDER_MANUAL_WITH_REASON";
         };
     }
 

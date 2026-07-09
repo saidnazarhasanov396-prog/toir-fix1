@@ -31,6 +31,11 @@ public class MaintenanceImpactService {
 
     @Transactional(readOnly = true)
     public MaintenanceRegulationPreviewDto preview(MaintenanceRegulationRequest request) {
+        return preview(request, null);
+    }
+
+    @Transactional(readOnly = true)
+    public MaintenanceRegulationPreviewDto preview(MaintenanceRegulationRequest request, String lang) {
         MaintenanceRegulation probe = new MaintenanceRegulation();
         probe.setEquipmentTypeId(request.equipmentTypeId());
         probe.setTemplateId(request.templateId());
@@ -57,14 +62,19 @@ public class MaintenanceImpactService {
         probe.setDuplicatePolicy(request.duplicatePolicy() == null
                 ? DuplicatePolicy.ONE_ITEM_PER_CYCLE
                 : request.duplicatePolicy());
-        return build(probe, request.attributeConditions());
+        return build(probe, request.attributeConditions(), lang);
     }
 
     @Transactional(readOnly = true)
     public MaintenanceRegulationImpactDto impact(UUID regulationId) {
+        return impact(regulationId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public MaintenanceRegulationImpactDto impact(UUID regulationId, String lang) {
         MaintenanceRegulation regulation = regulationRepository.findByIdAndIsDeletedFalse(regulationId)
                 .orElseThrow(() -> RestException.notFound("Maintenance regulation not found: " + regulationId));
-        MaintenanceRegulationPreviewDto preview = build(regulation, null);
+        MaintenanceRegulationPreviewDto preview = build(regulation, null, lang);
         return new MaintenanceRegulationImpactDto(
                 regulationId,
                 preview.affectedEquipment(),
@@ -72,17 +82,19 @@ public class MaintenanceImpactService {
                 preview.unmatchedCount(),
                 preview.blockedCount(),
                 preview.missingMetersCount(),
-                preview.automationSummary(),
+                preview.automationAction(),
+                preview.approvalResultAction(),
                 preview.duplicatePolicy(),
                 preview.items()
         );
     }
 
     private MaintenanceRegulationPreviewDto build(MaintenanceRegulation regulation,
-                                                  List<com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest> requestConditions) {
+                                                  List<com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest> requestConditions,
+                                                  String lang) {
         List<Equipment> equipment = equipmentRepository.findAllForMaintenanceRegulations(regulation.getEquipmentTypeId());
         List<MaintenanceRegulationPreviewDto.Item> items = equipment.stream()
-                .map(item -> item(regulation, requestConditions, item))
+                .map(item -> item(regulation, requestConditions, item, lang))
                 .toList();
         long matched = items.stream().filter(MaintenanceRegulationPreviewDto.Item::matched).count();
         long blocked = items.stream().filter(MaintenanceRegulationPreviewDto.Item::blocked).count();
@@ -93,7 +105,8 @@ public class MaintenanceImpactService {
                 Math.max(0, equipment.size() - matched),
                 blocked,
                 missingMeters,
-                automationSummary(regulation),
+                regulation.getAutomationAction(),
+                regulation.getApprovalResultAction(),
                 regulation.getDuplicatePolicy(),
                 items
         );
@@ -101,8 +114,9 @@ public class MaintenanceImpactService {
 
     private MaintenanceRegulationPreviewDto.Item item(MaintenanceRegulation regulation,
                                                       List<com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest> requestConditions,
-                                                      Equipment equipment) {
-        MaintenanceDueCalculationDto due = dueCalculationService.calculate(equipment.getId(), regulation);
+                                                      Equipment equipment,
+                                                      String lang) {
+        MaintenanceDueCalculationDto due = dueCalculationService.calculate(equipment.getId(), regulation, lang);
         MaintenanceRegulationApplicabilityService.ApplicabilityResult applicability =
                 applicabilityService.evaluate(equipment, regulation, requestConditions, due);
         return new MaintenanceRegulationPreviewDto.Item(
@@ -113,15 +127,10 @@ public class MaintenanceImpactService {
                 applicability.blocked(),
                 applicability.missingMeter(),
                 applicability.reason(),
-                applicability.dueStatus()
+                applicability.dueStatus(),
+                applicability.reasonCode(),
+                applicability.attributeKey()
         );
     }
 
-    private String automationSummary(MaintenanceRegulation regulation) {
-        return "Action: %s, approval result: %s, duplicates: %s".formatted(
-                regulation.getAutomationAction(),
-                regulation.getApprovalResultAction(),
-                regulation.getDuplicatePolicy()
-        );
-    }
 }
