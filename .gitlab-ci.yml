@@ -11,6 +11,7 @@ stages:
   - compile
   - build
   - deploy
+  - seed
 
 compile:
   image: maven:3.9.9-eclipse-temurin-21
@@ -52,4 +53,89 @@ deploy:
       RUN_STATUS=0
       ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "docker run -d --name ${SERVICE_NAME} --restart unless-stopped --env-file /tmp/toir-backend.env -p 10260:8080 ${CI_REGISTRY_IMAGE}:latest" || RUN_STATUS=$?
       ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "rm -f /tmp/toir-backend.env"
+      exit $RUN_STATUS
+
+seed:navoiy-azot:
+  stage: seed
+  image: alpine:latest
+  needs:
+    - job: deploy
+  rules:
+    - if: "$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"
+      when: manual
+      allow_failure: false
+    - when: never
+  script:
+    - |
+      if [ "${CONFIRM_NAVOIY_SEED}" != "YES" ]; then
+        echo "CONFIRM_NAVOIY_SEED=YES is required to run the Navoiy Azot seed."
+        exit 1
+      fi
+      if [ "${CONFIRM_PROD_DB_BACKUP}" != "YES" ]; then
+        echo "CONFIRM_PROD_DB_BACKUP=YES is required before running the production seed."
+        exit 1
+      fi
+    - chmod og= ${SSH_PRIVATE_KEY}
+    - apk add openssh-client
+    - ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "docker login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} --password ${CI_REGISTRY_PASSWORD}"
+    - ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "docker pull ${CI_REGISTRY_IMAGE}:latest"
+    - |
+      SEED_ENV_FILE="/tmp/toir-backend-navoiy-seed-${CI_PIPELINE_ID}.env"
+      SEED_CONTAINER="${SERVICE_NAME}-navoiy-seed-${CI_PIPELINE_ID}"
+      RUN_STATUS=0
+      ssh -i ${SSH_PRIVATE_KEY} -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SERVER_HOST} "SEED_ENV_FILE='${SEED_ENV_FILE}' SEED_CONTAINER='${SEED_CONTAINER}' CI_REGISTRY_IMAGE='${CI_REGISTRY_IMAGE}' sh -s" <<'REMOTE_SEED' || RUN_STATUS=$?
+      set -eu
+      SUCCESS_LOG="Navoiy Azot operational seed script finished: db/navoiy-azot-seed/99_validate_navoiy_azot_seed.sql"
+      FAILURE_PATTERN="APPLICATION FAILED TO START|Application run failed|ScriptStatementFailedException|PSQLException|Exception encountered during context initialization"
+
+      cleanup() {
+        rm -f "${SEED_ENV_FILE}"
+        docker rm -f "${SEED_CONTAINER}" >/dev/null 2>&1 || true
+      }
+      trap cleanup EXIT
+
+      cat > "${SEED_ENV_FILE}" <<EOF
+      SPRING_PROFILES_ACTIVE=prod,navoiy-azot-seed
+      EOF
+
+      docker rm -f "${SEED_CONTAINER}" >/dev/null 2>&1 || true
+      docker run -d \
+        --name "${SEED_CONTAINER}" \
+        --env-file "${SEED_ENV_FILE}" \
+        --entrypoint java \
+        "${CI_REGISTRY_IMAGE}:latest" \
+        -jar /app/app.jar \
+        --spring.profiles.active=prod,navoiy-azot-seed \
+        --server.port=0 \
+        --spring.task.scheduling.enabled=false
+
+      elapsed=0
+      while [ "${elapsed}" -lt 900 ]; do
+        LOGS="$(docker logs "${SEED_CONTAINER}" 2>&1 || true)"
+        if echo "${LOGS}" | grep -E -q "${FAILURE_PATTERN}"; then
+          echo "Navoiy Azot seed failed; failure marker found in container logs."
+          echo "${LOGS}"
+          exit 1
+        fi
+        if echo "${LOGS}" | grep -F -q "${SUCCESS_LOG}"; then
+          echo "Navoiy Azot seed validation finished successfully."
+          exit 0
+        fi
+
+        RUNNING="$(docker inspect -f '{{.State.Running}}' "${SEED_CONTAINER}" 2>/dev/null || echo false)"
+        EXIT_CODE="$(docker inspect -f '{{.State.ExitCode}}' "${SEED_CONTAINER}" 2>/dev/null || echo 1)"
+        if [ "${RUNNING}" != "true" ]; then
+          echo "Navoiy Azot seed container exited before validation success marker was observed. exitCode=${EXIT_CODE}"
+          echo "${LOGS}"
+          exit 1
+        fi
+
+        sleep 5
+        elapsed=$((elapsed + 5))
+      done
+
+      echo "Navoiy Azot seed timed out after 15 minutes without validation success marker."
+      docker logs "${SEED_CONTAINER}" 2>&1 || true
+      exit 1
+      REMOTE_SEED
       exit $RUN_STATUS
