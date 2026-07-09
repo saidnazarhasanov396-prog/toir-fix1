@@ -53,9 +53,9 @@ class EquipmentRepositoryTest {
 
         repository.save(equipment(
                 "EQ-004",
-                "Old Motor",
+                "Reserve Motor",
                 "INV-004",
-                EquipmentStatus.DECOMMISSIONED,
+                EquipmentStatus.STANDBY,
                 EquipmentCategory.PRODUCTION_EQUIPMENT,
                 departmentId,
                 equipmentTypeId
@@ -68,13 +68,13 @@ class EquipmentRepositoryTest {
                 null,
                 EquipmentStatus.ACTIVE,
                 EquipmentStatus.IN_REPAIR,
-                EquipmentStatus.DECOMMISSIONED
+                EquipmentStatus.STANDBY
         );
 
         assertThat(stats.getTotalInRegistry()).isEqualTo(4);
         assertThat(stats.getActive()).isEqualTo(2);
         assertThat(stats.getInRepair()).isEqualTo(1);
-        assertThat(stats.getDecommissioned()).isEqualTo(1);
+        assertThat(stats.getReserved()).isEqualTo(1);
     }
 
     @Test
@@ -128,7 +128,7 @@ class EquipmentRepositoryTest {
                 "EQ-PUMP-004",
                 "Other Type Pump",
                 "INV-PUMP-004",
-                EquipmentStatus.DECOMMISSIONED,
+                EquipmentStatus.STANDBY,
                 EquipmentCategory.PRODUCTION_EQUIPMENT,
                 targetDepartmentId,
                 otherEquipmentTypeId
@@ -141,13 +141,13 @@ class EquipmentRepositoryTest {
                 targetEquipmentTypeId,
                 EquipmentStatus.ACTIVE,
                 EquipmentStatus.IN_REPAIR,
-                EquipmentStatus.DECOMMISSIONED
+                EquipmentStatus.STANDBY
         );
 
         assertThat(stats.getTotalInRegistry()).isEqualTo(2);
         assertThat(stats.getActive()).isEqualTo(1);
         assertThat(stats.getInRepair()).isEqualTo(1);
-        assertThat(stats.getDecommissioned()).isZero();
+        assertThat(stats.getReserved()).isZero();
     }
 
     private Equipment equipment(

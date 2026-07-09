@@ -837,16 +837,23 @@ class RepairRequestControllerContractTest {
                         "Leak",
                         DefectStatus.OPEN,
                         "HIGH",
-                        Instant.now()
+                        Instant.now(),
+                        0,
+                        null
                 )),
                 List.of(new WorkOrderBriefDto(
                         UUID.randomUUID(),
                         "WO-2026-1001",
+                        "Repair work order",
+                        "Replace seal",
+                        "Petr Petrov",
                         WorkOrderStatus.APPROVED,
                         WorkType.REPAIR,
                         PriorityLevel.MEDIUM,
                         Instant.now(),
-                        Instant.now().plusSeconds(3600)
+                        Instant.now().plusSeconds(3600),
+                        Instant.now().plusSeconds(7200),
+                        null
                 ))
         );
     }
@@ -882,7 +889,9 @@ class RepairRequestControllerContractTest {
                         "Leak",
                         DefectStatus.OPEN,
                         "HIGH",
-                        Instant.now()
+                        Instant.now(),
+                        0,
+                        null
                 )),
                 List.of()
         );

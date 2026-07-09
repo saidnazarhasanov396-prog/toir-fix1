@@ -1,5 +1,6 @@
 package com.toir.dto.defect;
 
+import com.toir.dto.attachment.AttachmentPhotoSummary;
 import com.toir.dto.triad.RepairRequestBriefDto;
 import com.toir.dto.triad.WorkOrderBriefDto;
 import java.time.Instant;
@@ -33,7 +34,9 @@ public record DefectResponse(
         int recurrenceCount,
         RepairRequestBriefDto repairRequest,
         List<WorkOrderBriefDto> linkedWorkOrders,
-        boolean hasLesson
+        boolean hasLesson,
+        int photoCount,
+        String primaryPhotoDownloadUrl
 ) {
     public DefectResponse(UUID id,
                           String code,
@@ -56,7 +59,7 @@ public record DefectResponse(
                           boolean hasLesson) {
         this(id, code, title, description, equipmentId, equipmentName, null, null, null, null,
                 null, repairRequestId, requestId, category, severity, failureReason, rootCause, status, detectedAt,
-                resolvedAt, recurrenceCount, repairRequest, linkedWorkOrders, hasLesson);
+                resolvedAt, recurrenceCount, repairRequest, linkedWorkOrders, hasLesson, 0, null);
     }
 
     public DefectResponse {
@@ -99,6 +102,20 @@ public record DefectResponse(
                                       RepairRequestBriefDto repairRequest,
                                       List<WorkOrderBriefDto> linkedWorkOrders,
                                       boolean hasLesson) {
+        return from(dto, equipmentName, equipmentNodeCode, equipmentNodeName, equipmentNodeType,
+                defectListId, repairRequest, linkedWorkOrders, hasLesson, null);
+    }
+
+    public static DefectResponse from(DefectDto dto,
+                                      String equipmentName,
+                                      String equipmentNodeCode,
+                                      String equipmentNodeName,
+                                      EquipmentNodeType equipmentNodeType,
+                                      UUID defectListId,
+                                      RepairRequestBriefDto repairRequest,
+                                      List<WorkOrderBriefDto> linkedWorkOrders,
+                                      boolean hasLesson,
+                                      AttachmentPhotoSummary photoSummary) {
         return new DefectResponse(
                 dto.id(),
                 dto.code(),
@@ -123,7 +140,9 @@ public record DefectResponse(
                 dto.recurrenceCount(),
                 repairRequest,
                 linkedWorkOrders,
-                hasLesson
+                hasLesson,
+                photoSummary == null ? 0 : photoSummary.photoCount(),
+                photoSummary == null ? null : photoSummary.primaryPhotoDownloadUrl()
         );
     }
 }

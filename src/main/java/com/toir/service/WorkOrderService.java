@@ -1,9 +1,12 @@
 package com.toir.service;
 
 import com.toir.dto.attachment.AttachmentGroupDto;
+import com.toir.dto.attachment.AttachmentPhotoSummary;
 import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.dto.workorder.*;
+import com.toir.dto.triad.DefectBriefDto;
+import com.toir.dto.triad.RepairRequestBriefDto;
 import com.toir.dto.triad.TriadLinkMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,6 +69,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestTemplateActionRepository;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.CloseReadinessGroupStatus;
 import com.toir.enums.CloseReadinessSeverity;
 import com.toir.enums.DefectStatus;
@@ -2904,8 +2908,8 @@ public class WorkOrderService {
                 entity.getCreatedById(), entity.getApprovedById(),
                 entity.getWarehouseId(), entity.getReplacementEquipmentId(), replacementEquipmentName,
                 taskDtos(entity.getTasks()),
-                TriadLinkMapper.toRepairRequestBrief(linkedRepairRequest),
-                TriadLinkMapper.toDefectBrief(linkedDefect),
+                repairRequestBrief(linkedRepairRequest),
+                defectBrief(linkedDefect),
                 operationsCount,
                 materialsCount,
                 entity.getRepairActRequired(),
@@ -3088,6 +3092,38 @@ public class WorkOrderService {
         return userRepository.findByIdAndIsDeletedFalse(performer.getUserId())
                 .map(User::getFullName)
                 .orElse(null);
+    }
+
+    private RepairRequestBriefDto repairRequestBrief(RepairRequest repairRequest) {
+        if (repairRequest == null) {
+            return null;
+        }
+        String assigneeName = repairRequest.getAssignedToId() == null
+                ? null
+                : userRepository.findByIdAndIsDeletedFalse(repairRequest.getAssignedToId())
+                .map(User::getFullName)
+                .orElse(null);
+        String departmentName = repairRequest.getDepartmentId() == null
+                ? null
+                : departmentRepository.findByIdAndIsDeletedFalse(repairRequest.getDepartmentId())
+                .map(Department::getName)
+                .orElse(null);
+        String locationName = repairRequest.getLocationId() == null
+                ? null
+                : locationRepository.findByIdAndIsDeletedFalse(repairRequest.getLocationId())
+                .map(Location::getName)
+                .orElse(null);
+        return TriadLinkMapper.toRepairRequestBrief(repairRequest, assigneeName, departmentName, locationName);
+    }
+
+    private DefectBriefDto defectBrief(Defect defect) {
+        if (defect == null) {
+            return null;
+        }
+        AttachmentPhotoSummary photoSummary = attachmentGroupService
+                .getPhotoSummaries(AttachmentTargetType.DEFECT, List.of(defect.getId()))
+                .get(defect.getId());
+        return TriadLinkMapper.toDefectBrief(defect, photoSummary);
     }
 
     private String performerDisplayName(BrigadeMember member, Map<UUID, User> usersById) {

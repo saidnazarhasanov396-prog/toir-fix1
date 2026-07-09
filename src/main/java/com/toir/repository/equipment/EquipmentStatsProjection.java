@@ -4,5 +4,5 @@ public interface EquipmentStatsProjection {
     Long getTotalInRegistry();
     Long getActive();
     Long getInRepair();
-    Long getDecommissioned();
+    Long getReserved();
 }

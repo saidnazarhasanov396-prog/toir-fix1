@@ -68,6 +68,7 @@ import com.toir.service.MeterService;
 import com.toir.service.CounteragentService;
 import com.toir.service.NotificationService;
 import com.toir.service.OperationalIssueLifecycleSyncService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
@@ -182,6 +183,9 @@ class RepairRequestServiceTest {
     @Mock
     OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
 
+    @Mock
+    AttachmentGroupService attachmentGroupService;
+
     @InjectMocks
     RepairRequestService service;
 
@@ -193,6 +197,8 @@ class RepairRequestServiceTest {
                 .thenReturn(List.of());
         lenient().when(maintenanceOperationRepository.findAllByTemplateIdInAndIsDeletedFalse(any()))
                 .thenReturn(List.of());
+        lenient().when(attachmentGroupService.getPhotoSummaries(any(), any()))
+                .thenReturn(java.util.Map.of());
     }
 
     @Test

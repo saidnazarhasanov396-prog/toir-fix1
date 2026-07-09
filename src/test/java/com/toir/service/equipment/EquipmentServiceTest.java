@@ -3245,7 +3245,7 @@ class EquipmentServiceTest {
                 null,
                 EquipmentStatus.ACTIVE,
                 EquipmentStatus.IN_REPAIR,
-                EquipmentStatus.DECOMMISSIONED
+                EquipmentStatus.STANDBY
         )).thenReturn(projection);
 
         EquipmentStatsResponse result = service.getEquipmentStats(null, null, null, null);
@@ -3253,7 +3253,7 @@ class EquipmentServiceTest {
         assertThat(result.totalInRegistry()).isEqualTo(50);
         assertThat(result.active()).isEqualTo(9);
         assertThat(result.inRepair()).isEqualTo(3);
-        assertThat(result.decommissioned()).isEqualTo(1);
+        assertThat(result.reserved()).isEqualTo(1);
 
         verify(repository).getEquipmentStats(
                 null,
@@ -3262,7 +3262,7 @@ class EquipmentServiceTest {
                 null,
                 EquipmentStatus.ACTIVE,
                 EquipmentStatus.IN_REPAIR,
-                EquipmentStatus.DECOMMISSIONED
+                EquipmentStatus.STANDBY
         );
     }
 
@@ -3280,7 +3280,7 @@ class EquipmentServiceTest {
                 equipmentTypeId,
                 EquipmentStatus.ACTIVE,
                 EquipmentStatus.IN_REPAIR,
-                EquipmentStatus.DECOMMISSIONED
+                EquipmentStatus.STANDBY
         )).thenReturn(projection);
 
         EquipmentStatsResponse result = service.getEquipmentStats(
@@ -3293,7 +3293,7 @@ class EquipmentServiceTest {
         assertThat(result.totalInRegistry()).isEqualTo(12);
         assertThat(result.active()).isEqualTo(8);
         assertThat(result.inRepair()).isEqualTo(2);
-        assertThat(result.decommissioned()).isEqualTo(2);
+        assertThat(result.reserved()).isEqualTo(2);
 
         verify(repository).getEquipmentStats(
                 "%pump-42%",
@@ -3302,7 +3302,7 @@ class EquipmentServiceTest {
                 equipmentTypeId,
                 EquipmentStatus.ACTIVE,
                 EquipmentStatus.IN_REPAIR,
-                EquipmentStatus.DECOMMISSIONED
+                EquipmentStatus.STANDBY
         );
     }
 
@@ -3317,7 +3317,7 @@ class EquipmentServiceTest {
                 null,
                 EquipmentStatus.ACTIVE,
                 EquipmentStatus.IN_REPAIR,
-                EquipmentStatus.DECOMMISSIONED
+                EquipmentStatus.STANDBY
         )).thenReturn(projection);
 
         EquipmentStatsResponse result = service.getEquipmentStats("   ", null, null, null);
@@ -3325,7 +3325,7 @@ class EquipmentServiceTest {
         assertThat(result.totalInRegistry()).isEqualTo(10);
         assertThat(result.active()).isEqualTo(7);
         assertThat(result.inRepair()).isEqualTo(2);
-        assertThat(result.decommissioned()).isEqualTo(1);
+        assertThat(result.reserved()).isEqualTo(1);
 
         verify(repository).getEquipmentStats(
                 null,
@@ -3334,7 +3334,7 @@ class EquipmentServiceTest {
                 null,
                 EquipmentStatus.ACTIVE,
                 EquipmentStatus.IN_REPAIR,
-                EquipmentStatus.DECOMMISSIONED
+                EquipmentStatus.STANDBY
         );
     }
 
@@ -3349,7 +3349,7 @@ class EquipmentServiceTest {
                 null,
                 EquipmentStatus.ACTIVE,
                 EquipmentStatus.IN_REPAIR,
-                EquipmentStatus.DECOMMISSIONED
+                EquipmentStatus.STANDBY
         )).thenReturn(projection);
 
         EquipmentStatsResponse result = service.getEquipmentStats(null, null, null, null);
@@ -3357,14 +3357,14 @@ class EquipmentServiceTest {
         assertThat(result.totalInRegistry()).isZero();
         assertThat(result.active()).isZero();
         assertThat(result.inRepair()).isZero();
-        assertThat(result.decommissioned()).isZero();
+        assertThat(result.reserved()).isZero();
     }
 
     private EquipmentStatsProjection statsProjection(
             Long totalInRegistry,
             Long active,
             Long inRepair,
-            Long decommissioned
+            Long reserved
     ) {
         return new EquipmentStatsProjection() {
             @Override
@@ -3383,8 +3383,8 @@ class EquipmentServiceTest {
             }
 
             @Override
-            public Long getDecommissioned() {
-                return decommissioned;
+            public Long getReserved() {
+                return reserved;
             }
         };
     }

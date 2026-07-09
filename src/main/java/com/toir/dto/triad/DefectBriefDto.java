@@ -11,6 +11,8 @@ public record DefectBriefDto(
         String title,
         DefectStatus status,
         String severity,
-        Instant createdAt
+        Instant createdAt,
+        int photoCount,
+        String primaryPhotoDownloadUrl
 ) {
 }

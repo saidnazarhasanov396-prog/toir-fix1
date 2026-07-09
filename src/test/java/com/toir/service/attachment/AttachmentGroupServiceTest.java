@@ -279,4 +279,35 @@ class AttachmentGroupServiceTest {
         group.setItems(new java.util.ArrayList<>());
         return group;
     }
+
+    @Test
+    void getPhotoSummariesReturnsCountAndPrimaryDownloadUrlPerTarget() {
+        UUID targetId = UUID.randomUUID();
+        UUID groupId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        var countRow = org.mockito.Mockito.mock(com.toir.repository.attachment.AttachmentTargetPhotoCountProjection.class);
+        when(countRow.getTargetId()).thenReturn(targetId);
+        when(countRow.getPhotoCount()).thenReturn(2L);
+        var primaryRow = org.mockito.Mockito.mock(com.toir.repository.attachment.AttachmentTargetPrimaryPhotoProjection.class);
+        when(primaryRow.getTargetId()).thenReturn(targetId);
+        when(primaryRow.getGroupId()).thenReturn(groupId);
+        when(primaryRow.getFileId()).thenReturn(fileId);
+        when(groupRepository.countActiveImagesByTargetIds(AttachmentTargetType.DEFECT, List.of(targetId)))
+                .thenReturn(List.of(countRow));
+        when(groupRepository.findPrimaryActiveImageByTargetIds(AttachmentTargetType.DEFECT.name(), List.of(targetId)))
+                .thenReturn(List.of(primaryRow));
+
+        var summaries = service.getPhotoSummaries(AttachmentTargetType.DEFECT, List.of(targetId));
+
+        assertThat(summaries).containsKey(targetId);
+        assertThat(summaries.get(targetId).photoCount()).isEqualTo(2);
+        assertThat(summaries.get(targetId).primaryPhotoDownloadUrl())
+                .isEqualTo("/api/v1/attachments/groups/" + groupId + "/files/" + fileId + "/download");
+    }
+
+    @Test
+    void getPhotoSummariesReturnsEmptyMapForBlankTargetIds() {
+        assertThat(service.getPhotoSummaries(AttachmentTargetType.DEFECT, List.of())).isEmpty();
+        verify(groupRepository, never()).countActiveImagesByTargetIds(any(), any());
+    }
 }
