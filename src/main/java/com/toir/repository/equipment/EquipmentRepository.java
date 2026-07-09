@@ -8,6 +8,7 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
+import com.toir.repository.projection.StatusCountProjection;
 import java.util.Collection;
 import java.time.LocalDate;
 import java.util.List;
@@ -419,6 +420,14 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
             @Param("decommissionedStatus") EquipmentStatus decommissionedStatus
     );
 
-
+    @Query(nativeQuery = true, value = """
+            select e.status as status, count(e.id) as count
+            from equipment e
+            where e.is_deleted = false
+              and (cast(:departmentId as varchar) is null
+                   or coalesce(e.responsible_department_id, e.department_id) = cast(:departmentId as uuid))
+            group by e.status
+            """)
+    List<StatusCountProjection> countByStatusForCockpit(@Param("departmentId") UUID departmentId);
 
 }

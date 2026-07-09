@@ -10,7 +10,7 @@ BEGIN
     FROM budget_lines
     WHERE is_deleted = false
       AND committed_amount > planned_amount;
-    
+
     IF overshot_count > 0 THEN
         RAISE NOTICE 'Found % budget lines with committed_amount > planned_amount. Fixing...', overshot_count;
     END IF;
@@ -39,10 +39,10 @@ BEGIN
     FROM budget_lines
     WHERE is_deleted = false
       AND committed_amount > planned_amount;
-    
+
     IF remaining_overshot > 0 THEN
         RAISE EXCEPTION 'Migration failed: Still have % budget lines with overshoot', remaining_overshot;
     END IF;
-    
+
     RAISE NOTICE 'Migration successful: No budget lines with overshoot remaining';
 END $$;

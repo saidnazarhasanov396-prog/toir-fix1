@@ -3,6 +3,8 @@ package com.toir.repository;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkType;
+import com.toir.repository.projection.MonthlyCountProjection;
+import com.toir.repository.projection.StatusCountProjection;
 import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
 import java.time.Instant;
 import java.util.Collection;
@@ -411,4 +413,50 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
     List<WorkOrderEquipmentTypeCountProjection> countByEquipmentTypeForDashboard(
             @Param("departmentId") UUID departmentId,
             @Param("statuses") Collection<WorkOrderStatus> statuses);
+
+    @Query(nativeQuery = true, value = """
+            select w.status as status, count(w.id) as count
+            from work_orders w
+            where w.is_deleted = false
+              and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+            group by w.status
+            """)
+    List<StatusCountProjection> countByStatusForCockpit(@Param("departmentId") UUID departmentId);
+
+    @Query(nativeQuery = true, value = """
+            select w.priority as status, count(w.id) as count
+            from work_orders w
+            where w.is_deleted = false
+              and w.status in ('PLANNED', 'APPROVED', 'IN_PROGRESS', 'SUSPENDED')
+              and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+            group by w.priority
+            """)
+    List<StatusCountProjection> countActiveByPriorityForCockpit(@Param("departmentId") UUID departmentId);
+
+    @Query(nativeQuery = true, value = """
+            select to_char(date_trunc('month', timezone('Asia/Tashkent', w.created_at)), 'YYYY-MM') as month,
+                   count(w.id) as count
+            from work_orders w
+            where w.is_deleted = false
+              and w.created_at >= cast(:fromTs as timestamptz)
+              and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+            group by 1
+            """)
+    List<MonthlyCountProjection> countCreatedByMonthForCockpit(
+            @Param("fromTs") Instant fromTs,
+            @Param("departmentId") UUID departmentId);
+
+    @Query(nativeQuery = true, value = """
+            select to_char(date_trunc('month', timezone('Asia/Tashkent', w.completed_at)), 'YYYY-MM') as month,
+                   count(w.id) as count
+            from work_orders w
+            where w.is_deleted = false
+              and w.completed_at is not null
+              and w.completed_at >= cast(:fromTs as timestamptz)
+              and (cast(:departmentId as varchar) is null or w.department_id = cast(:departmentId as uuid))
+            group by 1
+            """)
+    List<MonthlyCountProjection> countCompletedByMonthForCockpit(
+            @Param("fromTs") Instant fromTs,
+            @Param("departmentId") UUID departmentId);
 }

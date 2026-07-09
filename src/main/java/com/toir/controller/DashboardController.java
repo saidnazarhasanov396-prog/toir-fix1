@@ -1,7 +1,9 @@
 package com.toir.controller;
+import com.toir.dto.dashboard.CockpitOverview;
 import com.toir.dto.dashboard.DashboardOverview;
 import com.toir.dto.dashboard.DashboardEmergencyEventDto;
 import com.toir.dto.dashboard.WorkOrdersByEquipmentTypeResponse;
+import com.toir.service.DashboardCockpitService;
 import com.toir.service.DashboardService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
@@ -28,6 +30,7 @@ public class DashboardController {
 
     private final DashboardService service;
     private final DashboardLifecycleService lifecycleService;
+    private final DashboardCockpitService cockpitService;
 
     @GetMapping("/overview")
     public ResponseEntity<DashboardOverview> overview(
@@ -53,6 +56,13 @@ public class DashboardController {
             @RequestParam(defaultValue = "ACTIVE") String statusScope
     ) {
         return ResponseEntity.ok(service.workOrdersByEquipmentType(departmentId, statusScope));
+    }
+
+    @GetMapping("/cockpit")
+    public ResponseEntity<CockpitOverview> cockpit(
+            @RequestParam(required = false) UUID departmentId
+    ) {
+        return ResponseEntity.ok(cockpitService.cockpit(departmentId));
     }
 
     @GetMapping("/equipment-lifecycle")
