@@ -84,4 +84,12 @@ public class MaintenanceDueEvent extends BaseEntity {
 
     @Column(columnDefinition = "text")
     private String explanation;
+
+    /** Machine-readable {@code MaintenanceDueReasonCode} name backing {@link #explanation}; null for events detected before this column existed. */
+    @Column(name = "reason_code")
+    private String reasonCode;
+
+    /** JSON-encoded interpolation params for {@link #reasonCode} (e.g. {"meterType":"ENGINE_HOURS"}). */
+    @Column(name = "reason_params", columnDefinition = "jsonb")
+    private String reasonParams;
 }

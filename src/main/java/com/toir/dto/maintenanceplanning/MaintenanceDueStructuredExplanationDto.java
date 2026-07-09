@@ -3,6 +3,8 @@ package com.toir.dto.maintenanceplanning;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 
 public record MaintenanceDueStructuredExplanationDto(
         String baseSource,
@@ -19,5 +21,10 @@ public record MaintenanceDueStructuredExplanationDto(
         String reasonText,
         String blockingCode,
         String blockingField,
-        String fixLink
+        String fixLink,
+        String reasonCode,
+        String reasonKey,
+        Map<String, Object> reasonParams,
+        List<String> supportingReasonKeys,
+        List<Map<String, Object>> supportingReasonParams
 ) {}

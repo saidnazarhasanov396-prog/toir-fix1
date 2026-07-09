@@ -16,7 +16,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,8 +31,11 @@ public class EquipmentMaintenanceProfileController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
-    public ResponseEntity<EquipmentMaintenanceProfileDto> getProfile(@PathVariable UUID equipmentId) {
-        return ResponseEntity.ok(service.getProfile(equipmentId));
+    public ResponseEntity<EquipmentMaintenanceProfileDto> getProfile(
+            @PathVariable UUID equipmentId,
+            @RequestParam(required = false) String lang,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        return ResponseEntity.ok(service.getProfile(equipmentId, lang != null ? lang : acceptLanguage));
     }
 
     @PostMapping("/rules")

@@ -24,6 +24,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -64,7 +66,7 @@ class MeterTriggerServiceTest {
         when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
                 .thenReturn(List.of(meter));
         when(effectiveRuleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(selectedRule));
-        when(dueCalculationService.calculate(selectedRule)).thenReturn(new MaintenanceDueCalculationDto(
+        when(dueCalculationService.calculate(eq(selectedRule), any())).thenReturn(new MaintenanceDueCalculationDto(
                 equipmentId,
                 selectedRegulation.getId(),
                 null,

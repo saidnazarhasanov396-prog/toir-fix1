@@ -63,6 +63,20 @@ public class MaintenanceDueEventService {
                                                Instant to,
                                                int page,
                                                int size) {
+        return search(equipmentId, departmentId, regulationId, status, dueStatus, from, to, page, size, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<MaintenanceDueEventDto> search(UUID equipmentId,
+                                               UUID departmentId,
+                                               UUID regulationId,
+                                               MaintenanceDueEventStatus status,
+                                               MaintenanceDueStatus dueStatus,
+                                               Instant from,
+                                               Instant to,
+                                               int page,
+                                               int size,
+                                               String lang) {
         Page<MaintenanceDueEvent> result = repository.findAll(
                 searchSpecification(
                         equipmentId,
@@ -78,7 +92,7 @@ public class MaintenanceDueEventService {
                                 .and(Sort.by(Sort.Direction.DESC, "updatedAt"))
                 )
         );
-        return toDtoPage(result);
+        return toDtoPage(result, lang);
     }
 
     private static Specification<MaintenanceDueEvent> searchSpecification(UUID equipmentId,
@@ -231,6 +245,11 @@ public class MaintenanceDueEventService {
 
     @Transactional(readOnly = true)
     public MaintenanceDueEventDto toDto(MaintenanceDueEvent event) {
+        return toDto(event, null);
+    }
+
+    @Transactional(readOnly = true)
+    public MaintenanceDueEventDto toDto(MaintenanceDueEvent event, String lang) {
         normalizeMeterDueStatus(event);
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(event.getEquipmentId()).orElse(null);
         MaintenanceRegulation regulation = event.getRegulationId() == null
@@ -241,11 +260,12 @@ public class MaintenanceDueEventService {
                 equipment == null ? null : new MaintenanceDueEventDto.Ref(
                         equipment.getId(), equipment.getCode(), equipment.getName()),
                 regulation == null ? null : new MaintenanceDueEventDto.Ref(
-                        regulation.getId(), regulation.getCode(), regulation.getName())
+                        regulation.getId(), regulation.getCode(), regulation.getName()),
+                lang
         );
     }
 
-    private Page<MaintenanceDueEventDto> toDtoPage(Page<MaintenanceDueEvent> page) {
+    private Page<MaintenanceDueEventDto> toDtoPage(Page<MaintenanceDueEvent> page, String lang) {
         List<MaintenanceDueEvent> events = page.getContent();
         Map<UUID, Equipment> equipmentById = equipmentRepository.findAllByIdInAndIsDeletedFalse(
                         events.stream().map(MaintenanceDueEvent::getEquipmentId).distinct().toList())
@@ -269,7 +289,8 @@ public class MaintenanceDueEventService {
                     equipment == null ? null : new MaintenanceDueEventDto.Ref(
                             equipment.getId(), equipment.getCode(), equipment.getName()),
                     regulation == null ? null : new MaintenanceDueEventDto.Ref(
-                            regulation.getId(), regulation.getCode(), regulation.getName())
+                            regulation.getId(), regulation.getCode(), regulation.getName()),
+                    lang
             );
         });
     }
@@ -321,15 +342,19 @@ public class MaintenanceDueEventService {
         if (remaining < 0) {
             event.setDueStatus(MaintenanceDueStatus.OVERDUE);
             event.setExplanation(replaceMeterExplanation(event.getExplanation(), "Meter trigger overdue"));
+            event.setReasonCode("METER_OVERDUE");
         } else if (remaining == 0) {
             event.setDueStatus(MaintenanceDueStatus.DUE);
             event.setExplanation(replaceMeterExplanation(event.getExplanation(), "Meter trigger due"));
+            event.setReasonCode("METER_DUE");
         } else if (isWithinMeterLeadWindow(event)) {
             event.setDueStatus(MaintenanceDueStatus.UPCOMING);
             event.setExplanation(replaceMeterExplanation(event.getExplanation(), "Meter trigger upcoming"));
+            event.setReasonCode("METER_UPCOMING");
         } else {
             event.setDueStatus(MaintenanceDueStatus.NOT_DUE);
             event.setExplanation(replaceMeterExplanation(event.getExplanation(), "Meter trigger not due"));
+            event.setReasonCode("METER_NOT_DUE");
         }
     }
 
@@ -348,8 +373,19 @@ public class MaintenanceDueEventService {
         if (event.getTriggerSource() == MaintenanceTriggerSource.METER_READING) {
             return true;
         }
+        if (event.getReasonCode() != null) {
+            return isMeterReasonCode(event.getReasonCode());
+        }
+        // Legacy events detected before reason codes were persisted - fall back to the free-text heuristic.
         String explanation = event.getExplanation();
         return explanation == null || explanation.isBlank() || explanation.startsWith("Meter trigger");
+    }
+
+    private boolean isMeterReasonCode(String reasonCode) {
+        return switch (reasonCode) {
+            case "METER_OVERDUE", "METER_DUE", "METER_UPCOMING", "METER_NOT_DUE" -> true;
+            default -> false;
+        };
     }
 
     private String replaceMeterExplanation(String explanation, String replacement) {

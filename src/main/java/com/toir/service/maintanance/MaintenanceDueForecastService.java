@@ -58,6 +58,18 @@ public class MaintenanceDueForecastService {
                                                       MaintenanceDueStatus status,
                                                       UUID criticality,
                                                       MaintenanceTriggerPolicy triggerPolicy) {
+        return getForecast(from, to, departmentId, equipmentTypeId, status, criticality, triggerPolicy, null);
+    }
+
+    @Transactional(readOnly = true)
+    public MaintenanceDueForecastResponse getForecast(LocalDate from,
+                                                      LocalDate to,
+                                                      UUID departmentId,
+                                                      UUID equipmentTypeId,
+                                                      MaintenanceDueStatus status,
+                                                      UUID criticality,
+                                                      MaintenanceTriggerPolicy triggerPolicy,
+                                                      String lang) {
         LocalDate horizonFrom = from == null ? LocalDate.now(ZoneOffset.UTC) : from;
         LocalDate horizonTo = to == null ? horizonFrom.plusDays(90) : to;
         UUID scopedDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
@@ -74,7 +86,7 @@ public class MaintenanceDueForecastService {
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadRules(events);
 
         List<MaintenanceDueForecastResponse.Row> rows = events.stream()
-                .map(event -> toRow(event, equipmentById, equipmentTypeById, departmentById, regulationById, ruleById, horizonFrom))
+                .map(event -> toRow(event, equipmentById, equipmentTypeById, departmentById, regulationById, ruleById, horizonFrom, lang))
                 .filter(Objects::nonNull)
                 .filter(row -> scopedDepartmentId == null
                         || (row.department() != null && scopedDepartmentId.equals(row.department().id())))
@@ -179,12 +191,13 @@ public class MaintenanceDueForecastService {
                                                      Map<UUID, Department> departmentById,
                                                      Map<UUID, MaintenanceRegulation> regulationById,
                                                      Map<UUID, EquipmentMaintenanceRule> ruleById,
-                                                     LocalDate horizonFrom) {
+                                                     LocalDate horizonFrom,
+                                                     String lang) {
         Equipment equipment = equipmentById.get(event.getEquipmentId());
         if (equipment == null) {
             return null;
         }
-        MaintenanceDueEventDto dto = MaintenanceDueEventDto.from(event, null, null);
+        MaintenanceDueEventDto dto = MaintenanceDueEventDto.from(event, null, null, lang);
         MaintenanceDueStructuredExplanationDto explanation = dto.structuredExplanation();
         EquipmentType equipmentType = equipmentTypeById.get(equipment.getEquipmentTypeId());
         Department department = departmentById.get(effectiveDepartmentId(equipment));
