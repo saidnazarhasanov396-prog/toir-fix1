@@ -1206,7 +1206,7 @@ class EquipmentControllerContractTest {
                 .andExpect(jsonPath("$.totalInRegistry").value(50))
                 .andExpect(jsonPath("$.active").value(9))
                 .andExpect(jsonPath("$.inRepair").value(3))
-                .andExpect(jsonPath("$.decommissioned").value(1));
+                .andExpect(jsonPath("$.reserved").value(1));
 
         verify(scopeAccessService).enforceDepartmentScope(null);
         verify(service).getEquipmentStats(null, null, null, null);
@@ -1242,7 +1242,7 @@ class EquipmentControllerContractTest {
                 .andExpect(jsonPath("$.totalInRegistry").value(12))
                 .andExpect(jsonPath("$.active").value(8))
                 .andExpect(jsonPath("$.inRepair").value(2))
-                .andExpect(jsonPath("$.decommissioned").value(2));
+                .andExpect(jsonPath("$.reserved").value(2));
 
         verify(scopeAccessService).enforceDepartmentScope(departmentId);
         verify(service).getEquipmentStats(

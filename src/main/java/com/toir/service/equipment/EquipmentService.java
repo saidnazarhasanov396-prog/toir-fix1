@@ -2320,14 +2320,14 @@ public class EquipmentService {
                 equipmentTypeId,
                 EquipmentStatus.ACTIVE,
                 EquipmentStatus.IN_REPAIR,
-                EquipmentStatus.DECOMMISSIONED
+                EquipmentStatus.STANDBY
         );
 
         return new EquipmentStatsResponse(
                 safe(stats.getTotalInRegistry()),
                 safe(stats.getActive()),
                 safe(stats.getInRepair()),
-                safe(stats.getDecommissioned())
+                safe(stats.getReserved())
         );
     }
 

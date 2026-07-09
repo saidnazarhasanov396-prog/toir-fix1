@@ -395,7 +395,7 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
 
         coalesce(sum(case when e.status = :inRepairStatus then 1 else 0 end), 0) as inRepair,
 
-        coalesce(sum(case when e.status = :decommissionedStatus then 1 else 0 end), 0) as decommissioned
+        coalesce(sum(case when e.status = :reservedStatus then 1 else 0 end), 0) as reserved
 
     from Equipment e
     where e.isDeleted = false
@@ -416,7 +416,7 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
             @Param("equipmentTypeId") UUID equipmentTypeId,
             @Param("activeStatus") EquipmentStatus activeStatus,
             @Param("inRepairStatus") EquipmentStatus inRepairStatus,
-            @Param("decommissionedStatus") EquipmentStatus decommissionedStatus
+            @Param("reservedStatus") EquipmentStatus reservedStatus
     );
 
 }
