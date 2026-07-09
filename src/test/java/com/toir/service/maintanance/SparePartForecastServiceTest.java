@@ -1,6 +1,7 @@
 package com.toir.service.maintanance;
 
 import com.toir.dto.sparepartforecast.SparePartForecastRequest;
+import com.toir.entity.Department;
 import com.toir.entity.OperationalIssue;
 import com.toir.entity.SparePart;
 import com.toir.entity.equipment.Equipment;
@@ -11,6 +12,7 @@ import com.toir.entity.maintenance.MaintenanceTemplate;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.MaintenanceTriggerSource;
@@ -77,6 +79,8 @@ class SparePartForecastServiceTest {
     private SparePartRepository sparePartRepository;
     @Mock
     private EquipmentRepository equipmentRepository;
+    @Mock
+    private com.toir.repository.department.DepartmentRepository departmentRepository;
     @Mock
     private OperationalIssueRepository operationalIssueRepository;
     @Mock
@@ -691,6 +695,148 @@ class SparePartForecastServiceTest {
         );
     }
 
+    @Test
+    void forecastWithoutWarehouseFilterResolvesRealWarehouseFromEquipmentDepartment() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID resolvedWarehouseId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-04T00:00:00Z");
+        Equipment equipment = equipment(equipmentId, departmentId, EquipmentLocationType.DEPARTMENT, null);
+
+        when(eventRepository.findForecastCandidates(
+                now,
+                now.plusSeconds(30L * 24 * 60 * 60),
+                null,
+                null,
+                null,
+                List.of(
+                        MaintenanceDueEventStatus.DETECTED,
+                        MaintenanceDueEventStatus.AWAITING_APPROVAL,
+                        MaintenanceDueEventStatus.TASK_CREATED,
+                        MaintenanceDueEventStatus.WORK_ORDER_CREATED
+                ),
+                List.of(MaintenanceDueStatus.UPCOMING, MaintenanceDueStatus.DUE, MaintenanceDueStatus.OVERDUE)
+        )).thenReturn(List.of(event(UUID.randomUUID(), templateId, equipmentId, now.plusSeconds(3600))));
+        when(requirementRepository.findAllActiveByTemplateIdIn(List.of(templateId)))
+                .thenReturn(List.of(requirement(UUID.randomUUID(), templateId, sparePartId, 5)));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment));
+        when(warehouseRepository.findAllByDepartmentIdInAndActiveTrueAndIsDeletedFalse(Set.of(departmentId)))
+                .thenReturn(List.of(warehouse(resolvedWarehouseId, departmentId)));
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(sparePartId)))
+                .thenReturn(List.of(stock(resolvedWarehouseId, sparePartId, 2, 0)));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(List.of(sparePartId)))
+                .thenReturn(List.of(sparePart(sparePartId)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(resolvedWarehouseId)))
+                .thenReturn(List.of(warehouse(resolvedWarehouseId, departmentId)));
+
+        var summary = service.forecast(new SparePartForecastRequest(30, now, null, null, null, null, null, false));
+
+        assertThat(summary.items()).hasSize(1);
+        var item = summary.items().getFirst();
+        assertThat(item.warehouseId()).isEqualTo(resolvedWarehouseId);
+        assertThat(item.warehouseName()).isEqualTo("Main warehouse");
+        assertThat(item.departmentId()).isNull();
+        assertThat(item.departmentName()).isNull();
+        assertThat(item.availableQty()).isEqualTo(2);
+        assertThat(item.shortageQty()).isEqualTo(3);
+    }
+
+    @Test
+    void forecastWithoutWarehouseFilterPrefersEquipmentCurrentWarehouseWhenPhysicallyStored() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID currentWarehouseId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-04T00:00:00Z");
+        Equipment equipment = equipment(equipmentId, null, EquipmentLocationType.WAREHOUSE, currentWarehouseId);
+
+        when(eventRepository.findForecastCandidates(
+                now,
+                now.plusSeconds(30L * 24 * 60 * 60),
+                null,
+                null,
+                null,
+                List.of(
+                        MaintenanceDueEventStatus.DETECTED,
+                        MaintenanceDueEventStatus.AWAITING_APPROVAL,
+                        MaintenanceDueEventStatus.TASK_CREATED,
+                        MaintenanceDueEventStatus.WORK_ORDER_CREATED
+                ),
+                List.of(MaintenanceDueStatus.UPCOMING, MaintenanceDueStatus.DUE, MaintenanceDueStatus.OVERDUE)
+        )).thenReturn(List.of(event(UUID.randomUUID(), templateId, equipmentId, now.plusSeconds(3600))));
+        when(requirementRepository.findAllActiveByTemplateIdIn(List.of(templateId)))
+                .thenReturn(List.of(requirement(UUID.randomUUID(), templateId, sparePartId, 3)));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment));
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(sparePartId)))
+                .thenReturn(List.of(stock(currentWarehouseId, sparePartId, 1, 0)));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(List.of(sparePartId)))
+                .thenReturn(List.of(sparePart(sparePartId)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(currentWarehouseId)))
+                .thenReturn(List.of(warehouse(currentWarehouseId)));
+
+        var summary = service.forecast(new SparePartForecastRequest(30, now, null, null, null, null, null, false));
+
+        assertThat(summary.items()).hasSize(1);
+        assertThat(summary.items().getFirst().warehouseId()).isEqualTo(currentWarehouseId);
+        verify(warehouseRepository, never()).findAllByDepartmentIdInAndActiveTrueAndIsDeletedFalse(any());
+    }
+
+    @Test
+    void forecastWithoutWarehouseFilterFallsBackToDepartmentWhenMultipleWarehousesServeIt() {
+        UUID templateId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID warehouseA = UUID.randomUUID();
+        UUID warehouseB = UUID.randomUUID();
+        Instant now = Instant.parse("2026-06-04T00:00:00Z");
+        Equipment equipment = equipment(equipmentId, departmentId, EquipmentLocationType.DEPARTMENT, null);
+        Department department = department(departmentId, "Mechanical shop");
+
+        when(eventRepository.findForecastCandidates(
+                now,
+                now.plusSeconds(30L * 24 * 60 * 60),
+                null,
+                null,
+                null,
+                List.of(
+                        MaintenanceDueEventStatus.DETECTED,
+                        MaintenanceDueEventStatus.AWAITING_APPROVAL,
+                        MaintenanceDueEventStatus.TASK_CREATED,
+                        MaintenanceDueEventStatus.WORK_ORDER_CREATED
+                ),
+                List.of(MaintenanceDueStatus.UPCOMING, MaintenanceDueStatus.DUE, MaintenanceDueStatus.OVERDUE)
+        )).thenReturn(List.of(event(UUID.randomUUID(), templateId, equipmentId, now.plusSeconds(3600))));
+        when(requirementRepository.findAllActiveByTemplateIdIn(List.of(templateId)))
+                .thenReturn(List.of(requirement(UUID.randomUUID(), templateId, sparePartId, 5)));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment));
+        when(warehouseRepository.findAllByDepartmentIdInAndActiveTrueAndIsDeletedFalse(Set.of(departmentId)))
+                .thenReturn(List.of(warehouse(warehouseA, departmentId), warehouse(warehouseB, departmentId)));
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(sparePartId)))
+                .thenReturn(List.of(stock(warehouseA, sparePartId, 2, 0), stock(warehouseB, sparePartId, 1, 0)));
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(List.of(sparePartId)))
+                .thenReturn(List.of(sparePart(sparePartId)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(Set.of(departmentId)))
+                .thenReturn(List.of(department));
+
+        var summary = service.forecast(new SparePartForecastRequest(30, now, null, null, null, null, null, false));
+
+        assertThat(summary.items()).hasSize(1);
+        var item = summary.items().getFirst();
+        assertThat(item.warehouseId()).isNull();
+        assertThat(item.warehouseName()).isNull();
+        assertThat(item.departmentId()).isEqualTo(departmentId);
+        assertThat(item.departmentName()).isEqualTo("Mechanical shop");
+        assertThat(item.availableQty()).isEqualTo(3);
+        assertThat(item.shortageQty()).isEqualTo(2);
+    }
+
     private MaintenanceDueEvent event(UUID id, UUID templateId, UUID equipmentId, Instant dueAt) {
         MaintenanceDueEvent event = new MaintenanceDueEvent();
         event.setId(id);
@@ -775,11 +921,36 @@ class SparePartForecastServiceTest {
         return warehouse;
     }
 
+    private Warehouse warehouse(UUID id, UUID departmentId) {
+        Warehouse warehouse = warehouse(id);
+        warehouse.setDepartmentId(departmentId);
+        warehouse.setActive(true);
+        return warehouse;
+    }
+
     private Equipment equipment(UUID id) {
         Equipment equipment = new Equipment();
         equipment.setId(id);
         equipment.setCode("EQ-1");
         equipment.setName("Pump");
         return equipment;
+    }
+
+    private Equipment equipment(UUID id,
+                                UUID departmentId,
+                                EquipmentLocationType locationType,
+                                UUID currentWarehouseId) {
+        Equipment equipment = equipment(id);
+        equipment.setDepartmentId(departmentId);
+        equipment.setCurrentLocationType(locationType);
+        equipment.setCurrentWarehouseId(currentWarehouseId);
+        return equipment;
+    }
+
+    private Department department(UUID id, String name) {
+        Department department = new Department();
+        department.setId(id);
+        department.setName(name);
+        return department;
     }
 }

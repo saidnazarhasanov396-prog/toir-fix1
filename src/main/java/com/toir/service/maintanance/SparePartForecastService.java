@@ -5,6 +5,7 @@ import com.toir.dto.sparepartforecast.SparePartForecastItemDto;
 import com.toir.dto.sparepartforecast.SparePartForecastRequest;
 import com.toir.dto.sparepartforecast.SparePartForecastSourceDto;
 import com.toir.dto.sparepartforecast.SparePartForecastSummaryDto;
+import com.toir.entity.Department;
 import com.toir.entity.SparePart;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
@@ -12,6 +13,7 @@ import com.toir.entity.maintenance.MaintenanceRegulationSparePartRequirement;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.NotificationSeverity;
@@ -22,6 +24,7 @@ import com.toir.repository.OperationalIssueRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirementRepository;
@@ -36,8 +39,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -74,6 +79,7 @@ public class SparePartForecastService {
     private final WarehouseRepository warehouseRepository;
     private final SparePartRepository sparePartRepository;
     private final EquipmentRepository equipmentRepository;
+    private final DepartmentRepository departmentRepository;
     private final OperationalIssueRepository operationalIssueRepository;
     private final OperationalIssueService operationalIssueService;
     private final ScopeAccessService scopeAccessService;
@@ -126,7 +132,14 @@ public class SparePartForecastService {
             return new SparePartForecastSummaryDto(period.start(), period.end(), List.of());
         }
 
-        List<DemandRow> demandRows = buildDemandRows(events, requirementsByTemplate, requirementsByRegulation, warehouseId);
+        Map<UUID, Equipment> equipmentById = loadEquipment(events);
+        // Only resolve per-equipment location when the caller did not pin a specific warehouse -
+        // the pinned-warehouse path is unchanged (every row gets that one warehouse, as before).
+        DemandLocationResolution locationResolution = warehouseId != null
+                ? new DemandLocationResolution(Map.of(), Map.of())
+                : resolveDemandLocations(equipmentById.values());
+        List<DemandRow> demandRows = buildDemandRows(events, requirementsByTemplate, requirementsByRegulation,
+                warehouseId, locationResolution.byEquipmentId());
         if (demandRows.isEmpty()) {
             return new SparePartForecastSummaryDto(period.start(), period.end(), List.of());
         }
@@ -135,29 +148,44 @@ public class SparePartForecastService {
         Map<UUID, SparePart> spareParts = sparePartRepository.findAllByIdInAndIsDeletedFalse(sparePartIds).stream()
                 .collect(Collectors.toMap(SparePart::getId, sparePart -> sparePart));
         List<WarehouseStock> stocks = loadStocks(sparePartIds, warehouseId, scope.warehouseScopeIds());
-        Map<StockKey, StockTotals> stockTotals = stockTotals(stocks, warehouseId);
-        Map<UUID, Warehouse> warehouses = loadWarehouses(stocks, warehouseId);
-        Map<UUID, Equipment> equipment = loadEquipment(events);
+        Map<StockKey, StockTotals> stockTotals = stockTotals(stocks);
 
-        Map<StockKey, List<DemandRow>> rowsByStock = demandRows.stream()
-                .collect(Collectors.groupingBy(row -> new StockKey(row.sparePartId(), row.warehouseId()),
+        Set<UUID> warehouseIdsNeeded = new HashSet<>();
+        stocks.forEach(stock -> warehouseIdsNeeded.add(stock.getWarehouseId()));
+        demandRows.forEach(row -> {
+            if (row.warehouseId() != null) {
+                warehouseIdsNeeded.add(row.warehouseId());
+            }
+        });
+        Map<UUID, Warehouse> warehouses = loadWarehouses(warehouseIdsNeeded);
+
+        Set<UUID> departmentIdsNeeded = demandRows.stream()
+                .map(DemandRow::departmentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, Department> departments = loadDepartments(departmentIdsNeeded);
+
+        Map<DemandGroupKey, List<DemandRow>> rowsByStock = demandRows.stream()
+                .collect(Collectors.groupingBy(
+                        row -> new DemandGroupKey(row.sparePartId(), row.warehouseId(), row.departmentId()),
                         LinkedHashMap::new, Collectors.toList()));
 
         List<SparePartForecastItemDto> items = new ArrayList<>();
-        for (Map.Entry<StockKey, List<DemandRow>> entry : rowsByStock.entrySet()) {
-            StockKey key = entry.getKey();
+        for (Map.Entry<DemandGroupKey, List<DemandRow>> entry : rowsByStock.entrySet()) {
+            DemandGroupKey key = entry.getKey();
             List<DemandRow> rows = entry.getValue();
             double requiredQty = rows.stream().mapToDouble(DemandRow::requiredQty).sum();
-            StockTotals totals = stockTotals.getOrDefault(key, StockTotals.ZERO);
+            StockTotals totals = totalsForGroup(key, stockTotals, locationResolution.warehousesByDepartment());
             double shortageQty = Math.max(requiredQty - totals.availableQty(), 0);
             if (onlyDeficit && shortageQty <= 0) {
                 continue;
             }
             SparePart sparePart = spareParts.get(key.sparePartId());
             Warehouse warehouse = key.warehouseId() == null ? null : warehouses.get(key.warehouseId());
+            Department department = key.departmentId() == null ? null : departments.get(key.departmentId());
             List<SparePartForecastSourceDto> sources = rows.stream()
                     .sorted(Comparator.comparing(DemandRow::dueAt, Comparator.nullsLast(Comparator.naturalOrder())))
-                    .map(row -> toSource(row, equipment.get(row.equipmentId())))
+                    .map(row -> toSource(row, equipmentById.get(row.equipmentId())))
                     .toList();
             Instant firstDueAt = sources.stream()
                     .map(SparePartForecastSourceDto::dueAt)
@@ -178,7 +206,9 @@ public class SparePartForecastService {
                     severity(requiredQty, totals.availableQty(), shortageQty),
                     firstDueAt,
                     sources.size(),
-                    sources
+                    sources,
+                    key.departmentId(),
+                    department == null ? null : department.getName()
             ));
         }
 
@@ -207,7 +237,7 @@ public class SparePartForecastService {
         Map<UUID, SparePartForecastItemDto> recoveredBySourceId = new LinkedHashMap<>();
         for (SparePartForecastItemDto item : fullSummary.items()) {
             UUID sourceId = sourceId(fullSummary.periodStart(), fullSummary.periodEnd(),
-                    item.warehouseId(), scope.departmentId(), item.sparePartId());
+                    item.warehouseId(), firstNonNull(item.departmentId(), scope.departmentId()), item.sparePartId());
             if (item.shortageQty() > 0) {
                 candidatesBySourceId.merge(sourceId, item, this::mergeForecastItems);
             } else {
@@ -284,17 +314,93 @@ public class SparePartForecastService {
                 severity(requiredQty, availableQty, shortageQty),
                 firstDueAt,
                 sources.size(),
-                sources
+                sources,
+                first.departmentId(),
+                firstNonBlank(first.departmentName(), duplicate.departmentName())
         );
+    }
+
+    /**
+     * Resolves each piece of equipment to a concrete warehouse (or, when that can't be determined
+     * uniquely, to its department) so unfiltered forecast rows aren't all lumped into a fake
+     * "Enterprise" bucket. Priority: (1) equipment physically sitting in a warehouse right now
+     * uses that warehouse; (2) otherwise the equipment's department is resolved to its single
+     * active warehouse, if there is exactly one; (3) if the department has zero or several
+     * warehouses, the row carries the department instead of a warehouse.
+     */
+    private DemandLocationResolution resolveDemandLocations(Collection<Equipment> equipmentList) {
+        Map<UUID, DemandLocation> byEquipmentId = new HashMap<>();
+        Set<UUID> departmentIdsToResolve = new HashSet<>();
+        for (Equipment equipment : equipmentList) {
+            if (equipment.getCurrentLocationType() == EquipmentLocationType.WAREHOUSE
+                    && equipment.getCurrentWarehouseId() != null) {
+                byEquipmentId.put(equipment.getId(), new DemandLocation(equipment.getCurrentWarehouseId(), null));
+            } else {
+                UUID departmentId = effectiveDepartmentId(equipment);
+                if (departmentId != null) {
+                    departmentIdsToResolve.add(departmentId);
+                }
+            }
+        }
+        Map<UUID, List<Warehouse>> warehousesByDepartment = departmentIdsToResolve.isEmpty()
+                ? Map.of()
+                : warehouseRepository.findAllByDepartmentIdInAndActiveTrueAndIsDeletedFalse(departmentIdsToResolve)
+                        .stream()
+                        .collect(Collectors.groupingBy(Warehouse::getDepartmentId));
+        for (Equipment equipment : equipmentList) {
+            if (byEquipmentId.containsKey(equipment.getId())) {
+                continue;
+            }
+            UUID departmentId = effectiveDepartmentId(equipment);
+            List<Warehouse> candidates = departmentId == null
+                    ? List.of()
+                    : warehousesByDepartment.getOrDefault(departmentId, List.of());
+            byEquipmentId.put(equipment.getId(), candidates.size() == 1
+                    ? new DemandLocation(candidates.getFirst().getId(), null)
+                    : new DemandLocation(null, departmentId));
+        }
+        return new DemandLocationResolution(byEquipmentId, warehousesByDepartment);
+    }
+
+    private UUID effectiveDepartmentId(Equipment equipment) {
+        if (equipment == null) {
+            return null;
+        }
+        return equipment.getResponsibleDepartmentId() != null
+                ? equipment.getResponsibleDepartmentId()
+                : equipment.getDepartmentId();
+    }
+
+    private StockTotals totalsForGroup(DemandGroupKey key,
+                                       Map<StockKey, StockTotals> stockTotals,
+                                       Map<UUID, List<Warehouse>> warehousesByDepartment) {
+        if (key.warehouseId() != null) {
+            return stockTotals.getOrDefault(new StockKey(key.sparePartId(), key.warehouseId()), StockTotals.ZERO);
+        }
+        if (key.departmentId() == null) {
+            return StockTotals.ZERO;
+        }
+        double availableQty = 0;
+        double reservedQty = 0;
+        for (Warehouse warehouse : warehousesByDepartment.getOrDefault(key.departmentId(), List.of())) {
+            StockTotals totals = stockTotals.getOrDefault(new StockKey(key.sparePartId(), warehouse.getId()), StockTotals.ZERO);
+            availableQty += totals.availableQty();
+            reservedQty += totals.reservedQty();
+        }
+        return new StockTotals(availableQty, reservedQty);
     }
 
     private List<DemandRow> buildDemandRows(List<MaintenanceDueEvent> events,
                                             Map<UUID, List<MaintenanceTemplateSparePartRequirement>> requirementsByTemplate,
                                             Map<UUID, List<MaintenanceRegulationSparePartRequirement>> requirementsByRegulation,
-                                            UUID warehouseId) {
+                                            UUID warehouseId,
+                                            Map<UUID, DemandLocation> demandLocations) {
         Set<String> seenKeys = new java.util.HashSet<>();
         List<DemandRow> rows = new ArrayList<>();
         for (MaintenanceDueEvent event : events) {
+            DemandLocation location = warehouseId != null
+                    ? new DemandLocation(warehouseId, null)
+                    : demandLocations.getOrDefault(event.getEquipmentId(), new DemandLocation(null, null));
             List<MaintenanceTemplateSparePartRequirement> requirements =
                     event.getTemplateId() == null
                             ? List.of()
@@ -313,7 +419,8 @@ public class SparePartForecastService {
                         event.getCreatedWorkOrderId(),
                         event.getDueAt(),
                         requirement.getSparePartId(),
-                        warehouseId,
+                        location.warehouseId(),
+                        location.departmentId(),
                         requirement.getQuantity(),
                         requirement.getUnit()
                 ));
@@ -336,7 +443,8 @@ public class SparePartForecastService {
                         event.getCreatedWorkOrderId(),
                         event.getDueAt(),
                         requirement.getSparePartId(),
-                        warehouseId,
+                        location.warehouseId(),
+                        location.departmentId(),
                         requirement.getQuantity(),
                         requirement.getUnit()
                 ));
@@ -364,12 +472,11 @@ public class SparePartForecastService {
         return stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(sparePartIds);
     }
 
-    private Map<StockKey, StockTotals> stockTotals(List<WarehouseStock> stocks, UUID warehouseId) {
+    private Map<StockKey, StockTotals> stockTotals(List<WarehouseStock> stocks) {
         Map<StockKey, StockTotals> totals = new HashMap<>();
         var snapshots = legacyStockProjectionService.currentAll();
         for (WarehouseStock stock : stocks) {
-            UUID keyWarehouseId = warehouseId == null ? null : stock.getWarehouseId();
-            StockKey key = new StockKey(stock.getSparePartId(), keyWarehouseId);
+            StockKey key = new StockKey(stock.getSparePartId(), stock.getWarehouseId());
             StockTotals current = totals.getOrDefault(key, StockTotals.ZERO);
             WmsStockSnapshot snapshot = legacyStockProjectionService.snapshot(
                     snapshots, stock.getWarehouseId(), stock.getSparePartId());
@@ -382,15 +489,21 @@ public class SparePartForecastService {
         return totals;
     }
 
-    private Map<UUID, Warehouse> loadWarehouses(List<WarehouseStock> stocks, UUID warehouseId) {
-        List<UUID> warehouseIds = warehouseId != null
-                ? List.of(warehouseId)
-                : stocks.stream().map(WarehouseStock::getWarehouseId).filter(Objects::nonNull).distinct().toList();
-        if (warehouseIds.isEmpty()) {
+    private Map<UUID, Warehouse> loadWarehouses(Set<UUID> warehouseIds) {
+        List<UUID> ids = warehouseIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
             return Map.of();
         }
-        return warehouseRepository.findAllByIdInAndIsDeletedFalse(warehouseIds).stream()
+        return warehouseRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
                 .collect(Collectors.toMap(Warehouse::getId, warehouse -> warehouse));
+    }
+
+    private Map<UUID, Department> loadDepartments(Set<UUID> departmentIds) {
+        if (departmentIds.isEmpty()) {
+            return Map.of();
+        }
+        return departmentRepository.findAllByIdInAndIsDeletedFalse(departmentIds).stream()
+                .collect(Collectors.toMap(Department::getId, department -> department));
     }
 
     private Map<UUID, Equipment> loadEquipment(List<MaintenanceDueEvent> events) {
@@ -545,6 +658,10 @@ public class SparePartForecastService {
         return primary == null || primary.isBlank() ? fallback : primary;
     }
 
+    private <T> T firstNonNull(T primary, T fallback) {
+        return primary == null ? fallback : primary;
+    }
+
     private record ForecastPeriod(Instant start, Instant end) {
     }
 
@@ -552,6 +669,19 @@ public class SparePartForecastService {
     }
 
     private record StockKey(UUID sparePartId, UUID warehouseId) {
+    }
+
+    /** Groups demand rows for the summary: by real warehouse when resolvable, else by department. */
+    private record DemandGroupKey(UUID sparePartId, UUID warehouseId, UUID departmentId) {
+    }
+
+    /** Resolved location for one piece of equipment's demand - either a real warehouse, or (when
+     *  that can't be determined uniquely) its department, never both. */
+    private record DemandLocation(UUID warehouseId, UUID departmentId) {
+    }
+
+    private record DemandLocationResolution(Map<UUID, DemandLocation> byEquipmentId,
+                                            Map<UUID, List<Warehouse>> warehousesByDepartment) {
     }
 
     private record StockTotals(double availableQty, double reservedQty) {
@@ -568,6 +698,7 @@ public class SparePartForecastService {
             Instant dueAt,
             UUID sparePartId,
             UUID warehouseId,
+            UUID departmentId,
             double requiredQty,
             String unit
     ) {
