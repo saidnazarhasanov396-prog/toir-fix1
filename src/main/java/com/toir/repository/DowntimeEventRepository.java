@@ -1,6 +1,8 @@
 package com.toir.repository;
 
 import com.toir.entity.DowntimeEvent;
+import com.toir.repository.projection.MonthlyDowntimeProjection;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -36,4 +38,17 @@ public interface DowntimeEventRepository extends JpaRepository<DowntimeEvent, UU
 
     @Query(value = "SELECT * FROM downtime_events WHERE equipment_id IN (:equipmentIds) AND is_deleted = false ORDER BY start_at DESC", nativeQuery = true)
     List<DowntimeEvent> findAllByEquipmentIdInAndIsDeletedFalse(@Param("equipmentIds") Collection<UUID> equipmentIds);
+
+    @Query(nativeQuery = true, value = """
+            select to_char(date_trunc('month', timezone('Asia/Tashkent', d.start_at)), 'YYYY-MM') as month,
+                   coalesce(sum(d.duration_minutes), 0) as downtimeMinutes
+            from downtime_events d
+            where d.is_deleted = false
+              and d.start_at >= cast(:fromTs as timestamptz)
+              and (cast(:departmentId as varchar) is null or d.department_id = cast(:departmentId as uuid))
+            group by 1
+            """)
+    List<MonthlyDowntimeProjection> sumDowntimeMinutesByMonthForCockpit(
+            @Param("fromTs") Instant fromTs,
+            @Param("departmentId") UUID departmentId);
 }

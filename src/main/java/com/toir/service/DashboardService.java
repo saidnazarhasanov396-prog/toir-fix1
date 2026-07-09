@@ -893,7 +893,7 @@ public class DashboardService {
         );
     }
 
-    private UUID scopedDepartment(UUID requestedDepartmentId) {
+    UUID scopedDepartment(UUID requestedDepartmentId) {
         if (scopeAccessService.isScopeAdmin()) {
             return requestedDepartmentId;
         }
