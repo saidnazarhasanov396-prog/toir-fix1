@@ -65,6 +65,12 @@ public record DashboardOverview(
             long pendingActualCosts,
             long dueSoonActualCosts,
             long overdueActualCosts,
+            /** Monetary total of pending actual costs (same scope as pendingActualCosts count). */
+            BigDecimal pendingActualCostAmount,
+            /** Monetary total of due-soon pending actual costs. */
+            BigDecimal dueSoonActualCostAmount,
+            /** Monetary total of overdue pending actual costs. */
+            BigDecimal overdueActualCostAmount,
             long counteragentWorkAwaitingReflection,
             long conditionAlarms,
             long expiringCertifications,

@@ -195,7 +195,7 @@ public class DashboardService {
 
         Instant nowInstant = Instant.now();
 
-        long dueSoonActualCosts = scopedPendingCosts.stream()
+        List<ActualCost> dueSoonPendingCosts = scopedPendingCosts.stream()
                 .filter(ac -> {
                     ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
                     if (ev == null || ev.getNextThresholdHours() == null) return false;
@@ -203,16 +203,28 @@ public class DashboardService {
                     return !deadline.isBefore(nowInstant)
                             && deadline.isBefore(nowInstant.plusSeconds(24 * 3600L));
                 })
-                .count();
+                .toList();
+        long dueSoonActualCosts = dueSoonPendingCosts.size();
+        BigDecimal dueSoonActualCostAmount = dueSoonPendingCosts.stream()
+                .mapToDouble(ActualCost::getAmount)
+                .mapToObj(BigDecimal::valueOf)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
-        long overdueActualCosts = scopedPendingCosts.stream()
+        List<ActualCost> overduePendingCosts = scopedPendingCosts.stream()
                 .filter(ac -> {
                     ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
                     if (ev == null || ev.getNextThresholdHours() == null) return false;
                     Instant deadline = ev.getOccurredAt().plusSeconds(ev.getNextThresholdHours() * 3600L);
                     return deadline.isBefore(nowInstant);
                 })
-                .count();
+                .toList();
+        long overdueActualCosts = overduePendingCosts.size();
+        BigDecimal overdueActualCostAmount = overduePendingCosts.stream()
+                .mapToDouble(ActualCost::getAmount)
+                .mapToObj(BigDecimal::valueOf)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
         Map<String, List<ActualCost>> byRole = scopedPendingCosts.stream()
                 .collect(Collectors.groupingBy(ac -> {
@@ -364,6 +376,11 @@ public class DashboardService {
                 .setScale(2, RoundingMode.HALF_UP);
 
         long pendingActualCosts = scopedPendingCosts.size();
+        BigDecimal pendingActualCostAmount = scopedPendingCosts.stream()
+                .mapToDouble(ActualCost::getAmount)
+                .mapToObj(BigDecimal::valueOf)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
         List<ActualCost> allActualCosts = actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
@@ -415,6 +432,9 @@ public class DashboardService {
                 pendingActualCosts,
                 dueSoonActualCosts,
                 overdueActualCosts,
+                pendingActualCostAmount,
+                dueSoonActualCostAmount,
+                overdueActualCostAmount,
                 counteragentWorkAwaitingReflection,
                 conditionAlarms,
                 expiringCertifications,
