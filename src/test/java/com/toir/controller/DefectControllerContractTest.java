@@ -508,19 +508,30 @@ class DefectControllerContractTest {
                         RequestStatus.OPEN,
                         PriorityLevel.MEDIUM,
                         "Repair request",
-                        "Short description"
+                        "Short description",
+                        "Ivan Ivanov",
+                        "Mechanical department",
+                        "Workshop 1",
+                        Instant.now(),
+                        Instant.now().plusSeconds(7200),
+                        null
                 ),
                 List.of(
                         new WorkOrderBriefDto(
                                 UUID.randomUUID(),
                                 "WO-2026-1001",
+                                "Repair work order",
+                                "Replace seal",
+                                "Petr Petrov",
                                 WorkOrderStatus.APPROVED,
                                 WorkType.REPAIR,
                                 PriorityLevel.MEDIUM,
                                 Instant.now(),
-                                Instant.now().plusSeconds(3600)
+                                Instant.now().plusSeconds(3600),
+                                Instant.now().plusSeconds(7200),
+                                null
                         )
-                ), false
+                ), false, 0, null
         );
     }
 

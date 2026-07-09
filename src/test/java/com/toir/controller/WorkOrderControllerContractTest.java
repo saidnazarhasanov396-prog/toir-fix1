@@ -1230,7 +1230,13 @@ class WorkOrderControllerContractTest {
                 status,
                 PriorityLevel.MEDIUM,
                 "Repair request",
-                "Short description"
+                "Short description",
+                "Ivan Ivanov",
+                "Mechanical department",
+                "Workshop 1",
+                Instant.now(),
+                Instant.now().plusSeconds(7200),
+                null
         );
     }
 
@@ -1245,7 +1251,9 @@ class WorkOrderControllerContractTest {
                 "Leak",
                 status,
                 "HIGH",
-                Instant.now()
+                Instant.now(),
+                0,
+                null
         );
     }
 

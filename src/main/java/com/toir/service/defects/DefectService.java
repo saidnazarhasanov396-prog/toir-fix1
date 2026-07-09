@@ -1,5 +1,6 @@
 package com.toir.service.defects;
 
+import com.toir.dto.attachment.AttachmentPhotoSummary;
 import com.toir.dto.defect.DefectDto;
 import com.toir.dto.defect.DefectRequest;
 import com.toir.dto.defect.DefectResponse;
@@ -7,7 +8,9 @@ import com.toir.dto.defect.DefectStatsResponse;
 import com.toir.dto.triad.RepairRequestBriefDto;
 import com.toir.dto.triad.TriadLinkMapper;
 import com.toir.dto.triad.WorkOrderBriefDto;
+import com.toir.entity.Department;
 import com.toir.entity.KnowledgeArticle;
+import com.toir.entity.Location;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.defects.DefectList;
 import com.toir.entity.defects.DefectListLine;
@@ -15,6 +18,9 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.BrigadeMember;
+import com.toir.entity.users.User;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.DefectListStatus;
@@ -22,16 +28,21 @@ import com.toir.enums.DefectStatus;
 import com.toir.enums.RequestStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.KnowledgeArticleRepository;
+import com.toir.repository.LocationRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectListLineRepository;
 import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.OperationalIssueLifecycleSyncService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
@@ -64,6 +75,10 @@ public class DefectService {
     private final EquipmentNodeRepository equipmentNodeRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final WorkOrderRepository workOrderRepository;
+    private final DepartmentRepository departmentRepository;
+    private final LocationRepository locationRepository;
+    private final UserRepository userRepository;
+    private final BrigadeMemberRepository brigadeMemberRepository;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
@@ -71,6 +86,7 @@ public class DefectService {
     private static final Set<RequestStatus> DISALLOWED_REPAIR_REQUEST_STATUSES_FOR_DEFECT_LINK =
             EnumSet.of(RequestStatus.REJECTED, RequestStatus.CLOSED, RequestStatus.CANCELLED);
     private final KnowledgeArticleRepository knowledgeRepository;
+    private final AttachmentGroupService attachmentGroupService;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
 
 
@@ -506,6 +522,31 @@ public class DefectService {
                         (first, second) -> first
                 ));
 
+        Map<UUID, String> departmentNameById = departmentNameById(repairRequestById.values());
+        Map<UUID, String> locationNameById = locationNameById(repairRequestById.values());
+
+        List<WorkOrder> allWorkOrders = workOrdersByDefectId.values().stream()
+                .flatMap(List::stream)
+                .toList();
+        Map<UUID, UUID> userIdByBrigadeMemberId = userIdByBrigadeMemberId(allWorkOrders);
+
+        Set<UUID> userIds = new HashSet<>();
+        repairRequestById.values().stream()
+                .map(RepairRequest::getAssignedToId)
+                .filter(Objects::nonNull)
+                .forEach(userIds::add);
+        userIdByBrigadeMemberId.values().stream()
+                .filter(Objects::nonNull)
+                .forEach(userIds::add);
+        Map<UUID, String> userNameById = userIds.isEmpty()
+                ? Map.of()
+                : userRepository.findAllByIdInAndIsDeletedFalse(userIds)
+                .stream()
+                .collect(Collectors.toMap(User::getId, User::getFullName));
+
+        Map<UUID, AttachmentPhotoSummary> photoSummaryByDefectId =
+                attachmentGroupService.getPhotoSummaries(AttachmentTargetType.DEFECT, defectIds);
+
         return defects.stream()
                 .map(defect -> toResponse(
                         defect,
@@ -514,8 +555,52 @@ public class DefectService {
                         repairRequestById,
                         workOrdersByDefectId,
                         defectListIdByDefectId,
-                        defectIdsWithLesson))
+                        defectIdsWithLesson,
+                        departmentNameById,
+                        locationNameById,
+                        userIdByBrigadeMemberId,
+                        userNameById,
+                        photoSummaryByDefectId))
                 .toList();
+    }
+
+    private Map<UUID, String> departmentNameById(Collection<RepairRequest> repairRequests) {
+        List<UUID> departmentIds = repairRequests.stream()
+                .map(RepairRequest::getDepartmentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return departmentIds.isEmpty()
+                ? Map.of()
+                : departmentRepository.findAllByIdInAndIsDeletedFalse(departmentIds)
+                .stream()
+                .collect(Collectors.toMap(Department::getId, Department::getName));
+    }
+
+    private Map<UUID, String> locationNameById(Collection<RepairRequest> repairRequests) {
+        List<UUID> locationIds = repairRequests.stream()
+                .map(RepairRequest::getLocationId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return locationIds.isEmpty()
+                ? Map.of()
+                : locationRepository.findAllByIdInAndIsDeletedFalse(locationIds)
+                .stream()
+                .collect(Collectors.toMap(Location::getId, Location::getName));
+    }
+
+    private Map<UUID, UUID> userIdByBrigadeMemberId(List<WorkOrder> workOrders) {
+        List<UUID> brigadeMemberIds = workOrders.stream()
+                .map(workOrder -> workOrder.getPerformer() == null ? null : workOrder.getPerformer().getId())
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return brigadeMemberIds.isEmpty()
+                ? Map.of()
+                : brigadeMemberRepository.findAllByIdInAndIsDeletedFalse(brigadeMemberIds)
+                .stream()
+                .collect(Collectors.toMap(BrigadeMember::getId, BrigadeMember::getUserId));
     }
 
 
@@ -667,11 +752,16 @@ public class DefectService {
                                       Map<UUID, RepairRequest> repairRequestById,
                                       Map<UUID, List<WorkOrder>> workOrdersByDefectId,
                                       Map<UUID, UUID> defectListIdByDefectId,
-                                      Set<UUID> defectIdsWithLesson) {
+                                      Set<UUID> defectIdsWithLesson,
+                                      Map<UUID, String> departmentNameById,
+                                      Map<UUID, String> locationNameById,
+                                      Map<UUID, UUID> userIdByBrigadeMemberId,
+                                      Map<UUID, String> userNameById,
+                                      Map<UUID, AttachmentPhotoSummary> photoSummaryByDefectId) {
         DefectDto dto = DefectDto.from(defect);
 
-        RepairRequestBriefDto repairRequest = getBriefDto(dto,repairRequestById);
-        List<WorkOrderBriefDto> linkedWorkOrders = getLinkedWorkOrderBrief(dto,workOrdersByDefectId);
+        RepairRequestBriefDto repairRequest = getBriefDto(dto, repairRequestById, departmentNameById, locationNameById, userNameById);
+        List<WorkOrderBriefDto> linkedWorkOrders = getLinkedWorkOrderBrief(dto, workOrdersByDefectId, userIdByBrigadeMemberId, userNameById);
         EquipmentNode equipmentNode = dto.equipmentNodeId() == null ? null : equipmentNodeById.get(dto.equipmentNodeId());
 
         return DefectResponse.from(
@@ -683,22 +773,44 @@ public class DefectService {
                 defectListIdByDefectId.get(dto.id()),
                 repairRequest,
                 linkedWorkOrders,
-                defectIdsWithLesson.contains(dto.id())
+                defectIdsWithLesson.contains(dto.id()),
+                photoSummaryByDefectId.get(dto.id())
         );
     }
 
-    private RepairRequestBriefDto getBriefDto(DefectDto dto, Map<UUID, RepairRequest> repairRequestById){
-        return dto.repairRequestId() == null
-                ? null
-                : TriadLinkMapper.toRepairRequestBrief(repairRequestById.get(dto.repairRequestId()));
-
+    private RepairRequestBriefDto getBriefDto(DefectDto dto,
+                                              Map<UUID, RepairRequest> repairRequestById,
+                                              Map<UUID, String> departmentNameById,
+                                              Map<UUID, String> locationNameById,
+                                              Map<UUID, String> userNameById) {
+        if (dto.repairRequestId() == null) {
+            return null;
+        }
+        RepairRequest repairRequest = repairRequestById.get(dto.repairRequestId());
+        if (repairRequest == null) {
+            return null;
+        }
+        return TriadLinkMapper.toRepairRequestBrief(
+                repairRequest,
+                repairRequest.getAssignedToId() == null ? null : userNameById.get(repairRequest.getAssignedToId()),
+                repairRequest.getDepartmentId() == null ? null : departmentNameById.get(repairRequest.getDepartmentId()),
+                repairRequest.getLocationId() == null ? null : locationNameById.get(repairRequest.getLocationId())
+        );
     }
 
-    private List<WorkOrderBriefDto> getLinkedWorkOrderBrief(DefectDto dto, Map<UUID, List<WorkOrder>> workOrdersByDefectId) {
+    private List<WorkOrderBriefDto> getLinkedWorkOrderBrief(DefectDto dto,
+                                                             Map<UUID, List<WorkOrder>> workOrdersByDefectId,
+                                                             Map<UUID, UUID> userIdByBrigadeMemberId,
+                                                             Map<UUID, String> userNameById) {
         return workOrdersByDefectId
                 .getOrDefault(dto.id(), List.of())
                 .stream()
-                .map(TriadLinkMapper::toWorkOrderBrief)
+                .map(workOrder -> {
+                    UUID brigadeMemberId = workOrder.getPerformer() == null ? null : workOrder.getPerformer().getId();
+                    UUID userId = brigadeMemberId == null ? null : userIdByBrigadeMemberId.get(brigadeMemberId);
+                    String assigneeName = userId == null ? null : userNameById.get(userId);
+                    return TriadLinkMapper.toWorkOrderBrief(workOrder, assigneeName);
+                })
                 .toList();
     }
 }

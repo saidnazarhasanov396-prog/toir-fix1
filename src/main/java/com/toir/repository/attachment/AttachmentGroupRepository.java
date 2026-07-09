@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -55,5 +56,39 @@ public interface AttachmentGroupRepository extends JpaRepository<AttachmentGroup
             @Param("targetType") AttachmentTargetType targetType,
             @Param("targetId") UUID targetId,
             @Param("fileId") UUID fileId
+    );
+
+    @Query("""
+            select item.group.targetId as targetId, count(item) as photoCount
+            from AttachmentGroupItem item
+            where item.group.targetType = :targetType
+              and item.group.targetId in :targetIds
+              and item.group.deleted = false
+              and item.file.deleted = false
+              and item.file.contentType like 'image/%'
+            group by item.group.targetId
+            """)
+    List<AttachmentTargetPhotoCountProjection> countActiveImagesByTargetIds(
+            @Param("targetType") AttachmentTargetType targetType,
+            @Param("targetIds") Collection<UUID> targetIds
+    );
+
+    @Query(value = """
+            select distinct on (ag.target_id) ag.target_id as target_id,
+                   ag.id as group_id,
+                   agi.file_id as file_id
+            from attachment_group_items agi
+            join attachment_groups ag on ag.id = agi.group_id
+            join uploaded_files uf on uf.id = agi.file_id
+            where ag.target_type = :targetType
+              and ag.target_id in (:targetIds)
+              and ag.deleted = false
+              and uf.deleted = false
+              and uf.content_type like 'image/%'
+            order by ag.target_id, ag.created_at asc, agi.order_number asc
+            """, nativeQuery = true)
+    List<AttachmentTargetPrimaryPhotoProjection> findPrimaryActiveImageByTargetIds(
+            @Param("targetType") String targetType,
+            @Param("targetIds") Collection<UUID> targetIds
     );
 }

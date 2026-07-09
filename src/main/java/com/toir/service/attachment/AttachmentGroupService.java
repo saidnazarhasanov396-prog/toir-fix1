@@ -1,6 +1,7 @@
 package com.toir.service.attachment;
 
 import com.toir.dto.attachment.AttachmentGroupDto;
+import com.toir.dto.attachment.AttachmentPhotoSummary;
 import com.toir.dto.file.PresignedUrlResponse;
 import com.toir.dto.file.UploadFileResponse;
 import com.toir.entity.UploadedFile;
@@ -12,6 +13,8 @@ import com.toir.exception.RestException;
 import com.toir.repository.UploadedFileRepository;
 import com.toir.repository.attachment.AttachmentGroupItemRepository;
 import com.toir.repository.attachment.AttachmentGroupRepository;
+import com.toir.repository.attachment.AttachmentTargetPhotoCountProjection;
+import com.toir.repository.attachment.AttachmentTargetPrimaryPhotoProjection;
 import com.toir.security.AuthenticatedUser;
 import com.toir.service.file_management.FileService;
 import lombok.RequiredArgsConstructor;
@@ -23,9 +26,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -209,6 +215,33 @@ public class AttachmentGroupService {
     ) {
         AttachmentGroupDto group = findGroupByTargetAndFile(targetType, targetId, fileId, user);
         removeFile(group.id(), fileId, user);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<UUID, AttachmentPhotoSummary> getPhotoSummaries(AttachmentTargetType targetType, Collection<UUID> targetIds) {
+        if (targetIds == null || targetIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, Long> countByTargetId = new HashMap<>();
+        for (AttachmentTargetPhotoCountProjection row : groupRepository.countActiveImagesByTargetIds(targetType, targetIds)) {
+            countByTargetId.put(row.getTargetId(), row.getPhotoCount());
+        }
+        if (countByTargetId.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, AttachmentTargetPrimaryPhotoProjection> primaryByTargetId = new HashMap<>();
+        for (AttachmentTargetPrimaryPhotoProjection row : groupRepository.findPrimaryActiveImageByTargetIds(targetType.name(), targetIds)) {
+            primaryByTargetId.put(row.getTargetId(), row);
+        }
+        Map<UUID, AttachmentPhotoSummary> summaries = new HashMap<>();
+        countByTargetId.forEach((targetId, count) -> {
+            AttachmentTargetPrimaryPhotoProjection primary = primaryByTargetId.get(targetId);
+            String downloadUrl = primary == null
+                    ? null
+                    : "/api/v1/attachments/groups/" + primary.getGroupId() + "/files/" + primary.getFileId() + "/download";
+            summaries.put(targetId, new AttachmentPhotoSummary(count.intValue(), downloadUrl));
+        });
+        return summaries;
     }
 
     private AttachmentGroup groupOrThrow(UUID groupId) {
