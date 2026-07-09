@@ -37,18 +37,21 @@ public class MaintenanceRegulationApplicabilityService {
                                         MaintenanceDueCalculationDto due) {
         ConditionMatch conditionMatch = matchesConditions(equipment, requestConditions, persistedConditions(regulation));
         if (!conditionMatch.matched()) {
-            return new ApplicabilityResult(false, false, false, conditionMatch.reason(), null);
+            return new ApplicabilityResult(false, false, false, conditionMatch.reason(), null,
+                    "EXCLUDED_BY_ATTRIBUTE", conditionMatch.attributeKey());
         }
         boolean blocked = due != null && due.status() == MaintenanceDueStatus.BLOCKED;
         boolean missingMeter = blocked
-                && due.explanation() != null
-                && due.explanation().toLowerCase(Locale.ROOT).contains("meter");
+                && due.structuredExplanation() != null
+                && "MISSING_ACTIVE_METER".equals(due.structuredExplanation().blockingCode());
         return new ApplicabilityResult(
                 true,
                 blocked,
                 missingMeter,
                 due == null ? null : due.explanation(),
-                due == null ? null : due.status()
+                due == null ? null : due.status(),
+                null,
+                null
         );
     }
 
@@ -61,7 +64,9 @@ public class MaintenanceRegulationApplicabilityService {
             boolean blocked,
             boolean missingMeter,
             String reason,
-            MaintenanceDueStatus dueStatus
+            MaintenanceDueStatus dueStatus,
+            String reasonCode,
+            String attributeKey
     ) {}
 
     private List<MaintenanceRegulationAttributeCondition> persistedConditions(MaintenanceRegulation regulation) {
@@ -82,14 +87,14 @@ public class MaintenanceRegulationApplicabilityService {
         if (requestConditions != null && !requestConditions.isEmpty()) {
             for (MaintenanceRegulationAttributeConditionRequest condition : requestConditions) {
                 if (!matchesCondition(equipment, attributeIndex, condition)) {
-                    return ConditionMatch.unmatched("Excluded by attribute condition: " + condition.attributeKey());
+                    return ConditionMatch.unmatched(condition.attributeKey());
                 }
             }
             return ConditionMatch.success();
         }
         for (MaintenanceRegulationAttributeCondition condition : persistedConditions) {
             if (!matchesCondition(equipment, attributeIndex, condition)) {
-                return ConditionMatch.unmatched("Excluded by attribute condition: " + condition.getAttributeKey());
+                return ConditionMatch.unmatched(condition.getAttributeKey());
             }
         }
         return ConditionMatch.success();
@@ -243,13 +248,13 @@ public class MaintenanceRegulationApplicabilityService {
             Map<UUID, EquipmentAttributeValue> values
     ) {}
 
-    private record ConditionMatch(boolean matched, String reason) {
+    private record ConditionMatch(boolean matched, String reason, String attributeKey) {
         static ConditionMatch success() {
-            return new ConditionMatch(true, null);
+            return new ConditionMatch(true, null, null);
         }
 
-        static ConditionMatch unmatched(String reason) {
-            return new ConditionMatch(false, reason);
+        static ConditionMatch unmatched(String attributeKey) {
+            return new ConditionMatch(false, "Excluded by attribute condition: " + attributeKey, attributeKey);
         }
     }
 }

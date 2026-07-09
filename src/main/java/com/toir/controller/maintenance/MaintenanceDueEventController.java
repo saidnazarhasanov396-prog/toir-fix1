@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -41,7 +42,9 @@ public class MaintenanceDueEventController {
             @RequestParam(required = false) Instant from,
             @RequestParam(required = false) Instant to,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String lang,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage
     ) {
         return ResponseEntity.ok(service.search(
                 equipmentId,
@@ -52,15 +55,20 @@ public class MaintenanceDueEventController {
                 from,
                 to,
                 page,
-                size
+                size,
+                lang != null ? lang : acceptLanguage
         ));
     }
 
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_EVENT_CANCEL')")
     public ResponseEntity<MaintenanceDueEventDto> cancel(@PathVariable UUID id,
-                                                         @RequestBody(required = false) CancelMaintenanceDueEventRequest request) {
-        return ResponseEntity.ok(service.toDto(service.cancel(id, request == null ? null : request.reason())));
+                                                         @RequestBody(required = false) CancelMaintenanceDueEventRequest request,
+                                                         @RequestParam(required = false) String lang,
+                                                         @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        return ResponseEntity.ok(service.toDto(
+                service.cancel(id, request == null ? null : request.reason()),
+                lang != null ? lang : acceptLanguage));
     }
 
     @PostMapping("/{id}/work-order")

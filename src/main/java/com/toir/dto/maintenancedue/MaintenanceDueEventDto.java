@@ -1,13 +1,18 @@
 package com.toir.dto.maintenancedue;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.maintenanceplanning.MaintenanceDueStructuredExplanationDto;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.MeterType;
+import com.toir.service.maintanance.MaintenanceDueReasonI18n;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public record MaintenanceDueEventDto(
@@ -36,6 +41,12 @@ public record MaintenanceDueEventDto(
         Ref equipment,
         Ref regulation
 ) {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final Map<String, String> METER_REASON_CODE_BY_STATUS = Map.of(
+            "OVERDUE", "METER_OVERDUE",
+            "DUE", "METER_DUE"
+    );
+
     public record Ref(UUID id, String code, String name) {}
 
     public MaintenanceDueEventDto(
@@ -70,8 +81,17 @@ public record MaintenanceDueEventDto(
     }
 
     public static MaintenanceDueEventDto from(MaintenanceDueEvent event, Ref equipment, Ref regulation) {
+        return from(event, equipment, regulation, null);
+    }
+
+    public static MaintenanceDueEventDto from(MaintenanceDueEvent event, Ref equipment, Ref regulation, String lang) {
         MaintenanceDueStatus dueStatus = normalizedDueStatus(event);
-        String explanation = normalizedExplanation(event, dueStatus);
+        String reasonCode = normalizedReasonCode(event, dueStatus);
+        String normalizedLang = MaintenanceDueReasonI18n.normalizeLang(lang);
+        Map<String, Object> reasonParams = parseReasonParams(event.getReasonParams());
+        String explanation = normalizedLang != null && reasonCode != null
+                ? MaintenanceDueReasonI18n.renderFullByName(reasonCode, reasonParams, List.of(), List.of(), normalizedLang)
+                : normalizedExplanation(event, dueStatus);
         return new MaintenanceDueEventDto(
                 event.getId(),
                 event.getEquipmentId(),
@@ -94,7 +114,7 @@ public record MaintenanceDueEventDto(
                 event.getResolvedAt(),
                 event.getResolutionReason(),
                 explanation,
-                structuredExplanation(event, dueStatus, explanation),
+                structuredExplanation(event, dueStatus, explanation, reasonCode, reasonParams),
                 equipment,
                 regulation
         );
@@ -118,6 +138,11 @@ public record MaintenanceDueEventDto(
         if (!meterDominant(event)) {
             return event.getExplanation();
         }
+        if (event.getReasonCode() != null) {
+            // Structured events already carry the right text for their persisted reason code; the
+            // meter-remaining crossing zero is reflected via normalizedReasonCode()/normalizedDueStatus().
+            return event.getExplanation();
+        }
         if (dueStatus == MaintenanceDueStatus.OVERDUE) {
             return replaceMeterExplanation(event.getExplanation(), "Meter trigger overdue");
         }
@@ -127,6 +152,14 @@ public record MaintenanceDueEventDto(
         return event.getExplanation();
     }
 
+    private static String normalizedReasonCode(MaintenanceDueEvent event, MaintenanceDueStatus dueStatus) {
+        if (!meterDominant(event)) {
+            return event.getReasonCode();
+        }
+        String override = METER_REASON_CODE_BY_STATUS.get(dueStatus == null ? null : dueStatus.name());
+        return override != null ? override : event.getReasonCode();
+    }
+
     private static boolean meterDominant(MaintenanceDueEvent event) {
         if (event.getMeterType() == null || event.getMeterRemaining() == null) {
             return false;
@@ -134,8 +167,19 @@ public record MaintenanceDueEventDto(
         if (event.getTriggerSource() == MaintenanceTriggerSource.METER_READING) {
             return true;
         }
+        if (event.getReasonCode() != null) {
+            return isMeterReasonCode(event.getReasonCode());
+        }
+        // Legacy events detected before reason codes were persisted - fall back to the free-text heuristic.
         String explanation = event.getExplanation();
         return explanation == null || explanation.isBlank() || explanation.startsWith("Meter trigger");
+    }
+
+    private static boolean isMeterReasonCode(String reasonCode) {
+        return switch (reasonCode) {
+            case "METER_OVERDUE", "METER_DUE", "METER_UPCOMING", "METER_NOT_DUE" -> true;
+            default -> false;
+        };
     }
 
     private static String replaceMeterExplanation(String explanation, String replacement) {
@@ -152,7 +196,9 @@ public record MaintenanceDueEventDto(
     private static MaintenanceDueStructuredExplanationDto structuredExplanation(
             MaintenanceDueEvent event,
             MaintenanceDueStatus dueStatus,
-            String explanation
+            String explanation,
+            String reasonCode,
+            Map<String, Object> reasonParams
     ) {
         String blockingCode = null;
         String blockingField = null;
@@ -181,7 +227,23 @@ public record MaintenanceDueEventDto(
                 explanation,
                 blockingCode,
                 blockingField,
-                fixLink
+                fixLink,
+                reasonCode,
+                reasonCode == null ? null : "maintenanceDue.reasons." + reasonCode,
+                reasonParams,
+                List.of(),
+                List.of()
         );
+    }
+
+    private static Map<String, Object> parseReasonParams(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(json, new TypeReference<>() {});
+        } catch (Exception ex) {
+            return Map.of();
+        }
     }
 }

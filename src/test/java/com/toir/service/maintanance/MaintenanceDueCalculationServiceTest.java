@@ -732,6 +732,305 @@ class MaintenanceDueCalculationServiceTest {
         assertThat(result.dueByCalendar()).isFalse();
     }
 
+    @Test
+    void manualPolicyExposesReasonKey() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setTriggerPolicy(MaintenanceTriggerPolicy.MANUAL);
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.structuredExplanation().reasonCode()).isEqualTo("MANUAL_TRIGGER_POLICY");
+        assertThat(result.structuredExplanation().reasonKey()).isEqualTo("maintenanceDue.reasons.MANUAL_TRIGGER_POLICY");
+        assertThat(result.structuredExplanation().reasonParams()).isEmpty();
+    }
+
+    @Test
+    void noTriggerConfiguredExposesReasonKey() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setPeriodicityUnit(null);
+        regulation.setPeriodicityValue(0);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.NOT_DUE);
+        assertThat(result.structuredExplanation().reasonCode()).isEqualTo("NO_TRIGGER_CONFIGURED");
+        assertThat(result.structuredExplanation().reasonKey()).isEqualTo("maintenanceDue.reasons.NO_TRIGGER_CONFIGURED");
+    }
+
+    @Test
+    void missingActiveMeterExposesMeterTypeParam() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setPeriodicityUnit(null);
+        regulation.setPeriodicityValue(0);
+        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        regulation.setTriggerMeterInterval(100.0);
+
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(java.util.List.of());
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.structuredExplanation().reasonCode()).isEqualTo("MISSING_ACTIVE_METER");
+        assertThat(result.structuredExplanation().reasonKey()).isEqualTo("maintenanceDue.reasons.MISSING_ACTIVE_METER");
+        assertThat(result.structuredExplanation().reasonParams()).containsEntry("meterType", "ENGINE_HOURS");
+    }
+
+    @Test
+    void calendarOverdueExposesBaseSourceParam() {
+        ReflectionTestUtils.setField(service, "clock",
+                Clock.fixed(Instant.parse("2026-06-02T12:00:00Z"), ZoneOffset.UTC));
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setPeriodicityUnit(PeriodicityUnit.DAY);
+        regulation.setPeriodicityValue(1);
+        MaintenanceCompletionAnchor anchor = anchor(equipmentId, regulation.getId(),
+                Instant.parse("2026-05-31T00:00:00Z"), 0.0);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.of(anchor));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.structuredExplanation().reasonCode()).isEqualTo("CALENDAR_OVERDUE");
+        assertThat(result.structuredExplanation().reasonKey()).isEqualTo("maintenanceDue.reasons.CALENDAR_OVERDUE");
+        assertThat(result.structuredExplanation().baseSource()).isEqualTo("COMPLETION_ANCHOR");
+        // COMPLETION_ANCHOR base carries no "from X" text suffix, but the reason param is still
+        // populated so the frontend has a self-contained (key, params) pair to translate from.
+        assertThat(result.structuredExplanation().reasonParams()).containsEntry("baseSource", "COMPLETION_ANCHOR");
+    }
+
+    @Test
+    void calendarNotDueFromRegulationCreatedExposesBaseSourceParam() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_REGULATION_CREATED);
+        regulation.setCreatedAt(Instant.parse("2026-05-10T12:00:00Z"));
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.structuredExplanation().reasonCode()).isEqualTo("CALENDAR_NOT_DUE");
+        assertThat(result.structuredExplanation().reasonParams()).containsEntry("baseSource", "REGULATION_CREATED");
+        assertThat(result.structuredExplanation().baseSource()).isEqualTo("REGULATION_CREATED");
+    }
+
+    @Test
+    void calendarFromOperationStartExposesBaseSourceParam() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_OPERATION_START);
+        equipment(equipmentId, LocalDate.parse("2026-05-01"));
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.structuredExplanation().reasonParams()).containsEntry("baseSource", "OPERATION_START");
+        assertThat(result.structuredExplanation().baseSource()).isEqualTo("OPERATION_START");
+    }
+
+    @Test
+    void requireInitialAnchorExposesReasonKeyAndBlockingCode() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.REQUIRE_INITIAL_ANCHOR);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.structuredExplanation().reasonCode()).isEqualTo("REQUIRE_INITIAL_ANCHOR");
+        assertThat(result.structuredExplanation().reasonKey()).isEqualTo("maintenanceDue.reasons.REQUIRE_INITIAL_ANCHOR");
+        assertThat(result.structuredExplanation().blockingCode()).isEqualTo("MISSING_COMPLETION_ANCHOR");
+        assertThat(result.structuredExplanation().blockingField()).isEqualTo("completionAnchor");
+    }
+
+    @Test
+    void noCompletionAnchorExposesReasonKeyAndBlockingCode() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.BLOCKED);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.structuredExplanation().reasonCode()).isEqualTo("NO_COMPLETION_ANCHOR");
+        assertThat(result.structuredExplanation().blockingCode()).isEqualTo("MISSING_COMPLETION_ANCHOR");
+    }
+
+    @Test
+    void meterReasonCodesCoverAllFourMeterStatuses() {
+        UUID overdueId = UUID.randomUUID();
+        MaintenanceRegulation overdueRegulation = regulation(overdueId);
+        overdueRegulation.setTriggerMeterType(MeterType.MILEAGE_KM);
+        overdueRegulation.setTriggerMeterInterval(1000.0);
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(overdueId))
+                .thenReturn(java.util.List.of(meter(overdueId, MeterType.MILEAGE_KM, 1050.0)));
+        when(anchorRepository.findLatestAnchor(overdueId, overdueRegulation.getId(), null)).thenReturn(Optional.empty());
+        assertThat(service.calculate(overdueId, overdueRegulation).structuredExplanation().reasonCode())
+                .isEqualTo("METER_OVERDUE");
+
+        UUID dueId = UUID.randomUUID();
+        MaintenanceRegulation dueRegulation = regulation(dueId);
+        dueRegulation.setTriggerMeterType(MeterType.MILEAGE_KM);
+        dueRegulation.setTriggerMeterInterval(1000.0);
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(dueId))
+                .thenReturn(java.util.List.of(meter(dueId, MeterType.MILEAGE_KM, 1000.0)));
+        when(anchorRepository.findLatestAnchor(dueId, dueRegulation.getId(), null)).thenReturn(Optional.empty());
+        assertThat(service.calculate(dueId, dueRegulation).structuredExplanation().reasonCode())
+                .isEqualTo("METER_DUE");
+
+        UUID upcomingId = UUID.randomUUID();
+        MaintenanceRegulation upcomingRegulation = regulation(upcomingId);
+        upcomingRegulation.setTriggerMeterType(MeterType.MILEAGE_KM);
+        upcomingRegulation.setTriggerMeterInterval(1000.0);
+        upcomingRegulation.setLeadMeterPercent(5.0);
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(upcomingId))
+                .thenReturn(java.util.List.of(meter(upcomingId, MeterType.MILEAGE_KM, 950.0)));
+        when(anchorRepository.findLatestAnchor(upcomingId, upcomingRegulation.getId(), null)).thenReturn(Optional.empty());
+        assertThat(service.calculate(upcomingId, upcomingRegulation).structuredExplanation().reasonCode())
+                .isEqualTo("METER_UPCOMING");
+
+        UUID notDueId = UUID.randomUUID();
+        MaintenanceRegulation notDueRegulation = regulation(notDueId);
+        // Both signals are inactive (NOT_DUE) in this case, so combine() has no dominant signal to
+        // pick - disable the calendar trigger so the meter reason is unambiguously primary.
+        notDueRegulation.setPeriodicityUnit(null);
+        notDueRegulation.setPeriodicityValue(0);
+        notDueRegulation.setTriggerMeterType(MeterType.MILEAGE_KM);
+        notDueRegulation.setTriggerMeterInterval(1000.0);
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(notDueId))
+                .thenReturn(java.util.List.of(meter(notDueId, MeterType.MILEAGE_KM, 100.0)));
+        when(anchorRepository.findLatestAnchor(notDueId, notDueRegulation.getId(), null)).thenReturn(Optional.empty());
+        assertThat(service.calculate(notDueId, notDueRegulation).structuredExplanation().reasonCode())
+                .isEqualTo("METER_NOT_DUE");
+    }
+
+    @Test
+    void combinedAllNoneDueExposesWaitingReasonKeyWithSupportingReasons() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setTriggerPolicy(MaintenanceTriggerPolicy.ALL);
+        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        regulation.setTriggerMeterInterval(500.0);
+
+        EquipmentMeter meter = meter(equipmentId, MeterType.ENGINE_HOURS, 500.0);
+        MaintenanceCompletionAnchor anchor = anchor(equipmentId, regulation.getId(), Instant.now(), 0.0);
+
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId)).thenReturn(java.util.List.of(meter));
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.of(anchor));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.NOT_DUE);
+        assertThat(result.structuredExplanation().reasonCode()).isEqualTo("WAITING_ALL_NONE_DUE");
+        assertThat(result.structuredExplanation().reasonKey()).isEqualTo("maintenanceDue.reasons.WAITING_ALL_NONE_DUE");
+        assertThat(result.structuredExplanation().supportingReasonKeys())
+                .contains("maintenanceDue.reasons.CALENDAR_NOT_DUE", "maintenanceDue.reasons.METER_DUE");
+    }
+
+    @Test
+    void combinedAllUpcomingExposesWaitingUpcomingReasonKey() {
+        ReflectionTestUtils.setField(service, "clock",
+                Clock.fixed(Instant.parse("2026-06-02T12:00:00Z"), ZoneOffset.UTC));
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setTriggerPolicy(MaintenanceTriggerPolicy.ALL);
+        regulation.setPeriodicityUnit(PeriodicityUnit.DAY);
+        regulation.setPeriodicityValue(2);
+        regulation.setLeadTimeDays(3);
+        regulation.setTriggerMeterType(MeterType.MILEAGE_KM);
+        regulation.setTriggerMeterInterval(1000.0);
+        regulation.setLeadMeterPercent(5.0);
+
+        MaintenanceCompletionAnchor anchor = anchor(equipmentId, regulation.getId(),
+                Instant.parse("2026-06-02T00:00:00Z"), 0.0);
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.of(anchor));
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
+                .thenReturn(java.util.List.of(meter(equipmentId, MeterType.MILEAGE_KM, 950.0)));
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.UPCOMING);
+        assertThat(result.structuredExplanation().reasonCode()).isEqualTo("WAITING_ALL_UPCOMING");
+        assertThat(result.structuredExplanation().reasonKey()).isEqualTo("maintenanceDue.reasons.WAITING_ALL_UPCOMING");
+    }
+
+    @Test
+    void combinedAllBlockedByMissingMeterIsDetectedEvenWhenCalendarIsPrimaryReason() {
+        // Regression guard: policy=ALL picks the calendar signal as the primary/dominant reason
+        // (calendar is evaluated first), but the actual blocking cause here is the missing meter.
+        // blockingCode must be derived by scanning the whole reason set, not just the primary code.
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setTriggerPolicy(MaintenanceTriggerPolicy.ALL);
+        regulation.setPeriodicityUnit(PeriodicityUnit.DAY);
+        regulation.setPeriodicityValue(10);
+        regulation.setTriggerMeterType(MeterType.ENGINE_HOURS);
+        regulation.setTriggerMeterInterval(500.0);
+        MaintenanceCompletionAnchor anchor = anchor(equipmentId, regulation.getId(),
+                Instant.parse("2026-06-01T00:00:00Z"), 0.0);
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.of(anchor));
+        when(meterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(equipmentId))
+                .thenReturn(java.util.List.of());
+
+        MaintenanceDueCalculationDto result = service.calculate(equipmentId, regulation);
+
+        assertThat(result.status()).isEqualTo(MaintenanceDueStatus.BLOCKED);
+        assertThat(result.structuredExplanation().blockingCode()).isEqualTo("MISSING_ACTIVE_METER");
+        assertThat(result.structuredExplanation().blockingField()).isEqualTo("ENGINE_HOURS");
+        assertThat(result.explanation()).contains("Required active meter is missing: ENGINE_HOURS");
+    }
+
+    @Test
+    void langParamReturnsLocalizedExplanationInsteadOfEnglish() {
+        ReflectionTestUtils.setField(service, "clock",
+                Clock.fixed(Instant.parse("2026-06-02T12:00:00Z"), ZoneOffset.UTC));
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setInitialSchedulePolicy(MaintenanceInitialSchedulePolicy.FROM_OPERATION_START);
+        regulation.setPeriodicityUnit(PeriodicityUnit.DAY);
+        regulation.setPeriodicityValue(1);
+        equipment(equipmentId, LocalDate.parse("2026-05-01"));
+
+        when(anchorRepository.findLatestAnchor(equipmentId, regulation.getId(), null)).thenReturn(Optional.empty());
+
+        MaintenanceDueCalculationDto ru = service.calculate(equipmentId, regulation, "ru");
+        assertThat(ru.explanation()).isEqualTo("Календарный триггер просрочен (от даты ввода в эксплуатацию)");
+
+        MaintenanceDueCalculationDto uz = service.calculate(equipmentId, regulation, "uz");
+        assertThat(uz.explanation()).isEqualTo("Kalendar trigeri muddati o'tgan (ekspluatatsiyaga kiritilgan sanadan)");
+
+        MaintenanceDueCalculationDto en = service.calculate(equipmentId, regulation, "en");
+        assertThat(en.explanation()).isEqualTo("Calendar trigger overdue (from operation start date)");
+
+        MaintenanceDueCalculationDto noLang = service.calculate(equipmentId, regulation);
+        assertThat(noLang.explanation()).isEqualTo("Calendar trigger overdue from operation start");
+    }
+
+    @Test
+    void langParamAcceptsAcceptLanguageHeaderStyleValueAndIgnoresUnsupportedLocale() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceRegulation regulation = regulation(equipmentId);
+        regulation.setTriggerPolicy(MaintenanceTriggerPolicy.MANUAL);
+
+        // Accept-Language style value ("uz-UZ,uz;q=0.9,ru;q=0.8") - first supported tag wins.
+        MaintenanceDueCalculationDto fromHeader = service.calculate(equipmentId, regulation, "uz-UZ,uz;q=0.9,ru;q=0.8");
+        assertThat(fromHeader.explanation()).isEqualTo("Reglament bo'yicha qo'lda ishga tushirish");
+
+        // Unsupported locale (no ru/uz/en tag anywhere) - normalizeLang() returns null, so the
+        // untranslated legacy English text is returned rather than an error or empty response.
+        MaintenanceDueCalculationDto unsupported = service.calculate(equipmentId, regulation, "fr-FR");
+        assertThat(unsupported.explanation()).isEqualTo("Manual trigger policy");
+    }
+
     private MaintenanceRegulation regulation(UUID equipmentId) {
         MaintenanceRegulation regulation = new MaintenanceRegulation();
         regulation.setId(UUID.randomUUID());

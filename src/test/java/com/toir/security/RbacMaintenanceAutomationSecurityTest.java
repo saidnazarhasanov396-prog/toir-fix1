@@ -283,11 +283,13 @@ class RbacMaintenanceAutomationSecurityTest {
     }
 
     private MaintenanceRegulationPreviewDto preview() {
-        return new MaintenanceRegulationPreviewDto(0, 0, 0, 0, 0, "TRACK_ONLY", DuplicatePolicy.ONE_ITEM_PER_CYCLE, List.of());
+        return new MaintenanceRegulationPreviewDto(0, 0, 0, 0, 0, AutomationAction.TRACK_ONLY,
+                ApprovalResultAction.CREATE_TASK, DuplicatePolicy.ONE_ITEM_PER_CYCLE, List.of());
     }
 
     private MaintenanceRegulationImpactDto impact(UUID regulationId) {
-        return new MaintenanceRegulationImpactDto(regulationId, 0, 0, 0, 0, 0, "TRACK_ONLY", DuplicatePolicy.ONE_ITEM_PER_CYCLE, List.of());
+        return new MaintenanceRegulationImpactDto(regulationId, 0, 0, 0, 0, 0, AutomationAction.TRACK_ONLY,
+                ApprovalResultAction.CREATE_TASK, DuplicatePolicy.ONE_ITEM_PER_CYCLE, List.of());
     }
 
     private MaintenanceDueEventDto dueEventDto(UUID id) {

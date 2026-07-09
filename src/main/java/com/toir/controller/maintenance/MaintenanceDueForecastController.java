@@ -9,6 +9,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,7 +33,9 @@ public class MaintenanceDueForecastController {
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) MaintenanceDueStatus status,
             @RequestParam(required = false) UUID criticality,
-            @RequestParam(required = false) MaintenanceTriggerPolicy triggerPolicy
+            @RequestParam(required = false) MaintenanceTriggerPolicy triggerPolicy,
+            @RequestParam(required = false) String lang,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage
     ) {
         return ResponseEntity.ok(service.getForecast(
                 from,
@@ -41,7 +44,8 @@ public class MaintenanceDueForecastController {
                 equipmentTypeId,
                 status,
                 criticality,
-                triggerPolicy
+                triggerPolicy,
+                lang != null ? lang : acceptLanguage
         ));
     }
 }

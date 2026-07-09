@@ -2,6 +2,7 @@ package com.toir.service.maintanance;
 
 import com.toir.dto.approval.ApprovalRequestDto;
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
+import com.toir.dto.maintenanceplanning.MaintenanceDueStructuredExplanationDto;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.entity.PprPlan;
@@ -24,6 +25,7 @@ import com.toir.service.WorkOrderNumberService;
 import com.toir.service.WorkOrderService;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -1694,7 +1696,8 @@ class MaintenanceAutomationServiceTest {
                 500.0,
                 0.0,
                 0.0,
-                "Required active meter is missing: ENGINE_HOURS"
+                "Required active meter is missing: ENGINE_HOURS",
+                missingActiveMeterExplanation(equipmentId, MeterType.ENGINE_HOURS)
         );
     }
 
@@ -1770,7 +1773,38 @@ class MaintenanceAutomationServiceTest {
                 null,
                 null,
                 null,
-                "No completion anchor for calendar trigger."
+                "No completion anchor for calendar trigger.",
+                noCompletionAnchorExplanation()
+        );
+    }
+
+    private MaintenanceDueStructuredExplanationDto missingActiveMeterExplanation(UUID equipmentId, MeterType meterType) {
+        return new MaintenanceDueStructuredExplanationDto(
+                null, null, null, meterType, null, null, null, null, null, null, null,
+                "Required active meter is missing: " + meterType.name(),
+                "MISSING_ACTIVE_METER",
+                meterType.name(),
+                "/equipment/%s/meters".formatted(equipmentId),
+                "MISSING_ACTIVE_METER",
+                "maintenanceDue.reasons.MISSING_ACTIVE_METER",
+                Map.of("meterType", meterType.name()),
+                List.of(),
+                List.of()
+        );
+    }
+
+    private MaintenanceDueStructuredExplanationDto noCompletionAnchorExplanation() {
+        return new MaintenanceDueStructuredExplanationDto(
+                null, null, null, null, null, null, null, null, null, null, null,
+                "No completion anchor for calendar trigger.",
+                "MISSING_COMPLETION_ANCHOR",
+                "completionAnchor",
+                null,
+                "NO_COMPLETION_ANCHOR",
+                "maintenanceDue.reasons.NO_COMPLETION_ANCHOR",
+                Map.of(),
+                List.of(),
+                List.of()
         );
     }
 

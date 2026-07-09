@@ -74,14 +74,20 @@ public class MaintenanceRegulationController {
 
     @PostMapping("/preview")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_REGULATION_READ')")
-    public ResponseEntity<MaintenanceRegulationPreviewDto> preview(@Valid @RequestBody MaintenanceRegulationRequest request) {
-        return ResponseEntity.ok(impactService.preview(request));
+    public ResponseEntity<MaintenanceRegulationPreviewDto> preview(
+            @Valid @RequestBody MaintenanceRegulationRequest request,
+            @RequestParam(required = false) String lang,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        return ResponseEntity.ok(impactService.preview(request, lang != null ? lang : acceptLanguage));
     }
 
     @GetMapping("/{id:[0-9a-fA-F-]{36}}/impact")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_REGULATION_READ')")
-    public ResponseEntity<MaintenanceRegulationImpactDto> impact(@PathVariable UUID id) {
-        return ResponseEntity.ok(impactService.impact(id));
+    public ResponseEntity<MaintenanceRegulationImpactDto> impact(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String lang,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage) {
+        return ResponseEntity.ok(impactService.impact(id, lang != null ? lang : acceptLanguage));
     }
 
     @PostMapping
