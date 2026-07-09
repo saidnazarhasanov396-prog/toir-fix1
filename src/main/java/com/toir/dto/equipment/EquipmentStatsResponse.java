@@ -4,5 +4,5 @@ public record EquipmentStatsResponse(
         long totalInRegistry,
         long active,
         long inRepair,
-        long decommissioned)
+        long reserved)
 {}

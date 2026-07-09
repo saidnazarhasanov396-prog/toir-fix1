@@ -1,6 +1,7 @@
 package com.toir.service.repair;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.dto.attachment.AttachmentPhotoSummary;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest;
@@ -21,11 +22,13 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.repair.RepairRequestTemplate;
 import com.toir.entity.repair.RepairRequestTemplateAction;
+import com.toir.entity.users.BrigadeMember;
 import com.toir.entity.users.EmployeeSpecialisation;
 import com.toir.entity.users.User;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.TriadLinkMapper;
 import com.toir.dto.triad.WorkOrderBriefDto;
+import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.enums.WarrantyHandling;
@@ -46,6 +49,7 @@ import com.toir.repository.maintenance.MaintenanceCompletionAnchorRepository;
 import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
+import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.repair.RepairRequestTemplateActionRepository;
@@ -60,6 +64,7 @@ import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.MeterService;
 import com.toir.service.CounteragentService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.NotificationService;
 import com.toir.service.OperationalIssueLifecycleSyncService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
@@ -113,6 +118,7 @@ public class RepairRequestService {
     private final UserRepository userRepository;
     private final DefectRepository defectRepository;
     private final WorkOrderRepository workOrderRepository;
+    private final BrigadeMemberRepository brigadeMemberRepository;
     private final AuditBuilderService auditBuilderService;
     private final ScopeAccessService scopeAccessService;
     private final NotificationService notificationService;
@@ -131,6 +137,7 @@ public class RepairRequestService {
     private final MaintenanceDueEventService maintenanceDueEventService;
     private final ObjectMapper objectMapper;
     private final EmployeeSpecialisationRepository employeeSpecialisationRepository;
+    private final AttachmentGroupService attachmentGroupService;
 
     private static final Set<RequestStatus> REVIEWABLE_STATUSES = EnumSet.of(
             RequestStatus.OPEN,
@@ -1346,20 +1353,57 @@ public class RepairRequestService {
     }
 
     private RepairRequestDto toDtoWithLinks(RepairRequest repairRequest) {
-        List<DefectBriefDto> linkedDefects = defectRepository
-                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequest.getId())
+        List<Defect> linkedDefectEntities = defectRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequest.getId());
+        Map<UUID, AttachmentPhotoSummary> defectPhotoSummaryById = attachmentGroupService.getPhotoSummaries(
+                AttachmentTargetType.DEFECT,
+                linkedDefectEntities.stream().map(Defect::getId).toList()
+        );
+        List<DefectBriefDto> linkedDefects = linkedDefectEntities
                 .stream()
-                .map(TriadLinkMapper::toDefectBrief)
+                .map(defect -> TriadLinkMapper.toDefectBrief(defect, defectPhotoSummaryById.get(defect.getId())))
                 .toList();
-        List<WorkOrderBriefDto> linkedWorkOrders = workOrderRepository
-                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequest.getId())
-                .stream()
-                .map(TriadLinkMapper::toWorkOrderBrief)
+        List<WorkOrder> linkedWorkOrderEntities = workOrderRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequest.getId());
+        Map<UUID, WorkOrderBriefDto> workOrderBriefById = toWorkOrderBriefsById(linkedWorkOrderEntities);
+        List<WorkOrderBriefDto> linkedWorkOrders = linkedWorkOrderEntities.stream()
+                .map(workOrder -> workOrderBriefById.get(workOrder.getId()))
                 .toList();
         List<MeterReadingDto> meterReadings = repairMeterReadingDtos(repairRequest.getId());
         List<RepairRequestTemplateSummaryDto> templates = repairRequestTemplates(repairRequest);
         List<RepairRequestActionReferenceDto> actionReferences = repairRequestActionReferences(repairRequest);
         return toDto(repairRequest, linkedDefects, linkedWorkOrders, meterReadings, templates, actionReferences);
+    }
+
+    private Map<UUID, WorkOrderBriefDto> toWorkOrderBriefsById(List<WorkOrder> workOrders) {
+        if (workOrders.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> brigadeMemberIds = workOrders.stream()
+                .map(workOrder -> workOrder.getPerformer() == null ? null : workOrder.getPerformer().getId())
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID, UUID> userIdByBrigadeMemberId = brigadeMemberIds.isEmpty()
+                ? Map.of()
+                : brigadeMemberRepository.findAllByIdInAndIsDeletedFalse(brigadeMemberIds)
+                .stream()
+                .collect(Collectors.toMap(BrigadeMember::getId, BrigadeMember::getUserId));
+        Set<UUID> userIds = userIdByBrigadeMemberId.values().stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> userNameById = userIds.isEmpty()
+                ? Map.of()
+                : userRepository.findAllByIdInAndIsDeletedFalse(userIds)
+                .stream()
+                .collect(Collectors.toMap(User::getId, User::getFullName));
+        return workOrders.stream()
+                .collect(Collectors.toMap(WorkOrder::getId, workOrder -> {
+                    UUID brigadeMemberId = workOrder.getPerformer() == null ? null : workOrder.getPerformer().getId();
+                    UUID userId = brigadeMemberId == null ? null : userIdByBrigadeMemberId.get(brigadeMemberId);
+                    String assigneeName = userId == null ? null : userNameById.get(userId);
+                    return TriadLinkMapper.toWorkOrderBrief(workOrder, assigneeName);
+                }));
     }
 
     private List<UUID> templateIdsForDto(RepairRequest repairRequest, List<RepairRequestTemplateSummaryDto> templates) {
@@ -1627,19 +1671,27 @@ public class RepairRequestService {
         List<RepairRequest> requests = page.getContent();
         List<UUID> requestIds = requests.stream().map(RepairRequest::getId).toList();
 
-        Map<UUID, List<DefectBriefDto>> defectsByRequestId = defectRepository
-                .findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(requestIds)
+        List<Defect> linkedDefectEntities = defectRepository
+                .findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(requestIds);
+        Map<UUID, AttachmentPhotoSummary> defectPhotoSummaryById = attachmentGroupService.getPhotoSummaries(
+                AttachmentTargetType.DEFECT,
+                linkedDefectEntities.stream().map(Defect::getId).toList()
+        );
+        Map<UUID, List<DefectBriefDto>> defectsByRequestId = linkedDefectEntities
                 .stream()
                 .collect(Collectors.groupingBy(
                         Defect::getRepairRequestId,
-                        Collectors.mapping(TriadLinkMapper::toDefectBrief, Collectors.toList())
+                        Collectors.mapping(
+                                defect -> TriadLinkMapper.toDefectBrief(defect, defectPhotoSummaryById.get(defect.getId())),
+                                Collectors.toList())
                 ));
-        Map<UUID, List<WorkOrderBriefDto>> workOrdersByRequestId = workOrderRepository
-                .findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(requestIds)
-                .stream()
+        List<WorkOrder> linkedWorkOrderEntities = workOrderRepository
+                .findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(requestIds);
+        Map<UUID, WorkOrderBriefDto> workOrderBriefById = toWorkOrderBriefsById(linkedWorkOrderEntities);
+        Map<UUID, List<WorkOrderBriefDto>> workOrdersByRequestId = linkedWorkOrderEntities.stream()
                 .collect(Collectors.groupingBy(
                         WorkOrder::getRepairRequestId,
-                        Collectors.mapping(TriadLinkMapper::toWorkOrderBrief, Collectors.toList())
+                        Collectors.mapping(workOrder -> workOrderBriefById.get(workOrder.getId()), Collectors.toList())
                 ));
         Map<UUID, List<MeterReadingDto>> readingsByRequestId = meterReadingRepository
                 .findAllByRepairRequestIdInAndIsDeletedFalseOrderByReadAtDesc(requestIds)

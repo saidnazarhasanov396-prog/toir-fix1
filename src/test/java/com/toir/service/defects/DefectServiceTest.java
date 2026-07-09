@@ -1,5 +1,6 @@
 package com.toir.service.defects;
 
+import com.toir.dto.attachment.AttachmentPhotoSummary;
 import com.toir.dto.defect.DefectRequest;
 import com.toir.dto.defect.DefectResponse;
 import com.toir.dto.defect.DefectStatsResponse;
@@ -31,6 +32,7 @@ import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.OperationalIssueLifecycleSyncService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +53,7 @@ import java.time.Year;
 import java.util.ArrayList;
 import java.util.Optional;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -105,6 +108,9 @@ class DefectServiceTest {
     @Mock
     OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
 
+    @Mock
+    AttachmentGroupService attachmentGroupService;
+
     @InjectMocks
     DefectService service;
 
@@ -113,6 +119,8 @@ class DefectServiceTest {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         lenient().when(defectListLineRepository.findAllByDefectIdInAndIsDeletedFalse(any()))
                 .thenReturn(List.of());
+        lenient().when(attachmentGroupService.getPhotoSummaries(any(), any()))
+                .thenReturn(Map.of());
     }
 
     @Test
@@ -725,6 +733,58 @@ class DefectServiceTest {
 
         assertThat(response.repairRequest()).isNull();
         assertThat(response.linkedWorkOrders()).isEmpty();
+    }
+
+    @Test
+    void responseIncludesPhotoSummaryWhenDefectHasImages() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Defect defect = Defect.builder()
+                .code("DEF-2026-0006")
+                .title("Corrosion")
+                .description("Visible corrosion on housing")
+                .equipmentId(equipmentId)
+                .status(DefectStatus.OPEN)
+                .severity("MEDIUM")
+                .build();
+        defect.setId(defectId);
+        when(repository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(workOrderRepository.findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(defectId)))
+                .thenReturn(List.of());
+        String downloadUrl = "/api/v1/attachments/groups/" + UUID.randomUUID() + "/files/" + UUID.randomUUID() + "/download";
+        when(attachmentGroupService.getPhotoSummaries(
+                com.toir.enums.AttachmentTargetType.DEFECT, List.of(defectId)))
+                .thenReturn(Map.of(defectId, new AttachmentPhotoSummary(3, downloadUrl)));
+
+        DefectResponse response = service.findById(defectId);
+
+        assertThat(response.photoCount()).isEqualTo(3);
+        assertThat(response.primaryPhotoDownloadUrl()).isEqualTo(downloadUrl);
+    }
+
+    @Test
+    void responseHasZeroPhotoCountWhenDefectHasNoImages() {
+        UUID defectId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Defect defect = Defect.builder()
+                .code("DEF-2026-0007")
+                .title("Noise")
+                .description("Unusual noise from motor")
+                .equipmentId(equipmentId)
+                .status(DefectStatus.OPEN)
+                .severity("LOW")
+                .build();
+        defect.setId(defectId);
+        when(repository.findByIdAndIsDeletedFalse(defectId)).thenReturn(Optional.of(defect));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of());
+        when(workOrderRepository.findAllByDefectIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(defectId)))
+                .thenReturn(List.of());
+
+        DefectResponse response = service.findById(defectId);
+
+        assertThat(response.photoCount()).isEqualTo(0);
+        assertThat(response.primaryPhotoDownloadUrl()).isNull();
     }
 
     @Test

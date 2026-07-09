@@ -327,6 +327,8 @@ class WorkOrderServiceTest {
     void setUpTemplateActionSelectionDefaults() {
         lenient().when(repairRequestTemplateActionRepository.findAllByRepairRequest_IdAndIsDeletedFalseOrderBySequenceAsc(any()))
                 .thenReturn(List.of());
+        lenient().when(attachmentGroupService.getPhotoSummaries(any(), any()))
+                .thenReturn(java.util.Map.of());
     }
 
     @Test
