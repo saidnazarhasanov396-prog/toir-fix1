@@ -54,7 +54,10 @@ class DashboardControllerContractTest {
         DashboardOverview overview = new DashboardOverview(
                 new DashboardOverview.Counters(
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO, 0, 0, 0, 0, 0, 0, 0),
+                        0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO,
+                        0, 0, 0,
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                        0, 0, 0, 0),
                 new DashboardOverview.PlanFact(0, 0, 0),
                 new DashboardOverview.Kpis(
                         0, 0, 9.0, 0, 0, 0, 0, 0, 33.333, 33.333,
