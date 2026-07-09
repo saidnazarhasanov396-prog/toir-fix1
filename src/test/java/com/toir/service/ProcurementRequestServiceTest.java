@@ -16,7 +16,9 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.CostCategory;
+import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.entity.warehouse.WarehouseStock;
@@ -24,6 +26,9 @@ import com.toir.dto.procurement.EquipmentWarrantyLineRequest;
 import com.toir.dto.procurement.ProcurementOrderRequest;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
+import com.toir.entity.Department;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.enums.BudgetAllocationStatus;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.PriorityLevel;
@@ -32,7 +37,6 @@ import com.toir.enums.ProcurementRequestType;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.CounteragentStatus;
 import com.toir.enums.WarehouseStockStatus;
-import com.toir.enums.WarehouseTaskSourceType;
 import com.toir.enums.WmsDocumentOperationType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.exception.RestException;
@@ -52,9 +56,9 @@ import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
-import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,8 +67,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -128,6 +134,9 @@ class ProcurementRequestServiceTest {
     ActualCostRepository actualCostRepository;
 
     @Mock
+    com.toir.repository.projects.BudgetLineRepository budgetLineRepository;
+
+    @Mock
     CostCategoryRepository costCategoryRepository;
 
     @Mock
@@ -138,8 +147,6 @@ class ProcurementRequestServiceTest {
     WmsStockCoordinateValidator coordinateValidator;
     @Mock
     WmsDocumentPolicyService documentPolicyService;
-    @Mock
-    WarehouseTaskGenerationService taskGenerationService;
 
     ProcurementRequestService service;
 
@@ -161,13 +168,13 @@ class ProcurementRequestServiceTest {
                 scopeAccessService,
                 lowStockRecommendationService,
                 actualCostRepository,
+                budgetLineRepository,
                 costCategoryRepository,
                 counteragentService,
                 toirStockService,
                 legacyStockProjectionService,
                 coordinateValidator,
-                documentPolicyService,
-                taskGenerationService
+                documentPolicyService
         );
     }
 
@@ -293,6 +300,82 @@ class ProcurementRequestServiceTest {
     }
 
     @Test
+    void generateFromLowStockUsesSharedPolicyAndSkipsActiveAutoDuplicates() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID warehouseId = UUID.randomUUID();
+        UUID reorderPartId = UUID.randomUUID();
+        UUID catalogMinPartId = UUID.randomUUID();
+        UUID duplicatePartId = UUID.randomUUID();
+        WarehouseStock reorderPointStock = stock(warehouseId, reorderPartId, 50);
+        reorderPointStock.setMinQty(5);
+        reorderPointStock.setReorderPoint(10.0);
+        reorderPointStock.setReorderQty(12.0);
+        WarehouseStock catalogMinStock = stock(warehouseId, catalogMinPartId, 40);
+        catalogMinStock.setMinQty(0);
+        WarehouseStock duplicateStock = stock(warehouseId, duplicatePartId, 1);
+        duplicateStock.setMinQty(5);
+        duplicateStock.setMaxQty(10.0);
+        SparePart reorderPart = sparePart(reorderPartId);
+        SparePart catalogPart = sparePart(catalogMinPartId);
+        catalogPart.setMinStock(5.0);
+        SparePart duplicatePart = sparePart(duplicatePartId);
+        duplicatePart.setMinStock(0.0);
+        WmsStockSnapshot reorderSnapshot = new WmsStockSnapshot(
+                warehouseId, reorderPartId, BigDecimal.valueOf(50), BigDecimal.ZERO,
+                BigDecimal.valueOf(8), BigDecimal.ZERO);
+        WmsStockSnapshot catalogSnapshot = new WmsStockSnapshot(
+                warehouseId, catalogMinPartId, BigDecimal.valueOf(40), BigDecimal.ZERO,
+                BigDecimal.valueOf(4), BigDecimal.ZERO);
+        WmsStockSnapshot duplicateSnapshot = new WmsStockSnapshot(
+                warehouseId, duplicatePartId, BigDecimal.ONE, BigDecimal.ZERO);
+        Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots = Map.of(
+                new LegacyStockProjectionService.StockKey(warehouseId, reorderPartId), reorderSnapshot,
+                new LegacyStockProjectionService.StockKey(warehouseId, catalogMinPartId), catalogSnapshot,
+                new LegacyStockProjectionService.StockKey(warehouseId, duplicatePartId), duplicateSnapshot
+        );
+        when(stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(reorderPointStock, catalogMinStock, duplicateStock));
+        when(legacyStockProjectionService.currentAll()).thenReturn(snapshots);
+        when(legacyStockProjectionService.snapshot(snapshots, warehouseId, reorderPartId)).thenReturn(reorderSnapshot);
+        when(legacyStockProjectionService.snapshot(snapshots, warehouseId, catalogMinPartId)).thenReturn(catalogSnapshot);
+        when(legacyStockProjectionService.snapshot(snapshots, warehouseId, duplicatePartId)).thenReturn(duplicateSnapshot);
+        when(sparePartRepository.findByIdAndIsDeletedFalse(reorderPartId)).thenReturn(Optional.of(reorderPart));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(catalogMinPartId)).thenReturn(Optional.of(catalogPart));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(duplicatePartId)).thenReturn(Optional.of(duplicatePart));
+        when(repository.existsActiveAutoForWarehouseAndSparePart(warehouseId, reorderPartId)).thenReturn(false);
+        when(repository.existsActiveAutoForWarehouseAndSparePart(warehouseId, catalogMinPartId)).thenReturn(false);
+        when(repository.existsActiveAutoForWarehouseAndSparePart(warehouseId, duplicatePartId)).thenReturn(true);
+        when(repository.countByIsDeletedFalse()).thenReturn(0L);
+        when(repository.existsByNumberAndIsDeletedFalse(any())).thenReturn(false);
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> {
+            ProcurementRequest request = invocation.getArgument(0);
+            request.setId(UUID.randomUUID());
+            request.getLines().forEach(line -> line.setId(UUID.randomUUID()));
+            return request;
+        });
+
+        var result = service.generateFromLowStock(null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().warehouseId()).isEqualTo(warehouseId);
+        assertThat(result.getFirst().lines()).hasSize(2);
+        assertThat(result.getFirst().lines())
+                .extracting(line -> line.sparePartId())
+                .containsExactlyInAnyOrder(reorderPartId, catalogMinPartId);
+        assertThat(result.getFirst().lines())
+                .filteredOn(line -> line.sparePartId().equals(reorderPartId))
+                .singleElement()
+                .satisfies(line -> assertThat(line.quantity()).isEqualTo(12.0));
+        assertThat(result.getFirst().lines())
+                .filteredOn(line -> line.sparePartId().equals(catalogMinPartId))
+                .singleElement()
+                .satisfies(line -> assertThat(line.quantity()).isEqualTo(6.0));
+        verify(repository).lockAutoProcurementKey(warehouseId, reorderPartId);
+        verify(repository).lockAutoProcurementKey(warehouseId, catalogMinPartId);
+        verify(repository).lockAutoProcurementKey(warehouseId, duplicatePartId);
+    }
+
+    @Test
     void creatingDraftRequestCanStoreScopedCounteragent() {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         UUID sparePartId = UUID.randomUUID();
@@ -339,6 +422,20 @@ class ProcurementRequestServiceTest {
                 .hasMessageContaining("Counteragent is required");
 
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void approvalGeneratesWarehouseReceiveTask() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        ProcurementRequest request = request(requestId, UUID.randomUUID(), ProcurementRequestStatus.SUBMITTED,
+                List.of(line(UUID.randomUUID(), 3, null)));
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.approve(requestId);
+
+        assertThat(result.status()).isEqualTo(ProcurementRequestStatus.APPROVED);
     }
 
     @Test
@@ -616,21 +713,6 @@ class ProcurementRequestServiceTest {
         assertThat(command.serialNumber()).isEqualTo("SN-8");
         assertThat(command.expiryDate()).isEqualTo(expiryDate);
         assertThat(command.stockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
-        ArgumentCaptor<WarehouseTaskGenerationService.ReceiptPutawayCommand> putawayCaptor =
-                ArgumentCaptor.forClass(WarehouseTaskGenerationService.ReceiptPutawayCommand.class);
-        verify(taskGenerationService).generatePutawayForReceipt(putawayCaptor.capture());
-        WarehouseTaskGenerationService.ReceiptPutawayCommand putawayCommand = putawayCaptor.getValue();
-        assertThat(putawayCommand.generationKey()).isEqualTo("procurement-putaway:" + movement.getId());
-        assertThat(putawayCommand.warehouseId()).isEqualTo(warehouseId);
-        assertThat(putawayCommand.sparePartId()).isEqualTo(sparePartId);
-        assertThat(putawayCommand.fromBinId()).isEqualTo(binId);
-        assertThat(putawayCommand.quantity()).isEqualByComparingTo("4");
-        assertThat(putawayCommand.lotNumber()).isEqualTo("LOT-7");
-        assertThat(putawayCommand.serialNumber()).isEqualTo("SN-8");
-        assertThat(putawayCommand.expiryDate()).isEqualTo(expiryDate);
-        assertThat(putawayCommand.stockStatus()).isEqualTo(WarehouseStockStatus.QUARANTINE);
-        assertThat(putawayCommand.sourceType()).isEqualTo(WarehouseTaskSourceType.PROCUREMENT_REQUEST);
-        assertThat(putawayCommand.sourceId()).isEqualTo(requestId);
         verify(coordinateValidator).assertCanReceiveOrMoveInto(warehouseId, binId, WarehouseStockStatus.QUARANTINE);
         verify(documentPolicyService).validateReceiptDocuments(
                 eq(WmsDocumentOperationType.PROCUREMENT_RECEIPT),
@@ -699,6 +781,12 @@ class ProcurementRequestServiceTest {
         when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CostCategory materials = new CostCategory();
+        materials.setId(UUID.randomUUID());
+        materials.setCode("MATERIALS");
+        when(costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS")).thenReturn(Optional.of(materials));
+        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(any(), any()))
+                .thenReturn(Optional.empty());
 
         ProcurementReceiptResponse result = service.receiveStock(requestId, new ProcurementReceiptRequest(
                 List.of(new ProcurementReceiptLineRequest(line.getId(), 2, binId, null, null, null, null)),
@@ -718,6 +806,15 @@ class ProcurementRequestServiceTest {
         verify(stockMovementRepository).save(movementCaptor.capture());
         StockMovement movement = movementCaptor.getValue();
         assertThat(movement.getType()).isEqualTo(StockMovementType.EQUIPMENT_IN);
+
+        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
+        verify(actualCostRepository).save(costCaptor.capture());
+        ActualCost cost = costCaptor.getValue();
+        assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.PROCUREMENT_RECEIPT);
+        assertThat(cost.getSourceId()).isEqualTo(movement.getId());
+        assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
+        assertThat(cost.getAmount()).isEqualTo(10_000_000.0);
+        assertThat(cost.getCostCategoryId()).isEqualTo(materials.getId());
         assertThat(movement.getSparePartId()).isNull();
         assertThat(movement.getEquipmentTypeId()).isEqualTo(equipmentTypeId);
         assertThat(movement.getSourceLineId()).isEqualTo(line.getId());
@@ -751,6 +848,59 @@ class ProcurementRequestServiceTest {
                 });
         verify(stockRepository, never()).save(any());
         verify(toirStockService, never()).postReceipt(any());
+    }
+
+    @Test
+    void receivingEquipmentUsesBudgetLineAndCreatesPendingActualCostForFinanceApprove() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        UUID budgetCategoryId = UUID.randomUUID();
+        UUID binId = UUID.randomUUID();
+        ProcurementRequestLine line = equipmentLine(equipmentTypeId, "Pump", 1, 3_000_000.0);
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED, List.of(line));
+        request.setType(ProcurementRequestType.EQUIPMENT);
+        request.setBudgetLineId(budgetLineId);
+        BudgetLine budgetLine = new BudgetLine();
+        budgetLine.setId(budgetLineId);
+        budgetLine.setCostCategoryId(budgetCategoryId);
+        budgetLine.setBudget(new MaintenanceBudget());
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(equipmentRepository.save(any(Equipment.class))).thenAnswer(invocation -> {
+            Equipment equipment = invocation.getArgument(0);
+            equipment.setId(UUID.randomUUID());
+            return equipment;
+        });
+        when(warehouseEquipmentItemRepository.save(any(WarehouseEquipmentItem.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(budgetLine));
+        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.receiveStock(requestId, new ProcurementReceiptRequest(
+                List.of(new ProcurementReceiptLineRequest(line.getId(), 1, binId, null, null, null, null)),
+                LocalDate.of(2026, 6, 18),
+                "ACT-EQ-2",
+                null,
+                "allocated equipment receipt"
+        ));
+
+        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
+        verify(actualCostRepository).save(costCaptor.capture());
+        ActualCost cost = costCaptor.getValue();
+        assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.PROCUREMENT_RECEIPT);
+        assertThat(cost.getBudgetLineId()).isEqualTo(budgetLineId);
+        assertThat(cost.getCostCategoryId()).isEqualTo(budgetCategoryId);
+        assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
+        assertThat(cost.getAmount()).isEqualTo(3_000_000.0);
     }
 
     @Test
@@ -822,6 +972,41 @@ class ProcurementRequestServiceTest {
         assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
         assertThat(cost.getAmount()).isEqualTo(22.0);
         assertThat(cost.getNotes()).contains(requestId.toString());
+    }
+
+    @Test
+    void receivingLineUsesBudgetLineCategoryWhenAllocated() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        UUID requestId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        UUID budgetCategoryId = UUID.randomUUID();
+        ProcurementRequest request = request(requestId, warehouseId, ProcurementRequestStatus.ORDERED,
+                List.of(line(sparePartId, 2, 11.0)));
+        request.setBudgetLineId(budgetLineId);
+        BudgetLine budgetLine = new BudgetLine();
+        budgetLine.setId(budgetLineId);
+        budgetLine.setCostCategoryId(budgetCategoryId);
+        budgetLine.setBudget(new MaintenanceBudget());
+        when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId))
+                .thenReturn(stock(warehouseId, sparePartId, 3));
+        when(stockMovementRepository.save(any(StockMovement.class))).thenAnswer(invocation -> {
+            StockMovement movement = invocation.getArgument(0);
+            movement.setId(UUID.randomUUID());
+            return movement;
+        });
+        when(repository.save(any(ProcurementRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(budgetLine));
+        when(actualCostRepository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(any(), any()))
+                .thenReturn(Optional.empty());
+
+        service.markReceived(requestId);
+
+        ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
+        verify(actualCostRepository).save(costCaptor.capture());
+        assertThat(costCaptor.getValue().getCostCategoryId()).isEqualTo(budgetCategoryId);
     }
 
     @Test
@@ -1090,5 +1275,66 @@ class ProcurementRequestServiceTest {
 
     private WmsDocumentGroupRequest documentGroup(String name, String type) {
         return new WmsDocumentGroupRequest(name, type, "DOC-1", LocalDate.of(2026, 6, 18), UUID.randomUUID());
+    }
+
+    @Test
+    void findFinanceReviewQueueIncludesRequestLines() {
+        UUID requestId = UUID.randomUUID();
+        ProcurementRequest request = new ProcurementRequest();
+        request.setId(requestId);
+        request.setNumber("PR-2026-0001");
+        request.setTitle("Finance review queue");
+        request.setStatus(ProcurementRequestStatus.SUBMITTED);
+        request.setBudgetAllocationStatus(BudgetAllocationStatus.UNALLOCATED);
+        ProcurementRequestLine line = new ProcurementRequestLine();
+        line.setId(UUID.randomUUID());
+        line.setRequest(request);
+        line.setQuantity(2);
+        line.setUnitPrice(150.0);
+        request.setLines(new java.util.ArrayList<>(List.of(line)));
+
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(repository.findFinanceReviewQueue(null, ProcurementRequestStatus.SUBMITTED, BudgetAllocationStatus.UNALLOCATED))
+                .thenReturn(List.of(request));
+
+        var result = service.findFinanceReviewQueue(null, ProcurementRequestStatus.SUBMITTED, true);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().lines()).hasSize(1);
+        assertThat(result.getFirst().lines().getFirst().quantity()).isEqualTo(2);
+    }
+
+    @Test
+    void findFinanceReviewQueueEnrichesDepartmentAndWarehouseNames() {
+        UUID departmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        ProcurementRequest request = new ProcurementRequest();
+        request.setId(UUID.randomUUID());
+        request.setNumber("PR-2026-0002");
+        request.setTitle("Named procurement");
+        request.setStatus(ProcurementRequestStatus.SUBMITTED);
+        request.setDepartmentId(departmentId);
+        request.setWarehouseId(warehouseId);
+        request.setBudgetAllocationStatus(BudgetAllocationStatus.UNALLOCATED);
+        request.setLines(new java.util.ArrayList<>());
+
+        Department department = new Department();
+        department.setId(departmentId);
+        department.setName("Maintenance");
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(warehouseId);
+        warehouse.setName("Central WH");
+
+        when(scopeAccessService.enforceDepartmentScope(null)).thenReturn(null);
+        when(repository.findFinanceReviewQueue(null, ProcurementRequestStatus.SUBMITTED, BudgetAllocationStatus.UNALLOCATED))
+                .thenReturn(List.of(request));
+        when(departmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(department));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(warehouse));
+
+        var result = service.findFinanceReviewQueue(null, ProcurementRequestStatus.SUBMITTED, true);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().departmentName()).isEqualTo("Maintenance");
+        assertThat(result.getFirst().warehouseName()).isEqualTo("Central WH");
     }
 }

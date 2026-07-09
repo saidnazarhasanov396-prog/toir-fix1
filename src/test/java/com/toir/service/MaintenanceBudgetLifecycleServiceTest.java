@@ -12,6 +12,7 @@ import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetEventRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.WebhookService;
 import com.toir.service.maintanance.MaintenanceBudgetService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,7 @@ class MaintenanceBudgetLifecycleServiceTest {
         AuditBuilderService auditBuilderService = mock(AuditBuilderService.class);
         scopeAccessService = mock(ScopeAccessService.class);
         budgetEventRepository = mock(BudgetEventRepository.class);
+        WebhookService webhookService = mock(WebhookService.class);
         service = new MaintenanceBudgetService(
                 repository,
                 lineRepository,
@@ -52,7 +54,8 @@ class MaintenanceBudgetLifecycleServiceTest {
                 costCategoryRepository,
                 auditBuilderService,
                 scopeAccessService,
-                budgetEventRepository
+                budgetEventRepository,
+                webhookService
         );
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repository.save(any(MaintenanceBudget.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -129,7 +132,28 @@ class MaintenanceBudgetLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.transfer(budgetId, fromLineId, toLineId, 100, UUID.randomUUID(), "shift"))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("below approved actual amount");
+                .hasMessageContaining("below approved actual and committed amounts");
+    }
+
+    @Test
+    void transferRejectsWhenTargetLineWouldDropBelowCommittedAmount() {
+        UUID budgetId = UUID.randomUUID();
+        UUID fromLineId = UUID.randomUUID();
+        UUID toLineId = UUID.randomUUID();
+        MaintenanceBudget budget = budget(budgetId, BudgetStatus.APPROVED);
+        BudgetLine from = line(fromLineId, budget, 500, 100);
+        from.setCommittedAmount(450);
+        BudgetLine to = line(toLineId, budget, 200, 0);
+        budget.getLines().add(from);
+        budget.getLines().add(to);
+        budget.setTotalPlanned(700);
+        when(repository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(budget));
+        when(lineRepository.findByIdAndIsDeletedFalse(fromLineId)).thenReturn(Optional.of(from));
+        when(lineRepository.findByIdAndIsDeletedFalse(toLineId)).thenReturn(Optional.of(to));
+
+        assertThatThrownBy(() -> service.transfer(budgetId, fromLineId, toLineId, 100, UUID.randomUUID(), "shift"))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("below approved actual and committed amounts");
     }
 
     @Test
@@ -150,7 +174,24 @@ class MaintenanceBudgetLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.reviseLine(budgetId, lineId, 100, UUID.randomUUID(), "too low"))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("below approved actual amount");
+                .hasMessageContaining("below approved actual and committed amounts");
+    }
+
+    @Test
+    void reviseAllowedOnLockedBudgetForResponsibleFinanceUser() {
+        UUID budgetId = UUID.randomUUID();
+        UUID lineId = UUID.randomUUID();
+        MaintenanceBudget budget = budget(budgetId, BudgetStatus.LOCKED);
+        BudgetLine line = line(lineId, budget, 500, 0);
+        budget.getLines().add(line);
+        budget.setTotalPlanned(500);
+        when(repository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(budget));
+        when(lineRepository.findByIdAndIsDeletedFalse(lineId)).thenReturn(Optional.of(line));
+
+        MaintenanceBudgetDto result = service.reviseLine(budgetId, lineId, 800, UUID.randomUUID(), "unplanned absorb");
+
+        assertThat(line.getPlannedAmount()).isEqualTo(800);
+        assertThat(result.totalPlanned()).isEqualTo(800);
     }
 
     private MaintenanceBudget budget(UUID id, BudgetStatus status) {

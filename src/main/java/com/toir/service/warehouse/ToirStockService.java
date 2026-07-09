@@ -19,7 +19,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -93,6 +95,61 @@ public class ToirStockService {
     @Transactional
     public WarehouseStockLedger postIssue(StockIssueCommand command) {
         return postDecrease(command, StockLedgerMovementType.ISSUE);
+    }
+
+    @Transactional
+    public List<WarehouseStockLedger> postIssueAutoAllocate(StockIssueCommand command) {
+        if (hasExplicitCoordinates(command)) {
+            return List.of(postIssue(command));
+        }
+        validateRequiredIds(command.warehouseId(), command.sparePartId());
+        validatePositiveQuantity(command.quantity());
+        if (command.effectiveStatus() != WarehouseStockStatus.AVAILABLE) {
+            throw RestException.badRequest("Only AVAILABLE stock can be issued or moved");
+        }
+
+        List<WarehouseStockBalance> balances = balanceRepository.lockAvailableBalancesForIssue(
+                command.warehouseId(),
+                command.sparePartId()
+        );
+        BigDecimal totalAvailable = balances.stream()
+                .map(WarehouseStockBalance::getAvailableQty)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (totalAvailable.compareTo(command.quantity()) < 0) {
+            throw RestException.badRequest("Insufficient available stock: available="
+                    + totalAvailable + ", requested=" + command.quantity());
+        }
+
+        BigDecimal remaining = command.quantity();
+        List<WarehouseStockLedger> ledgers = new ArrayList<>();
+        int allocationIndex = 1;
+        for (WarehouseStockBalance balance : balances) {
+            if (remaining.signum() == 0) {
+                break;
+            }
+            BigDecimal availableQty = balance.getAvailableQty();
+            if (availableQty.signum() <= 0) {
+                continue;
+            }
+            BigDecimal allocatedQty = availableQty.min(remaining);
+            ledgers.add(postIssue(new StockIssueCommand(
+                    command.warehouseId(),
+                    command.sparePartId(),
+                    balance.getBinId(),
+                    allocatedQty,
+                    balance.getLotNumber(),
+                    balance.getSerialNumber(),
+                    balance.getExpiryDate(),
+                    WarehouseStockStatus.AVAILABLE,
+                    command.referenceType(),
+                    command.referenceId(),
+                    command.referenceDocNo(),
+                    command.notes(),
+                    allocationIdempotencyKey(command.idempotencyKey(), allocationIndex++)
+            )));
+            remaining = remaining.subtract(allocatedQty);
+        }
+        return ledgers;
     }
 
     @Transactional
@@ -647,6 +704,18 @@ public class ToirStockService {
             return zero(balance.getQtyOnHand()).subtract(zero(balance.getQtyReserved()));
         }
         return balance.getAvailableQty();
+    }
+
+    private boolean hasExplicitCoordinates(StockIssueCommand command) {
+        return command.binId() != null
+                || trimToNull(command.lotNumber()) != null
+                || trimToNull(command.serialNumber()) != null
+                || command.expiryDate() != null;
+    }
+
+    private String allocationIdempotencyKey(String idempotencyKey, int allocationIndex) {
+        String normalized = trimToNull(idempotencyKey);
+        return normalized == null ? null : normalized + ":allocation:" + allocationIndex;
     }
 
     private String identityKey(UUID warehouseId,

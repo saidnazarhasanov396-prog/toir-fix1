@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.dto.knowledge.KnowledgeArticleDto;
 import com.toir.dto.knowledge.KnowledgeArticleLinkDto;
 import com.toir.dto.knowledge.KnowledgeArticleRequest;
+import com.toir.dto.knowledge.KnowledgeArticleSearchRequest;
 import com.toir.dto.knowledge.KnowledgeContextResponse;
 import com.toir.dto.knowledge.KnowledgeStatsResponse;
 import com.toir.dto.knowledge.KnowledgeSuggestionDto;
@@ -21,10 +22,10 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
-import com.toir.util.PaginationUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -85,25 +86,33 @@ public class KnowledgeService {
 
     @Transactional(readOnly = true)
     public Page<KnowledgeArticleDto> list(UUID equipmentId, UUID equipmentTypeId, String kind, int page, int size) {
-        String normalizedKind = kind == null || kind.isBlank() ? null : kind.trim();
-        if (equipmentId != null) {
-            return PaginationUtils
-                    .page(repository.findAllByEquipmentIdAndIsDeletedFalse(equipmentId), page, size)
-                    .map(this::toDto);
-        }
-        if (equipmentTypeId != null) {
-            return PaginationUtils
-                    .page(repository.findAllByEquipmentTypeIdAndIsDeletedFalse(equipmentTypeId), page, size)
-                    .map(this::toDto);
-        }
-        if (normalizedKind != null) {
-            return PaginationUtils
-                    .page(repository.findAllByKindAndIsDeletedFalse(normalizedKind), page, size)
-                    .map(this::toDto);
-        }
-        return PaginationUtils
-                .page(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc(), page, size)
-                .map(this::toDto);
+        return search(KnowledgeArticleSearchRequest.legacy(equipmentId, equipmentTypeId, kind, page, size));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<KnowledgeArticleDto> search(KnowledgeArticleSearchRequest request) {
+        KnowledgeArticleSearchRequest normalized = request.normalized();
+        Page<KnowledgeArticle> articles = repository.search(
+                normalized.q(),
+                normalized.kindsEmpty(),
+                normalized.repositoryKinds(),
+                normalized.targetTypeValue(),
+                normalized.targetId(),
+                normalized.equipmentId(),
+                normalized.equipmentTypeId(),
+                normalized.defectId(),
+                normalized.workOrderId(),
+                normalized.tagsEmpty(),
+                normalized.repositoryTags(),
+                normalized.createdFrom(),
+                normalized.createdTo(),
+                normalized.updatedFrom(),
+                normalized.updatedTo(),
+                normalized.hasLinks(),
+                normalized.sortValue(),
+                PageRequest.of(normalized.page(), normalized.size())
+        );
+        return mapArticlesWithLinks(articles);
     }
 
     @Transactional(readOnly = true)
@@ -126,7 +135,7 @@ public class KnowledgeService {
                         toLinkDtos(directLinksByArticle.getOrDefault(article.getId(), List.of()))))
                 .toList();
 
-        List<KnowledgeArticle> candidates = repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        List<KnowledgeArticle> candidates = findSuggestionCandidates(target);
         List<UUID> candidateIds = candidates.stream().map(KnowledgeArticle::getId).toList();
         Map<UUID, List<KnowledgeArticleLink>> linksByArticle = linksForArticleIds(candidateIds).stream()
                 .collect(Collectors.groupingBy(KnowledgeArticleLink::getKnowledgeArticleId));
@@ -155,7 +164,33 @@ public class KnowledgeService {
     @Transactional(readOnly = true)
     public KnowledgeStatsResponse getStats(UUID equipmentId, UUID equipmentTypeId, String kind) {
         String normalizedKind = kind == null || kind.isBlank() ? null : kind.trim();
-        var stats = repository.getKnowledgeStats(equipmentId, equipmentTypeId, normalizedKind);
+        return toStatsResponse(repository.getKnowledgeStats(equipmentId, equipmentTypeId, normalizedKind));
+    }
+
+    @Transactional(readOnly = true)
+    public KnowledgeStatsResponse getStats(KnowledgeArticleSearchRequest request) {
+        KnowledgeArticleSearchRequest normalized = request.normalized();
+        return toStatsResponse(repository.getKnowledgeStatsSearch(
+                normalized.q(),
+                normalized.kindsEmpty(),
+                normalized.repositoryKinds(),
+                normalized.targetTypeValue(),
+                normalized.targetId(),
+                normalized.equipmentId(),
+                normalized.equipmentTypeId(),
+                normalized.defectId(),
+                normalized.workOrderId(),
+                normalized.tagsEmpty(),
+                normalized.repositoryTags(),
+                normalized.createdFrom(),
+                normalized.createdTo(),
+                normalized.updatedFrom(),
+                normalized.updatedTo(),
+                normalized.hasLinks()
+        ));
+    }
+
+    private KnowledgeStatsResponse toStatsResponse(com.toir.repository.KnowledgeStatsProjection stats) {
         return new KnowledgeStatsResponse(
                 stats.getTotalArticles() == null ? 0 : stats.getTotalArticles(),
                 stats.getLessonLearned() == null ? 0 : stats.getLessonLearned(),
@@ -253,6 +288,21 @@ public class KnowledgeService {
         return KnowledgeArticleDto.from(article, linksForArticle(article.getId()));
     }
 
+    private Page<KnowledgeArticleDto> mapArticlesWithLinks(Page<KnowledgeArticle> articles) {
+        List<UUID> articleIds = articles.getContent().stream()
+                .map(KnowledgeArticle::getId)
+                .filter(id -> id != null)
+                .toList();
+        Map<UUID, List<KnowledgeArticleLinkDto>> linksByArticle = linksForArticleIds(articleIds).stream()
+                .collect(Collectors.groupingBy(
+                        KnowledgeArticleLink::getKnowledgeArticleId,
+                        Collectors.mapping(KnowledgeArticleLinkDto::from, Collectors.toList())
+                ));
+        return articles.map(article -> KnowledgeArticleDto.from(
+                article,
+                linksByArticle.getOrDefault(article.getId(), List.of())));
+    }
+
     private List<KnowledgeArticleLinkDto> linksForArticle(UUID articleId) {
         if (articleId == null || linkRepository == null) {
             return List.of();
@@ -328,6 +378,48 @@ public class KnowledgeService {
         link.setTargetType(dto.targetType());
         link.setTargetId(dto.targetId());
         linkRepository.save(link);
+    }
+
+    private List<KnowledgeArticle> findSuggestionCandidates(TargetContext target) {
+        KnowledgeArticleSearchRequest request = new KnowledgeArticleSearchRequest(
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                target.equipmentTypeId(),
+                null,
+                target.workOrderId(),
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                0,
+                200,
+                "updatedAt,desc"
+        ).normalized();
+        return repository.search(
+                request.q(),
+                request.kindsEmpty(),
+                request.repositoryKinds(),
+                request.targetTypeValue(),
+                request.targetId(),
+                request.equipmentId(),
+                request.equipmentTypeId(),
+                request.defectId(),
+                request.workOrderId(),
+                request.tagsEmpty(),
+                request.repositoryTags(),
+                request.createdFrom(),
+                request.createdTo(),
+                request.updatedFrom(),
+                request.updatedTo(),
+                request.hasLinks(),
+                request.sortValue(),
+                PageRequest.of(request.page(), request.size())
+        ).getContent();
     }
 
     private KnowledgeSuggestionDto scoreSuggestion(KnowledgeArticle article,
@@ -508,11 +600,12 @@ public class KnowledgeService {
 
     private KnowledgeArticle saveWithGeneratedCode(KnowledgeArticle article) {
         int year = Year.now().getValue();
-        String codePrefix = "LL-" + year + "-";
+        String prefix = codePrefixForKind(article.getKind());
+        String codePrefix = prefix + "-" + year + "-";
         long sequence = repository.maxSequenceByCodePrefix(codePrefix) + 1;
 
         for (int attempt = 0; attempt < MAX_CODE_GENERATION_ATTEMPTS; attempt++) {
-            String code = formatCode("LL", year, sequence + attempt);
+            String code = formatCode(prefix, year, sequence + attempt);
             if (repository.existsByCode(code)) {
                 continue;
             }
@@ -528,6 +621,18 @@ public class KnowledgeService {
         }
 
         throw RestException.conflict("Could not generate unique knowledge article code");
+    }
+
+    private String codePrefixForKind(String kind) {
+        if (kind == null) {
+            return "LL";
+        }
+        return switch (kind) {
+            case "KB" -> "KB";
+            case "PROCEDURE" -> "PROC";
+            case "TROUBLESHOOTING" -> "TS";
+            default -> "LL";
+        };
     }
 
     private String formatCode(String prefix, int year, long sequence) {

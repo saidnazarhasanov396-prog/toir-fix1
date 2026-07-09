@@ -49,6 +49,55 @@ public interface WarehouseStockBalanceRepository extends JpaRepository<Warehouse
             UUID sparePartId
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select b
+            from WarehouseStockBalance b
+            where b.warehouseId = :warehouseId
+              and b.sparePartId = :sparePartId
+              and b.stockStatus = com.toir.enums.WarehouseStockStatus.AVAILABLE
+              and b.isDeleted = false
+              and b.qtyOnHand > b.qtyReserved
+            order by
+              case when b.expiryDate is null then 1 else 0 end,
+              b.expiryDate asc,
+              b.updatedAt asc,
+              b.id asc
+            """)
+    List<WarehouseStockBalance> lockAvailableBalancesForIssue(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("sparePartId") UUID sparePartId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select b
+            from WarehouseStockBalance b
+            where b.warehouseId = :warehouseId
+              and b.sparePartId = :sparePartId
+              and b.stockStatus = :stockStatus
+              and b.isDeleted = false
+              and b.qtyOnHand > b.qtyReserved
+              and (:binId is null or b.binId = :binId)
+              and (cast(:lotNumber as string) is null or lower(coalesce(b.lotNumber, '')) = lower(cast(:lotNumber as string)))
+              and (cast(:serialNumber as string) is null or lower(coalesce(b.serialNumber, '')) = lower(cast(:serialNumber as string)))
+              and (:expiryDate is null or b.expiryDate = :expiryDate)
+            order by
+              case when b.expiryDate is null then 1 else 0 end,
+              b.expiryDate asc,
+              b.updatedAt asc,
+              b.id asc
+            """)
+    List<WarehouseStockBalance> lockEligibleBalancesForWriteoff(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("sparePartId") UUID sparePartId,
+            @Param("stockStatus") WarehouseStockStatus stockStatus,
+            @Param("binId") UUID binId,
+            @Param("lotNumber") String lotNumber,
+            @Param("serialNumber") String serialNumber,
+            @Param("expiryDate") java.time.LocalDate expiryDate
+    );
+
     List<WarehouseStockBalance> findAllByIsDeletedFalse();
 
     List<WarehouseStockBalance> findAllByWarehouseIdAndIsDeletedFalse(UUID warehouseId);
@@ -56,6 +105,53 @@ public interface WarehouseStockBalanceRepository extends JpaRepository<Warehouse
     List<WarehouseStockBalance> findAllBySparePartIdAndIsDeletedFalse(UUID sparePartId);
 
     List<WarehouseStockBalance> findAllByWarehouseIdAndBinIdAndIsDeletedFalse(UUID warehouseId, UUID binId);
+
+    @Query("""
+            select coalesce(sum(b.qtyOnHand), 0)
+            from WarehouseStockBalance b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+            """)
+    BigDecimal sumQtyOnHand(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select coalesce(sum(b.qtyReserved), 0)
+            from WarehouseStockBalance b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+            """)
+    BigDecimal sumQtyReserved(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select coalesce(sum(
+                case when b.stockStatus = com.toir.enums.WarehouseStockStatus.AVAILABLE
+                     then b.qtyOnHand - b.qtyReserved
+                     else 0
+                end
+            ), 0)
+            from WarehouseStockBalance b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+            """)
+    BigDecimal sumAvailableQty(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select count(b)
+            from WarehouseStockBalance b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+            """)
+    long countRows(@Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select count(b)
+            from WarehouseStockBalance b
+            where b.isDeleted = false
+              and (:warehouseId is null or b.warehouseId = :warehouseId)
+              and b.stockStatus = :stockStatus
+            """)
+    long countRowsByStatus(@Param("warehouseId") UUID warehouseId,
+                           @Param("stockStatus") WarehouseStockStatus stockStatus);
 
     boolean existsByWarehouseIdAndBinIdAndQtyOnHandGreaterThanAndIsDeletedFalse(
             UUID warehouseId,

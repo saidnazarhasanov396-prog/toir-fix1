@@ -6,21 +6,16 @@ import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.users.Employee;
-import com.toir.entity.warehouse.InventoryCountSession;
 import com.toir.entity.warehouse.Warehouse;
-import com.toir.entity.warehouse.WarehouseTask;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.FileCategory;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.CompletionActRepository;
-import com.toir.repository.InventoryCountSessionRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.PurchaseOrderRepository;
 import com.toir.repository.StockMovementRepository;
-import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseRepository;
-import com.toir.repository.WarehouseTaskRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -75,14 +70,8 @@ class AttachmentTargetAccessServiceTest {
     @Mock
     WarehouseRepository warehouseRepository;
 
-    @Mock
-    WarehouseBinRepository warehouseBinRepository;
 
-    @Mock
-    WarehouseTaskRepository warehouseTaskRepository;
 
-    @Mock
-    InventoryCountSessionRepository inventoryCountSessionRepository;
 
     @Mock
     ScopeAccessService scopeAccessService;
@@ -110,48 +99,11 @@ class AttachmentTargetAccessServiceTest {
                 procurementRequestRepository,
                 purchaseOrderRepository,
                 warehouseRepository,
-                warehouseBinRepository,
-                warehouseTaskRepository,
-                inventoryCountSessionRepository,
                 scopeAccessService,
                 equipmentCommissioningActRepository,
                 defectRepository,
                 employeeRepository
         );
-    }
-
-    @Test
-    void warehouseTaskAttachmentUsesWarehouseScope() {
-        UUID taskId = UUID.randomUUID();
-        UUID warehouseId = UUID.randomUUID();
-        WarehouseTask task = new WarehouseTask();
-        task.setId(taskId);
-        task.setWarehouseId(warehouseId);
-        Warehouse warehouse = new Warehouse();
-        warehouse.setId(warehouseId);
-        when(warehouseTaskRepository.findByIdAndIsDeletedFalse(taskId)).thenReturn(Optional.of(task));
-        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-
-        assertThatCode(() -> service.assertCanAccess(AttachmentTargetType.WAREHOUSE_TASK, taskId))
-                .doesNotThrowAnyException();
-    }
-
-    @Test
-    void inventoryCountSessionAttachmentUsesWarehouseScope() {
-        UUID sessionId = UUID.randomUUID();
-        UUID warehouseId = UUID.randomUUID();
-        InventoryCountSession session = new InventoryCountSession();
-        session.setId(sessionId);
-        session.setWarehouseId(warehouseId);
-        Warehouse warehouse = new Warehouse();
-        warehouse.setId(warehouseId);
-        when(inventoryCountSessionRepository.findByIdAndIsDeletedFalse(sessionId)).thenReturn(Optional.of(session));
-        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-
-        assertThatCode(() -> service.assertCanAccess(AttachmentTargetType.INVENTORY_COUNT_SESSION, sessionId))
-                .doesNotThrowAnyException();
     }
 
     @Test

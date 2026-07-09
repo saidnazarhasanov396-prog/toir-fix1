@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.EquipmentStatus;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public record EquipmentRiskEvidence(
@@ -22,6 +23,7 @@ public record EquipmentRiskEvidence(
         double mttrHours,
         double recentDowntimeHours,
         long overdueMaintenanceCount,
-        long openHighRepairRequestCount
+        long openHighRepairRequestCount,
+        Instant lastFailureAt
 ) {
 }

@@ -29,4 +29,22 @@ public class BudgetLine extends BaseEntity {
 
     @Column(name = "actual_amount", nullable = false)
     private double actualAmount;
+
+    @Column(name = "committed_amount", nullable = false)
+    private double committedAmount = 0.0;
+
+    public double getRemainingAmount() {
+        double remaining = plannedAmount - committedAmount;
+        return Math.max(0, remaining);
+    }
+
+    public double getAvailableForActual() {
+        double available = plannedAmount - actualAmount - committedAmount;
+        return Math.max(0, available);
+    }
+
+    public double getAvailableForCommitment() {
+        double available = plannedAmount - committedAmount;
+        return Math.max(0, available);
+    }
 }

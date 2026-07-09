@@ -5,6 +5,7 @@ import com.toir.dto.warehouse.WarehouseRequest;
 import com.toir.dto.warehouse.WarehouseStockBalanceDto;
 import com.toir.dto.warehouse.WarehouseStockDto;
 import com.toir.dto.warehouse.WarehouseStockLedgerDto;
+import com.toir.dto.warehouse.WarehouseStockStatsResponse;
 import com.toir.dto.warehouse.WarehouseStockReconciliationDto;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WarehouseStockStatus;
@@ -68,6 +69,12 @@ public class WarehouseController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(service.findStocks(id, search), page, size));
+    }
+
+    @GetMapping("/{id}/stock/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<WarehouseStockStatsResponse> stockStats(@PathVariable UUID id) {
+        return ResponseEntity.ok(warehouseQueryService.stockStats(id));
     }
 
     @GetMapping("/{id}/stock-balances")

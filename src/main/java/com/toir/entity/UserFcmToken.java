@@ -1,6 +1,8 @@
 package com.toir.entity;
 
+import com.toir.audit.AuditedResource;
 import com.toir.entity.users.User;
+import com.toir.enums.AuditModule;
 import com.toir.enums.FcmDevicePlatform;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -25,6 +27,11 @@ import lombok.Setter;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@AuditedResource(
+        module = AuditModule.USER,
+        entityType = "user_fcm_tokens",
+        ignoredFields = {"lastSeenAt"}
+)
 public class UserFcmToken extends BaseEntity {
 
     @Column(name = "user_id", nullable = false)

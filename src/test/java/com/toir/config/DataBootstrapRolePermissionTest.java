@@ -7,11 +7,15 @@ import com.toir.security.PermissionConstants;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -20,6 +24,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class DataBootstrapRolePermissionTest {
+
+    private static final Path DATA_BOOTSTRAP = Path.of("src/main/java/com/toir/config/DataBootstrap.java");
 
     private final Map<String, Role> roles = new ConcurrentHashMap<>();
     private final RoleRepository roleRepository = mock(RoleRepository.class);
@@ -56,8 +62,21 @@ class DataBootstrapRolePermissionTest {
                         PermissionConstants.WORK_ORDER_START,
                         PermissionConstants.WORK_ORDER_COMPLETE
                 );
+        assertThat(roles.get("FINANCE_MANAGER").getPermissions())
+                .contains(
+                        PermissionConstants.ACTUAL_COST_APPROVE,
+                        PermissionConstants.BUDGET_APPROVE,
+                        PermissionConstants.APPROVAL_APPROVE
+                );
         assertThat(roles.get("SYSTEM_ADMIN").getPermissions())
                 .containsExactly(PermissionConstants.WILDCARD);
+    }
+
+    @Test
+    void baseRolesDoNotDefineAnyRoleMoreThanOnce() throws Exception {
+        List<String> roleCodes = baseRoleCodes();
+
+        assertThat(roleCodes).doesNotHaveDuplicates();
     }
 
     @Test
@@ -82,6 +101,34 @@ class DataBootstrapRolePermissionTest {
                         PermissionConstants.WORK_ORDER_CREATE,
                         PermissionConstants.WORK_ORDER_APPROVE,
                         PermissionConstants.WORK_ORDER_CLOSE
+                );
+    }
+
+    @Test
+    void bootstrapCreatesTechnicianRoleWithMaintenanceExecutionPermissions() {
+        bootstrapProperties.setCreateDefaultAdmin(false);
+        stubRoleRepository();
+
+        bootstrap().run();
+
+        assertThat(roles.get("TECHNICIAN").getPermissions())
+                .contains(
+                        PermissionConstants.READ_LEGACY,
+                        PermissionConstants.REPAIR_REQUEST_READ,
+                        PermissionConstants.WORK_ORDER_READ,
+                        PermissionConstants.WORK_ORDER_UPDATE,
+                        PermissionConstants.WORK_ORDER_START,
+                        PermissionConstants.WORK_ORDER_COMPLETE,
+                        PermissionConstants.EQUIPMENT_READ,
+                        PermissionConstants.DEFECT_READ,
+                        PermissionConstants.PPR_TASK_READ,
+                        PermissionConstants.INSPECTION_READ,
+                        PermissionConstants.INSPECTION_START,
+                        PermissionConstants.INSPECTION_COMPLETE,
+                        PermissionConstants.TIMESHEET_CREATE,
+                        PermissionConstants.KNOWLEDGE_READ,
+                        PermissionConstants.NOTIFICATION_READ,
+                        PermissionConstants.NOTIFICATION_MARK_READ
                 );
     }
 
@@ -120,5 +167,15 @@ class DataBootstrapRolePermissionTest {
         role.setSystem(true);
         role.setPermissions(new ArrayList<>(List.of(permissions)));
         return role;
+    }
+
+    private List<String> baseRoleCodes() throws Exception {
+        String source = Files.readString(DATA_BOOTSTRAP);
+        Matcher matcher = Pattern.compile("\\{\\s*\\\"([A-Z_]+)\\\",").matcher(source);
+        List<String> roleCodes = new ArrayList<>();
+        while (matcher.find()) {
+            roleCodes.add(matcher.group(1));
+        }
+        return roleCodes;
     }
 }

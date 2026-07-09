@@ -26,8 +26,11 @@ import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.security.PermissionConstants;
+import com.toir.security.SecurityAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -53,6 +56,7 @@ public class ApprovalScopeService {
     private final FinanceScopeService financeScopeService;
     private final UserRepository userRepository;
     private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
+    private final SecurityAccessService securityAccessService;
 
     public boolean canReadApproval(ApprovalRequest approval) {
         if (approval == null) {
@@ -157,7 +161,19 @@ public class ApprovalScopeService {
         if (step.getApproverId() != null) {
             return matchesCurrentPrincipal(step.getApproverId());
         }
-        return currentUserHasRole(step.getApproverRole());
+        return currentUserCanActOnApproverStep(step.getApproverRole());
+    }
+
+    private boolean currentUserCanActOnApproverStep(String approverRole) {
+        if (!StringUtils.hasText(approverRole)) {
+            return false;
+        }
+        String normalizedRole = approverRole.trim();
+        if (currentUserHasRole(normalizedRole)) {
+            return true;
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return securityAccessService.hasPermission(authentication, normalizedRole);
     }
 
     private boolean matchesCurrentPrincipal(UUID candidateId) {

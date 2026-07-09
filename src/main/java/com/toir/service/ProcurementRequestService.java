@@ -18,6 +18,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.equipment.ProcurementRequestLine;
 import com.toir.entity.projects.ActualCost;
+import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.CostCategory;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.warehouse.Warehouse;
@@ -27,6 +28,7 @@ import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.BudgetAllocationStatus;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
@@ -37,9 +39,9 @@ import com.toir.enums.StockMovementSourceType;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WarehouseStockStatus;
-import com.toir.enums.WarehouseTaskSourceType;
 import com.toir.enums.WmsDocumentOperationType;
 import com.toir.exception.RestException;
+import com.toir.finance.FinanceUpgradePolicy;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
@@ -50,15 +52,16 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
-import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -94,13 +97,26 @@ public class ProcurementRequestService {
     private final ScopeAccessService scopeAccessService;
     private final LowStockRecommendationService lowStockRecommendationService;
     private final ActualCostRepository actualCostRepository;
+    private final BudgetLineRepository budgetLineRepository;
     private final CostCategoryRepository costCategoryRepository;
     private final CounteragentService counteragentService;
     private final ToirStockService toirStockService;
     private final LegacyStockProjectionService legacyStockProjectionService;
     private final WmsStockCoordinateValidator coordinateValidator;
     private final WmsDocumentPolicyService documentPolicyService;
-    private final WarehouseTaskGenerationService taskGenerationService;
+
+    @Transactional(readOnly = true)
+    public List<ProcurementRequestDto> findFinanceReviewQueue(UUID departmentId,
+                                                             ProcurementRequestStatus status,
+                                                             boolean unallocatedOnly) {
+        UUID effectiveDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
+        BudgetAllocationStatus allocationStatus = unallocatedOnly ? BudgetAllocationStatus.UNALLOCATED : null;
+        return toDtos(repo.findFinanceReviewQueue(effectiveDepartmentId, status, allocationStatus));
+    }
+
+    public ProcurementRequestDto toProcurementRequestDto(ProcurementRequest request) {
+        return toDto(request);
+    }
 
     @Transactional(readOnly = true)
     public List<ProcurementRequestDto> findAll(ProcurementRequestStatus status, UUID departmentId, String search) {
@@ -605,34 +621,11 @@ public class ProcurementRequestService {
                 movementIds.add(movement.getId());
             }
             postProcurementCoreStockReceipt(request, movement, quantity, receiptLine);
-            generatePutawayTask(request, line, movement, quantity, receiptLine);
             WarehouseStock stock = legacyStockProjectionService.sync(warehouseId, line.getSparePartId());
             syncProcurementReceiptActualCost(request, line, quantity, movement);
             lowStockRecommendationService.evaluateStockSafely(stock);
         }
         return new ReceiptResult(movementIds, List.of());
-    }
-
-    private void generatePutawayTask(ProcurementRequest request,
-                                     ProcurementRequestLine line,
-                                     StockMovement movement,
-                                     double quantity,
-                                     ReceiptLine receiptLine) {
-        taskGenerationService.generatePutawayForReceipt(new WarehouseTaskGenerationService.ReceiptPutawayCommand(
-                "procurement-putaway:" + movement.getId(),
-                request.getWarehouseId(),
-                line.getSparePartId(),
-                receiptLine.binId(),
-                BigDecimal.valueOf(quantity),
-                line.getUnit(),
-                trimToNull(receiptLine.lotNumber()),
-                trimToNull(receiptLine.serialNumber()),
-                receiptLine.expiryDate(),
-                receiptLine.effectiveStatus(),
-                WarehouseTaskSourceType.PROCUREMENT_REQUEST,
-                request.getId(),
-                "Putaway for procurement receipt: " + request.getNumber() + " line " + line.getId()
-        ));
     }
 
     private ReceiptResult applyEquipmentReceipt(ProcurementRequest request,
@@ -671,6 +664,8 @@ public class ProcurementRequestService {
             }
             line.setReceivedQuantity(line.getReceivedQuantity() + quantity);
             line.setRemainingQuantity(Math.max(0, line.getQuantity() - line.getReceivedQuantity()));
+            // Same finance path as spare parts: receipt creates PENDING actual cost for finance approve.
+            syncProcurementReceiptActualCost(request, line, quantity, movement);
         }
         return new ReceiptResult(movementIds, equipmentIds);
     }
@@ -744,8 +739,8 @@ public class ProcurementRequestService {
                 || movement == null || movement.getId() == null) {
             return;
         }
-        Optional<CostCategory> category = costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS");
-        if (category.isEmpty()) {
+        UUID categoryId = resolveReceiptCostCategoryId(request);
+        if (categoryId == null) {
             return;
         }
         ActualCost cost = actualCostRepository
@@ -756,12 +751,26 @@ public class ProcurementRequestService {
                 .orElseGet(ActualCost::new);
         cost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
         cost.setSourceId(movement.getId());
-        cost.setCostCategoryId(category.get().getId());
+        cost.setBudgetLineId(request.getBudgetLineId());
+        cost.setCostCategoryId(categoryId);
         cost.setAmount(quantity * line.getUnitPrice());
         cost.setStatus(ActualCostStatus.PENDING);
         cost.setCostDate(movement.getOccurredAt() == null ? Instant.now() : movement.getOccurredAt());
         cost.setNotes("Generated from procurement receipt %s line %s".formatted(request.getId(), line.getId()));
         actualCostRepository.save(cost);
+    }
+
+    private UUID resolveReceiptCostCategoryId(ProcurementRequest request) {
+        if (FinanceUpgradePolicy.RECEIPT_CATEGORY_FOLLOWS_BUDGET_LINE && request.getBudgetLineId() != null) {
+            Optional<UUID> fromBudgetLine = budgetLineRepository.findByIdAndIsDeletedFalse(request.getBudgetLineId())
+                    .map(BudgetLine::getCostCategoryId);
+            if (fromBudgetLine.isPresent()) {
+                return fromBudgetLine.get();
+            }
+        }
+        return costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS")
+                .map(CostCategory::getId)
+                .orElse(null);
     }
 
     private StockMovement receiptMovement(ProcurementRequest request,
@@ -1031,12 +1040,32 @@ public class ProcurementRequestService {
         }
         List<WarehouseStock> stocks = stockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(s -> warehouseId == null || s.getWarehouseId().equals(warehouseId))
-                .filter(s -> s.getAvailable() < s.getMinQty())
                 .toList();
         if (stocks.isEmpty()) return List.of();
+        Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots = warehouseId == null
+                ? legacyStockProjectionService.currentAll()
+                : legacyStockProjectionService.currentForWarehouse(warehouseId);
 
         Map<UUID, ProcurementRequest> byWarehouse = new HashMap<>();
+        Set<String> selectedKeys = new HashSet<>();
         for (WarehouseStock s : stocks) {
+            SparePart sp = sparePartRepository.findByIdAndIsDeletedFalse(s.getSparePartId()).orElse(null);
+            if (sp == null) continue;
+            WmsStockSnapshot snapshot = legacyStockProjectionService.snapshot(
+                    snapshots,
+                    s.getWarehouseId(),
+                    s.getSparePartId()
+            );
+            var policy = ReplenishmentPolicyEvaluator.evaluate(s, sp, snapshot);
+            if (!policy.reorderNeeded()) continue;
+            String selectedKey = s.getWarehouseId() + ":" + s.getSparePartId();
+            if (!selectedKeys.add(selectedKey)) continue;
+            repo.lockAutoProcurementKey(s.getWarehouseId(), s.getSparePartId());
+            if (repo.existsActiveAutoForWarehouseAndSparePart(s.getWarehouseId(), s.getSparePartId())) {
+                continue;
+            }
+            double needed = policy.recommendedQuantity();
+            if (needed <= 0) continue;
             ProcurementRequest p = byWarehouse.computeIfAbsent(s.getWarehouseId(), wh -> {
                 ProcurementRequest pr = new ProcurementRequest();
                 pr.setNumber(nextNumber());
@@ -1044,17 +1073,17 @@ public class ProcurementRequestService {
                 pr.setDescription("Автозаявка: пополнение запасов ниже минимального уровня");
                 pr.setWarehouseId(wh);
                 pr.setType(ProcurementRequestType.SPARE_PART);
-                pr.setPriority(PriorityLevel.MEDIUM);
+                pr.setPriority(policy.severity() == com.toir.enums.NotificationSeverity.CRITICAL
+                        ? PriorityLevel.CRITICAL
+                        : PriorityLevel.HIGH);
                 pr.setStatus(ProcurementRequestStatus.DRAFT);
                 pr.setSource("AUTO");
                 pr.setRequiredBy(LocalDate.now(ZoneOffset.UTC).plusDays(14));
                 return pr;
             });
-            SparePart sp = sparePartRepository.findByIdAndIsDeletedFalse(s.getSparePartId()).orElse(null);
-            if (sp == null) continue;
-            double target = s.getMaxQty() != null ? s.getMaxQty() : s.getMinQty() * 2;
-            double needed = Math.max(0, target - s.getAvailable());
-            if (needed <= 0) continue;
+            if (policy.severity() == com.toir.enums.NotificationSeverity.CRITICAL) {
+                p.setPriority(PriorityLevel.CRITICAL);
+            }
             ProcurementRequestLine line = new ProcurementRequestLine();
             line.setRequest(p);
             line.setSparePartId(sp.getId());
@@ -1063,7 +1092,12 @@ public class ProcurementRequestService {
             line.setRemainingQuantity(needed);
             line.setUnit(sp.getUnit());
             line.setEstimatedCost(0.0);
-            line.setNotes("Автогенерация: available=" + s.getAvailable() + ", min=" + s.getMinQty());
+            line.setNotes("Автогенерация: usableAvailable=" + policy.usableAvailable()
+                    + ", triggerThreshold=" + policy.triggerThreshold()
+                    + ", criticalThreshold=" + policy.criticalThreshold()
+                    + ", min=" + policy.minQty()
+                    + ", reorderPoint=" + policy.reorderPoint()
+                    + ", recommendedQuantity=" + needed);
             p.getLines().add(line);
         }
 

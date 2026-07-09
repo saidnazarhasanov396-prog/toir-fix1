@@ -1,6 +1,8 @@
 package com.toir.service;
 
 import com.toir.dto.sparepart.SparePartDto;
+import com.toir.dto.warehouse.WarehouseStockPolicyDto;
+import com.toir.dto.warehouse.WarehouseStockPolicyRequest;
 import com.toir.entity.Counteragent;
 import com.toir.entity.Mxik;
 import com.toir.entity.SparePart;
@@ -15,6 +17,7 @@ import com.toir.enums.CounteragentStatus;
 import com.toir.enums.StockMovementType;
 import com.toir.enums.InventoryItemKind;
 import com.toir.enums.SparePartType;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.InventoryTransactionRepository;
 import com.toir.repository.LocationRepository;
@@ -113,6 +116,9 @@ class SparePartServiceTest {
     @Mock
     LegacyStockProjectionService legacyStockProjectionService;
 
+    @Mock
+    WarehouseStockPolicyService warehouseStockPolicyService;
+
     SparePartService service;
     Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> wmsSnapshots;
 
@@ -135,10 +141,13 @@ class SparePartServiceTest {
                 unitOfMeasurementService,
                 scopeAccessService,
                 auditBuilderService,
-                legacyStockProjectionService
+                legacyStockProjectionService,
+                warehouseStockPolicyService
         );
         lenient().when(legacyStockProjectionService.currentAll()).thenAnswer(invocation -> wmsSnapshots);
         lenient().when(legacyStockProjectionService.currentForSparePart(any())).thenAnswer(invocation -> wmsSnapshots);
+        lenient().when(warehouseStockPolicyService.replaceForSparePart(any(), any())).thenReturn(List.of());
+        lenient().when(warehouseStockPolicyService.findBySparePart(any())).thenReturn(List.of());
         lenient().when(legacyStockProjectionService.snapshot(any(), any(), any())).thenAnswer(invocation ->
                 wmsSnapshots.getOrDefault(
                         new LegacyStockProjectionService.StockKey(invocation.getArgument(1), invocation.getArgument(2)),
@@ -254,6 +263,41 @@ class SparePartServiceTest {
     }
 
     @Test
+    void findAllUsesWmsUsableAvailabilityForAvailableStock() {
+        UUID warehouseId = UUID.randomUUID();
+        SparePart part = sparePart(UUID.randomUUID(), "SP-WMS", "Bearing", InventoryItemKind.SPARE_PART);
+        WarehouseStock stock = stock(warehouseId, part.getId(), 10, 2);
+        wmsSnapshots.put(
+                new LegacyStockProjectionService.StockKey(warehouseId, part.getId()),
+                new WmsStockSnapshot(
+                        warehouseId,
+                        part.getId(),
+                        BigDecimal.valueOf(10),
+                        BigDecimal.valueOf(2),
+                        BigDecimal.valueOf(6),
+                        BigDecimal.ONE,
+                        Map.of(
+                                WarehouseStockStatus.AVAILABLE, BigDecimal.valueOf(6),
+                                WarehouseStockStatus.QUARANTINE, BigDecimal.valueOf(4)
+                        )
+                )
+        );
+        Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of(stock));
+
+        SparePartDto result = service.findAll(20, 0, null, "", null).getContent().getFirst();
+
+        assertThat(result.currentStock()).isEqualTo(10);
+        assertThat(result.reservedStock()).isEqualTo(2);
+        assertThat(result.availableStock()).isEqualTo(5);
+        assertThat(result.nonAvailableStock()).isEqualTo(4);
+    }
+
+    @Test
     void warehouseIdAndItemTypeUseIntersectionWithSearch() {
         UUID warehouseId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
@@ -336,6 +380,79 @@ class SparePartServiceTest {
     }
 
     @Test
+    void findAllIncludesWarehousePolicies() {
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        SparePart part = sparePart(sparePartId, "SP-POL", "Policy Part", InventoryItemKind.SPARE_PART);
+        WarehouseStockPolicyDto policyDto = new WarehouseStockPolicyDto(
+                UUID.randomUUID(), warehouseId, "Central Warehouse", sparePartId, "Policy Part", "SP-POL",
+                5.0, 20.0, 5.0, 10.0, null, null);
+        Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of());
+        when(warehouseStockPolicyService.findBySparePart(sparePartId)).thenReturn(List.of(policyDto));
+
+        Page<SparePartDto> result = service.findAll(20, 0, null, "", null);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().warehousePolicies()).containsExactly(policyDto);
+    }
+
+    @Test
+    void findByIdIncludesWarehousePolicies() {
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        SparePart part = sparePart(sparePartId, "SP-POL", "Policy Part", InventoryItemKind.SPARE_PART);
+        WarehouseStockPolicyDto policyDto = new WarehouseStockPolicyDto(
+                UUID.randomUUID(), warehouseId, "Central Warehouse", sparePartId, "Policy Part", "SP-POL",
+                5.0, 20.0, 5.0, 10.0, null, null);
+
+        when(repository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(part));
+        when(stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId)).thenReturn(List.of());
+        when(warehouseStockPolicyService.findBySparePart(sparePartId)).thenReturn(List.of(policyDto));
+
+        SparePartDto result = service.findById(sparePartId);
+
+        assertThat(result.warehousePolicies()).containsExactly(policyDto);
+    }
+
+    @Test
+    void findByIdUsesWmsUsableAvailabilityForAvailableStock() {
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        SparePart part = sparePart(sparePartId, "SP-WMS-ID", "Policy Part", InventoryItemKind.SPARE_PART);
+        WarehouseStock stock = stock(warehouseId, sparePartId, 10, 2);
+        wmsSnapshots.put(
+                new LegacyStockProjectionService.StockKey(warehouseId, sparePartId),
+                new WmsStockSnapshot(
+                        warehouseId,
+                        sparePartId,
+                        BigDecimal.valueOf(10),
+                        BigDecimal.valueOf(2),
+                        BigDecimal.valueOf(6),
+                        BigDecimal.ONE,
+                        Map.of(
+                                WarehouseStockStatus.AVAILABLE, BigDecimal.valueOf(6),
+                                WarehouseStockStatus.BLOCKED, BigDecimal.valueOf(4)
+                        )
+                )
+        );
+
+        when(repository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(part));
+        when(stockRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId)).thenReturn(List.of(stock));
+
+        SparePartDto result = service.findById(sparePartId);
+
+        assertThat(result.currentStock()).isEqualTo(10);
+        assertThat(result.reservedStock()).isEqualTo(2);
+        assertThat(result.availableStock()).isEqualTo(5);
+        assertThat(result.nonAvailableStock()).isEqualTo(4);
+    }
+
+    @Test
     void numericSortUsesEnrichedStockValuesBeforePagination() {
         SparePart low = sparePart(UUID.randomUUID(), "SP-LOW", "Low", InventoryItemKind.SPARE_PART);
         SparePart high = sparePart(UUID.randomUUID(), "SP-HIGH", "High", InventoryItemKind.SPARE_PART);
@@ -357,6 +474,24 @@ class SparePartServiceTest {
     }
 
     @Test
+    void entityTypeSortKeepsStableOrderWhenDtoEntityTypesMatch() {
+        SparePart sparePart = sparePart(UUID.randomUUID(), "SP-TYPE", "Spare", InventoryItemKind.SPARE_PART);
+        SparePart material = sparePart(UUID.randomUUID(), "MAT-TYPE", "Material", InventoryItemKind.MATERIAL);
+        Page<SparePart> page = new PageImpl<>(List.of(sparePart, material));
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of());
+
+        Page<SparePartDto> result = service.findAll(1, 0, null, null, null, "", null, "entityType", "asc");
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).extracting(SparePartDto::id)
+                .containsExactly(sparePart.getId());
+    }
+
+    @Test
     void unsupportedSortFallsBackToDefaultPageOrder() {
         SparePart part = sparePart(UUID.randomUUID(), "SP-DEFAULT", "Default", InventoryItemKind.SPARE_PART);
         Page<SparePart> page = new PageImpl<>(List.of(part), PageRequest.of(0, 20), 1);
@@ -371,6 +506,46 @@ class SparePartServiceTest {
         assertThat(result.getContent()).extracting(SparePartDto::id)
                 .containsExactly(part.getId());
         assertThat(result.getPageable().isPaged()).isTrue();
+    }
+
+
+    @Test
+    void catalogVisibleTextSortsUseEnrichedDtoValuesBeforePagination() {
+        SparePart alpha = sparePart(UUID.randomUUID(), "SP-002", "Alpha", InventoryItemKind.SPARE_PART);
+        alpha.setManufacturer("Zeta");
+        alpha.setPreferredCounteragentId(UUID.randomUUID());
+        SparePart beta = sparePart(UUID.randomUUID(), "SP-001", "Beta", InventoryItemKind.SPARE_PART);
+        beta.setManufacturer("Acme");
+        beta.setPreferredCounteragentId(UUID.randomUUID());
+        Page<SparePart> page = new PageImpl<>(List.of(alpha, beta));
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findAllByFilter(isNull(), isNull(), isNull(), isNull(), any())).thenReturn(page);
+        when(stockRepository.findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(anyCollection()))
+                .thenReturn(List.of());
+        Counteragent zedSupplier = new Counteragent();
+        zedSupplier.setName("Zed Supplier");
+        Counteragent ableSupplier = new Counteragent();
+        ableSupplier.setName("Able Supplier");
+        when(counteragentService.load(alpha.getPreferredCounteragentId())).thenReturn(zedSupplier);
+        when(counteragentService.load(beta.getPreferredCounteragentId())).thenReturn(ableSupplier);
+
+        assertThat(service.findAll(1, 0, null, null, null, "", null, "name", "desc")
+                .getContent())
+                .extracting(SparePartDto::id)
+                .containsExactly(beta.getId());
+        assertThat(service.findAll(1, 0, null, null, null, "", null, "code", "asc")
+                .getContent())
+                .extracting(SparePartDto::id)
+                .containsExactly(beta.getId());
+        assertThat(service.findAll(1, 0, null, null, null, "", null, "manufacturer", "asc")
+                .getContent())
+                .extracting(SparePartDto::id)
+                .containsExactly(beta.getId());
+        assertThat(service.findAll(1, 0, null, null, null, "", null, "preferredCounteragentName", "asc")
+                .getContent())
+                .extracting(SparePartDto::id)
+                .containsExactly(beta.getId());
     }
 
     @Test
@@ -615,6 +790,54 @@ class SparePartServiceTest {
     }
 
     @Test
+    void createReplacesWarehousePoliciesAndReturnsThem() {
+        String codePrefix = "SP-" + java.time.Year.now().getValue() + "-";
+        UUID sparePartId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        com.toir.entity.SparePartType otherType = sparePartType(UUID.randomUUID(), "OTHER", "Other", "PCS");
+        WarehouseStockPolicyRequest policyRequest = new WarehouseStockPolicyRequest(
+                warehouseId, 5.0, 20.0, 5.0, 10.0, null);
+        WarehouseStockPolicyDto policyDto = new WarehouseStockPolicyDto(
+                UUID.randomUUID(), warehouseId, "Central Warehouse", sparePartId, "Laptop Kamera", "SP-001",
+                5.0, 20.0, 5.0, 10.0, null, null);
+
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(codePrefix + "0001")).thenReturn(false);
+        when(typeRepository.findByCodeIgnoreCaseAndActiveTrue("OTHER")).thenReturn(Optional.of(otherType));
+        when(repository.save(any(SparePart.class))).thenAnswer(invocation -> {
+            SparePart saved = invocation.getArgument(0);
+            saved.setId(sparePartId);
+            return saved;
+        });
+        when(warehouseStockPolicyService.replaceForSparePart(eq(sparePartId), eq(List.of(policyRequest))))
+                .thenReturn(List.of(policyDto));
+
+        SparePartDto result = service.create(new com.toir.dto.sparepart.SparePartRequest(
+                null,
+                "Laptop Kamera",
+                null,
+                InventoryItemKind.SPARE_PART,
+                null,
+                null,
+                "PCS",
+                null,
+                null,
+                5,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(policyRequest)
+        ));
+
+        verify(warehouseStockPolicyService).replaceForSparePart(sparePartId, List.of(policyRequest));
+        assertThat(result.warehousePolicies()).containsExactly(policyDto);
+    }
+
+    @Test
     void createRejectsInactivePreferredCounteragent() {
         String codePrefix = "SP-" + java.time.Year.now().getValue() + "-";
         UUID counteragentId = UUID.randomUUID();
@@ -802,6 +1025,7 @@ class SparePartServiceTest {
         assertThat(result.totalQuantity()).isEqualTo(300);
         assertThat(result.totalReservedQty()).isEqualTo(40);
         assertThat(result.totalAvailableQty()).isEqualTo(260);
+        assertThat(result.totalNonAvailableQty()).isZero();
         assertThat(result.locations()).hasSize(1);
         assertThat(result.recentMovements()).hasSize(1);
         assertThat(result.recentMovements().getFirst().type()).isEqualTo(StockMovementType.RECEIPT);

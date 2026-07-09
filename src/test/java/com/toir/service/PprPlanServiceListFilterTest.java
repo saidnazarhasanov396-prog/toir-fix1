@@ -41,6 +41,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.AssertionsForClassTypes.within;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -234,7 +235,7 @@ class PprPlanServiceListFilterTest {
 
     @Test
     void statsWithoutFiltersReturnsCountsByStatus() {
-        when(planRepository.getStats(null, null, null, null)).thenReturn(stats(6, 1, 2, 3, 8, 4, 5));
+        when(planRepository.getStats(null, null, null, null)).thenReturn(stats(6, 1, 2, 3, 8, 4, 5, 2));
 
         var result = service.getStats(null, null, null, null);
 
@@ -245,7 +246,55 @@ class PprPlanServiceListFilterTest {
         assertThat(result.plannedTasks()).isEqualTo(8);
         assertThat(result.inProgressTasks()).isEqualTo(4);
         assertThat(result.completedTasks()).isEqualTo(5);
+        assertThat(result.overdueTasks()).isEqualTo(2);
         verify(planRepository).getStats(null, null, null, null);
+    }
+
+    @Test
+    void findTasksPassesScopeAndStatusFiltersToRepository() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        PprPlan plan = plan(2026, 5, departmentId);
+        PprTask task = task(plan, LocalDateTime.of(2026, 5, 1, 9, 0));
+        task.setEquipmentId(equipmentId);
+        task.setStatus(PprTaskStatus.COMPLETED);
+        when(taskRepository.searchTasks(
+                departmentId,
+                equipmentId,
+                PprTaskStatus.COMPLETED,
+                PageRequest.of(0, 10)
+        )).thenReturn(new PageImpl<>(List.of(task), PageRequest.of(0, 10), 1));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment(equipmentId, "Pump 17")));
+
+        var result = service.findTasks(departmentId, equipmentId, PprTaskStatus.COMPLETED, 0, 10);
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().getFirst().status()).isEqualTo(PprTaskStatus.COMPLETED);
+        assertThat(result.getContent().getFirst().equipmentName()).isEqualTo("Pump 17");
+        verify(taskRepository).searchTasks(departmentId, equipmentId, PprTaskStatus.COMPLETED, PageRequest.of(0, 10));
+    }
+
+    @Test
+    void taskStatsCalculatesCompletionRateFromAllScopedTasks() {
+        UUID departmentId = UUID.randomUUID();
+        PprPlan plan = plan(2026, 5, departmentId);
+        PprTask completed = task(plan, LocalDateTime.of(2026, 5, 1, 9, 0));
+        completed.setStatus(PprTaskStatus.COMPLETED);
+        PprTask planned = task(plan, LocalDateTime.of(2026, 5, 2, 9, 0));
+        planned.setStatus(PprTaskStatus.PLANNED);
+        PprTask cancelled = task(plan, LocalDateTime.of(2026, 5, 3, 9, 0));
+        cancelled.setStatus(PprTaskStatus.CANCELLED);
+        when(taskRepository.searchTasks(departmentId, null, null))
+                .thenReturn(List.of(completed, planned, cancelled));
+
+        var result = service.getTaskStats(departmentId, null, null);
+
+        assertThat(result.totalTasks()).isEqualTo(3);
+        assertThat(result.completedTasks()).isEqualTo(1);
+        assertThat(result.completionRate()).isCloseTo(100.0 / 3.0, within(0.001));
+        assertThat(result.statusBreakdown().get(PprTaskStatus.COMPLETED)).isEqualTo(1);
+        assertThat(result.statusBreakdown().get(PprTaskStatus.CANCELLED)).isEqualTo(1);
     }
 
     @Test
@@ -452,7 +501,7 @@ class PprPlanServiceListFilterTest {
     @Test
     void statsWithDepartmentUsesSameFilter() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.getStats(2026, 5, 12, departmentId)).thenReturn(stats(2, 0, 1, 1, 3, 2, 1));
+        when(planRepository.getStats(2026, 5, 12, departmentId)).thenReturn(stats(2, 0, 1, 1, 3, 2, 1, 1));
 
         var result = service.getStats(2026, 5, 12, departmentId);
 
@@ -465,7 +514,7 @@ class PprPlanServiceListFilterTest {
     @Test
     void statsForNonExistingDepartmentReturnsZeroCounts() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.getStats(null, null, null, departmentId)).thenReturn(stats(0, 0, 0, 0, 0, 0, 0));
+        when(planRepository.getStats(null, null, null, departmentId)).thenReturn(stats(0, 0, 0, 0, 0, 0, 0, 0));
 
         var result = service.getStats(null, null, null, departmentId);
 
@@ -560,7 +609,8 @@ class PprPlanServiceListFilterTest {
             long approvedPlans,
             long plannedTasks,
             long inProgressTasks,
-            long completedTasks
+            long completedTasks,
+            long overdueTasks
     ) {
         return new PprPlanStatsProjection() {
             @Override
@@ -596,6 +646,11 @@ class PprPlanServiceListFilterTest {
             @Override
             public Long getCompletedTasks() {
                 return completedTasks;
+            }
+
+            @Override
+            public Long getOverdueTasks() {
+                return overdueTasks;
             }
         };
     }

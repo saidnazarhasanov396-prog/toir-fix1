@@ -96,6 +96,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.METER_READ,
                 PermissionConstants.METER_READING_CREATE,
                 PermissionConstants.CALIBRATION_RECORD_READ,
+
                 PermissionConstants.CALIBRATION_RECORD_CREATE,
                 PermissionConstants.CALIBRATION_RECORD_UPDATE,
                 PermissionConstants.EMPLOYEE_READ,
@@ -107,7 +108,11 @@ public final class RolePermissionDefaults {
                 PermissionConstants.KNOWLEDGE_READ,
                 PermissionConstants.ANALYTICS_READ,
                 PermissionConstants.NOTIFICATION_READ,
-                PermissionConstants.NOTIFICATION_MARK_READ
+                PermissionConstants.NOTIFICATION_MARK_READ,
+                PermissionConstants.STOCK_READ,
+                PermissionConstants.STOCK_MOVE,
+                PermissionConstants.MATERIAL_USAGE_READ,
+                PermissionConstants.MATERIAL_USAGE_ISSUE
         ));
         defaults.put("TECHNICIAN", List.of(
                 PermissionConstants.READ_LEGACY,
@@ -307,18 +312,6 @@ public final class RolePermissionDefaults {
                 PermissionConstants.WAREHOUSE_READ,
                 PermissionConstants.WAREHOUSE_EQUIPMENT_READ,
                 PermissionConstants.WAREHOUSE_EQUIPMENT_STATUS_UPDATE,
-                PermissionConstants.WAREHOUSE_BIN_READ,
-                PermissionConstants.WAREHOUSE_BIN_MANAGE,
-                PermissionConstants.WAREHOUSE_TASK_READ,
-                PermissionConstants.WAREHOUSE_TASK_ASSIGN,
-                PermissionConstants.WAREHOUSE_TASK_EXECUTE,
-                PermissionConstants.WAREHOUSE_RECEIVE,
-                PermissionConstants.WAREHOUSE_PUTAWAY,
-                PermissionConstants.WAREHOUSE_PICK,
-                PermissionConstants.WAREHOUSE_COUNT_CREATE,
-                PermissionConstants.WAREHOUSE_COUNT_EXECUTE,
-                PermissionConstants.WAREHOUSE_WRITEOFF_REQUEST,
-                PermissionConstants.WAREHOUSE_DOCUMENT_UPLOAD,
                 PermissionConstants.STOCK_READ,
                 PermissionConstants.STOCK_RECEIVE,
                 PermissionConstants.STOCK_ISSUE,
@@ -350,10 +343,6 @@ public final class RolePermissionDefaults {
                 PermissionConstants.COUNTERAGENT_CREATE,
                 PermissionConstants.COUNTERAGENT_UPDATE,
                 PermissionConstants.WAREHOUSE_READ,
-                PermissionConstants.WAREHOUSE_BIN_READ,
-                PermissionConstants.WAREHOUSE_TASK_READ,
-                PermissionConstants.WAREHOUSE_RECEIVE,
-                PermissionConstants.WAREHOUSE_DOCUMENT_UPLOAD,
                 PermissionConstants.STOCK_READ,
                 PermissionConstants.INVENTORY_READ,
                 PermissionConstants.WAREHOUSE_ANALYTICS_READ,
@@ -424,8 +413,6 @@ public final class RolePermissionDefaults {
                 PermissionConstants.METER_READ,
                 PermissionConstants.CALIBRATION_RECORD_READ,
                 PermissionConstants.WAREHOUSE_READ,
-                PermissionConstants.WAREHOUSE_BIN_READ,
-                PermissionConstants.WAREHOUSE_TASK_READ,
                 PermissionConstants.STOCK_READ,
                 PermissionConstants.INVENTORY_READ,
                 PermissionConstants.WAREHOUSE_ANALYTICS_READ,
@@ -457,7 +444,6 @@ public final class RolePermissionDefaults {
                 PermissionConstants.EQUIPMENT_READ,
                 PermissionConstants.KNOWLEDGE_READ
         );
-        defaults.put("TECHNICIAN", performerPermissions);
         defaults.put("MECHANIC", performerPermissions);
         return Map.copyOf(defaults);
     }

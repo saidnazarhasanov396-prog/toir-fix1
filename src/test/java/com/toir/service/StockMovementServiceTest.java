@@ -263,7 +263,7 @@ class StockMovementServiceTest {
     }
 
     @Test
-    void receiptDoesNotTriggerLowStockEvaluation() {
+    void receiptTriggersLowStockEvaluationForRecovery() {
         UUID warehouseId = UUID.randomUUID();
         UUID sparePartId = UUID.randomUUID();
         WarehouseStock stock = stock(warehouseId, sparePartId, 8, 0);
@@ -280,12 +280,38 @@ class StockMovementServiceTest {
         service.create(request(warehouseId, sparePartId, StockMovementType.RECEIPT, 5));
 
         assertThat(stock.getQuantity()).isEqualTo(13);
-        verify(lowStockRecommendationService, never()).evaluateStockSafely(any(WarehouseStock.class));
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
 
         ArgumentCaptor<StockReceiptCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
         verify(toirStockService).postIncrease(stockCommandCaptor.capture(), eq(StockLedgerMovementType.RECEIPT));
         assertThat(stockCommandCaptor.getValue().quantity()).isEqualByComparingTo("5");
         assertThat(stockCommandCaptor.getValue().idempotencyKey()).startsWith("stock-movement-receipt:");
+    }
+
+    @Test
+    void manualReturnTriggersLowStockEvaluationForRecovery() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID sparePartId = UUID.randomUUID();
+        WarehouseStock stock = stock(warehouseId, sparePartId, 8, 0);
+
+        when(legacyStockProjectionService.current(warehouseId, sparePartId))
+                .thenReturn(new WmsStockSnapshot(warehouseId, sparePartId, BigDecimal.valueOf(8), BigDecimal.ZERO));
+        when(legacyStockProjectionService.sync(warehouseId, sparePartId)).thenAnswer(invocation -> {
+            stock.setQuantity(13);
+            return stock;
+        });
+        when(repository.save(any(StockMovement.class)))
+                .thenAnswer(invocation -> saveWithId(invocation.getArgument(0)));
+
+        service.create(request(warehouseId, sparePartId, StockMovementType.RETURN, 5));
+
+        assertThat(stock.getQuantity()).isEqualTo(13);
+        verify(lowStockRecommendationService).evaluateStockSafely(stock);
+
+        ArgumentCaptor<StockReceiptCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockReceiptCommand.class);
+        verify(toirStockService).postIncrease(stockCommandCaptor.capture(), eq(StockLedgerMovementType.RETURN));
+        assertThat(stockCommandCaptor.getValue().quantity()).isEqualByComparingTo("5");
+        assertThat(stockCommandCaptor.getValue().idempotencyKey()).startsWith("stock-movement-return:");
     }
 
     @Test

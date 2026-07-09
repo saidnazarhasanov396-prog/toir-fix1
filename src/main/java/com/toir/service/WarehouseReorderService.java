@@ -10,6 +10,7 @@ import com.toir.repository.SparePartRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.ReplenishmentPolicyEvaluator.ReplenishmentPolicyResult;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.service.warehouse.LegacyStockProjectionService.StockKey;
 import com.toir.service.warehouse.WmsStockSnapshot;
@@ -157,7 +158,13 @@ public class WarehouseReorderService {
                 null,
                 minStock,
                 Math.max(minStock * 2 - available, 0),
-                "CRITICAL"
+                "CRITICAL",
+                available,
+                0,
+                minStock,
+                minStock,
+                null,
+                ReplenishmentPolicyEvaluator.REASON_LOW_STOCK
         ));
     }
 
@@ -167,29 +174,13 @@ public class WarehouseReorderService {
                                                            Map<UUID, SparePart> sparePartsById) {
         WmsStockSnapshot snapshot = legacyStockProjectionService.snapshot(
                 snapshots, stock.getWarehouseId(), stock.getSparePartId());
-        double available = snapshot.availableQty().doubleValue();
-        Double reorderPoint = positive(stock.getReorderPoint());
-        Double stockMinQty = positive(stock.getMinQty());
         SparePart sparePart = sparePartsById.get(stock.getSparePartId());
-        Double sparePartMinStock = sparePart == null ? null : positive(sparePart.getMinStock());
-        Double trigger = firstNonNull(reorderPoint, stockMinQty, sparePartMinStock);
-        if (trigger == null || available > trigger) {
+        ReplenishmentPolicyResult policy = ReplenishmentPolicyEvaluator.evaluate(stock, sparePart, snapshot);
+        if (!policy.reorderNeeded()) {
             return Optional.empty();
         }
 
-        String urgency;
-        double thresholdShortfall = Math.max(trigger - available, 0);
-        double minimumShortfall = stockMinQty == null ? thresholdShortfall : Math.max(stockMinQty - available, 0);
-        double shortfall;
-        if (stockMinQty != null && available <= stockMinQty) {
-            shortfall = minimumShortfall;
-            urgency = "CRITICAL";
-        } else {
-            shortfall = thresholdShortfall;
-            urgency = "WARNING";
-        }
-        Double effectiveMinimum = firstNonNull(stockMinQty, sparePartMinStock);
-        double recommendedQuantity = recommendedQuantity(stock, available, effectiveMinimum, trigger, true);
+        Double effectiveMinimum = firstNonNull(policy.minQty(), policy.sparePartMinStock());
 
         String warehouseName = warehouseNames.getOrDefault(stock.getWarehouseId(), "");
         String sparePartName = sparePart != null ? sparePart.getName() : null;
@@ -204,14 +195,20 @@ public class WarehouseReorderService {
                 sparePartName,
                 sparePartCode,
                 sparePartUnit,
-                snapshot.qtyOnHand().doubleValue(),
-                available,
+                policy.quantity(),
+                policy.usableAvailable(),
                 effectiveMinimum,
-                reorderPoint,
+                policy.reorderPoint(),
                 stock.getReorderQty(),
-                shortfall,
-                recommendedQuantity,
-                urgency
+                policy.shortfall(),
+                policy.recommendedQuantity(),
+                policy.severity().name(),
+                policy.usableAvailable(),
+                policy.nonAvailableQty(),
+                policy.triggerThreshold(),
+                policy.criticalThreshold(),
+                policy.maxQty(),
+                policy.reason()
         ));
     }
 

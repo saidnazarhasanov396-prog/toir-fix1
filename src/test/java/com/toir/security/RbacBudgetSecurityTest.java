@@ -114,12 +114,16 @@ class RbacBudgetSecurityTest {
     @MockBean
     FinanceReportService financeReportService;
 
+    @MockBean
+    ScopeAccessService scopeAccessService;
+
     @BeforeEach
     void setUpFinanceScope() {
         lenient().when(financeScopeService.filterBudgets(any())).thenReturn(List.of());
         lenient().when(financeScopeService.filterBudgetLines(any())).thenReturn(List.of());
         lenient().when(financeScopeService.filterActualCosts(any())).thenReturn(List.of());
         lenient().when(financeScopeService.filterRouteOverrides(any())).thenReturn(List.of());
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(false);
     }
 
     @TestConfiguration
@@ -391,7 +395,7 @@ class RbacBudgetSecurityTest {
     }
 
     private MaintenanceBudgetDto budgetDto(UUID id) {
-        return new MaintenanceBudgetDto(id, 2026, 5, UUID.randomUUID(), null, BudgetStatus.DRAFT, 1000.0, 0.0, List.of());
+        return new MaintenanceBudgetDto(id, 2026, 5, UUID.randomUUID(), null, BudgetStatus.DRAFT, 1000.0, 0.0, 0.0, List.of());
     }
 
     private BudgetLineDto budgetLineDto() {
@@ -430,6 +434,7 @@ class RbacBudgetSecurityTest {
     private FinanceDashboardResponse dashboard() {
         return new FinanceDashboardResponse(
                 100,
+                0,
                 10,
                 5,
                 0,
@@ -441,7 +446,7 @@ class RbacBudgetSecurityTest {
                 0,
                 java.time.Instant.parse("2026-06-27T00:00:00Z"),
                 new FinanceDashboardResponse.Filters(2026, 6, null),
-                List.of(new FinanceReportRow(null, "D", "Dept", "DEPARTMENT", 100, 10, 5, 0, 90, 85, 90, 0.1, 0, 0, 1)),
+                List.of(new FinanceReportRow(null, "D", "Dept", "DEPARTMENT", 100, 0, 10, 5, 0, 90, 85, 90, 0.1, 0, 0, 1)),
                 List.of()
         );
     }

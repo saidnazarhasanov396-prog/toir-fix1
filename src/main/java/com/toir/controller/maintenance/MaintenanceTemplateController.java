@@ -5,6 +5,7 @@ import com.toir.dto.maintenancetemplate.MaintenanceTemplateDto;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateRequest;
 import com.toir.dto.maintenancetemplate.MaintenanceTemplateStatsResponse;
 import com.toir.enums.MaintenanceKind;
+import com.toir.security.PermissionConstants;
 import com.toir.service.maintanance.MaintenanceTemplateService;
 import com.toir.util.PaginationUtils;
 import com.toir.util.SortUtils;
@@ -20,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -31,6 +33,7 @@ public class MaintenanceTemplateController {
     private final MaintenanceTemplateService service;
 
     @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.MAINTENANCE_REGULATION_READ + "')")
     public ResponseEntity<MaintenanceTemplateStatsResponse> getStats(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) MaintenanceKind type
@@ -38,7 +41,9 @@ public class MaintenanceTemplateController {
         return ResponseEntity.ok(service.getStats(search, type));
     }
 
-    @GetMapping public ResponseEntity<Page<MaintenanceTemplateDto>> list(
+    @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.MAINTENANCE_REGULATION_READ + "')")
+    public ResponseEntity<Page<MaintenanceTemplateDto>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) MaintenanceKind type
     , @RequestParam(defaultValue = "0") int page,
@@ -63,19 +68,23 @@ public class MaintenanceTemplateController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.MAINTENANCE_REGULATION_READ + "')")
     public ResponseEntity<MaintenanceTemplateDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.MAINTENANCE_REGULATION_CREATE + "')")
     public ResponseEntity<MaintenanceTemplateDto> create(@Valid @RequestBody MaintenanceTemplateRequest r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.MAINTENANCE_REGULATION_UPDATE + "')")
     public ResponseEntity<MaintenanceTemplateDto> update(@PathVariable UUID id, @Valid @RequestBody MaintenanceTemplateRequest r) {
         return ResponseEntity.ok(service.update(id, r));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.MAINTENANCE_REGULATION_DELETE + "')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
@@ -83,11 +92,13 @@ public class MaintenanceTemplateController {
     }
 
     @PostMapping("/{id}/operations")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.MAINTENANCE_REGULATION_UPDATE + "')")
     public ResponseEntity<MaintenanceOperationDto> addOperation(@PathVariable UUID id, @Valid @RequestBody MaintenanceOperationDto r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addOperation(id, r));
     }
 
     @DeleteMapping("/operations/{operationId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('" + PermissionConstants.MAINTENANCE_REGULATION_UPDATE + "')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public ResponseEntity<Void> removeOperation(@PathVariable UUID operationId) {
         service.removeOperation(operationId);

@@ -1,6 +1,7 @@
 package com.toir.audit;
 
 import com.toir.entity.Material;
+import com.toir.entity.UserFcmToken;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import org.junit.jupiter.api.Test;
@@ -79,6 +80,19 @@ class UniversalAuditChangeFactoryTest {
         assertThat(change.get().currentSnapshot()).containsEntry("name", "Pump v2");
         assertThat(change.get().previousSnapshot()).doesNotContainKey("internalChecksum");
         assertThat(change.get().currentSnapshot()).doesNotContainKey("internalChecksum");
+    }
+
+    @Test
+    void fcmTokenLastSeenRefreshIsSkipped() {
+        Optional<UniversalEntityAuditChange> change = factory.fromUpdate(
+                UserFcmToken.class,
+                UUID.randomUUID(),
+                new String[]{"lastSeenAt", "updatedAt"},
+                new Object[]{"2026-07-02T06:29:03Z", "2026-07-02T06:29:03Z"},
+                new Object[]{"2026-07-02T06:51:27Z", "2026-07-02T06:51:27Z"}
+        );
+
+        assertThat(change).isEmpty();
     }
 
     @AuditedResource(

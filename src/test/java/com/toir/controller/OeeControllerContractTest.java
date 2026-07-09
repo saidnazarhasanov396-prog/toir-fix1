@@ -1,5 +1,6 @@
 package com.toir.controller;
 
+import com.toir.dto.oee.OeeFilter;
 import com.toir.dto.oee.OeeRecordDto;
 import com.toir.dto.oee.OeeSummary;
 import com.toir.exception.GlobalExceptionHandler;
@@ -16,10 +17,13 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -42,7 +46,7 @@ class OeeControllerContractTest {
     void listWithoutFiltersShouldReturnRecords() throws Exception {
         UUID recordId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
-        when(service.list()).thenReturn(List.of(new OeeRecordDto(
+        when(service.list(any(OeeFilter.class))).thenReturn(List.of(new OeeRecordDto(
                 recordId,
                 equipmentId,
                 Instant.parse("2026-01-02T08:00:00Z"),
@@ -65,26 +69,43 @@ class OeeControllerContractTest {
                 .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
                 .andExpect(jsonPath("$.totalElements").value(1));
 
-        verify(service).list();
+        verify(service).list(argThat((OeeFilter filter) -> "shiftStart".equals(filter.sortBy()) && "desc".equals(filter.sortDir())));
     }
 
     @Test
-    void listShouldSupportEquipmentBusinessSearch() throws Exception {
-        when(service.list("EQ-2026")).thenReturn(List.of());
+    void listShouldForwardExpandedFilters() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentTypeId = UUID.randomUUID();
+        when(service.list(any(OeeFilter.class))).thenReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/oee").param("equipmentSearch", "EQ-2026"))
+        mockMvc.perform(get("/api/v1/oee")
+                        .param("equipmentSearch", "compressor")
+                        .param("departmentId", departmentId.toString())
+                        .param("equipmentTypeId", equipmentTypeId.toString())
+                        .param("minOee", "0.70")
+                        .param("maxOee", "0.95")
+                        .param("sortBy", "oee")
+                        .param("sortDir", "asc"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content").isEmpty());
 
-        verify(service).list("EQ-2026");
+        verify(service).list(argThat((OeeFilter filter) ->
+                "compressor".equals(filter.equipmentSearch())
+                        && departmentId.equals(filter.departmentId())
+                        && equipmentTypeId.equals(filter.equipmentTypeId())
+                        && filter.minOee().equals(0.70)
+                        && filter.maxOee().equals(0.95)
+                        && "oee".equals(filter.sortBy())
+                        && "asc".equals(filter.sortDir())
+        ));
     }
 
     @Test
     void summaryShouldSupportEquipmentBusinessSearch() throws Exception {
         Instant from = Instant.parse("2026-01-01T00:00:00Z");
         Instant to = Instant.parse("2026-01-31T23:59:59Z");
-        when(service.summary(null, "compressor", from, to))
+        when(service.summary(any(OeeFilter.class)))
                 .thenReturn(new OeeSummary(null, from, to, 0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/v1/oee/summary")
@@ -94,7 +115,11 @@ class OeeControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recordCount").value(0));
 
-        verify(service).summary(null, "compressor", from, to);
+        verify(service).summary(argThat((OeeFilter filter) ->
+                "compressor".equals(filter.equipmentSearch())
+                        && from.equals(filter.from())
+                        && to.equals(filter.to())
+        ));
     }
 
     @Test
@@ -102,6 +127,14 @@ class OeeControllerContractTest {
         mockMvc.perform(get("/api/v1/oee").param("equipmentId", "invalid-uuid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Invalid value for parameter 'equipmentId': invalid-uuid. Expected UUID."));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void postShouldNotBeAvailableForOeeUi() throws Exception {
+        mockMvc.perform(post("/api/v1/oee").contentType("application/json").content("{}"))
+                .andExpect(status().isMethodNotAllowed());
 
         verifyNoInteractions(service);
     }

@@ -20,7 +20,6 @@ import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
-import com.toir.service.warehouse.WarehouseTaskGenerationService;
 import com.toir.service.warehouse.WmsDocumentPolicyService;
 import com.toir.service.warehouse.WmsStockCoordinateValidator;
 import com.toir.util.AuditBuilderService;
@@ -58,13 +57,13 @@ class ProcurementRequestSearchTest {
     @Mock ScopeAccessService scopeAccessService;
     @Mock LowStockRecommendationService lowStockRecommendationService;
     @Mock ActualCostRepository actualCostRepository;
+    @Mock com.toir.repository.projects.BudgetLineRepository budgetLineRepository;
     @Mock CostCategoryRepository costCategoryRepository;
     @Mock CounteragentService counteragentService;
     @Mock ToirStockService toirStockService;
     @Mock LegacyStockProjectionService legacyStockProjectionService;
     @Mock WmsStockCoordinateValidator coordinateValidator;
     @Mock WmsDocumentPolicyService documentPolicyService;
-    @Mock WarehouseTaskGenerationService taskGenerationService;
 
     ProcurementRequestService service;
 
@@ -86,13 +85,13 @@ class ProcurementRequestSearchTest {
                 scopeAccessService,
                 lowStockRecommendationService,
                 actualCostRepository,
+                budgetLineRepository,
                 costCategoryRepository,
                 counteragentService,
                 toirStockService,
                 legacyStockProjectionService,
                 coordinateValidator,
-                documentPolicyService,
-                taskGenerationService
+                documentPolicyService
         );
     }
 

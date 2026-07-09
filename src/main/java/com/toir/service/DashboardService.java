@@ -1,5 +1,6 @@
 package com.toir.service;
 import com.toir.dto.dashboard.DashboardOverview;
+import com.toir.dto.dashboard.DashboardEmergencyEventDto;
 import com.toir.dto.dashboard.WorkOrdersByEquipmentTypeResponse;
 
 import com.toir.entity.*;
@@ -19,6 +20,7 @@ import com.toir.enums.ContractStatus;
 import com.toir.enums.ContractorWorkStatus;
 import com.toir.dto.dashboard.DashboardOverview.*;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.DowntimeType;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.PprTaskStatus;
@@ -42,6 +44,9 @@ import com.toir.repository.WorkOrderEquipmentTypeCountProjection;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
@@ -52,8 +57,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -127,15 +134,21 @@ public class DashboardService {
         List<RepairRequest> allRequests = repairRequestRepository.search(null, departmentId, null);
 
         long openRequests = allRequests.stream()
+                .filter(r -> r.getStatus() == RequestStatus.OPEN)
+                .count();
+        long activeRepairRequests = allRequests.stream()
                 .filter(DashboardService::isActiveRepairRequest)
                 .count();
         long activeEmergencyRequests = allRequests.stream()
                 .filter(IndustrialKpiAggregations::isActiveEmergencyRequest)
                 .count();
 
-        long overduePpr = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> isPprTaskOverdue(t, now))
+        List<PprTask> scopedPprTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
+                .toList();
+
+        long overduePpr = scopedPprTasks.stream()
+                .filter(t -> isPprTaskOverdue(t, now))
                 .count();
 
         List<WorkOrder> allWorkOrders = workOrderRepository.search(null, departmentId, null);
@@ -298,8 +311,14 @@ public class DashboardService {
                 .filter(IndustrialKpiAggregations::isCompletedRepair)
                 .filter(w -> w.getCompletedAt() != null && !w.getCompletedAt().isBefore(currentMonthStart))
                 .count();
-        long completedRepairs = allWorkOrders.stream()
+        long completedOrClosedWorkOrders = allWorkOrders.stream()
+                .filter(w -> w.getStatus() == WorkOrderStatus.COMPLETED || w.getStatus() == WorkOrderStatus.CLOSED)
+                .count();
+        long completedRepairWorkOrders = allWorkOrders.stream()
                 .filter(IndustrialKpiAggregations::isCompletedRepair)
+                .count();
+        long completedRepairs = allRequests.stream()
+                .filter(DashboardService::isCompletedRepairRequest)
                 .count();
         long closedWorkOrders = allWorkOrders.stream()
                 .filter(w -> w.getStatus() == WorkOrderStatus.CLOSED)
@@ -379,11 +398,13 @@ public class DashboardService {
 
         Counters counters = new Counters(
                 openRequests,
+                activeRepairRequests,
                 activeEmergencyRequests,
                 activeEmergencyRequests,
                 totalEmergencyRequests,
                 overduePpr,
                 repairsThisMonth,
+                completedOrClosedWorkOrders,
                 completedRepairs,
                 closedWorkOrders,
                 activeReservations,
@@ -400,15 +421,13 @@ public class DashboardService {
                 dueCalibrations
         );
 
-        long plannedTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
+        long plannedTasks = scopedPprTasks.stream()
                 .filter(t -> t.getStatus() == PprTaskStatus.PLANNED || t.getStatus() == PprTaskStatus.APPROVED || t.getStatus() == PprTaskStatus.IN_PROGRESS || t.getStatus() == PprTaskStatus.COMPLETED)
                 .count();
-        long completedTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
+        long completedTasks = scopedPprTasks.stream()
                 .filter(t -> t.getStatus() == PprTaskStatus.COMPLETED)
                 .count();
-        PlanFact planFact = new PlanFact(plannedTasks, completedTasks, completedRepairs);
+        PlanFact planFact = new PlanFact(plannedTasks, completedTasks, completedRepairWorkOrders);
 
         List<Equipment> scopedEquipment = equipById.values().stream()
                 .filter(e -> departmentId == null || departmentId.equals(e.getDepartmentId()))
@@ -482,15 +501,11 @@ public class DashboardService {
                 .mapToLong(r -> java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMinutes())
                 .average().orElse(0) / 60.0;
         
-        long pprTotal = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
-                .count();
-        long pprDone = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
+        long pprTotal = scopedPprTasks.size();
+        long pprDone = scopedPprTasks.stream()
                 .filter(t -> t.getStatus() == PprTaskStatus.COMPLETED)
                 .count();
-        long pprOver = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
+        long pprOver = scopedPprTasks.stream()
                 .filter(t -> isPprTaskOverdue(t, now))
                 .count();
         double pprCompletionRate = pprTotal > 0 ? (double) pprDone / pprTotal * 100 : 0;
@@ -498,7 +513,10 @@ public class DashboardService {
 
         Kpis kpis = new Kpis(mtbfAvg, mttrAvg, unplannedShare, downtimeTotalHours,
                 downtimeEventsCount, downtimeThisMonth,
-                avgReactionHours, avgResolutionHours, pprCompletionRate, overdueWorkShare);
+                avgReactionHours, avgResolutionHours, pprCompletionRate, overdueWorkShare,
+                new Ratio(unplannedWO, totalWO),
+                new Ratio(pprDone, pprTotal),
+                new Ratio(pprOver, pprTotal));
 
         List<Defect> allDefects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> d.getStatus() != DefectStatus.CANCELLED)
@@ -712,6 +730,42 @@ public class DashboardService {
                 problemDepartments);
     }
 
+    public Page<DashboardEmergencyEventDto> emergencyEvents(
+            UUID requestedDepartmentId,
+            int page,
+            int size,
+            String sourceType,
+            String search
+    ) {
+        UUID departmentId = scopedDepartment(requestedDepartmentId);
+        List<RepairRequest> allRequests = repairRequestRepository.search(null, departmentId, null);
+        List<WorkOrder> allWorkOrders = workOrderRepository.search(null, departmentId, null);
+        Map<UUID, WorkOrder> workOrderById = allWorkOrders.stream()
+                .collect(Collectors.toMap(WorkOrder::getId, workOrder -> workOrder));
+        List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(d -> departmentId == null || departmentId.equals(d.getDepartmentId()))
+                .toList();
+
+        String normalizedSourceType = normalizeEmergencySourceType(sourceType);
+        List<DashboardEmergencyEventDto> rows = emergencyEventRows(
+                allRequests, allWorkOrders, allDowntimes, workOrderById).stream()
+                .filter(row -> normalizedSourceType == null || normalizedSourceType.equals(row.sourceType()))
+                .filter(row -> matchesEmergencySearch(row, search))
+                .sorted(Comparator
+                        .comparing(
+                                DashboardEmergencyEventDto::occurredAt,
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(DashboardEmergencyEventDto::eventKey))
+                .toList();
+
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.max(1, Math.min(size, 100));
+        int fromIndex = Math.min(safePage * safeSize, rows.size());
+        int toIndex = Math.min(fromIndex + safeSize, rows.size());
+        return new PageImpl<>(
+                rows.subList(fromIndex, toIndex), PageRequest.of(safePage, safeSize), rows.size());
+    }
+
     public WorkOrdersByEquipmentTypeResponse workOrdersByEquipmentType(UUID requestedDepartmentId, String requestedStatusScope) {
         UUID departmentId = scopedDepartment(requestedDepartmentId);
         String statusScope = normalizeWorkOrderStatusScope(requestedStatusScope);
@@ -786,29 +840,171 @@ public class DashboardService {
                 || request.getStatus() == RequestStatus.IN_PROGRESS;
     }
 
+    private static boolean isCompletedRepairRequest(RepairRequest request) {
+        if (request == null || request.getStatus() == null) {
+            return false;
+        }
+        return request.getStatus() == RequestStatus.COMPLETED
+                || request.getStatus() == RequestStatus.CLOSED;
+    }
+
     private static long totalEmergencyEvents(
             List<RepairRequest> requests,
             List<WorkOrder> workOrders,
             List<DowntimeEvent> downtimes,
             Map<UUID, WorkOrder> workOrderById
     ) {
-        Set<String> emergencyKeys = new HashSet<>();
+        return emergencyEventRows(requests, workOrders, downtimes, workOrderById).size();
+    }
+
+    private static List<DashboardEmergencyEventDto> emergencyEventRows(
+            List<RepairRequest> requests,
+            List<WorkOrder> workOrders,
+            List<DowntimeEvent> downtimes,
+            Map<UUID, WorkOrder> workOrderById
+    ) {
+        Map<String, DashboardEmergencyEventDto> rowsByKey = new LinkedHashMap<>();
         requests.stream()
                 .filter(IndustrialKpiAggregations::isEmergencyRequest)
-                .map(request -> request.getId() != null ? "rr:" + request.getId() : null)
+                .map(DashboardService::repairRequestEmergencyEvent)
                 .filter(Objects::nonNull)
-                .forEach(emergencyKeys::add);
+                .forEach(row -> rowsByKey.putIfAbsent(row.eventKey(), row));
         workOrders.stream()
                 .filter(workOrder -> workOrder.getType() == WorkOrderType.EMERGENCY)
-                .map(DashboardService::emergencyKeyForWorkOrder)
+                .map(DashboardService::workOrderEmergencyEvent)
                 .filter(Objects::nonNull)
-                .forEach(emergencyKeys::add);
+                .forEach(row -> rowsByKey.putIfAbsent(row.eventKey(), row));
         downtimes.stream()
-                .filter(downtime -> downtime.getType() == com.toir.enums.DowntimeType.EMERGENCY)
-                .map(downtime -> emergencyKeyForDowntime(downtime, workOrderById))
+                .filter(downtime -> downtime.getType() == DowntimeType.EMERGENCY)
+                .map(downtime -> downtimeEmergencyEvent(downtime, workOrderById))
                 .filter(Objects::nonNull)
-                .forEach(emergencyKeys::add);
-        return emergencyKeys.size();
+                .forEach(row -> rowsByKey.putIfAbsent(row.eventKey(), row));
+        return new ArrayList<>(rowsByKey.values());
+    }
+
+    private static DashboardEmergencyEventDto repairRequestEmergencyEvent(RepairRequest request) {
+        if (request.getId() == null) {
+            return null;
+        }
+        String eventKey = "rr:" + request.getId();
+        return new DashboardEmergencyEventDto(
+                eventKey,
+                "REPAIR_REQUEST",
+                request.getId(),
+                request.getId(),
+                null,
+                null,
+                request.getNumber(),
+                request.getTitle(),
+                enumName(request.getStatus()),
+                enumName(request.getPriority()),
+                request.getDepartmentId(),
+                request.getEquipmentId(),
+                firstInstant(request.getDetectedAt(), request.getCreatedAt(), request.getUpdatedAt()),
+                "/repair-requests/" + request.getId()
+        );
+    }
+
+    private static DashboardEmergencyEventDto workOrderEmergencyEvent(WorkOrder workOrder) {
+        String eventKey = emergencyKeyForWorkOrder(workOrder);
+        if (eventKey == null) {
+            return null;
+        }
+        return new DashboardEmergencyEventDto(
+                eventKey,
+                "WORK_ORDER",
+                workOrder.getId(),
+                workOrder.getRepairRequestId(),
+                workOrder.getId(),
+                null,
+                workOrder.getNumber(),
+                workOrder.getTitle(),
+                enumName(workOrder.getStatus()),
+                enumName(workOrder.getType()),
+                workOrder.getDepartmentId(),
+                workOrder.getEquipmentId(),
+                firstInstant(
+                        workOrder.getCompletedAt(),
+                        workOrder.getStartedAt(),
+                        workOrder.getCreatedAt(),
+                        workOrder.getUpdatedAt()),
+                workOrder.getId() == null ? null : "/work-orders/" + workOrder.getId()
+        );
+    }
+
+    private static DashboardEmergencyEventDto downtimeEmergencyEvent(
+            DowntimeEvent downtime,
+            Map<UUID, WorkOrder> workOrderById
+    ) {
+        String eventKey = emergencyKeyForDowntime(downtime, workOrderById);
+        if (eventKey == null) {
+            return null;
+        }
+        WorkOrder linkedWorkOrder = downtime.getWorkOrderId() == null
+                ? null
+                : workOrderById.get(downtime.getWorkOrderId());
+        UUID repairRequestId = linkedWorkOrder == null ? null : linkedWorkOrder.getRepairRequestId();
+        String detailPath = downtime.getWorkOrderId() == null ? null : "/work-orders/" + downtime.getWorkOrderId();
+        String title = downtime.getDescription() == null || downtime.getDescription().isBlank()
+                ? "Emergency downtime"
+                : downtime.getDescription();
+        return new DashboardEmergencyEventDto(
+                eventKey,
+                "DOWNTIME",
+                downtime.getId(),
+                repairRequestId,
+                downtime.getWorkOrderId(),
+                downtime.getId(),
+                null,
+                title,
+                enumName(downtime.getType()),
+                enumName(downtime.getType()),
+                downtime.getDepartmentId(),
+                downtime.getEquipmentId(),
+                firstInstant(downtime.getStartAt(), downtime.getCreatedAt(), downtime.getUpdatedAt()),
+                detailPath
+        );
+    }
+
+    private static String normalizeEmergencySourceType(String sourceType) {
+        if (sourceType == null || sourceType.isBlank()) {
+            return null;
+        }
+        String normalized = sourceType.trim().toUpperCase(Locale.ROOT);
+        if (normalized.equals("REPAIR_REQUEST") || normalized.equals("WORK_ORDER") || normalized.equals("DOWNTIME")) {
+            return normalized;
+        }
+        throw RestException.badRequest("Unsupported dashboard emergency sourceType: " + sourceType);
+    }
+
+    private static boolean matchesEmergencySearch(DashboardEmergencyEventDto row, String search) {
+        if (search == null || search.isBlank()) {
+            return true;
+        }
+        String normalized = search.trim().toLowerCase(Locale.ROOT);
+        return containsIgnoreCase(row.eventKey(), normalized)
+                || containsIgnoreCase(row.sourceType(), normalized)
+                || containsIgnoreCase(row.number(), normalized)
+                || containsIgnoreCase(row.title(), normalized)
+                || containsIgnoreCase(row.status(), normalized)
+                || containsIgnoreCase(row.priorityOrType(), normalized);
+    }
+
+    private static boolean containsIgnoreCase(String value, String lowerCaseNeedle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(lowerCaseNeedle);
+    }
+
+    private static String enumName(Enum<?> value) {
+        return value == null ? null : value.name();
+    }
+
+    private static Instant firstInstant(Instant... values) {
+        for (Instant value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private static String emergencyKeyForWorkOrder(WorkOrder workOrder) {
@@ -871,12 +1067,22 @@ public class DashboardService {
         Instant end = slice.end().isBefore(periodEnd) ? slice.end() : periodEnd;
         if (!end.isAfter(start)) {
             return new ReliabilityDowntimeCalculator.DowntimeSlice(
-                    slice.equipmentId(), slice.departmentId(), slice.causeKey(), start, start, 0, slice.completed());
+                    slice.equipmentId(),
+                    slice.departmentId(),
+                    slice.causeKey(),
+                    slice.sourceType(),
+                    slice.sourceId(),
+                    start,
+                    start,
+                    0,
+                    slice.completed());
         }
         return new ReliabilityDowntimeCalculator.DowntimeSlice(
                 slice.equipmentId(),
                 slice.departmentId(),
                 slice.causeKey(),
+                slice.sourceType(),
+                slice.sourceId(),
                 start,
                 end,
                 Duration.between(start, end).toMinutes(),

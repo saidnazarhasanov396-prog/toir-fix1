@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.analytics.AnalyticsOverview;
+import com.toir.dto.analytics.AnalyticsDowntimeEventRow;
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.dto.analytics.FailureParetoResponse;
 import com.toir.dto.analytics.RcaEquipmentResponse;
@@ -35,6 +36,9 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -274,6 +278,77 @@ public class AnalyticsService {
         return new AnalyticsOverview(
                 totals, kpis, topFailureReasons, downtimeByDept,
                 reliabilitySnapshot, repeatedDefects, maintenanceKpis);
+    }
+
+    @Transactional
+    public Page<AnalyticsDowntimeEventRow> downtimeEvents(UUID requestedDepartmentId, int page, int size) {
+        UUID departmentId = analyticsDepartmentScope(requestedDepartmentId);
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        PageRequest pageable = PageRequest.of(safePage, safeSize);
+
+        List<Equipment> allEquipment = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        Map<UUID, Equipment> equipById = allEquipment.stream()
+                .collect(Collectors.toMap(Equipment::getId, equipment -> equipment));
+        List<Equipment> scopedEquipment = allEquipment.stream()
+                .filter(equipment -> departmentId == null || departmentId.equals(equipment.getDepartmentId()))
+                .toList();
+
+        List<RepairRequest> allRequests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(request -> departmentId == null || departmentId.equals(request.getDepartmentId()))
+                .toList();
+        List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(workOrder -> departmentId == null || departmentId.equals(workOrder.getDepartmentId()))
+                .toList();
+        List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(downtime -> departmentId == null || departmentId.equals(downtime.getDepartmentId()))
+                .toList();
+        Map<UUID, Department> deptById = departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(Collectors.toMap(Department::getId, department -> department));
+        Map<UUID, RepairRequest> requestById = allRequests.stream()
+                .filter(request -> request.getId() != null)
+                .collect(Collectors.toMap(RepairRequest::getId, request -> request, (first, second) -> first));
+        Map<UUID, WorkOrder> workOrderById = allWorkOrders.stream()
+                .filter(workOrder -> workOrder.getId() != null)
+                .collect(Collectors.toMap(WorkOrder::getId, workOrder -> workOrder, (first, second) -> first));
+        Map<UUID, DowntimeEvent> downtimeById = allDowntimes.stream()
+                .filter(downtime -> downtime.getId() != null)
+                .collect(Collectors.toMap(DowntimeEvent::getId, downtime -> downtime, (first, second) -> first));
+
+        Map<UUID, List<RepairRequest>> requestsByEquipment = allRequests.stream()
+                .filter(request -> request.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(RepairRequest::getEquipmentId));
+        Map<UUID, List<WorkOrder>> workOrdersByEquipment = allWorkOrders.stream()
+                .filter(workOrder -> workOrder.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(WorkOrder::getEquipmentId));
+        Map<UUID, List<DowntimeEvent>> downtimesByEquipment = allDowntimes.stream()
+                .filter(downtime -> downtime.getEquipmentId() != null)
+                .collect(Collectors.groupingBy(DowntimeEvent::getEquipmentId));
+
+        Instant now = Instant.now();
+        List<AnalyticsDowntimeEventRow> rows = scopedEquipment.stream()
+                .flatMap(equipment -> ReliabilityDowntimeCalculator.calculate(
+                                equipment,
+                                downtimesByEquipment.getOrDefault(equipment.getId(), List.of()),
+                                workOrdersByEquipment.getOrDefault(equipment.getId(), List.of()),
+                                requestsByEquipment.getOrDefault(equipment.getId(), List.of()),
+                                now)
+                        .failureSlices()
+                        .stream()
+                        .map(slice -> downtimeEventRow(
+                                slice,
+                                equipment,
+                                equipById,
+                                deptById,
+                                downtimeById,
+                                workOrderById,
+                                requestById)))
+                .sorted(Comparator.comparing(AnalyticsDowntimeEventRow::startAt).reversed())
+                .toList();
+
+        int fromIndex = Math.min((int) pageable.getOffset(), rows.size());
+        int toIndex = Math.min(fromIndex + pageable.getPageSize(), rows.size());
+        return new PageImpl<>(rows.subList(fromIndex, toIndex), pageable, rows.size());
     }
 
     @Transactional
@@ -562,6 +637,83 @@ public class AnalyticsService {
             throw new AccessDeniedException("Access denied by data scope");
         }
         return currentDepartmentId;
+    }
+
+    private UUID analyticsDepartmentScope(UUID requestedDepartmentId) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return requestedDepartmentId;
+        }
+        UUID currentDepartmentId = scopeAccessService.currentDepartmentIdOrNull();
+        if (currentDepartmentId == null) {
+            throw new AccessDeniedException("Access denied by data scope");
+        }
+        return currentDepartmentId;
+    }
+
+    private AnalyticsDowntimeEventRow downtimeEventRow(
+            ReliabilityDowntimeCalculator.DowntimeSlice slice,
+            Equipment fallbackEquipment,
+            Map<UUID, Equipment> equipById,
+            Map<UUID, Department> deptById,
+            Map<UUID, DowntimeEvent> downtimeById,
+            Map<UUID, WorkOrder> workOrderById,
+            Map<UUID, RepairRequest> requestById) {
+        Equipment equipment = equipById.getOrDefault(slice.equipmentId(), fallbackEquipment);
+        UUID resolvedDepartmentId = slice.departmentId() != null
+                ? slice.departmentId()
+                : (equipment != null ? equipment.getDepartmentId() : null);
+        Department department = resolvedDepartmentId != null ? deptById.get(resolvedDepartmentId) : null;
+        SourceText source = sourceText(slice, downtimeById, workOrderById, requestById);
+        return new AnalyticsDowntimeEventRow(
+                slice.sourceId(),
+                slice.sourceType().name(),
+                slice.equipmentId(),
+                equipment != null ? equipment.getCode() : null,
+                equipment != null ? equipment.getName() : null,
+                resolvedDepartmentId,
+                department != null ? department.getCode() : null,
+                department != null ? department.getName() : null,
+                slice.causeKey(),
+                slice.start(),
+                slice.end(),
+                slice.durationMinutes(),
+                slice.completed(),
+                source.number(),
+                source.title(),
+                source.description()
+        );
+    }
+
+    private SourceText sourceText(
+            ReliabilityDowntimeCalculator.DowntimeSlice slice,
+            Map<UUID, DowntimeEvent> downtimeById,
+            Map<UUID, WorkOrder> workOrderById,
+            Map<UUID, RepairRequest> requestById) {
+        if (slice.sourceType() == ReliabilityDowntimeCalculator.DowntimeSourceType.DOWNTIME_EVENT) {
+            DowntimeEvent downtime = downtimeById.get(slice.sourceId());
+            return new SourceText(null, "Downtime event", downtime != null ? downtime.getDescription() : null);
+        }
+        if (slice.sourceType() == ReliabilityDowntimeCalculator.DowntimeSourceType.WORK_ORDER) {
+            WorkOrder workOrder = workOrderById.get(slice.sourceId());
+            if (workOrder == null) {
+                return SourceText.empty();
+            }
+            return new SourceText(workOrder.getNumber(), workOrder.getTitle(), workOrder.getSummary());
+        }
+        if (slice.sourceType() == ReliabilityDowntimeCalculator.DowntimeSourceType.REPAIR_REQUEST) {
+            RepairRequest request = requestById.get(slice.sourceId());
+            if (request == null) {
+                return SourceText.empty();
+            }
+            return new SourceText(request.getNumber(), request.getTitle(), request.getDescription());
+        }
+        return SourceText.empty();
+    }
+
+    private record SourceText(String number, String title, String description) {
+        private static SourceText empty() {
+            return new SourceText(null, null, null);
+        }
     }
 
     private boolean isEquipmentInDepartment(Map<UUID, Equipment> equipById, UUID equipmentId, UUID departmentId) {

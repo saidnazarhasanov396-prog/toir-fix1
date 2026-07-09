@@ -191,6 +191,41 @@ class RbacApprovalSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = PermissionConstants.WORK_ORDER_APPROVE)
+    void workOrderApproveCanApproveApproval() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        when(approvalService.approve(any(), any())).thenReturn(approvalDto(approvalId));
+
+        mockMvc.perform(post("/api/v1/approvals/{id}/approve", approvalId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(decisionPayload()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.WORK_ORDER_UPDATE)
+    void workOrderUpdateCanCreateApprovalRequest() throws Exception {
+        when(approvalService.create(any())).thenReturn(approvalDto(UUID.randomUUID()));
+
+        mockMvc.perform(post("/api/v1/approvals")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createApprovalPayload()))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.REPAIR_REQUEST_APPROVE)
+    void repairRequestApproveCanRejectApproval() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        when(approvalService.reject(any(), any())).thenReturn(approvalDto(approvalId));
+
+        mockMvc.perform(post("/api/v1/approvals/{id}/reject", approvalId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(decisionPayload()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @WithMockUser(authorities = APPROVAL_APPROVE)
     void approvalApproveCanApproveApproval() throws Exception {
         UUID approvalId = UUID.randomUUID();

@@ -8,6 +8,8 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.User;
+import com.toir.enums.RequestStatus;
+import com.toir.exception.RestException;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
@@ -22,6 +24,8 @@ import java.util.Locale;
 
 public final class RepairRequestSpecifications {
 
+    private static final String COMPLETED_OR_CLOSED_STATUS_SCOPE = "COMPLETED_OR_CLOSED";
+
     private RepairRequestSpecifications() {
     }
 
@@ -34,7 +38,7 @@ public final class RepairRequestSpecifications {
                 return cb.and(predicates.toArray(Predicate[]::new));
             }
 
-            equalIfPresent(predicates, cb, root, "status", filter.status());
+            addStatusPredicate(predicates, cb, root, filter);
             equalIfPresent(predicates, cb, root, "departmentId", filter.departmentId());
             equalIfPresent(predicates, cb, root, "equipmentId", filter.equipmentId());
             equalIfPresent(predicates, cb, root, "priority", filter.priority());
@@ -77,6 +81,31 @@ public final class RepairRequestSpecifications {
 
             return cb.and(predicates.toArray(Predicate[]::new));
         };
+    }
+
+    private static void addStatusPredicate(
+            List<Predicate> predicates,
+            CriteriaBuilder cb,
+            Root<RepairRequest> root,
+            RepairRequestFilterRequest filter
+    ) {
+        if (filter.status() != null) {
+            predicates.add(cb.equal(root.get("status"), filter.status()));
+            return;
+        }
+
+        String statusScope = trimToNull(filter.statusScope());
+        if (statusScope == null) {
+            return;
+        }
+
+        String normalizedScope = statusScope.toUpperCase(Locale.ROOT);
+        if (COMPLETED_OR_CLOSED_STATUS_SCOPE.equals(normalizedScope)) {
+            predicates.add(root.get("status").in(RequestStatus.COMPLETED, RequestStatus.CLOSED));
+            return;
+        }
+
+        throw RestException.badRequest("Unsupported repair request statusScope: " + statusScope);
     }
 
     private static Predicate globalSearch(

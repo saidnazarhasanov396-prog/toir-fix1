@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.dashboard.DashboardEmergencyEventDto;
 import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.SparePart;
@@ -55,6 +56,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -97,32 +99,32 @@ class DashboardServiceKpiTest {
 
     @BeforeEach
     void stubEmptyDependencies() {
-        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(sparePartRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(userRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(repairRequestRepository.search(any(), any(), any())).thenReturn(List.of());
-        when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(workOrderRepository.search(any(), any(), any())).thenReturn(List.of());
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        lenient().when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(sparePartRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(userRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(repairRequestRepository.search(any(), any(), any())).thenReturn(List.of());
+        lenient().when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(workOrderRepository.search(any(), any(), any())).thenReturn(List.of());
         lenient().when(reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
-        when(warehouseStockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(legacyStockProjectionService.currentAll()).thenReturn(java.util.Map.of());
-        when(stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
-        when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(warehouseStockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(legacyStockProjectionService.currentAll()).thenReturn(java.util.Map.of());
+        lenient().when(stockMovementRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
+        lenient().when(actualCostRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         lenient().when(actualCostReviewEventRepository.findAllByActualCostIdInAndIsDeletedFalseOrderByOccurredAtDesc(any()))
                 .thenReturn(List.of());
-        when(contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(contractorContractRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(conditionReadingRepository.countBySeveritiesAndDepartment(any(), any())).thenReturn(0L);
-        when(userCertificationRepository.findAllByExpiresAtBeforeAndIsDeletedFalse(any())).thenReturn(List.of());
-        when(calibrationRecordRepository.findAllByNextDueAtBeforeAndIsDeletedFalse(any())).thenReturn(List.of());
-        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
-        when(counteragentService.load(org.mockito.ArgumentMatchers.<java.util.Collection<UUID>>any())).thenReturn(List.of());
+        lenient().when(contractorWorkRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(contractorContractRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(conditionReadingRepository.countBySeveritiesAndDepartment(any(), any())).thenReturn(0L);
+        lenient().when(userCertificationRepository.findAllByExpiresAtBeforeAndIsDeletedFalse(any())).thenReturn(List.of());
+        lenient().when(calibrationRecordRepository.findAllByNextDueAtBeforeAndIsDeletedFalse(any())).thenReturn(List.of());
+        lenient().when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(counteragentService.load(org.mockito.ArgumentMatchers.<java.util.Collection<UUID>>any())).thenReturn(List.of());
     }
 
     @Test
@@ -154,7 +156,9 @@ class DashboardServiceKpiTest {
         when(repairRequestRepository.search(null, null, null)).thenReturn(List.of(
                 request(departmentA, PriorityLevel.EMERGENCY, RequestStatus.OPEN),
                 request(departmentA, PriorityLevel.EMERGENCY, RequestStatus.CLOSED),
-                request(departmentB, PriorityLevel.HIGH, RequestStatus.OPEN)));
+                request(departmentB, PriorityLevel.HIGH, RequestStatus.OPEN),
+                request(departmentA, PriorityLevel.HIGH, RequestStatus.COMPLETED),
+                request(departmentB, PriorityLevel.HIGH, RequestStatus.COMPLETED)));
         when(workOrderRepository.search(null, null, null)).thenReturn(List.of(
                 workOrder(departmentA, equipmentA, WorkType.REPAIR, WorkOrderStatus.COMPLETED, currentMonth),
                 workOrder(departmentB, equipmentB, WorkType.REPAIR, WorkOrderStatus.CLOSED, previousMonth),
@@ -178,8 +182,10 @@ class DashboardServiceKpiTest {
         assertThat(result.counters().emergencyRequests()).isEqualTo(1);
         assertThat(result.counters().totalEmergencyRequests()).isEqualTo(2);
         assertThat(result.counters().repairsThisMonth()).isEqualTo(1);
-        assertThat(result.counters().completedRepairs()).isEqualTo(2);
+        assertThat(result.counters().completedOrClosedWorkOrders()).isEqualTo(3);
+        assertThat(result.counters().completedRepairs()).isEqualTo(3);
         assertThat(result.counters().closedWorkOrders()).isEqualTo(1);
+        assertThat(result.planFact().completedRepairs()).isEqualTo(2);
         assertThat(result.kpis().downtimeHoursTotal()).isEqualTo(3.5);
         assertThat(result.kpis().downtimeEventsCount()).isEqualTo(3);
         assertThat(result.kpis().downtimeThisMonth()).isEqualTo(2.5);
@@ -198,6 +204,89 @@ class DashboardServiceKpiTest {
         assertThat(result.topProblemEquipment().getFirst().failureCount()).isEqualTo(2);
         assertThat(result.topProblemEquipment().getFirst().openDefects()).isEqualTo(1);
         assertThat(result.topProblemEquipment().getFirst().downtimeHours()).isEqualTo(3.0);
+    }
+
+    @Test
+    void emergencyEventsDeduplicateLinkedRepairRequestWorkOrderAndDowntime() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-07-03T04:00:00Z");
+
+        RepairRequest request = request(departmentId, PriorityLevel.EMERGENCY, RequestStatus.CLOSED);
+        request.setNumber("RR-1");
+        request.setTitle("Emergency request");
+        request.setEquipmentId(equipmentId);
+        request.setDetectedAt(now.minus(Duration.ofHours(3)));
+
+        WorkOrder linkedWorkOrder = workOrder(
+                departmentId, equipmentId, WorkType.REPAIR, WorkOrderStatus.CLOSED, now.minus(Duration.ofHours(2)));
+        linkedWorkOrder.setType(WorkOrderType.EMERGENCY);
+        linkedWorkOrder.setRepairRequestId(request.getId());
+        linkedWorkOrder.setNumber("WO-LINKED");
+
+        DowntimeEvent linkedDowntime = downtime(departmentId, equipmentId, now.minus(Duration.ofHours(1)), 60);
+        linkedDowntime.setType(DowntimeType.EMERGENCY);
+        linkedDowntime.setWorkOrderId(linkedWorkOrder.getId());
+
+        WorkOrder standaloneWorkOrder = workOrder(
+                departmentId, equipmentId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, now.minus(Duration.ofMinutes(30)));
+        standaloneWorkOrder.setType(WorkOrderType.EMERGENCY);
+        standaloneWorkOrder.setNumber("WO-STANDALONE");
+        standaloneWorkOrder.setTitle("Standalone work order");
+
+        DowntimeEvent standaloneDowntime = downtime(departmentId, equipmentId, now, 30);
+        standaloneDowntime.setType(DowntimeType.EMERGENCY);
+        standaloneDowntime.setDescription("Standalone downtime");
+
+        when(repairRequestRepository.search(null, null, null)).thenReturn(List.of(request));
+        when(workOrderRepository.search(null, null, null))
+                .thenReturn(List.of(linkedWorkOrder, standaloneWorkOrder));
+        when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(linkedDowntime, standaloneDowntime));
+
+        var overview = service.overview(null);
+        var events = service.emergencyEvents(null, 0, 10, null, null);
+
+        assertThat(overview.counters().totalEmergencyRequests()).isEqualTo(3);
+        assertThat(events.getTotalElements()).isEqualTo(3);
+        assertThat(events.getContent()).extracting(DashboardEmergencyEventDto::eventKey)
+                .containsExactlyInAnyOrder(
+                        "rr:" + request.getId(),
+                        "wo:" + standaloneWorkOrder.getId(),
+                        "dt:" + standaloneDowntime.getId());
+        assertThat(events.getContent()).extracting(DashboardEmergencyEventDto::sourceType)
+                .containsExactlyInAnyOrder("REPAIR_REQUEST", "WORK_ORDER", "DOWNTIME");
+    }
+
+    @Test
+    void emergencyEventsApplySourceDepartmentAndSearchFilters() {
+        UUID departmentA = UUID.randomUUID();
+        UUID departmentB = UUID.randomUUID();
+        UUID equipmentA = UUID.randomUUID();
+        Instant now = Instant.parse("2026-07-03T05:00:00Z");
+
+        RepairRequest pumpRequest = request(departmentA, PriorityLevel.EMERGENCY, RequestStatus.OPEN);
+        pumpRequest.setNumber("RR-PUMP");
+        pumpRequest.setTitle("Pump fire alarm");
+        pumpRequest.setEquipmentId(equipmentA);
+        pumpRequest.setDetectedAt(now);
+
+
+        when(repairRequestRepository.search(null, departmentA, null)).thenReturn(List.of(pumpRequest));
+        when(workOrderRepository.search(null, departmentA, null)).thenReturn(List.of());
+        when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                emergencyDowntime(departmentA, equipmentA, now.minus(Duration.ofMinutes(5)), "Pump downtime"),
+                emergencyDowntime(departmentB, UUID.randomUUID(), now, "Other department downtime")
+        ));
+
+        var repairRequestEvents = service.emergencyEvents(departmentA, 0, 10, "repair_request", "pump");
+        var downtimeEvents = service.emergencyEvents(departmentA, 0, 10, "DOWNTIME", null);
+
+        assertThat(repairRequestEvents.getTotalElements()).isEqualTo(1);
+        assertThat(repairRequestEvents.getContent().getFirst().sourceType()).isEqualTo("REPAIR_REQUEST");
+        assertThat(repairRequestEvents.getContent().getFirst().departmentId()).isEqualTo(departmentA);
+        assertThat(downtimeEvents.getTotalElements()).isEqualTo(1);
+        assertThat(downtimeEvents.getContent().getFirst().title()).isEqualTo("Pump downtime");
     }
 
     @Test
@@ -264,7 +353,8 @@ class DashboardServiceKpiTest {
 
         var result = service.overview(null);
 
-        assertThat(result.counters().openRequests()).isEqualTo(2);
+        assertThat(result.counters().openRequests()).isEqualTo(1);
+        assertThat(result.counters().activeRepairRequests()).isEqualTo(2);
         assertThat(result.counters().activeEmergencyRequests()).isEqualTo(1);
         assertThat(result.counters().totalEmergencyRequests()).isEqualTo(2);
     }
@@ -304,11 +394,74 @@ class DashboardServiceKpiTest {
         assertThat(result.counters().overduePpr()).isEqualTo(1);
     }
 
+    @Test
+    void overviewCalculatesPprCompletionRateFromAllScopedPprTasks() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                equipment(equipmentId, departmentId, "Pump A")));
+        com.toir.entity.PprTask completed = pprTask(equipmentId, com.toir.enums.PprTaskStatus.COMPLETED);
+        com.toir.entity.PprTask planned = pprTask(equipmentId, com.toir.enums.PprTaskStatus.PLANNED);
+        com.toir.entity.PprTask postponed = pprTask(equipmentId, com.toir.enums.PprTaskStatus.POSTPONED);
+        com.toir.entity.PprTask cancelled = pprTask(equipmentId, com.toir.enums.PprTaskStatus.CANCELLED);
+        when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(completed, planned, postponed, cancelled));
+
+        var result = service.overview(departmentId);
+
+        assertThat(result.kpis().pprCompletionRate()).isCloseTo(25.0, within(0.001));
+    }
+
+    @Test
+    void overviewReturnsRatiosForPercentKpis() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                equipment(equipmentId, departmentId, "Pump A")));
+
+        List<WorkOrder> workOrders = new ArrayList<>();
+        for (int i = 0; i < 9; i++) {
+            WorkOrder workOrder = workOrder(departmentId, equipmentId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, monthStart());
+            workOrder.setType(i % 2 == 0 ? WorkOrderType.EMERGENCY : WorkOrderType.DEFECT);
+            workOrders.add(workOrder);
+        }
+        for (int i = 9; i < 100; i++) {
+            WorkOrder workOrder = workOrder(departmentId, equipmentId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, monthStart());
+            workOrder.setType(WorkOrderType.PLANNED);
+            workOrders.add(workOrder);
+        }
+        when(workOrderRepository.search(null, departmentId, null)).thenReturn(workOrders);
+
+        com.toir.entity.PprTask completed = pprTask(equipmentId, com.toir.enums.PprTaskStatus.COMPLETED);
+        com.toir.entity.PprTask planned = pprTask(equipmentId, com.toir.enums.PprTaskStatus.PLANNED);
+        com.toir.entity.PprTask overdue = pprTask(equipmentId, com.toir.enums.PprTaskStatus.OVERDUE);
+        when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(completed, planned, overdue));
+
+        var result = service.overview(departmentId);
+
+        assertThat(result.kpis().unplannedRepairShare()).isCloseTo(9.0, within(0.001));
+        assertThat(result.kpis().unplannedRepairRatio().numerator()).isEqualTo(9);
+        assertThat(result.kpis().unplannedRepairRatio().denominator()).isEqualTo(100);
+        assertThat(result.kpis().pprCompletionRatio().numerator()).isEqualTo(1);
+        assertThat(result.kpis().pprCompletionRatio().denominator()).isEqualTo(3);
+        assertThat(result.kpis().overdueWorkRatio().numerator()).isEqualTo(1);
+        assertThat(result.kpis().overdueWorkRatio().denominator()).isEqualTo(3);
+    }
+
     private Instant monthStart() {
         return LocalDate.now(ZoneId.of("Asia/Tashkent"))
                 .withDayOfMonth(1)
                 .atStartOfDay(ZoneId.of("Asia/Tashkent"))
                 .toInstant();
+    }
+
+    private com.toir.entity.PprTask pprTask(UUID equipmentId, com.toir.enums.PprTaskStatus status) {
+        com.toir.entity.PprTask task = new com.toir.entity.PprTask();
+        task.setId(UUID.randomUUID());
+        task.setEquipmentId(equipmentId);
+        task.setStatus(status);
+        return task;
     }
 
     private Department department(UUID id, String name) {
@@ -408,6 +561,18 @@ class DashboardServiceKpiTest {
         event.setStartAt(startAt);
         event.setDurationMinutes(durationMinutes);
         event.setType(DowntimeType.UNPLANNED);
+        return event;
+    }
+
+    private DowntimeEvent emergencyDowntime(
+            UUID departmentId,
+            UUID equipmentId,
+            Instant startAt,
+            String description
+    ) {
+        DowntimeEvent event = downtime(departmentId, equipmentId, startAt, 30);
+        event.setType(DowntimeType.EMERGENCY);
+        event.setDescription(description);
         return event;
     }
 

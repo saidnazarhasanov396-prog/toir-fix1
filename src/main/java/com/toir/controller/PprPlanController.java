@@ -7,8 +7,10 @@ import com.toir.dto.pprplanning.PprPlanRequest;
 import com.toir.dto.pprplanning.PprPlanStatsResponse;
 import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprTaskRequest;
+import com.toir.dto.pprplanning.PprTaskStatsResponse;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.enums.PprTaskStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
@@ -128,6 +130,26 @@ public class PprPlanController {
             @RequestParam(required = false) Integer day,
             @RequestParam(required = false) UUID departmentId) {
         return ResponseEntity.ok(service.getStats(year, month, day, scopedDepartment(departmentId)));
+    }
+
+    @GetMapping("/tasks")
+    @PreAuthorize(PPR_TASK_READ_AUTH)
+    public ResponseEntity<Page<PprTaskDto>> tasks(
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) PprTaskStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(service.findTasks(scopedDepartment(departmentId), equipmentId, status, page, size));
+    }
+
+    @GetMapping("/tasks/stats")
+    @PreAuthorize(PPR_TASK_READ_AUTH)
+    public ResponseEntity<PprTaskStatsResponse> taskStats(
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) PprTaskStatus status) {
+        return ResponseEntity.ok(service.getTaskStats(scopedDepartment(departmentId), equipmentId, status));
     }
 
     @GetMapping("/{id}")

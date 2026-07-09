@@ -32,6 +32,8 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.warehouse.WmsStockSnapshot;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,6 +75,7 @@ public class WarehouseAnalyticsService {
     private final ReservationRepository reservationRepository;
     private final WorkOrderRepository workOrderRepository;
     private final EquipmentRepository equipmentRepository;
+    private final LegacyStockProjectionService legacyStockProjectionService;
 
     @Transactional(readOnly = true)
     public WarehouseAnalyticsOverviewDto overview(WarehouseAnalyticsFilter filter) {
@@ -82,14 +85,15 @@ public class WarehouseAnalyticsService {
         List<StockMovement> movements = movements(safeFilter.warehouseId(), range);
         List<InventoryReplenishmentRecommendationDto> recommendations = replenishmentService
                 .recommendationRows(daysBetween(range), range.fromInstant(), range.toInstant(), safeFilter.warehouseId(), true);
+        Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> stockSnapshots = stockSnapshots(safeFilter.warehouseId());
         Map<UUID, SparePart> parts = spareParts(stocks, recommendations, movements);
-        List<WarehouseStock> filteredStocks = filterStocks(stocks, parts, movements, safeFilter);
+        List<WarehouseStock> filteredStocks = filterStocks(stocks, parts, movements, safeFilter, stockSnapshots);
         Map<UUID, Warehouse> warehouses = warehouses(filteredStocks, recommendations);
         List<WarehouseDeficitRowDto> deficits = deficits(recommendations, parts, movements, safeFilter);
         List<WarehouseReservationRowDto> reservations = reservations(safeFilter, parts, warehouses, deficits);
         Set<UUID> visiblePartIds = visiblePartIds(filteredStocks, deficits, reservations);
         List<StockMovement> visibleMovements = movementsForVisibleParts(movements, visiblePartIds, hasSliceFilter(safeFilter));
-        List<WarehouseDistributionRowDto> distribution = distribution(filteredStocks, warehouses, parts);
+        List<WarehouseDistributionRowDto> distribution = distribution(filteredStocks, warehouses, parts, stockSnapshots);
         List<WarehouseConsumptionRowDto> consumption = consumption(visibleMovements, parts);
         List<WarehouseRiskDto> risks = risks(deficits, recommendations, reservations);
         List<WarehouseAbcXyzCellDto> abcXyz = abcXyz(visiblePartIds, hasSliceFilter(safeFilter));
@@ -191,7 +195,8 @@ public class WarehouseAnalyticsService {
 
     private List<WarehouseDistributionRowDto> distribution(List<WarehouseStock> stocks,
                                                            Map<UUID, Warehouse> warehouses,
-                                                           Map<UUID, SparePart> parts) {
+                                                           Map<UUID, SparePart> parts,
+                                                           Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> stockSnapshots) {
         return stocks.stream()
                 .collect(Collectors.groupingBy(WarehouseStock::getWarehouseId, LinkedHashMap::new, Collectors.toList()))
                 .entrySet()
@@ -201,9 +206,11 @@ public class WarehouseAnalyticsService {
                     double stock = warehouseStocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
                     double reserved = warehouseStocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
                     double available = Math.max(stock - reserved, 0);
-                    long deficits = warehouseStocks.stream().filter(item -> isDeficit(item, parts.get(item.getSparePartId()))).count();
+                    long deficits = warehouseStocks.stream()
+                            .filter(item -> isDeficit(item, parts.get(item.getSparePartId()), stockSnapshots))
+                            .count();
                     boolean hasCriticalDeficit = warehouseStocks.stream()
-                            .anyMatch(item -> isDeficit(item, parts.get(item.getSparePartId()))
+                            .anyMatch(item -> isDeficit(item, parts.get(item.getSparePartId()), stockSnapshots)
                                     && isCritical(parts.get(item.getSparePartId())));
                     double max = warehouseStocks.stream()
                             .map(WarehouseStock::getMaxQty)
@@ -413,7 +420,8 @@ public class WarehouseAnalyticsService {
     private List<WarehouseStock> filterStocks(List<WarehouseStock> stocks,
                                               Map<UUID, SparePart> parts,
                                               List<StockMovement> movements,
-                                              WarehouseAnalyticsFilter filter) {
+                                              WarehouseAnalyticsFilter filter,
+                                              Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> stockSnapshots) {
         String search = normalize(filter.search());
         Set<UUID> movedPartIds = movedPartIds(movements);
         return stocks.stream()
@@ -421,11 +429,11 @@ public class WarehouseAnalyticsService {
                     SparePart part = parts.get(item.getSparePartId());
                     return matchesSearch(part, search, null, null)
                             && matchesCategory(part, filter.categoryId())
-                            && (!Boolean.TRUE.equals(filter.onlyDeficit()) || isDeficit(item, part))
+                            && (!Boolean.TRUE.equals(filter.onlyDeficit()) || isDeficit(item, part, stockSnapshots))
                             && (!Boolean.TRUE.equals(filter.onlyCritical()) || isCritical(part))
                             && (!Boolean.TRUE.equals(filter.noMovement()) || !movedPartIds.contains(item.getSparePartId()))
                             && (!Boolean.TRUE.equals(filter.hasReserve()) || item.getReservedQty() > 0)
-                            && matchesStatus(statusForStock(item, part), filter.status());
+                            && matchesStatus(statusForStock(item, part, stockSnapshots), filter.status());
                 })
                 .toList();
     }
@@ -566,8 +574,10 @@ public class WarehouseAnalyticsService {
         return normalized == null || actual.equalsIgnoreCase(normalized);
     }
 
-    private String statusForStock(WarehouseStock stock, SparePart part) {
-        if (isDeficit(stock, part)) {
+    private String statusForStock(WarehouseStock stock,
+                                  SparePart part,
+                                  Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> stockSnapshots) {
+        if (isDeficit(stock, part, stockSnapshots)) {
             return isCritical(part) ? "CRITICAL" : "WARNING";
         }
         return "NORMAL";
@@ -588,11 +598,30 @@ public class WarehouseAnalyticsService {
         return part != null && part.getCriticality() == CriticalityLevel.CRITICAL;
     }
 
-    private boolean isDeficit(WarehouseStock stock, SparePart part) {
+    private boolean isDeficit(WarehouseStock stock,
+                              SparePart part,
+                              Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> stockSnapshots) {
         double trigger = stock.getReorderPoint() != null && stock.getReorderPoint() > 0
                 ? stock.getReorderPoint()
                 : stock.getMinQty() > 0 ? stock.getMinQty() : part == null ? 0 : part.getMinStock();
-        return trigger > 0 && stock.getAvailable() <= trigger;
+        return trigger > 0 && usableAvailable(stock, stockSnapshots) <= trigger;
+    }
+
+    private double usableAvailable(WarehouseStock stock,
+                                   Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> stockSnapshots) {
+        WmsStockSnapshot snapshot = legacyStockProjectionService.snapshot(
+                stockSnapshots,
+                stock.getWarehouseId(),
+                stock.getSparePartId()
+        );
+        return snapshot == null ? stock.getAvailable() : snapshot.availableQty().doubleValue();
+    }
+
+    private Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> stockSnapshots(UUID warehouseId) {
+        Map<LegacyStockProjectionService.StockKey, WmsStockSnapshot> snapshots = warehouseId == null
+                ? legacyStockProjectionService.currentAll()
+                : legacyStockProjectionService.currentForWarehouse(warehouseId);
+        return snapshots == null ? Map.of() : snapshots;
     }
 
     private String dominantReason(List<StockMovement> movements) {

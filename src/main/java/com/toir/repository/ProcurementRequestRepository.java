@@ -1,6 +1,7 @@
 package com.toir.repository;
 
 import com.toir.entity.projects.ProcurementRequest;
+import com.toir.enums.BudgetAllocationStatus;
 import com.toir.enums.ProcurementRequestStatus;
 import java.util.Collection;
 import java.util.List;
@@ -45,6 +46,14 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
     boolean existsByNumberAndIsDeletedFalse(@Param("number") String number);
 
     @Query(value = """
+            SELECT pg_advisory_xact_lock(
+                hashtextextended(cast(:warehouseId as text) || ':' || cast(:sparePartId as text), 0)
+            )
+            """, nativeQuery = true)
+    void lockAutoProcurementKey(@Param("warehouseId") UUID warehouseId,
+                                @Param("sparePartId") UUID sparePartId);
+
+    @Query(value = """
             SELECT EXISTS(
                 SELECT 1
                 FROM procurement_requests pr
@@ -73,6 +82,20 @@ public interface ProcurementRequestRepository extends JpaRepository<ProcurementR
 
     @Query(value = "SELECT COUNT(*) FROM procurement_requests WHERE status = :status AND is_deleted = false", nativeQuery = true)
     long countByStatusAndIsDeletedFalse(@Param("status") String status);
+
+    @Query("""
+            select distinct p from ProcurementRequest p
+            left join fetch p.lines
+            where p.isDeleted = false
+              and (:departmentId is null or p.departmentId = :departmentId)
+              and (:status is null or p.status = :status)
+              and (:allocationStatus is null or p.budgetAllocationStatus = :allocationStatus)
+            order by p.updatedAt desc
+            """)
+    List<ProcurementRequest> findFinanceReviewQueue(
+            @Param("departmentId") UUID departmentId,
+            @Param("status") ProcurementRequestStatus status,
+            @Param("allocationStatus") BudgetAllocationStatus allocationStatus);
 
     @Query(value = """
             SELECT * FROM procurement_requests

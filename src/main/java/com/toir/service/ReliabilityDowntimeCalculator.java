@@ -94,6 +94,8 @@ final class ReliabilityDowntimeCalculator {
                             event.getEquipmentId(),
                             event.getDepartmentId(),
                             event.getType() != null ? event.getType().name() : "UNKNOWN",
+                            DowntimeSourceType.DOWNTIME_EVENT,
+                            event.getId(),
                             event,
                             periodStart,
                             periodEnd);
@@ -121,6 +123,8 @@ final class ReliabilityDowntimeCalculator {
                             workOrder.getEquipmentId(),
                             workOrder.getDepartmentId(),
                             workOrderCauseKey(workOrder),
+                            DowntimeSourceType.WORK_ORDER,
+                            workOrder.getId(),
                             workOrder.getStartedAt(),
                             workOrder.getCompletedAt(),
                             workOrder.getStatus() == WorkOrderStatus.COMPLETED
@@ -142,6 +146,8 @@ final class ReliabilityDowntimeCalculator {
                         request.getEquipmentId(),
                         request.getDepartmentId(),
                         request.getPriority() != null ? request.getPriority().name() : "REPAIR_REQUEST",
+                        DowntimeSourceType.REPAIR_REQUEST,
+                        request.getId(),
                         request.getDetectedAt(),
                         request.getActualCompletionAt(),
                         request.getStatus() == RequestStatus.COMPLETED || request.getStatus() == RequestStatus.CLOSED,
@@ -206,6 +212,8 @@ final class ReliabilityDowntimeCalculator {
     private static DowntimeSlice sliceToPeriod(UUID equipmentId,
                                                UUID departmentId,
                                                String causeKey,
+                                               DowntimeSourceType sourceType,
+                                               UUID sourceId,
                                                DowntimeEvent event,
                                                Instant periodStart,
                                                Instant periodEnd) {
@@ -226,12 +234,14 @@ final class ReliabilityDowntimeCalculator {
             completed = false;
         }
 
-        return sliceToPeriod(equipmentId, departmentId, causeKey, event.getStartAt(), eventEnd, completed, periodStart, periodEnd);
+        return sliceToPeriod(equipmentId, departmentId, causeKey, sourceType, sourceId, event.getStartAt(), eventEnd, completed, periodStart, periodEnd);
     }
 
     private static DowntimeSlice sliceToPeriod(UUID equipmentId,
                                                UUID departmentId,
                                                String causeKey,
+                                               DowntimeSourceType sourceType,
+                                               UUID sourceId,
                                                Instant start,
                                                Instant end,
                                                boolean completed,
@@ -250,6 +260,8 @@ final class ReliabilityDowntimeCalculator {
                 equipmentId,
                 departmentId,
                 causeKey == null || causeKey.isBlank() ? "UNKNOWN" : causeKey,
+                sourceType == null ? DowntimeSourceType.UNKNOWN : sourceType,
+                sourceId,
                 overlapStart,
                 overlapEnd,
                 Duration.between(overlapStart, overlapEnd).toMinutes(),
@@ -273,13 +285,22 @@ final class ReliabilityDowntimeCalculator {
     record DowntimeSlice(UUID equipmentId,
                          UUID departmentId,
                          String causeKey,
+                         DowntimeSourceType sourceType,
+                         UUID sourceId,
                          Instant start,
                          Instant end,
                          long durationMinutes,
                          boolean completed) {
         private static DowntimeSlice empty(UUID equipmentId, UUID departmentId, String causeKey) {
             Instant epoch = Instant.EPOCH;
-            return new DowntimeSlice(equipmentId, departmentId, causeKey, epoch, epoch, 0, false);
+            return new DowntimeSlice(equipmentId, departmentId, causeKey, DowntimeSourceType.UNKNOWN, null, epoch, epoch, 0, false);
         }
+    }
+
+    enum DowntimeSourceType {
+        DOWNTIME_EVENT,
+        WORK_ORDER,
+        REPAIR_REQUEST,
+        UNKNOWN
     }
 }

@@ -117,6 +117,7 @@ class RbacSensitiveModulesSecurityTest {
     WarehouseEquipmentItemService warehouseEquipmentItemService;
     @MockBean
     ToirWarehouseQueryService warehouseQueryService;
+
     @MockBean
     SparePartService sparePartService;
     @MockBean

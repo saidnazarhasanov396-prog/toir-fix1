@@ -55,6 +55,7 @@ class RbacWarehouseEquipmentSecurityTest {
     @MockBean
     ToirWarehouseQueryService warehouseQueryService;
 
+
     @TestConfiguration
     static class SecurityBeans {
         @Bean

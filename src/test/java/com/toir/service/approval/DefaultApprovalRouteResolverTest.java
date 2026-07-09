@@ -65,7 +65,28 @@ class DefaultApprovalRouteResolverTest {
     }
 
     @Test
-    void routePolicyDoesNotGenerateAnApproverRole() {
+    void fallsBackToDomainPermissionWhenTemplateHasNoSteps() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
+        ApprovalRequest request = new ApprovalRequest();
+        request.setTargetType(ApprovalTargetType.WORK_ORDER);
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        )).thenReturn(Optional.empty());
+        when(templateRepository.findFirstByTargetTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.WORK_ORDER
+        )).thenReturn(Optional.empty());
+
+        var steps = resolver.resolveRoute(request);
+
+        assertThat(steps).hasSize(1);
+        assertThat(steps.getFirst().approverId()).isNull();
+        assertThat(steps.getFirst().approverRole()).isEqualTo("WORK_ORDER_APPROVE");
+    }
+
+    @Test
+    void emptyTemplateFallsBackToDomainPermissionStep() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
         DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
         ApprovalTemplate template = new ApprovalTemplate();
@@ -78,6 +99,9 @@ class DefaultApprovalRouteResolverTest {
                 ApprovalActionType.APPROVE
         )).thenReturn(Optional.of(template));
 
-        assertThat(resolver.resolveRoute(request)).isEmpty();
+        var steps = resolver.resolveRoute(request);
+
+        assertThat(steps).hasSize(1);
+        assertThat(steps.getFirst().approverRole()).isEqualTo("WORK_ORDER_APPROVE");
     }
 }

@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.entity.StockMovement;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
@@ -16,8 +17,11 @@ import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.NotificationSeverity;
+import com.toir.enums.StockMovementSourceType;
 import com.toir.exception.RestException;
+import com.toir.finance.FinanceUpgradePolicy;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.StockMovementRepository;
 import com.toir.repository.actualCost.ActualCostAllocationEventRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.actualCost.ActualCostReviewEventRepository;
@@ -26,6 +30,7 @@ import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.projects.FinancialApprovalRuleRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.service.finance.BudgetCommitmentService;
 import com.toir.service.repair.RepairCampaignBudgetLineResolver;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +64,9 @@ public class ActualCostService {
     private final FinanceScopeService financeScopeService;
     private final NotificationService notificationService;
     private final RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
+    private final BudgetCommitmentService budgetCommitmentService;
+    private final StockMovementRepository stockMovementRepository;
+    private final WebhookService webhookService;
 
     @Transactional(readOnly = true)
     public List<ActualCostDto> findPending() {
@@ -118,6 +126,10 @@ public class ActualCostService {
         financeScopeService.assertCanMutateActualCost(c);
         ActualCost saved = repository.save(c);
 
+        if (budgetLine != null) {
+            commitPendingBudgetOnCreate(saved, budgetLine);
+        }
+
         UUID deptIdForRule = resolveActualCostDepartment(effectiveWorkOrder, repairRequest, budgetLine);
         FinancialApprovalRule matchedRule = financialApprovalRuleRepository
                 .findFirstMatchingRule(deptIdForRule, saved.getAmount())
@@ -153,8 +165,41 @@ public class ActualCostService {
                 "ActualCost",
                 saved.getId().toString()
         );
+        webhookService.publish("ACTUAL_COST_PENDING", ActualCostDto.from(saved));
 
         return ActualCostDto.from(saved);
+    }
+
+    /**
+     * Upserts PENDING actual costs produced when a work order is completed.
+     * New rows use the standard create path (review events, notifications, budget commitment).
+     * Existing PENDING rows are updated in place; APPROVED rows are left unchanged.
+     */
+    @Transactional
+    public void syncPendingFromWorkOrderCompletion(ActualCostDto request) {
+        if (request == null || request.amount() <= 0 || request.costCategoryId() == null) {
+            return;
+        }
+        if (request.sourceType() == null || request.sourceId() == null) {
+            throw RestException.badRequest("Work order completion sync requires sourceType and sourceId");
+        }
+
+        var existing = repository.findTopBySourceTypeAndSourceIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                request.sourceType(),
+                request.sourceId()
+        );
+        if (existing.isPresent()) {
+            ActualCost cost = existing.get();
+            if (cost.getStatus() == ActualCostStatus.APPROVED) {
+                return;
+            }
+            applyWorkOrderCompletionFields(cost, request);
+            financeScopeService.assertCanMutateActualCost(cost);
+            repository.save(cost);
+            return;
+        }
+
+        create(request);
     }
 
     @Transactional
@@ -164,11 +209,25 @@ public class ActualCostService {
         assertCanReviewActualCost(c, approve, reviewerId, comment);
         financeScopeService.assertCanMutateActualCost(c);
 
+        if (approve && FinanceUpgradePolicy.REQUIRE_BUDGET_LINE_ON_APPROVE && c.getBudgetLineId() == null) {
+            throw RestException.badRequest("Actual cost approve requires budget line allocation");
+        }
+
         if (approve && c.getBudgetLineId() != null) {
             BudgetLine line = requireBudgetLine(c.getBudgetLineId());
             assertBudgetLineUsable(line);
             assertBudgetRemaining(line, c.getAmount());
+            if (c.getSourceType() == ActualCostSourceType.PROCUREMENT_RECEIPT) {
+                releaseProcurementCommitment(line, c, reviewerId,
+                        "Release commitment on actual cost approval");
+            } else {
+                releasePendingCommitmentOnApprove(line, c, reviewerId);
+            }
             applyBudgetUsageOnce(line, c);
+        } else if (!approve && c.getBudgetLineId() != null) {
+            BudgetLine line = requireBudgetLine(c.getBudgetLineId());
+            assertBudgetLineUsable(line);
+            releaseCommitmentOnReject(line, c, reviewerId);
         }
 
         c.setStatus(approve ? ActualCostStatus.APPROVED : ActualCostStatus.REJECTED);
@@ -186,6 +245,10 @@ public class ActualCostService {
                 "Фактическая стоимость обновлена",
                 c,
                 saved
+        );
+        webhookService.publish(
+                approve ? "ACTUAL_COST_APPROVED" : "ACTUAL_COST_REJECTED",
+                ActualCostDto.from(saved)
         );
         return ActualCostDto.from(saved);
     }
@@ -238,6 +301,12 @@ public class ActualCostService {
         financeScopeService.assertCanMutateActualCost(cost);
         if (cost.getStatus() != ActualCostStatus.PENDING && cost.getStatus() != ActualCostStatus.REJECTED) {
             throw RestException.badRequest("Only PENDING or REJECTED actual costs can be sent for correction");
+        }
+
+        if (cost.getBudgetLineId() != null && cost.getStatus() == ActualCostStatus.PENDING) {
+            BudgetLine line = requireBudgetLine(cost.getBudgetLineId());
+            assertBudgetLineUsable(line);
+            releaseCommitmentOnReject(line, cost, actorUserId);
         }
 
         String normalizedComment = comment.trim();
@@ -399,12 +468,10 @@ public class ActualCostService {
     }
 
     private void assertBudgetRemaining(BudgetLine line, double amount) {
-        double alreadyApproved = repository.sumAmountByBudgetLineIdAndStatusAndIsDeletedFalse(
-                line.getId(), ActualCostStatus.APPROVED);
-        double remaining = line.getPlannedAmount() - alreadyApproved;
-        if (amount - remaining > EPSILON) {
+        double available = line.getAvailableForActual();
+        if (amount - available > EPSILON) {
             throw RestException.badRequest(
-                    "Actual cost amount exceeds budget line remaining amount (remaining=" + remaining + ")");
+                    "Actual cost amount exceeds budget line available amount (available=" + available + ")");
         }
     }
 
@@ -420,6 +487,70 @@ public class ActualCostService {
             budget.setTotalActual(budget.getTotalActual() + cost.getAmount());
             maintenanceBudgetRepository.save(budget);
         }
+    }
+
+    private void releaseCommitmentOnReject(BudgetLine line, ActualCost cost, UUID actorUserId) {
+        if (cost.getSourceType() == ActualCostSourceType.PROCUREMENT_RECEIPT) {
+            releaseProcurementCommitment(line, cost, actorUserId,
+                    "Release commitment on actual cost rejection");
+            return;
+        }
+        budgetCommitmentService.releaseBudget(
+                line.getId(),
+                cost.getAmount(),
+                "ACTUAL_COST_PENDING",
+                cost.getId(),
+                actorUserId,
+                "Release commitment on actual cost rejection"
+        );
+    }
+
+    private void commitPendingBudgetOnCreate(ActualCost saved, BudgetLine budgetLine) {
+        if (!FinanceUpgradePolicy.DIRECT_ACTUAL_COST_COMMIT_ON_CREATE
+                || saved.getSourceType() == ActualCostSourceType.PROCUREMENT_RECEIPT) {
+            return;
+        }
+        budgetCommitmentService.commitBudget(
+                budgetLine.getId(),
+                saved.getAmount(),
+                "ACTUAL_COST_PENDING",
+                saved.getId(),
+                null,
+                "Reserve on actual cost create"
+        );
+    }
+
+    private void releasePendingCommitmentOnApprove(BudgetLine line, ActualCost cost, UUID reviewerId) {
+        budgetCommitmentService.releaseBudget(
+                line.getId(),
+                cost.getAmount(),
+                "ACTUAL_COST_PENDING",
+                cost.getId(),
+                reviewerId,
+                "Release commitment on actual cost approval"
+        );
+    }
+
+    private void releaseProcurementCommitment(BudgetLine line, ActualCost cost, UUID reviewerId, String comment) {
+        String sourceType = "PROCUREMENT_RECEIPT";
+        UUID sourceId = cost.getSourceId();
+        if (cost.getSourceId() != null) {
+            StockMovement movement = stockMovementRepository.findByIdAndIsDeletedFalse(cost.getSourceId()).orElse(null);
+            if (movement != null
+                    && movement.getSourceType() == StockMovementSourceType.PROCUREMENT_REQUEST
+                    && movement.getSourceId() != null) {
+                sourceType = "PROCUREMENT_REQUEST";
+                sourceId = movement.getSourceId();
+            }
+        }
+        budgetCommitmentService.releaseBudget(
+                line.getId(),
+                cost.getAmount(),
+                sourceType,
+                sourceId,
+                reviewerId,
+                comment
+        );
     }
 
     private WorkOrder resolveEffectiveWorkOrder(WorkOrder workOrder, ContractorWork contractorWork) {
@@ -518,5 +649,21 @@ public class ActualCostService {
         event.setNextThresholdHours(thresholdHours);
         event.setOccurredAt(Instant.now());
         reviewEventRepository.save(event);
+    }
+
+    private void applyWorkOrderCompletionFields(ActualCost cost, ActualCostDto request) {
+        cost.setWorkOrderId(request.workOrderId());
+        cost.setRepairRequestId(request.repairRequestId());
+        cost.setContractorWorkId(request.contractorWorkId());
+        cost.setSourceType(request.sourceType());
+        cost.setSourceId(request.sourceId());
+        cost.setBudgetLineId(request.budgetLineId());
+        cost.setCostCategoryId(request.costCategoryId());
+        cost.setAmount(request.amount());
+        cost.setNotes(request.notes());
+        cost.setStatus(ActualCostStatus.PENDING);
+        if (request.costDate() != null) {
+            cost.setCostDate(request.costDate());
+        }
     }
 }

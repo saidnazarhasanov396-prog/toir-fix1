@@ -90,9 +90,13 @@ class RbacFinancialReviewSecurityTest {
     @MockBean
     ActualCostReviewFacadeService actualCostReviewFacadeService;
 
+    @MockBean
+    ScopeAccessService scopeAccessService;
+
     @BeforeEach
     void setUpFinanceScope() {
         lenient().when(financeScopeService.filterActualCosts(any())).thenReturn(List.of());
+        lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(false);
     }
 
     @TestConfiguration
@@ -144,7 +148,7 @@ class RbacFinancialReviewSecurityTest {
     @WithMockUser(authorities = PermissionConstants.ACTUAL_COST_READ)
     void actualCostReadReturnsScopedReviewQueueContent() throws Exception {
         UUID actualCostId = UUID.randomUUID();
-        when(actualCostReviewFacadeService.reviewQueue(null)).thenReturn(List.of(reviewItem(actualCostId, "PENDING")));
+        when(actualCostReviewFacadeService.reviewQueue(null, null)).thenReturn(List.of(reviewItem(actualCostId, "PENDING")));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue?page=0&size=5"))
                 .andExpect(status().isOk())
@@ -156,7 +160,7 @@ class RbacFinancialReviewSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.ACTUAL_COST_READ)
     void actualCostReadReturnsEmptyReviewQueueWhenScopeHasNoItems() throws Exception {
-        when(actualCostReviewFacadeService.reviewQueue(null)).thenReturn(List.of());
+        when(actualCostReviewFacadeService.reviewQueue(null, null)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/review-queue?page=0&size=5"))
                 .andExpect(status().isOk())
@@ -169,7 +173,7 @@ class RbacFinancialReviewSecurityTest {
     void actualCostReadReturnsScopedRegisterContentAndSummary() throws Exception {
         UUID actualCostId = UUID.randomUUID();
         ActualCostReviewItem item = reviewItem(actualCostId, "APPROVED");
-        when(actualCostReviewFacadeService.actualCostRegister(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.actualCostRegister(null, null)).thenReturn(List.of(item));
         when(actualCostReviewFacadeService.registerSummary(List.of(item))).thenReturn(registerSummary(List.of(item)));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/register?page=0&size=5"))
@@ -184,7 +188,7 @@ class RbacFinancialReviewSecurityTest {
     void systemAdminCanReadFinancialReviewRegisterContent() throws Exception {
         UUID actualCostId = UUID.randomUUID();
         ActualCostReviewItem item = reviewItem(actualCostId, "PENDING");
-        when(actualCostReviewFacadeService.actualCostRegister(null)).thenReturn(List.of(item));
+        when(actualCostReviewFacadeService.actualCostRegister(null, null)).thenReturn(List.of(item));
         when(actualCostReviewFacadeService.registerSummary(List.of(item))).thenReturn(registerSummary(List.of(item)));
 
         mockMvc.perform(get("/api/v1/budgets/actual-costs/register?page=0&size=5"))

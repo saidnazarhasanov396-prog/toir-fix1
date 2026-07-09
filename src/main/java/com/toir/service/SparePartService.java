@@ -82,8 +82,14 @@ public class SparePartService {
     private final ScopeAccessService scopeAccessService;
     private final AuditBuilderService auditBuilderService;
     private final LegacyStockProjectionService legacyStockProjectionService;
+    private final WarehouseStockPolicyService warehouseStockPolicyService;
 
-    private static final List<String> NUMERIC_SORT_FIELDS = List.of(
+    private static final List<String> DTO_SORT_FIELDS = List.of(
+            "name",
+            "code",
+            "entityType",
+            "manufacturer",
+            "preferredCounteragentName",
             "minStock",
             "currentStock",
             "reservedStock",
@@ -199,8 +205,8 @@ public class SparePartService {
     ) {
         int safePage = Math.max(page != null ? page : 0, 0);
         int safePageSize = Math.max(pageSize != null ? pageSize : 20, 1);
-        boolean numericSort = isNumericSort(sortBy);
-        Pageable pageable = numericSort ? Pageable.unpaged() : PaginationUtils.pageRequest(safePage, safePageSize);
+        boolean dtoSort = isDtoSort(sortBy);
+        Pageable pageable = dtoSort ? Pageable.unpaged() : PaginationUtils.pageRequest(safePage, safePageSize);
         InventoryItemKind inventoryItemKind = mapItemType(itemType);
         UUID sparePartTypeId = resolveTypeFilter(typeId, type);
         UUID unitId = resolveUnitFilter(unit);
@@ -274,7 +280,7 @@ public class SparePartService {
             return parts.map(SparePartDto::from);
         }
         Page<SparePartDto> enrichedParts = enrichPartPage(parts, warehouseId, scopedWarehouseIds);
-        if (!numericSort) {
+        if (!dtoSort) {
             return enrichedParts;
         }
         List<SparePartDto> sorted = enrichedParts.getContent().stream()
@@ -314,26 +320,50 @@ public class SparePartService {
                     List<WarehouseStock> stocks = stocksByPart.getOrDefault(part.getId(), List.of());
                     double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
                     double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
-                    return enrichCounteragent(SparePartDto.from(
+                    double availableStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).availableQty().doubleValue()).sum();
+                    double nonAvailableStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).nonAvailableQty().doubleValue()).sum();
+                    return enrichWarehousePolicies(enrichCounteragent(SparePartDto.from(
                             part,
                             currentStock,
                             reservedStock,
+                            availableStock,
+                            nonAvailableStock,
                             stocks.size(),
                             unitRefFor(part.getUnit(), unitRefsByToken),
                             MxikRefDto.from(mxikById.get(part.getMxikId()))
-                    ));
+                    )));
                 });
     }
 
-    private boolean isNumericSort(String sortBy) {
+    private boolean isDtoSort(String sortBy) {
         if (sortBy == null || sortBy.isBlank()) {
             return false;
         }
-        return NUMERIC_SORT_FIELDS.contains(sortBy.trim());
+        return DTO_SORT_FIELDS.contains(sortBy.trim());
     }
 
     private Comparator<SparePartDto> sparePartComparator(String sortBy, String sortDir) {
         Comparator<SparePartDto> comparator = switch (sortBy.trim()) {
+            case "name" -> Comparator.comparing(
+                    SparePartDto::name,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+            case "code" -> Comparator.comparing(
+                    SparePartDto::code,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+            case "entityType" -> Comparator.comparing(
+                    SparePartDto::entityType,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+            case "manufacturer" -> Comparator.comparing(
+                    SparePartDto::manufacturer,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+            case "preferredCounteragentName" -> Comparator.comparing(
+                    SparePartDto::preferredCounteragentName,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
             case "minStock" -> Comparator.comparingDouble(SparePartDto::minStock);
             case "currentStock" -> Comparator.comparingDouble(SparePartDto::currentStock);
             case "reservedStock" -> Comparator.comparingDouble(SparePartDto::reservedStock);
@@ -406,8 +436,11 @@ public class SparePartService {
         var stockSnapshots = legacyStockProjectionService.currentForSparePart(id);
         double currentStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyOnHand().doubleValue()).sum();
         double reservedStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).qtyReserved().doubleValue()).sum();
-        return enrichCounteragent(SparePartDto.from(part, currentStock, reservedStock, stocks.size(), unitRefFor(part.getUnit()),
-                MxikRefDto.from(mxik(part.getMxikId()).orElse(null))));
+        double availableStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).availableQty().doubleValue()).sum();
+        double nonAvailableStock = stocks.stream().mapToDouble(stock -> snapshot(stock, stockSnapshots).nonAvailableQty().doubleValue()).sum();
+        return enrichWarehousePolicies(enrichCounteragent(SparePartDto.from(part, currentStock, reservedStock,
+                availableStock, nonAvailableStock, stocks.size(), unitRefFor(part.getUnit()),
+                MxikRefDto.from(mxik(part.getMxikId()).orElse(null)))));
     }
 
     @Transactional(readOnly = true)
@@ -428,6 +461,9 @@ public class SparePartService {
         double totalQuantity = locations.stream().mapToDouble(SparePartLocationDto::quantity).sum();
         double totalReservedQty = locations.stream().mapToDouble(SparePartLocationDto::reservedQty).sum();
         double totalAvailableQty = locations.stream().mapToDouble(SparePartLocationDto::availableQty).sum();
+        double totalNonAvailableQty = context.stocks().stream()
+                .mapToDouble(stock -> snapshot(stock, context.snapshots()).nonAvailableQty().doubleValue())
+                .sum();
         InventoryTransactionSummary transactionSummary = transactionSummaryFor(part.getId(), totalQuantity);
 
         return new SparePartDetailDto(
@@ -446,6 +482,7 @@ public class SparePartService {
                 totalQuantity,
                 totalReservedQty,
                 totalAvailableQty,
+                totalNonAvailableQty,
                 transactionSummary.totalReceivedQuantity(),
                 transactionSummary.totalIssuedQuantity(),
                 transactionSummary.currentQuantity(),
@@ -466,6 +503,7 @@ public class SparePartService {
         entity.setCode(nextCode());
         apply(entity, request);
         SparePart saved = repository.save(entity);
+        var warehousePolicies = warehouseStockPolicyService.replaceForSparePart(saved.getId(), request.warehousePolicies());
 
         auditBuilderService.log(
                 "spare_part",
@@ -478,7 +516,7 @@ public class SparePartService {
         );
 
         return enrichCounteragent(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()),
-                MxikRefDto.from(mxik(request.mxikId()).orElse(null))));
+                MxikRefDto.from(mxik(request.mxikId()).orElse(null))).withWarehousePolicies(warehousePolicies));
     }
 
     @Transactional
@@ -489,6 +527,7 @@ public class SparePartService {
         apply(entity, request);
 
         SparePart saved = repository.save(entity);
+        var warehousePolicies = warehouseStockPolicyService.replaceForSparePart(saved.getId(), request.warehousePolicies());
 
         auditBuilderService.log(
                 "spare_part",
@@ -500,7 +539,7 @@ public class SparePartService {
                 saved
         );
         return enrichCounteragent(SparePartDto.from(saved, 0, 0, 0, unitRefFor(saved.getUnit()),
-                MxikRefDto.from(mxik(request.mxikId()).orElse(null))));
+                MxikRefDto.from(mxik(request.mxikId()).orElse(null))).withWarehousePolicies(warehousePolicies));
     }
 
     @Transactional
@@ -586,6 +625,13 @@ public class SparePartService {
         } catch (RestException ignored) {
             return dto;
         }
+    }
+
+    private SparePartDto enrichWarehousePolicies(SparePartDto dto) {
+        if (dto == null || dto.id() == null) {
+            return dto;
+        }
+        return dto.withWarehousePolicies(warehouseStockPolicyService.findBySparePart(dto.id()));
     }
 
     private UUID resolveUnitFilter(String unit) {

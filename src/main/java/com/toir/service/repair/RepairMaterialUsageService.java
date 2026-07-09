@@ -143,6 +143,11 @@ public class RepairMaterialUsageService {
         movement.setUnitCost(r.unitCost());
         movement.setCreatedById(r.issuedById());
         movement.setNotes(r.notes());
+        movement.setBinId(r.binId());
+        movement.setLotNumber(r.lotNumber());
+        movement.setSerialNumber(r.serialNumber());
+        movement.setExpiryDate(r.expiryDate());
+        movement.setStockStatus(r.stockStatus() == null ? WarehouseStockStatus.AVAILABLE : r.stockStatus());
         StockMovement savedMovement = stockMovementRepository.save(movement);
         postCoreStockIssue(workOrder, savedMovement);
         stock = legacyStockProjectionService.sync(r.warehouseId(), r.sparePartId());
@@ -158,6 +163,11 @@ public class RepairMaterialUsageService {
         usage.setQuantity(r.quantity());
         usage.setUnitCost(r.unitCost());
         usage.setNotes(r.notes());
+        usage.setBinId(r.binId());
+        usage.setLotNumber(r.lotNumber());
+        usage.setSerialNumber(r.serialNumber());
+        usage.setExpiryDate(r.expiryDate());
+        usage.setStockStatus(r.stockStatus() == null ? WarehouseStockStatus.AVAILABLE : r.stockStatus());
 
 
         if (r.requirementId() != null) {
@@ -193,15 +203,15 @@ public class RepairMaterialUsageService {
     }
 
     private void postCoreStockIssue(WorkOrder workOrder, StockMovement movement) {
-        toirStockService.postIssue(new StockIssueCommand(
+        toirStockService.postIssueAutoAllocate(new StockIssueCommand(
                 movement.getWarehouseId(),
                 movement.getSparePartId(),
-                null,
+                movement.getBinId(),
                 BigDecimal.valueOf(movement.getQuantity()),
-                null,
-                null,
-                null,
-                WarehouseStockStatus.AVAILABLE,
+                movement.getLotNumber(),
+                movement.getSerialNumber(),
+                movement.getExpiryDate(),
+                movement.getStockStatus(),
                 "WORK_ORDER",
                 workOrder.getId(),
                 null,

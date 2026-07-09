@@ -769,6 +769,33 @@ class PprPlanServiceLifecycleTest {
     }
 
     @Test
+    void findAllUnpagedSortsByStatus() {
+        PprPlan approved = plan(UUID.randomUUID(), PlanStatus.APPROVED);
+        approved.setStartDate(LocalDate.of(2026, 3, 1));
+        approved.setPprType(PprType.CAPITAL_REPAIR);
+        PprPlan draft = plan(UUID.randomUUID(), PlanStatus.DRAFT);
+        draft.setStartDate(LocalDate.of(2026, 1, 1));
+        draft.setPprType(PprType.PREVENTIVE_MAINTENANCE);
+        PprPlan generated = plan(UUID.randomUUID(), PlanStatus.GENERATED);
+        generated.setStartDate(LocalDate.of(2026, 2, 1));
+        generated.setPprType(PprType.PLANNED_REPAIR);
+
+        when(planRepository.searchPlans(null, null, null, null))
+                .thenReturn(List.of(approved, draft, generated));
+
+        var byStatus = service.findAllUnpaged(null, null, null, null, "status", "asc");
+        var byFromDate = service.findAllUnpaged(null, null, null, null, "fromDate", "asc");
+        var byPprType = service.findAllUnpaged(null, null, null, null, "pprType", "desc");
+
+        assertThat(byStatus.getContent()).extracting("status")
+                .containsExactly(PlanStatus.DRAFT, PlanStatus.GENERATED, PlanStatus.APPROVED);
+        assertThat(byFromDate.getContent()).extracting("fromDate")
+                .containsExactly(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1), LocalDate.of(2026, 3, 1));
+        assertThat(byPprType.getContent()).extracting("pprType")
+                .containsExactly(PprType.CAPITAL_REPAIR, PprType.PLANNED_REPAIR, PprType.PREVENTIVE_MAINTENANCE);
+    }
+
+    @Test
     void createWithAllFieldsAndTargetsReloadsPersistedPlanWithNames() {
         UUID departmentId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();

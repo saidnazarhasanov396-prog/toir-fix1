@@ -1052,6 +1052,7 @@ public class RepairRequestService {
                 null,
                 null,
                 null,
+                null,
                 null
         );
     }

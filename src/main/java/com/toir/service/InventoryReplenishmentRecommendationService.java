@@ -9,14 +9,17 @@ import com.toir.dto.warehouse.InventoryReplenishmentRecommendationDto;
 import com.toir.dto.warehouse.ReorderSuggestionDto;
 import com.toir.entity.Counteragent;
 import com.toir.entity.SparePart;
+import com.toir.entity.warehouse.WarehouseStock;
 import com.toir.enums.NotificationSeverity;
 import com.toir.repository.SparePartRepository;
+import com.toir.repository.WarehouseStockRepository;
 import com.toir.service.maintanance.SparePartForecastService;
 import com.toir.util.PaginationUtils;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +38,7 @@ public class InventoryReplenishmentRecommendationService {
     private final WarehouseReorderService reorderService;
     private final SparePartForecastService forecastService;
     private final SparePartRepository sparePartRepository;
+    private final WarehouseStockRepository stockRepository;
     private final CounteragentService counteragentService;
 
     @Transactional(readOnly = true)
@@ -45,7 +49,23 @@ public class InventoryReplenishmentRecommendationService {
                                                                           Boolean onlyDeficit,
                                                                           int page,
                                                                           int size) {
-        return PaginationUtils.page(recommendationRows(days, from, to, warehouseId, onlyDeficit), page, size);
+        return recommendations(days, from, to, warehouseId, onlyDeficit, page, size, null, "asc");
+    }
+
+    public Page<InventoryReplenishmentRecommendationDto> recommendations(Integer days,
+                                                                          Instant from,
+                                                                          Instant to,
+                                                                          UUID warehouseId,
+                                                                          Boolean onlyDeficit,
+                                                                          int page,
+                                                                          int size,
+                                                                          String sortBy,
+                                                                          String sortDir) {
+        List<InventoryReplenishmentRecommendationDto> rows = recommendationRows(days, from, to, warehouseId, onlyDeficit);
+        if (isSortSupported(sortBy)) {
+            rows = rows.stream().sorted(recommendationComparator(sortBy, sortDir)).toList();
+        }
+        return PaginationUtils.page(rows, page, size);
     }
 
     @Transactional(readOnly = true)
@@ -82,7 +102,8 @@ public class InventoryReplenishmentRecommendationService {
     }
 
     private InventoryReplenishmentRecommendationDto fromReorder(ReorderSuggestionDto reorder) {
-        double reservedStock = Math.max(reorder.quantity() - reorder.available(), 0);
+        double reservedStock = Math.max(reorder.quantity() - reorder.nonAvailableQty() - reorder.usableAvailable(), 0);
+        Double effectiveReorderPoint = firstNonNull(reorder.reorderPoint(), reorder.triggerThreshold());
         return build(
                 reorder.sparePartId(),
                 reorder.sparePartCode(),
@@ -93,7 +114,7 @@ public class InventoryReplenishmentRecommendationService {
                 reservedStock,
                 reorder.available(),
                 reorder.minQty(),
-                reorder.reorderPoint(),
+                effectiveReorderPoint,
                 reorder.reorderQty(),
                 0,
                 0,
@@ -107,6 +128,7 @@ public class InventoryReplenishmentRecommendationService {
 
     private InventoryReplenishmentRecommendationDto fromForecast(SparePartForecastItemDto forecast) {
         double currentStock = forecast.availableQty() + forecast.reservedQty();
+        ReplenishmentPolicy policy = policyForForecast(forecast);
         return build(
                 forecast.sparePartId(),
                 forecast.sparePartCode(),
@@ -118,9 +140,9 @@ public class InventoryReplenishmentRecommendationService {
                 currentStock,
                 forecast.reservedQty(),
                 forecast.availableQty(),
-                null,
-                null,
-                null,
+                policy.minStock(),
+                policy.reorderPoint(),
+                policy.reorderQty(),
                 forecast.requiredQty(),
                 forecast.shortageQty(),
                 forecast.sources(),
@@ -188,8 +210,13 @@ public class InventoryReplenishmentRecommendationService {
         double policyQty = positive(reorderPoint) != null ? reorderPoint : valueOrZero(minStock);
         double totalShortageQty = reason == InventoryReplenishmentReason.LOW_STOCK
                 ? Math.max(policyQty - availableStock, 0)
-                : Math.max(policyQty + maintenanceDemandQty - availableStock, 0);
-        double suggestedOrderQty = suggestedOrderQty(reorderQty, totalShortageQty);
+                : ReplenishmentPolicyEvaluator.forecastTotalShortage(policyQty, maintenanceDemandQty, availableStock);
+        double policyRecommendedQty = suggestedOrderQtyOverride == null ? 0 : suggestedOrderQtyOverride;
+        double suggestedOrderQty = ReplenishmentPolicyEvaluator.forecastAwareSuggestedOrderQty(
+                policyRecommendedQty,
+                reorderQty,
+                totalShortageQty
+        );
         if (suggestedOrderQtyOverride != null && suggestedOrderQtyOverride > suggestedOrderQty) {
             suggestedOrderQty = suggestedOrderQtyOverride;
         }
@@ -226,6 +253,96 @@ public class InventoryReplenishmentRecommendationService {
         );
     }
 
+    private boolean isSortSupported(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return false;
+        }
+        return switch (sortBy.trim()) {
+            case "sparePartName", "warehouseName", "currentStock", "availableStock", "reservedStock",
+                    "nonAvailableStock", "policy", "maintenanceDemandQty", "projectedBalance",
+                    "totalShortageQty", "suggestedOrderQty", "severity", "reason", "firstDueAt",
+                    "sourceCount" -> true;
+            default -> false;
+        };
+    }
+
+    private Comparator<InventoryReplenishmentRecommendationDto> recommendationComparator(String sortBy, String sortDir) {
+        Comparator<InventoryReplenishmentRecommendationDto> comparator = switch (sortBy.trim()) {
+            case "sparePartName" -> Comparator.comparing(
+                    InventoryReplenishmentRecommendationDto::sparePartName,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+            case "warehouseName" -> Comparator.comparing(
+                    InventoryReplenishmentRecommendationDto::warehouseName,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+            case "currentStock" -> Comparator.comparingDouble(InventoryReplenishmentRecommendationDto::currentStock);
+            case "availableStock" -> Comparator.comparingDouble(InventoryReplenishmentRecommendationDto::availableStock);
+            case "reservedStock" -> Comparator.comparingDouble(InventoryReplenishmentRecommendationDto::reservedStock);
+            case "nonAvailableStock" -> Comparator.comparingDouble(this::nonAvailableStock);
+            case "policy" -> Comparator
+                    .comparing((InventoryReplenishmentRecommendationDto row) -> firstNonNull(row.minStock(), row.reorderPoint()),
+                            Comparator.nullsLast(Comparator.naturalOrder()))
+                    .thenComparing(row -> row.reorderPoint(), Comparator.nullsLast(Comparator.naturalOrder()));
+            case "maintenanceDemandQty" -> Comparator.comparingDouble(InventoryReplenishmentRecommendationDto::maintenanceDemandQty);
+            case "projectedBalance" -> Comparator.comparingDouble(InventoryReplenishmentRecommendationDto::projectedBalance);
+            case "totalShortageQty" -> Comparator.comparingDouble(InventoryReplenishmentRecommendationDto::totalShortageQty);
+            case "suggestedOrderQty" -> Comparator.comparingDouble(InventoryReplenishmentRecommendationDto::suggestedOrderQty);
+            case "severity" -> Comparator.comparing(row -> severityRank(row.severity()));
+            case "reason" -> Comparator.comparing(
+                    row -> row.reason() == null ? null : row.reason().name(),
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+            case "firstDueAt" -> Comparator.comparing(
+                    InventoryReplenishmentRecommendationDto::firstDueAt,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            case "sourceCount" -> Comparator.comparingInt(InventoryReplenishmentRecommendationDto::sourceCount);
+            default -> Comparator.comparing(
+                    InventoryReplenishmentRecommendationDto::sparePartName,
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
+            );
+        };
+        return "desc".equalsIgnoreCase(sortDir) ? comparator.reversed() : comparator;
+    }
+
+    private double nonAvailableStock(InventoryReplenishmentRecommendationDto row) {
+        return Math.max(row.currentStock() - row.reservedStock() - row.availableStock(), 0);
+    }
+
+    private int severityRank(NotificationSeverity severity) {
+        if (severity == null) {
+            return 0;
+        }
+        return switch (severity) {
+            case INFO -> 1;
+            case WARNING -> 2;
+            case CRITICAL -> 3;
+        };
+    }
+
+    private ReplenishmentPolicy policyForForecast(SparePartForecastItemDto forecast) {
+        if (forecast.sparePartId() == null) {
+            return ReplenishmentPolicy.empty();
+        }
+
+        WarehouseStock stock = forecast.warehouseId() == null
+                ? null
+                : stockRepository
+                .findByWarehouseIdAndSparePartIdAndIsDeletedFalse(forecast.warehouseId(), forecast.sparePartId())
+                .orElse(null);
+        SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(forecast.sparePartId()).orElse(null);
+        Double warehouseMinQty = stock == null ? null : positive(stock.getMinQty());
+        Double sparePartMinStock = sparePart == null ? null : positive(sparePart.getMinStock());
+        Double effectiveMinimum = firstNonNull(warehouseMinQty, sparePartMinStock);
+        Double effectiveReorderPoint = firstNonNull(
+                stock == null ? null : positive(stock.getReorderPoint()),
+                effectiveMinimum
+        );
+        Double reorderQty = stock == null ? null : positive(stock.getReorderQty());
+        return new ReplenishmentPolicy(effectiveMinimum, effectiveReorderPoint, reorderQty);
+    }
+
     private CounteragentRecommendation counteragentRecommendation(UUID sparePartId) {
         if (sparePartId == null) {
             return new CounteragentRecommendation(null, null, null);
@@ -245,12 +362,6 @@ public class InventoryReplenishmentRecommendationService {
                 counteragent == null ? null : counteragent.getName(),
                 expectedDeliveryDate
         );
-    }
-
-    private double suggestedOrderQty(Double reorderQty, double totalShortageQty) {
-        return reorderQty != null && reorderQty > 0
-                ? Math.max(reorderQty, totalShortageQty)
-                : totalShortageQty;
     }
 
     private boolean include(InventoryReplenishmentRecommendationDto item, boolean deficitOnly) {
@@ -320,5 +431,11 @@ public class InventoryReplenishmentRecommendationService {
     }
 
     private record CounteragentRecommendation(UUID counteragentId, String counteragentName, LocalDate expectedDeliveryDate) {
+    }
+
+    private record ReplenishmentPolicy(Double minStock, Double reorderPoint, Double reorderQty) {
+        private static ReplenishmentPolicy empty() {
+            return new ReplenishmentPolicy(null, null, null);
+        }
     }
 }

@@ -1,9 +1,15 @@
 package com.toir.service;
 
+import com.toir.dto.actualcost.ActualCostDto;
+import com.toir.dto.financialreview.ActualCostReviewItem;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideCreateRequest;
+import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
 import com.toir.entity.Counteragent;
 import com.toir.entity.Department;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.projects.BudgetLine;
+import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.ActualCostReviewEvent;
 import com.toir.entity.projects.CostCategory;
@@ -13,6 +19,8 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.CounteragentStatus;
 import com.toir.enums.ContractorWorkStatus;
 import com.toir.enums.NotificationSeverity;
+import com.toir.exception.RestException;
+import com.toir.dto.financialreview.BulkActualCostReviewResponse;
 import com.toir.dto.notification.NotificationDto;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -41,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -68,6 +77,10 @@ class ActualCostReviewFacadeServiceTest {
     @Mock
     ContractorWorkRepository contractorWorkRepository;
     @Mock
+    com.toir.repository.projects.BudgetLineRepository budgetLineRepository;
+    @Mock
+    com.toir.repository.repair.RepairRequestRepository repairRequestRepository;
+    @Mock
     DepartmentRepository departmentRepository;
     @Mock
     CostCategoryRepository costCategoryRepository;
@@ -80,6 +93,53 @@ class ActualCostReviewFacadeServiceTest {
 
     @InjectMocks
     ActualCostReviewFacadeService service;
+
+    @Test
+    void bulkReviewCollectsFailuresWithoutAbortingRemainingItems() {
+        UUID successId = UUID.randomUUID();
+        UUID failId = UUID.randomUUID();
+        UUID reviewerId = UUID.randomUUID();
+        ActualCostReviewFacadeService self = mock(ActualCostReviewFacadeService.class);
+        ReflectionTestUtils.setField(service, "self", self);
+
+        when(self.approve(successId, reviewerId, "ok"))
+                .thenReturn(approvedDto(successId));
+        when(self.approve(failId, reviewerId, "ok"))
+                .thenThrow(RestException.badRequest("Already reviewed"));
+
+        var response = service.bulkReview(List.of(successId, failId), "APPROVE", reviewerId, "ok");
+
+        assertThat(response.processed()).isEqualTo(2);
+        assertThat(response.succeeded()).isEqualTo(1);
+        assertThat(response.failed()).isEqualTo(1);
+        assertThat(response.successes()).extracting(BulkActualCostReviewResponse.Success::id).containsExactly(successId);
+        assertThat(response.failures()).extracting(BulkActualCostReviewResponse.Failure::message)
+                .containsExactly("Already reviewed");
+    }
+
+    private ActualCostDto approvedDto(UUID id) {
+        return new ActualCostDto(
+                id,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                UUID.randomUUID(),
+                ActualCostStatus.APPROVED,
+                null,
+                null,
+                null,
+                100.0,
+                Instant.now(),
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
 
     @Test
     void actualCostRegisterEnrichesDepartmentContractorWorkOrderAndCostCategoryRefs() {
@@ -168,11 +228,9 @@ class ActualCostReviewFacadeServiceTest {
         rule.setEscalateToRoleCode("FINANCE_MANAGER");
         rule.setThresholdHours(8);
 
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(List.of(actualCost));
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(false);
         when(financeScopeService.filterActualCosts(List.of(actualCost))).thenReturn(List.of(actualCost));
         when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId))
                 .thenReturn(Optional.empty());
@@ -191,35 +249,15 @@ class ActualCostReviewFacadeServiceTest {
     }
 
     @Test
-    void reviewQueueReturnsAllPendingCostsForApprover() {
+    void reviewQueueAppliesScopeFilterForApprover() {
         List<ActualCost> pendingCosts = List.of(
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID())
         );
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(pendingCosts);
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(true);
-        stubMinimalReviewQueueMapping();
-
-        assertThat(service.reviewQueue(null)).hasSize(3);
-
-        verify(financeScopeService, never()).filterActualCosts(any());
-    }
-
-    @Test
-    void reviewQueueAppliesScopeFilterForNonApprover() {
-        List<ActualCost> pendingCosts = List.of(
-                minimalPendingCost(UUID.randomUUID()),
-                minimalPendingCost(UUID.randomUUID()),
-                minimalPendingCost(UUID.randomUUID())
-        );
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
-                .thenReturn(pendingCosts);
-        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(false);
         when(financeScopeService.filterActualCosts(pendingCosts)).thenReturn(List.of(pendingCosts.getFirst()));
         stubMinimalReviewQueueMapping();
 
@@ -229,22 +267,39 @@ class ActualCostReviewFacadeServiceTest {
     }
 
     @Test
-    void reviewQueueReturnsAllPendingCostsForRejectRole() {
+    void reviewQueueAppliesScopeFilterForNonApprover() {
         List<ActualCost> pendingCosts = List.of(
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID())
         );
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(pendingCosts);
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_APPROVE)).thenReturn(false);
-        when(scopeAccessService.hasAuthority(PermissionConstants.ACTUAL_COST_REJECT)).thenReturn(true);
+        when(financeScopeService.filterActualCosts(pendingCosts)).thenReturn(List.of(pendingCosts.getFirst()));
         stubMinimalReviewQueueMapping();
 
-        assertThat(service.reviewQueue(null)).hasSize(3);
+        assertThat(service.reviewQueue(null)).hasSize(1);
 
-        verify(financeScopeService, never()).filterActualCosts(any());
+        verify(financeScopeService).filterActualCosts(pendingCosts);
+    }
+
+    @Test
+    void reviewQueueAppliesScopeFilterForRejectRole() {
+        List<ActualCost> pendingCosts = List.of(
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID()),
+                minimalPendingCost(UUID.randomUUID())
+        );
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
+                .thenReturn(pendingCosts);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(financeScopeService.filterActualCosts(pendingCosts)).thenReturn(List.of(pendingCosts.get(1)));
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null)).hasSize(1);
+
+        verify(financeScopeService).filterActualCosts(pendingCosts);
     }
 
     @Test
@@ -256,7 +311,7 @@ class ActualCostReviewFacadeServiceTest {
                 minimalPendingCost(UUID.randomUUID()),
                 minimalPendingCost(UUID.randomUUID())
         );
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(pendingCosts);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         stubMinimalReviewQueueMapping();
@@ -267,12 +322,55 @@ class ActualCostReviewFacadeServiceTest {
     }
 
     @Test
+    void reviewQueueFiltersByYearWhenProvided() {
+        ActualCost in2026 = minimalPendingCost(UUID.randomUUID());
+        in2026.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
+        ActualCost in2025 = minimalPendingCost(UUID.randomUUID());
+        in2025.setCostDate(Instant.parse("2025-06-01T00:00:00Z"));
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
+                .thenReturn(List.of(in2026, in2025));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        stubMinimalReviewQueueMapping();
+
+        assertThat(service.reviewQueue(null, 2026)).hasSize(1);
+        assertThat(service.reviewQueue(null, 2026).getFirst().id()).isEqualTo(in2026.getId());
+    }
+
+    @Test
+    void reviewQueueResolvesDepartmentFromBudgetLineBeforeWorkOrder() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID budgetLineId = UUID.randomUUID();
+        UUID budgetDepartmentId = UUID.randomUUID();
+        UUID workOrderDepartmentId = UUID.randomUUID();
+        ActualCost actualCost = pendingActualCost(actualCostId, workOrderId, 500.0, Instant.now());
+        actualCost.setBudgetLineId(budgetLineId);
+        WorkOrder workOrder = workOrder(workOrderId, workOrderDepartmentId);
+        Department budgetDepartment = department(budgetDepartmentId);
+
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
+                .thenReturn(List.of(actualCost));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(actualCostId))
+                .thenReturn(Optional.empty());
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(budgetLine(budgetLineId, budgetDepartmentId)));
+        when(departmentRepository.findByIdAndIsDeletedFalse(budgetDepartmentId)).thenReturn(Optional.of(budgetDepartment));
+        when(financialApprovalRuleRepository.findFirstMatchingRule(budgetDepartmentId, 500.0)).thenReturn(Optional.empty());
+
+        var item = service.reviewQueue(null).getFirst();
+
+        assertThat(item.department()).isInstanceOf(ActualCostReviewItem.Ref.class);
+        assertThat(((ActualCostReviewItem.Ref) item.department()).id()).isEqualTo(budgetDepartmentId);
+    }
+
+    @Test
     void evaluateOverdueCreatesDepartmentNotificationsAndCountsDuplicatesSeparately() {
         UUID departmentId = UUID.randomUUID();
         ActualCost overdue = pendingActualCost(UUID.randomUUID(), UUID.randomUUID(), 100.0, Instant.now().minusSeconds(30 * 3600));
         ActualCost dueSoon = pendingActualCost(UUID.randomUUID(), UUID.randomUUID(), 120.0, Instant.now().minusSeconds(22 * 3600));
 
-        when(actualCostRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING))
+        when(actualCostRepository.findAllByFiltersOrderByUpdatedAtDesc(null, null))
                 .thenReturn(List.of(overdue, dueSoon));
         when(financeScopeService.filterActualCosts(List.of(overdue, dueSoon))).thenReturn(List.of(overdue, dueSoon));
         when(routeOverrideRepository.findFirstByActualCostIdAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(any()))
@@ -350,6 +448,85 @@ class ActualCostReviewFacadeServiceTest {
 
         assertThat(items).isEmpty();
         verify(eventRepository).findAllByEventCodeAndIsDeletedFalseOrderByOccurredAtDesc("HANDOVER");
+    }
+
+
+    @Test
+    void applyRouteOverrideRequestPersistsOverrideAppliedEvent() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID overrideId = UUID.randomUUID();
+        var request = new ActualCostReviewRouteOverrideCreateRequest(
+                actualCostId,
+                departmentId,
+                "FINANCE_MANAGER",
+                "SYSTEM_ADMIN",
+                18,
+                "Manual route change"
+        );
+        when(routeOverrideService.apply(request)).thenReturn(new ActualCostReviewRouteOverrideResponseDto(
+                overrideId,
+                null,
+                departmentId,
+                "FINANCE_MANAGER",
+                "SYSTEM_ADMIN",
+                18,
+                "Manual route change",
+                true,
+                actorId,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        var response = service.applyRouteOverride(request, actorId);
+
+        ArgumentCaptor<ActualCostReviewEvent> eventCaptor = ArgumentCaptor.forClass(ActualCostReviewEvent.class);
+        verify(eventRepository).save(eventCaptor.capture());
+        assertThat(response.id()).isEqualTo(overrideId);
+        assertThat(eventCaptor.getValue().getActualCostId()).isEqualTo(actualCostId);
+        assertThat(eventCaptor.getValue().getRouteOverrideId()).isEqualTo(overrideId);
+        assertThat(eventCaptor.getValue().getActorUserId()).isEqualTo(actorId);
+        assertThat(eventCaptor.getValue().getEventGroup()).isEqualTo("ROUTE");
+        assertThat(eventCaptor.getValue().getEventCode()).isEqualTo("OVERRIDE_APPLIED");
+        assertThat(eventCaptor.getValue().getDescription()).isEqualTo("Manual route change");
+    }
+
+    @Test
+    void clearRouteOverrideByOverrideIdPersistsOverrideClearedEvent() {
+        UUID actualCostId = UUID.randomUUID();
+        UUID overrideId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        when(routeOverrideService.deactivate(overrideId, actorId, "Back to default route"))
+                .thenReturn(new ActualCostReviewRouteOverrideDto(
+                        overrideId,
+                        actualCostId,
+                        null,
+                        "FINANCE_MANAGER",
+                        null,
+                        24,
+                        "Original override",
+                        false,
+                        null,
+                        actorId,
+                        "Back to default route",
+                        Instant.parse("2026-06-02T10:00:00Z")
+                ));
+
+        var response = service.clearRouteOverrideByOverrideId(overrideId, actorId, "Back to default route");
+
+        ArgumentCaptor<ActualCostReviewEvent> eventCaptor = ArgumentCaptor.forClass(ActualCostReviewEvent.class);
+        verify(eventRepository).save(eventCaptor.capture());
+        assertThat(response.id()).isEqualTo(overrideId);
+        assertThat(eventCaptor.getValue().getActualCostId()).isEqualTo(actualCostId);
+        assertThat(eventCaptor.getValue().getRouteOverrideId()).isEqualTo(overrideId);
+        assertThat(eventCaptor.getValue().getActorUserId()).isEqualTo(actorId);
+        assertThat(eventCaptor.getValue().getEventGroup()).isEqualTo("ROUTE");
+        assertThat(eventCaptor.getValue().getEventCode()).isEqualTo("OVERRIDE_CLEARED");
+        assertThat(eventCaptor.getValue().getDescription()).isEqualTo("Back to default route");
     }
 
     @Test
@@ -459,6 +636,15 @@ class ActualCostReviewFacadeServiceTest {
         department.setCode("D-1");
         department.setName("Mechanical");
         return department;
+    }
+
+    private BudgetLine budgetLine(UUID lineId, UUID departmentId) {
+        BudgetLine line = new BudgetLine();
+        ReflectionTestUtils.setField(line, "id", lineId);
+        MaintenanceBudget budget = new MaintenanceBudget();
+        budget.setDepartmentId(departmentId);
+        line.setBudget(budget);
+        return line;
     }
 
     private ActualCostReviewEvent handoverEvent(UUID actualCostId, UUID notificationId, UUID actorId) {

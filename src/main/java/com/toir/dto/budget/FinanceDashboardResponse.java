@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record FinanceDashboardResponse(
         double totalPlanned,
+        double totalCommitted,
         double approvedActual,
         double pendingActual,
         double rejectedActual,

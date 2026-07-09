@@ -18,6 +18,8 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Year;
 import java.util.ArrayList;
@@ -27,6 +29,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -128,7 +131,9 @@ class KnowledgeServiceLinksTest {
         when(linkRepository.findAllByTargetTypeAndTargetIdAndIsDeletedFalseOrderByUpdatedAtDesc(KnowledgeTargetType.EQUIPMENT, equipmentId))
                 .thenReturn(List.of(directLink));
         when(repository.findAllByIdInAndIsDeletedFalse(List.of(linkedArticleId))).thenReturn(List.of(linked));
-        when(repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(linked, suggested));
+        when(repository.search(any(), anyBoolean(), any(), any(), any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(linked, suggested), PageRequest.of(0, 200), 2));
         when(linkRepository.findAllByKnowledgeArticleIdInAndIsDeletedFalse(List.of(linkedArticleId, suggestedArticleId)))
                 .thenReturn(List.of(directLink));
 

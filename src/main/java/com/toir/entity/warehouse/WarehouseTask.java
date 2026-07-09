@@ -7,7 +7,6 @@ import com.toir.enums.WarehouseTaskStatus;
 import com.toir.enums.WarehouseTaskType;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.OneToMany;
@@ -20,7 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-@Entity
 @Table(name = "warehouse_tasks")
 @Getter
 @Setter

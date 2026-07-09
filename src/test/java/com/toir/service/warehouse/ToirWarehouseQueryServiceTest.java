@@ -4,6 +4,8 @@ import com.toir.entity.warehouse.WarehouseStockBalance;
 import com.toir.entity.warehouse.WarehouseStockLedger;
 import com.toir.enums.StockLedgerMovementType;
 import com.toir.enums.WarehouseStockStatus;
+import com.toir.repository.SparePartRepository;
+import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.repository.WarehouseStockLedgerRepository;
@@ -38,11 +40,17 @@ class ToirWarehouseQueryServiceTest {
     @Mock
     WarehouseStockLedgerRepository ledgerRepository;
 
+    @Mock
+    StockMovementRepository movementRepository;
+
+    @Mock
+    SparePartRepository sparePartRepository;
+
     ToirWarehouseQueryService service;
 
     @BeforeEach
     void setUp() {
-        service = new ToirWarehouseQueryService(warehouseRepository, balanceRepository, ledgerRepository);
+        service = new ToirWarehouseQueryService(warehouseRepository, balanceRepository, ledgerRepository, movementRepository, sparePartRepository);
     }
 
     @Test

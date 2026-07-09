@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.rcm.EquipmentRiskScore;
+import com.toir.dto.rcm.RcmFailureForecastDto;
 import com.toir.dto.rcm.RiskExplanationDto;
 import com.toir.entity.RcmSnapshot;
 import com.toir.exception.RestException;
@@ -29,6 +30,7 @@ public class RcmService {
     private final RcmSnapshotRepository snapshotRepository;
     private final EquipmentRiskEvidenceService equipmentRiskEvidenceService;
     private final EquipmentRiskScoringService equipmentRiskScoringService;
+    private final RcmFailureForecastService rcmFailureForecastService;
     private final MetricExplanationService metricExplanationService;
 
 
@@ -105,6 +107,7 @@ public class RcmService {
     private EquipmentRiskScore score(Equipment eq, EquipmentRiskEvidence evidence, String lang) {
         EquipmentRiskEvidence resolvedEvidence = evidence == null ? defaultEvidence(eq) : evidence;
         EquipmentRiskScoringResult result = equipmentRiskScoringService.score(resolvedEvidence);
+        RcmFailureForecastDto failureForecast = rcmFailureForecastService.forecast(resolvedEvidence, result, lang);
         RiskExplanationDto explanation = metricExplanationService.rcmRisk(lang, result, resolvedEvidence);
         return new EquipmentRiskScore(
                 eq.getId(), eq.getCode(), eq.getName(),
@@ -117,6 +120,7 @@ public class RcmService {
                 resolvedEvidence.openDefects(),
                 resolvedEvidence.mtbfHours(),
                 resolvedEvidence.mttrHours(),
+                failureForecast,
                 explanation
         );
     }
@@ -139,7 +143,8 @@ public class RcmService {
                 0,
                 0,
                 0,
-                0
+                0,
+                null
         );
     }
 

@@ -67,20 +67,6 @@ public final class PermissionConstants {
     public static final String WAREHOUSE_EQUIPMENT_READ = "WAREHOUSE_EQUIPMENT_READ";
     public static final String WAREHOUSE_EQUIPMENT_ASSIGN = "WAREHOUSE_EQUIPMENT_ASSIGN";
     public static final String WAREHOUSE_EQUIPMENT_STATUS_UPDATE = "WAREHOUSE_EQUIPMENT_STATUS_UPDATE";
-    public static final String WAREHOUSE_BIN_READ = "WAREHOUSE_BIN_READ";
-    public static final String WAREHOUSE_BIN_MANAGE = "WAREHOUSE_BIN_MANAGE";
-    public static final String WAREHOUSE_TASK_READ = "WAREHOUSE_TASK_READ";
-    public static final String WAREHOUSE_TASK_ASSIGN = "WAREHOUSE_TASK_ASSIGN";
-    public static final String WAREHOUSE_TASK_EXECUTE = "WAREHOUSE_TASK_EXECUTE";
-    public static final String WAREHOUSE_RECEIVE = "WAREHOUSE_RECEIVE";
-    public static final String WAREHOUSE_PUTAWAY = "WAREHOUSE_PUTAWAY";
-    public static final String WAREHOUSE_PICK = "WAREHOUSE_PICK";
-    public static final String WAREHOUSE_COUNT_CREATE = "WAREHOUSE_COUNT_CREATE";
-    public static final String WAREHOUSE_COUNT_EXECUTE = "WAREHOUSE_COUNT_EXECUTE";
-    public static final String WAREHOUSE_COUNT_APPROVE = "WAREHOUSE_COUNT_APPROVE";
-    public static final String WAREHOUSE_WRITEOFF_REQUEST = "WAREHOUSE_WRITEOFF_REQUEST";
-    public static final String WAREHOUSE_WRITEOFF_APPROVE = "WAREHOUSE_WRITEOFF_APPROVE";
-    public static final String WAREHOUSE_DOCUMENT_UPLOAD = "WAREHOUSE_DOCUMENT_UPLOAD";
     public static final String SPARE_PART_READ = "SPARE_PART_READ";
     public static final String SPARE_PART_CREATE = "SPARE_PART_CREATE";
     public static final String SPARE_PART_UPDATE = "SPARE_PART_UPDATE";
@@ -146,6 +132,9 @@ public final class PermissionConstants {
     public static final String FINANCE_ROUTE_OVERRIDE_APPLY = "FINANCE_ROUTE_OVERRIDE_APPLY";
     public static final String FINANCE_ROUTE_OVERRIDE_CLEAR = "FINANCE_ROUTE_OVERRIDE_CLEAR";
     public static final String FINANCE_REPORT_EXPORT = "FINANCE_REPORT_EXPORT";
+    public static final String FINANCE_REVIEW_READ = "FINANCE_REVIEW_READ";
+    public static final String FINANCE_REVIEW_ALLOCATE = "FINANCE_REVIEW_ALLOCATE";
+    public static final String FINANCE_REVIEW_UNALLOCATE = "FINANCE_REVIEW_UNALLOCATE";
 
     public static final String EQUIPMENT_READ = "EQUIPMENT_READ";
     public static final String EQUIPMENT_CREATE = "EQUIPMENT_CREATE";

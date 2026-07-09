@@ -36,7 +36,8 @@ public record RepairRequestFilterRequest(
         String clarificationReason,
         String closeResult,
         Boolean hasLinkedDefects,
-        Boolean hasLinkedWorkOrders
+        Boolean hasLinkedWorkOrders,
+        String statusScope
 ) {
     public RepairRequestFilterRequest withDepartmentId(UUID departmentId) {
         return new RepairRequestFilterRequest(
@@ -66,7 +67,8 @@ public record RepairRequestFilterRequest(
                 clarificationReason,
                 closeResult,
                 hasLinkedDefects,
-                hasLinkedWorkOrders
+                hasLinkedWorkOrders,
+                statusScope
         );
     }
 }

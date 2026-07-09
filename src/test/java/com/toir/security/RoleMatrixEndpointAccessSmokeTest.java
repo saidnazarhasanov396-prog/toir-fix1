@@ -112,6 +112,7 @@ class RoleMatrixEndpointAccessSmokeTest {
     @MockBean
     ToirWarehouseQueryService warehouseQueryService;
 
+
     @MockBean
     SparePartService sparePartService;
 

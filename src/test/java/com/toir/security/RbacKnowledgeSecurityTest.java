@@ -2,6 +2,7 @@ package com.toir.security;
 
 import com.toir.controller.KnowledgeController;
 import com.toir.dto.knowledge.KnowledgeArticleDto;
+import com.toir.dto.knowledge.KnowledgeStatsResponse;
 import com.toir.entity.KnowledgeArticle;
 import com.toir.service.KnowledgeService;
 import org.junit.jupiter.api.Test;
@@ -73,6 +74,29 @@ class RbacKnowledgeSecurityTest {
     void unrelatedPermissionCannotReadKnowledge() throws Exception {
         mockMvc.perform(get("/api/v1/knowledge?page=0&size=1"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void unauthenticatedCannotReadKnowledgeStats() throws Exception {
+        mockMvc.perform(get("/api/v1/knowledge/stats"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.USER_READ)
+    void unrelatedPermissionCannotReadKnowledgeStats() throws Exception {
+        mockMvc.perform(get("/api/v1/knowledge/stats"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.KNOWLEDGE_READ)
+    void knowledgeReadCanReadKnowledgeStats() throws Exception {
+        when(knowledgeService.getStats(isNull(), isNull(), isNull()))
+                .thenReturn(new KnowledgeStatsResponse(4, 2, 1, 1));
+
+        mockMvc.perform(get("/api/v1/knowledge/stats"))
+                .andExpect(status().isOk());
     }
 
     @Test

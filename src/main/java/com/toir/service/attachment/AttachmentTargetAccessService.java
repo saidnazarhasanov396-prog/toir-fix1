@@ -10,23 +10,17 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.Employee;
-import com.toir.entity.warehouse.InventoryCountSession;
 import com.toir.entity.warehouse.Warehouse;
-import com.toir.entity.warehouse.WarehouseBin;
-import com.toir.entity.warehouse.WarehouseTask;
 import com.toir.enums.AttachmentTargetType;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.FileCategory;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.CompletionActRepository;
-import com.toir.repository.InventoryCountSessionRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.PurchaseOrderRepository;
 import com.toir.repository.StockMovementRepository;
-import com.toir.repository.WarehouseBinRepository;
 import com.toir.repository.WarehouseRepository;
-import com.toir.repository.WarehouseTaskRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -56,9 +50,6 @@ public class AttachmentTargetAccessService {
     private final ProcurementRequestRepository procurementRequestRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final WarehouseRepository warehouseRepository;
-    private final WarehouseBinRepository warehouseBinRepository;
-    private final WarehouseTaskRepository warehouseTaskRepository;
-    private final InventoryCountSessionRepository inventoryCountSessionRepository;
     private final ScopeAccessService scopeAccessService;
     private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
     private final DefectRepository defectRepository;
@@ -83,10 +74,6 @@ public class AttachmentTargetAccessService {
             case PURCHASE_ORDER -> assertCanAccessPurchaseOrder(targetId);
             case STOCK_MOVEMENT -> assertCanAccessStockMovement(targetId);
             case EQUIPMENT_COMMISSIONING -> assertCanAccessEquipmentCommissioning(targetId);
-            case WAREHOUSE_BIN -> assertCanAccessWarehouseBin(targetId);
-            case WAREHOUSE_TASK -> assertCanAccessWarehouseTask(targetId);
-            case INVENTORY_COUNT_SESSION -> assertCanAccessInventoryCountSession(targetId);
-            case WAREHOUSE_WRITEOFF -> assertCanAccessFutureWmsAttachmentTarget(targetType, targetId);
             case HR_EMPLOYEE -> assertCanAccessHrEmployee(targetId);
         }
         return targetType;
@@ -100,8 +87,7 @@ public class AttachmentTargetAccessService {
             case STOCK_MOVEMENT -> FileCategory.STOCK_MOVEMENT_DOCUMENT;
             case HR_EMPLOYEE -> FileCategory.PASSPORT;
             case REPAIR_REQUEST, DEFECT, COMPLETION_ACT, APPROVAL, PROCUREMENT_REQUEST, PURCHASE_ORDER,
-                 EQUIPMENT_COMMISSIONING, INVENTORY_COUNT_SESSION, WAREHOUSE_TASK, WAREHOUSE_BIN,
-                 WAREHOUSE_WRITEOFF -> FileCategory.DOCUMENT;
+                 EQUIPMENT_COMMISSIONING -> FileCategory.DOCUMENT;
         };
     }
 
@@ -244,28 +230,6 @@ public class AttachmentTargetAccessService {
         PurchaseOrder order = purchaseOrderRepository.findByIdAndIsDeletedFalse(purchaseOrderId)
                 .orElseThrow(() -> RestException.notFound("Purchase order not found: " + purchaseOrderId));
         assertCanAccessWarehouse(order.getWarehouseId());
-    }
-
-    private void assertCanAccessWarehouseBin(UUID binId) {
-        WarehouseBin bin = warehouseBinRepository.findByIdAndIsDeletedFalse(binId)
-                .orElseThrow(() -> RestException.notFound("Warehouse bin not found: " + binId));
-        assertCanAccessWarehouse(bin.getWarehouseId());
-    }
-
-    private void assertCanAccessWarehouseTask(UUID taskId) {
-        WarehouseTask task = warehouseTaskRepository.findByIdAndIsDeletedFalse(taskId)
-                .orElseThrow(() -> RestException.notFound("Warehouse task not found: " + taskId));
-        assertCanAccessWarehouse(task.getWarehouseId());
-    }
-
-    private void assertCanAccessInventoryCountSession(UUID sessionId) {
-        InventoryCountSession session = inventoryCountSessionRepository.findByIdAndIsDeletedFalse(sessionId)
-                .orElseThrow(() -> RestException.notFound("Inventory count session not found: " + sessionId));
-        assertCanAccessWarehouse(session.getWarehouseId());
-    }
-
-    private void assertCanAccessFutureWmsAttachmentTarget(AttachmentTargetType targetType, UUID targetId) {
-        throw RestException.notFound(targetType + " not found: " + targetId);
     }
 
     private void assertCanAccessWarehouse(UUID warehouseId) {

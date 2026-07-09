@@ -19,6 +19,7 @@ import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.BudgetStatus;
+import com.toir.enums.BudgetAllocationStatus;
 import com.toir.enums.ProcurementRequestStatus;
 import com.toir.enums.UserStatus;
 import com.toir.exception.RestException;
@@ -87,8 +88,7 @@ class ApprovalPbacScopeTest {
     MaintenanceBudgetRepository maintenanceBudgetRepository;
     WorkOrderService workOrderService;
     PprPlanService pprPlanService;
-    ProcurementRequestService procurementRequestService;
-    RepairRequestService repairRequestService;
+    ProcurementRequestService procurementRequestService;    RepairRequestService repairRequestService;
     MaintenanceAutomationService maintenanceAutomationService;
     MaintenanceRegulationService maintenanceRegulationService;
     ScopeAccessService scopeAccessService;
@@ -110,8 +110,7 @@ class ApprovalPbacScopeTest {
         maintenanceBudgetRepository = mock(MaintenanceBudgetRepository.class);
         workOrderService = mock(WorkOrderService.class);
         pprPlanService = mock(PprPlanService.class);
-        procurementRequestService = mock(ProcurementRequestService.class);
-        repairRequestService = mock(RepairRequestService.class);
+        procurementRequestService = mock(ProcurementRequestService.class);        repairRequestService = mock(RepairRequestService.class);
         maintenanceAutomationService = mock(MaintenanceAutomationService.class);
         maintenanceRegulationService = mock(MaintenanceRegulationService.class);
         scopeAccessService = mock(ScopeAccessService.class);
@@ -126,7 +125,9 @@ class ApprovalPbacScopeTest {
                 new DefaultApprovalActionExecutor(List.of(
                         new WorkOrderApprovalHandler(workOrderService),
                         new PprPlanApprovalHandler(pprPlanService),
-                        new ProcurementRequestApprovalHandler(procurementRequestRepository),
+                        new ProcurementRequestApprovalHandler(
+                                procurementRequestRepository,
+                                mock(com.toir.service.finance.BudgetCommitmentService.class)),
                         new MaintenanceBudgetApprovalHandler(maintenanceBudgetRepository),
                         new MaintenanceDueEventApprovalHandler(maintenanceAutomationService)
                 )),
@@ -1015,6 +1016,28 @@ class ApprovalPbacScopeTest {
     }
 
     @Test
+    void finalApprovalStepRejectsUnallocatedProcurementRequest() {
+        UUID approvalId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        ApprovalRequest approval = approval(approvalId, UUID.randomUUID(), approverId, documentId);
+        approval.setDocumentType("PROCUREMENT_REQUEST");
+        ProcurementRequest procurementRequest = procurementRequest(documentId, ProcurementRequestStatus.SUBMITTED);
+        procurementRequest.setBudgetAllocationStatus(BudgetAllocationStatus.UNALLOCATED);
+        procurementRequest.setBudgetLineId(null);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(requestRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(procurementRequestRepository.findByIdAndIsDeletedFalse(documentId)).thenReturn(Optional.of(procurementRequest));
+
+        ApprovalRequestDto result = service.approve(approvalId, new DecisionRequest(approverId, "ok"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.FAILED);
+        assertThat(result.failureReason())
+                .isEqualTo("Procurement request must be allocated to a budget line before approval");
+        assertThat(procurementRequest.getStatus()).isEqualTo(ProcurementRequestStatus.SUBMITTED);
+    }
+
+    @Test
     void finalApprovalStepAppliesProcurementApprovalHandler() {
         UUID approvalId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
@@ -1269,7 +1292,8 @@ class ApprovalPbacScopeTest {
                 mock(ActualCostRepository.class),
                 mock(FinanceScopeService.class),
                 userRepository,
-                mock(com.toir.repository.equipment.EquipmentCommissioningActRepository.class)
+                mock(com.toir.repository.equipment.EquipmentCommissioningActRepository.class),
+                new SecurityAccessService()
         );
     }
 
@@ -1286,6 +1310,9 @@ class ApprovalPbacScopeTest {
         request.setStatus(status);
         request.setNumber("PR-2026-0001");
         request.setTitle("Procurement");
+        request.setBudgetLineId(UUID.randomUUID());
+        request.setBudgetAllocationStatus(BudgetAllocationStatus.ALLOCATED);
+        request.setTotalEstimatedCost(100);
         return request;
     }
 }

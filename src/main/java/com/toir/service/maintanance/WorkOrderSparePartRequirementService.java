@@ -1,6 +1,7 @@
 package com.toir.service.maintanance;
 
 import com.toir.dto.workorder.WorkOrderSparePartRequirementDto;
+import com.toir.dto.workorder.WorkOrderSparePartRequirementRequest;
 import com.toir.entity.SparePart;
 import com.toir.entity.PprTask;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
@@ -105,6 +106,59 @@ public class WorkOrderSparePartRequirementService {
                     );
                 })
                 .toList();
+    }
+
+    @Transactional
+    public WorkOrderSparePartRequirementDto createManual(UUID workOrderId,
+                                                         WorkOrderSparePartRequirementRequest request) {
+        WorkOrder workOrder = workOrderOrThrow(workOrderId);
+        assertCanMutateWorkOrder(workOrder);
+        SparePart sparePart = sparePartOrThrow(request.sparePartId());
+        if (request.requiredQty() <= 0) {
+            throw RestException.badRequest("requiredQty must be positive");
+        }
+
+        WorkOrderSparePartRequirement requirement = new WorkOrderSparePartRequirement();
+        requirement.setWorkOrder(workOrder);
+        requirement.setSourceType(WorkOrderSparePartRequirementSourceType.MANUAL);
+        requirement.setSparePart(sparePart);
+        requirement.setRequiredQty(request.requiredQty());
+        requirement.setUnit(request.unit());
+        requirement.setCriticality(request.criticality());
+        requirement.setNotes(request.notes());
+        requirement.setStatus(WorkOrderSparePartRequirementStatus.PLANNED);
+        return WorkOrderSparePartRequirementDto.from(repository.save(requirement));
+    }
+
+    @Transactional
+    public WorkOrderSparePartRequirementDto updateManual(UUID workOrderId,
+                                                         UUID requirementId,
+                                                         WorkOrderSparePartRequirementRequest request) {
+        WorkOrder workOrder = workOrderOrThrow(workOrderId);
+        assertCanMutateWorkOrder(workOrder);
+        WorkOrderSparePartRequirement requirement = requirementOrThrow(workOrderId, requirementId);
+        assertManualRequirement(requirement);
+        SparePart sparePart = sparePartOrThrow(request.sparePartId());
+        if (request.requiredQty() <= 0) {
+            throw RestException.badRequest("requiredQty must be positive");
+        }
+
+        requirement.setSparePart(sparePart);
+        requirement.setRequiredQty(request.requiredQty());
+        requirement.setUnit(request.unit());
+        requirement.setCriticality(request.criticality());
+        requirement.setNotes(request.notes());
+        return WorkOrderSparePartRequirementDto.from(repository.save(requirement));
+    }
+
+    @Transactional
+    public void deleteManual(UUID workOrderId, UUID requirementId) {
+        WorkOrder workOrder = workOrderOrThrow(workOrderId);
+        assertCanMutateWorkOrder(workOrder);
+        WorkOrderSparePartRequirement requirement = requirementOrThrow(workOrderId, requirementId);
+        assertManualRequirement(requirement);
+        requirement.setDeleted(true);
+        repository.save(requirement);
     }
 
     @Transactional
@@ -300,6 +354,27 @@ public class WorkOrderSparePartRequirementService {
         }
         if (workOrder.getDepartmentId() == null || !scopeAccessService.canAccessDepartment(workOrder.getDepartmentId())) {
             throw new AccessDeniedException("Access denied by work order department scope");
+        }
+    }
+
+    private void assertCanMutateWorkOrder(WorkOrder workOrder) {
+        assertCanAccessWorkOrder(workOrder);
+    }
+
+    private WorkOrderSparePartRequirement requirementOrThrow(UUID workOrderId, UUID requirementId) {
+        return repository.findByIdAndWorkOrderIdAndIsDeletedFalse(requirementId, workOrderId)
+                .orElseThrow(() -> RestException.notFound(
+                        "Work order spare part requirement not found: " + requirementId));
+    }
+
+    private SparePart sparePartOrThrow(UUID sparePartId) {
+        return sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)
+                .orElseThrow(() -> RestException.notFound("Spare part not found: " + sparePartId));
+    }
+
+    private void assertManualRequirement(WorkOrderSparePartRequirement requirement) {
+        if (requirement.getSourceType() != WorkOrderSparePartRequirementSourceType.MANUAL) {
+            throw RestException.conflict("Only manually added spare part requirements can be changed");
         }
     }
 }

@@ -5,6 +5,7 @@ import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.dto.pprplanning.PprPlanRequest;
 import com.toir.dto.pprplanning.PprPlanStatsResponse;
 import com.toir.entity.PprPlan;
+import com.toir.dto.pprplanning.PprTaskStatsResponse;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
@@ -45,6 +46,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -364,7 +366,8 @@ class PprPlanControllerContractTest {
                 3,
                 8,
                 4,
-                5
+                5,
+                2
         );
         when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
         when(service.getStats(2026, 5, 12, departmentId)).thenReturn(stats);
@@ -381,20 +384,60 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.approvedPlans").value(3))
                 .andExpect(jsonPath("$.plannedTasks").value(8))
                 .andExpect(jsonPath("$.inProgressTasks").value(4))
-                .andExpect(jsonPath("$.completedTasks").value(5));
+                .andExpect(jsonPath("$.completedTasks").value(5))
+                .andExpect(jsonPath("$.overdueTasks").value(2));
 
         verify(service).getStats(2026, 5, 12, departmentId);
     }
 
     @Test
     void statsRouteIsNotSwallowedByIdRoute() throws Exception {
-        when(service.getStats(null, null, null, null)).thenReturn(new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0));
+        when(service.getStats(null, null, null, null)).thenReturn(new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans/stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalPlans").value(0));
 
         verify(service).getStats(null, null, null, null);
+        verify(service, never()).findById(any(UUID.class));
+    }
+
+    @Test
+    void taskListPassesFiltersToService() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        PprTaskDto task = taskDto(UUID.randomUUID(), equipmentId, "Pump 17", UUID.randomUUID(), "Monthly PM");
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
+        when(service.findTasks(departmentId, equipmentId, PprTaskStatus.COMPLETED, 1, 15))
+                .thenReturn(new PageImpl<>(List.of(task), PageRequest.of(1, 15), 1));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/tasks")
+                        .param("departmentId", departmentId.toString())
+                        .param("equipmentId", equipmentId.toString())
+                        .param("status", "COMPLETED")
+                        .param("page", "1")
+                        .param("size", "15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()));
+
+        verify(service).findTasks(departmentId, equipmentId, PprTaskStatus.COMPLETED, 1, 15);
+    }
+
+    @Test
+    void taskStatsRouteIsNotSwallowedByIdRoute() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
+        when(service.getTaskStats(departmentId, null, null))
+                .thenReturn(new PprTaskStatsResponse(4, 1, 25.0, Map.of(PprTaskStatus.COMPLETED, 1L)));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/tasks/stats")
+                        .param("departmentId", departmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalTasks").value(4))
+                .andExpect(jsonPath("$.completedTasks").value(1))
+                .andExpect(jsonPath("$.completionRate").value(25.0));
+
+        verify(service).getTaskStats(departmentId, null, null);
         verify(service, never()).findById(any(UUID.class));
     }
 
@@ -785,4 +828,3 @@ class PprPlanControllerContractTest {
         }
     }
 }
-

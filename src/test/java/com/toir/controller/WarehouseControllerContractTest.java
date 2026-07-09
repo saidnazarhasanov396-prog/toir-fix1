@@ -50,6 +50,7 @@ class WarehouseControllerContractTest {
     @Mock
     ToirWarehouseQueryService warehouseQueryService;
 
+
     private MockMvc mockMvc;
 
     @BeforeEach

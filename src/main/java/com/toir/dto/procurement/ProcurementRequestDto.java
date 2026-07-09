@@ -41,7 +41,11 @@ public record ProcurementRequestDto(
         Instant orderedAt,
         Instant receivedAt,
         String rejectionReason,
-        List<ProcurementRequestLineDto> lines
+        List<ProcurementRequestLineDto> lines,
+        UUID budgetLineId,
+        String budgetAllocationStatus,
+        Instant budgetAllocatedAt,
+        String budgetAllocatedBy
 ) {
     public ProcurementRequestDto(UUID id,
                                  String number,
@@ -74,7 +78,7 @@ public record ProcurementRequestDto(
                 warehouseName, requestedBy, approvedBy, responsibleId, priority, null, null, type, sourceDefectId,
                 sourceDefectTitle, sourcePprTaskId, sourcePprTaskTitle, status, source,
                 requiredBy, totalEstimatedCost, submittedAt, approvedAt, orderedAt,
-                receivedAt, rejectionReason, lines);
+                receivedAt, rejectionReason, lines, null, null, null, null);
     }
 
     public ProcurementRequestDto(UUID id,
@@ -106,7 +110,7 @@ public record ProcurementRequestDto(
                 warehouseName, requestedBy, approvedBy, null, PriorityLevel.MEDIUM, null, null, type, sourceDefectId,
                 sourceDefectTitle, sourcePprTaskId, sourcePprTaskTitle, status, source,
                 requiredBy, totalEstimatedCost, submittedAt, approvedAt, orderedAt,
-                receivedAt, rejectionReason, lines);
+                receivedAt, rejectionReason, lines, null, null, null, null);
     }
 
     public ProcurementRequestDto(UUID id,
@@ -130,7 +134,7 @@ public record ProcurementRequestDto(
         this(id, number, title, description, departmentId, warehouseId, null, null, requestedBy,
                 approvedBy, null, PriorityLevel.MEDIUM, null, null, ProcurementRequestType.SPARE_PART, null, null, null, null, status, source,
                 requiredBy, totalEstimatedCost, submittedAt, approvedAt, orderedAt, receivedAt,
-                rejectionReason, lines);
+                rejectionReason, lines, null, null, null, null);
     }
 
     public static ProcurementRequestDto from(ProcurementRequest r) {
@@ -196,7 +200,11 @@ public record ProcurementRequestDto(
                                         ? null
                                         : safeWarrantyCounteragentNamesById.get(line.getWarrantyCounteragentId())
                         ))
-                        .toList()
+                        .toList(),
+                r.getBudgetLineId(),
+                r.getBudgetAllocationStatus() == null ? null : r.getBudgetAllocationStatus().name(),
+                r.getBudgetAllocatedAt(),
+                null
         );
     }
 }

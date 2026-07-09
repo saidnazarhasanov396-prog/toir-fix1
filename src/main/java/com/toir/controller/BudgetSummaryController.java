@@ -26,6 +26,7 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.exception.RestException;
 import com.toir.security.RequiresSensitiveAccess;
+import com.toir.security.ScopeAccessService;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.contarctor.ContractorWorkRepository;
@@ -35,6 +36,7 @@ import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.finance.FinanceBudgetMath;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.ActualCostReviewFacadeService;
 import com.toir.service.CounteragentService;
@@ -91,6 +93,7 @@ public class BudgetSummaryController {
     private final WorkOrderRepository workOrderRepository;
     private final FinanceScopeService financeScopeService;
     private final ActualCostReviewFacadeService actualCostReviewFacadeService;
+    private final ScopeAccessService scopeAccessService;
 
     @GetMapping("/summary")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('BUDGET_READ')")
@@ -120,18 +123,21 @@ public class BudgetSummaryController {
                 .filter(cost -> cost.getBudgetLineId() == null || scopedLineIds.contains(cost.getBudgetLineId()))
                 .toList();
         Map<UUID, Double> approvedByLine = sumByBudgetLine(visibleActualCosts, ActualCostStatus.APPROVED);
-        Map<UUID, Double> pendingByLine = sumByBudgetLine(visibleActualCosts, ActualCostStatus.PENDING);
         double totalPlanned = scopedLines.isEmpty()
                 ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalPlanned).sum()
                 : scopedLines.stream().mapToDouble(BudgetLine::getPlannedAmount).sum();
         double totalActual = scopedLines.isEmpty()
                 ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalActual).sum()
-                : scopedLines.stream().mapToDouble(line -> lineActualAmount(line, approvedByLine, pendingByLine)).sum();
-        double totalCommitted = scopedLines.stream()
-                .mapToDouble(line -> pendingByLine.getOrDefault(line.getId(), 0.0))
+                : scopedLines.stream().mapToDouble(line -> lineApprovedActualAmount(line, approvedByLine)).sum();
+        double totalCommitted = scopedLines.isEmpty()
+                ? budgets.stream().mapToDouble(MaintenanceBudget::getTotalCommitted).sum()
+                : scopedLines.stream().mapToDouble(BudgetLine::getCommittedAmount).sum();
+        double totalRemaining = FinanceBudgetMath.remainingBudget(totalPlanned, totalActual, totalCommitted);
+        double totalAvailable = FinanceBudgetMath.remainingBudget(totalPlanned, totalActual, totalCommitted);
+        double pendingReviewAmount = visibleActualCosts.stream()
+                .filter(cost -> cost.getStatus() == ActualCostStatus.PENDING)
+                .mapToDouble(ActualCost::getAmount)
                 .sum();
-        double totalAvailable = totalPlanned - totalActual - totalCommitted;
-        double pendingReviewAmount = totalCommitted;
         double unallocatedActualAmount = visibleActualCosts.stream()
                 .filter(cost -> cost.getBudgetLineId() == null)
                 .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED || cost.getStatus() == ActualCostStatus.PENDING)
@@ -139,12 +145,12 @@ public class BudgetSummaryController {
                 .sum();
         long atRiskBudgetLineCount = scopedLines.stream()
                 .filter(line -> line.getPlannedAmount() > 0)
-                .filter(line -> (lineActualAmount(line, approvedByLine, pendingByLine)
-                        + pendingByLine.getOrDefault(line.getId(), 0.0)) / line.getPlannedAmount() >= 0.9d)
+                .filter(line -> (lineApprovedActualAmount(line, approvedByLine)
+                        + line.getCommittedAmount()) / line.getPlannedAmount() >= 0.9d)
                 .count();
         long overBudgetLineCount = scopedLines.stream()
-                .filter(line -> lineActualAmount(line, approvedByLine, pendingByLine)
-                        + pendingByLine.getOrDefault(line.getId(), 0.0) > line.getPlannedAmount())
+                .filter(line -> lineApprovedActualAmount(line, approvedByLine)
+                        + line.getCommittedAmount() > line.getPlannedAmount())
                 .count();
         double variance = totalPlanned - totalActual;
         double executionPercent = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
@@ -168,10 +174,10 @@ public class BudgetSummaryController {
                     CostCategory cat = catById.get(entry.getKey());
                     double planned = entry.getValue().stream().mapToDouble(BudgetLine::getPlannedAmount).sum();
                     double actual = entry.getValue().stream()
-                            .mapToDouble(line -> lineActualAmount(line, approvedByLine, pendingByLine))
+                            .mapToDouble(line -> lineApprovedActualAmount(line, approvedByLine))
                             .sum();
                     double committed = entry.getValue().stream()
-                            .mapToDouble(line -> pendingByLine.getOrDefault(line.getId(), 0.0))
+                            .mapToDouble(BudgetLine::getCommittedAmount)
                             .sum();
                     double available = planned - actual - committed;
                     return new BudgetSummaryResponse.CategoryRow(
@@ -203,7 +209,7 @@ public class BudgetSummaryController {
                 unallocatedActualAmount,
                 atRiskBudgetLineCount,
                 overBudgetLineCount,
-                totalAvailable,
+                totalRemaining,
                 variance,
                 executionPercent,
                 budgetItems.size(),
@@ -241,10 +247,11 @@ public class BudgetSummaryController {
             @RequestParam(required = false) UUID actualCostId,
             @RequestParam(required = false) String actualCostIds,
             @RequestParam(required = false) String allocationStatus,
+            @RequestParam(required = false) Integer year,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         List<ActualCostReviewItem> items = filterReviewItems(
-                actualCostReviewFacadeService.actualCostRegister(search),
+                actualCostReviewFacadeService.actualCostRegister(search, year),
                 status,
                 null,
                 null,
@@ -279,7 +286,7 @@ public class BudgetSummaryController {
             String dateTo,
             UUID actualCostId,
             String actualCostIds) {
-        return actualCostRegister(page, size, search, status, costCategoryId, null, null, dateFrom, dateTo, actualCostId, actualCostIds, null, null, "desc");
+        return actualCostRegister(page, size, search, status, costCategoryId, null, null, dateFrom, dateTo, actualCostId, actualCostIds, null, null, null, "desc");
     }
 
     @GetMapping("/actual-costs/review-queue")
@@ -299,10 +306,11 @@ public class BudgetSummaryController {
             @RequestParam(required = false) UUID actualCostId,
             @RequestParam(required = false) String actualCostIds,
             @RequestParam(required = false) String allocationStatus,
+            @RequestParam(required = false) Integer year,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir) {
         List<ActualCostReviewItem> pending = filterReviewItems(
-                actualCostReviewFacadeService.reviewQueue(search),
+                actualCostReviewFacadeService.reviewQueue(search, year),
                 status,
                 Boolean.TRUE.equals(overdueOnly),
                 approvalRoleCode,
@@ -611,12 +619,9 @@ public class BudgetSummaryController {
                 ));
     }
 
-    private double lineActualAmount(BudgetLine line,
-                                    Map<UUID, Double> approvedByLine,
-                                    Map<UUID, Double> pendingByLine) {
-        if (approvedByLine.containsKey(line.getId()) || pendingByLine.containsKey(line.getId())) {
-            return approvedByLine.getOrDefault(line.getId(), 0.0d)
-                    + pendingByLine.getOrDefault(line.getId(), 0.0d);
+    private double lineApprovedActualAmount(BudgetLine line, Map<UUID, Double> approvedByLine) {
+        if (approvedByLine.containsKey(line.getId())) {
+            return approvedByLine.getOrDefault(line.getId(), 0.0d);
         }
         return line.getActualAmount();
     }
@@ -678,6 +683,9 @@ public class BudgetSummaryController {
     }
 
     private boolean matchesCurrentReviewQueue(ActualCostReviewItem item) {
+        if (scopeAccessService.isScopeAdmin()) {
+            return true;
+        }
         var authentication = org.springframework.security.core.context.SecurityContextHolder
                 .getContext()
                 .getAuthentication();
@@ -688,9 +696,6 @@ public class BudgetSummaryController {
                 .map(org.springframework.security.core.GrantedAuthority::getAuthority)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        if (authorities.contains("SYSTEM_ADMIN") || authorities.contains("*")) {
-            return true;
-        }
         return authorities.contains(item.effectiveReviewRoleCode())
                 || authorities.contains(item.approvalRoleCode())
                 || authorities.contains("ACTUAL_COST_APPROVE")
