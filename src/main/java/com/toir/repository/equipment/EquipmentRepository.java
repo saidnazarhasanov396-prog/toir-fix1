@@ -132,6 +132,10 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                 and e.outsideExpectedReturnDate is not null
                 and e.outsideExpectedReturnDate < :today
             )) and
+            (:hasWarranty is null
+                or (:hasWarranty = true and e.hasWarranty = true)
+                or (:hasWarranty = false and (e.hasWarranty = false or e.hasWarranty is null))
+            ) and
             (:searchPattern is null or
             lower(e.code) like :searchPattern or
             lower(e.name) like :searchPattern or
@@ -153,6 +157,7 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                            @Param("outsideReason") EquipmentOutsideReason outsideReason,
                            @Param("overdueOnly") boolean overdueOnly,
                            @Param("today") LocalDate today,
+                           @Param("hasWarranty") Boolean hasWarranty,
                            @Param("searchPattern") String searchPattern,
                            Pageable pageable);
 
@@ -173,6 +178,10 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                 and e.outsideExpectedReturnDate < :today
             )) and
             (:mxikId is null or e.mxikId = :mxikId) and
+            (:hasWarranty is null
+                or (:hasWarranty = true and e.hasWarranty = true)
+                or (:hasWarranty = false and (e.hasWarranty = false or e.hasWarranty is null))
+            ) and
             (:searchPattern is null or
             lower(e.code) like :searchPattern or
             lower(e.name) like :searchPattern or
@@ -206,6 +215,7 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                                    @Param("overdueOnly") boolean overdueOnly,
                                    @Param("today") LocalDate today,
                                    @Param("mxikId") UUID mxikId,
+                                   @Param("hasWarranty") Boolean hasWarranty,
                                    @Param("searchPattern") String searchPattern,
                                    Pageable pageable);
 
@@ -238,6 +248,10 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
               and (:equipmentTypeId is null or e.equipmentTypeId = :equipmentTypeId)
               and (:status is null or e.status = :status)
               and (:category is null or e.category = :category)
+              and (:hasWarranty is null
+                    or (:hasWarranty = true and e.hasWarranty = true)
+                    or (:hasWarranty = false and (e.hasWarranty = false or e.hasWarranty is null))
+                  )
               and (
                     :searchPattern is null
                     or lower(e.code) like :searchPattern
@@ -279,6 +293,7 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                                                   @Param("equipmentTypeId") UUID equipmentTypeId,
                                                   @Param("status") EquipmentStatus status,
                                                   @Param("category") EquipmentCategory category,
+                                                  @Param("hasWarranty") Boolean hasWarranty,
                                                   @Param("searchPattern") String searchPattern,
                                                   Pageable pageable);
 
@@ -291,6 +306,10 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
               and (:status is null or e.status = :status)
               and (:category is null or e.category = :category)
               and (:mxikId is null or e.mxikId = :mxikId)
+              and (:hasWarranty is null
+                    or (:hasWarranty = true and e.hasWarranty = true)
+                    or (:hasWarranty = false and (e.hasWarranty = false or e.hasWarranty is null))
+                  )
               and (
                     :searchPattern is null
                     or lower(e.code) like :searchPattern
@@ -344,6 +363,7 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                                                           @Param("status") EquipmentStatus status,
                                                           @Param("category") EquipmentCategory category,
                                                           @Param("mxikId") UUID mxikId,
+                                                          @Param("hasWarranty") Boolean hasWarranty,
                                                           @Param("searchPattern") String searchPattern,
                                                           Pageable pageable);
 
@@ -367,6 +387,7 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
                 equipmentTypeId,
                 status,
                 category,
+                null,
                 searchPattern,
                 pageable
         );

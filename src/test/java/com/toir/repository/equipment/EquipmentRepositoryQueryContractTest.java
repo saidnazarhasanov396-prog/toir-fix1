@@ -16,7 +16,7 @@ class EquipmentRepositoryQueryContractTest {
     void availableForReplacementQueryRequiresActiveNonDeletedWarehouseEquipmentItems() {
         Method method = Arrays.stream(EquipmentRepository.class.getMethods())
                 .filter(m -> m.getName().equals("searchAvailableForReplacement"))
-                .filter(m -> m.getParameterCount() == 11)
+                .filter(m -> m.getParameterCount() == 12)
                 .findFirst()
                 .orElseThrow();
 
@@ -30,7 +30,7 @@ class EquipmentRepositoryQueryContractTest {
     void searchQueryScopesByResponsibleDepartmentFallbackAndLocationFilters() {
         Method method = Arrays.stream(EquipmentRepository.class.getMethods())
                 .filter(m -> m.getName().equals("search"))
-                .filter(m -> m.getParameterCount() == 12)
+                .filter(m -> m.getParameterCount() == 13)
                 .findFirst()
                 .orElseThrow();
 
@@ -45,10 +45,50 @@ class EquipmentRepositoryQueryContractTest {
     }
 
     @Test
+    void searchQueryAppliesNullableHasWarrantyFilterOnlyFromBooleanField() {
+        Method method = Arrays.stream(EquipmentRepository.class.getMethods())
+                .filter(m -> m.getName().equals("search"))
+                .filter(m -> m.getParameterCount() == 13)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+        String queryText = query.value().toLowerCase();
+        assertThat(queryText).contains(":haswarranty is null");
+        assertThat(queryText).contains(":haswarranty = true");
+        assertThat(queryText).contains("e.haswarranty = true");
+        assertThat(queryText).contains(":haswarranty = false");
+        assertThat(queryText).contains("e.haswarranty = false");
+        assertThat(queryText).contains("e.haswarranty is null");
+        assertThat(queryText).doesNotContain("warrantyuntil");
+        assertThat(queryText).doesNotContain("warrantystartdate");
+        assertThat(queryText).doesNotContain("warrantyenddate");
+        assertThat(queryText).doesNotContain("warrantyattachmentid");
+        assertThat(queryText).doesNotContain("warrantycounteragentid");
+    }
+
+    @Test
+    void searchQueryCombinesVehicleCategoryStatusAndHasWarrantyFilters() {
+        Method method = Arrays.stream(EquipmentRepository.class.getMethods())
+                .filter(m -> m.getName().equals("search"))
+                .filter(m -> m.getParameterCount() == 13)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+        String queryText = query.value().toLowerCase();
+        assertThat(queryText).contains("e.status = :status");
+        assertThat(queryText).contains("e.category = :category");
+        assertThat(queryText).contains("e.haswarranty = true");
+    }
+
+    @Test
     void searchWithMxikQueryFiltersAndSearchesMxikCatalog() {
         Method method = Arrays.stream(EquipmentRepository.class.getMethods())
                 .filter(m -> m.getName().equals("searchWithMxik"))
-                .filter(m -> m.getParameterCount() == 13)
+                .filter(m -> m.getParameterCount() == 14)
                 .findFirst()
                 .orElseThrow();
 
@@ -62,10 +102,44 @@ class EquipmentRepositoryQueryContractTest {
     }
 
     @Test
+    void searchWithMxikQueryAlsoAppliesHasWarrantyFilter() {
+        Method method = Arrays.stream(EquipmentRepository.class.getMethods())
+                .filter(m -> m.getName().equals("searchWithMxik"))
+                .filter(m -> m.getParameterCount() == 14)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+        String queryText = query.value().toLowerCase();
+        assertThat(queryText).contains("(:mxikid is null or e.mxikid = :mxikid)");
+        assertThat(queryText).contains(":haswarranty is null");
+        assertThat(queryText).contains("e.haswarranty = true");
+        assertThat(queryText).contains("e.haswarranty = false");
+        assertThat(queryText).contains("e.haswarranty is null");
+    }
+
+    @Test
+    void searchQueryHasWarrantyTrueIncludesVehicleRowsThroughEquipmentCategoryOnly() {
+        Method method = Arrays.stream(EquipmentRepository.class.getMethods())
+                .filter(m -> m.getName().equals("search"))
+                .filter(m -> m.getParameterCount() == 13)
+                .findFirst()
+                .orElseThrow();
+
+        Query query = method.getAnnotation(Query.class);
+        assertThat(query).isNotNull();
+        String queryText = query.value().toLowerCase();
+        assertThat(queryText).contains("e.category = :category");
+        assertThat(queryText).contains("e.haswarranty = true");
+        assertThat(queryText).doesNotContain("vehicledetails");
+    }
+
+    @Test
     void availableReplacementWithMxikQueryFiltersByMxik() {
         Method method = Arrays.stream(EquipmentRepository.class.getMethods())
                 .filter(m -> m.getName().equals("searchAvailableForReplacementWithMxik"))
-                .filter(m -> m.getParameterCount() == 12)
+                .filter(m -> m.getParameterCount() == 13)
                 .findFirst()
                 .orElseThrow();
 
@@ -79,7 +153,7 @@ class EquipmentRepositoryQueryContractTest {
     void availableReplacementQueryRequiresCanonicalWarehouseLocation() {
         Method method = Arrays.stream(EquipmentRepository.class.getMethods())
                 .filter(m -> m.getName().equals("searchAvailableForReplacement"))
-                .filter(m -> m.getParameterCount() == 11)
+                .filter(m -> m.getParameterCount() == 12)
                 .findFirst()
                 .orElseThrow();
 
