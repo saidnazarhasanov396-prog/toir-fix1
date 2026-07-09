@@ -78,7 +78,7 @@ public class InventoryReplenishmentRecommendationService {
         Map<RecommendationKey, InventoryReplenishmentRecommendationDto> rows = new LinkedHashMap<>();
 
         for (ReorderSuggestionDto reorder : reorderService.allSuggestions(warehouseId)) {
-            rows.put(key(reorder.sparePartId(), reorder.warehouseId()), fromReorder(reorder));
+            rows.put(key(reorder.sparePartId(), reorder.warehouseId(), null), fromReorder(reorder));
         }
 
         SparePartForecastSummaryDto forecast = forecastService.forecast(new SparePartForecastRequest(
@@ -92,7 +92,7 @@ public class InventoryReplenishmentRecommendationService {
                 false
         ));
         for (SparePartForecastItemDto item : forecast.items()) {
-            RecommendationKey key = key(item.sparePartId(), item.warehouseId());
+            RecommendationKey key = key(item.sparePartId(), item.warehouseId(), item.departmentId());
             rows.merge(key, fromForecast(item), this::merge);
         }
 
@@ -110,6 +110,8 @@ public class InventoryReplenishmentRecommendationService {
                 reorder.sparePartName(),
                 reorder.warehouseId(),
                 reorder.warehouseName(),
+                null,
+                null,
                 reorder.quantity(),
                 reservedStock,
                 reorder.available(),
@@ -129,14 +131,25 @@ public class InventoryReplenishmentRecommendationService {
     private InventoryReplenishmentRecommendationDto fromForecast(SparePartForecastItemDto forecast) {
         double currentStock = forecast.availableQty() + forecast.reservedQty();
         ReplenishmentPolicy policy = policyForForecast(forecast);
+        // A resolved warehouse always wins. Otherwise, if the demand could only be traced to a
+        // department (equipment's department has zero or multiple active warehouses - see
+        // SparePartForecastService.resolveDemandLocations), surface the department instead of a
+        // fabricated warehouse name. Only fall back to the generic "Enterprise" placeholder when
+        // neither could be resolved at all.
+        String warehouseName = forecast.warehouseName();
+        UUID departmentId = warehouseName == null ? forecast.departmentId() : null;
+        String departmentName = warehouseName == null ? forecast.departmentName() : null;
+        if (warehouseName == null && departmentName == null) {
+            warehouseName = ENTERPRISE_WAREHOUSE_NAME;
+        }
         return build(
                 forecast.sparePartId(),
                 forecast.sparePartCode(),
                 forecast.sparePartName(),
                 forecast.warehouseId(),
-                forecast.warehouseName() == null && forecast.warehouseId() == null
-                        ? ENTERPRISE_WAREHOUSE_NAME
-                        : forecast.warehouseName(),
+                warehouseName,
+                departmentId,
+                departmentName,
                 currentStock,
                 forecast.reservedQty(),
                 forecast.availableQty(),
@@ -172,6 +185,8 @@ public class InventoryReplenishmentRecommendationService {
                 firstNonBlank(existing.sparePartName(), incoming.sparePartName()),
                 firstNonNull(existing.warehouseId(), incoming.warehouseId()),
                 firstNonBlank(existing.warehouseName(), incoming.warehouseName()),
+                firstNonNull(existing.departmentId(), incoming.departmentId()),
+                firstNonBlank(existing.departmentName(), incoming.departmentName()),
                 currentStock,
                 reservedStock,
                 availableStock,
@@ -193,6 +208,8 @@ public class InventoryReplenishmentRecommendationService {
                                                          String sparePartName,
                                                          UUID warehouseId,
                                                          String warehouseName,
+                                                         UUID departmentId,
+                                                         String departmentName,
                                                          double currentStock,
                                                          double reservedStock,
                                                          double availableStock,
@@ -231,6 +248,8 @@ public class InventoryReplenishmentRecommendationService {
                 sparePartName,
                 warehouseId,
                 warehouseName,
+                departmentId,
+                departmentName,
                 currentStock,
                 reservedStock,
                 availableStock,
@@ -397,8 +416,8 @@ public class InventoryReplenishmentRecommendationService {
         return NotificationSeverity.INFO;
     }
 
-    private RecommendationKey key(UUID sparePartId, UUID warehouseId) {
-        return new RecommendationKey(sparePartId, warehouseId);
+    private RecommendationKey key(UUID sparePartId, UUID warehouseId, UUID departmentId) {
+        return new RecommendationKey(sparePartId, warehouseId, warehouseId == null ? departmentId : null);
     }
 
     private double valueOrZero(Double value) {
@@ -427,7 +446,7 @@ public class InventoryReplenishmentRecommendationService {
         return first == null ? second : first;
     }
 
-    private record RecommendationKey(UUID sparePartId, UUID warehouseId) {
+    private record RecommendationKey(UUID sparePartId, UUID warehouseId, UUID departmentId) {
     }
 
     private record CounteragentRecommendation(UUID counteragentId, String counteragentName, LocalDate expectedDeliveryDate) {

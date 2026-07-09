@@ -22,6 +22,10 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, UUID> {
     @Query(value = "SELECT * FROM warehouses WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<Warehouse> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
+    @Query(value = "SELECT * FROM warehouses WHERE department_id IN (:departmentIds) AND is_active = true AND is_deleted = false",
+            nativeQuery = true)
+    List<Warehouse> findAllByDepartmentIdInAndActiveTrueAndIsDeletedFalse(@Param("departmentIds") Collection<UUID> departmentIds);
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM warehouses WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
