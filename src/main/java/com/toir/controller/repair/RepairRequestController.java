@@ -2,12 +2,15 @@ package com.toir.controller.repair;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
+import com.toir.dto.repairrequest.RepairRequestCloseReadinessDto;
+import com.toir.dto.repairrequest.RepairRequestCostsSummaryDto;
 import com.toir.dto.repairrequest.RepairRequestDto;
 import com.toir.dto.repairrequest.RepairRequestFilterRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
+import com.toir.dto.repairrequest.RepairRequestTimelineEventDto;
 import com.toir.dto.repairrequest.WarrantyDecisionRequest;
 import com.toir.dto.repairrequest.WarrantyPreviewResponse;
 import com.toir.dto.repairrequest.WarrantyStatusResponse;
@@ -17,6 +20,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.repair.RepairRequestService;
+import com.toir.service.repair.RepairRequestInsightsService;
 import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -49,6 +53,7 @@ public class RepairRequestController {
     );
 
     private final RepairRequestService service;
+    private final RepairRequestInsightsService insightsService;
     private final RepairRequestRepository repository;
     private final ScopeAccessService scopeAccessService;
 
@@ -92,6 +97,30 @@ public class RepairRequestController {
     public ResponseEntity<RepairRequestDto> get(@PathVariable UUID id) {
         assertCanReadRequest(requestOrThrow(id));
         return ResponseEntity.ok(service.findById(id));
+    }
+
+    @GetMapping("/{id}/close-readiness")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_READ')")
+    public ResponseEntity<RepairRequestCloseReadinessDto> closeReadiness(@PathVariable UUID id) {
+        RepairRequest request = requestOrThrow(id);
+        assertCanReadRequest(request);
+        return ResponseEntity.ok(insightsService.getCloseReadiness(request));
+    }
+
+    @GetMapping("/{id}/costs-summary")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_READ')")
+    public ResponseEntity<RepairRequestCostsSummaryDto> costsSummary(@PathVariable UUID id) {
+        RepairRequest request = requestOrThrow(id);
+        assertCanReadRequest(request);
+        return ResponseEntity.ok(insightsService.getCostsSummary(request));
+    }
+
+    @GetMapping("/{id}/timeline")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_REQUEST_READ')")
+    public ResponseEntity<List<RepairRequestTimelineEventDto>> timeline(@PathVariable UUID id) {
+        RepairRequest request = requestOrThrow(id);
+        assertCanReadRequest(request);
+        return ResponseEntity.ok(insightsService.getTimeline(request));
     }
 
     @GetMapping("/{id}/meter-readings/requirements")
