@@ -146,6 +146,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.List;
@@ -230,6 +231,7 @@ public class WorkOrderService {
     private final NotificationService notificationService;
     private final OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
+    private final com.toir.service.sparepartlifecycle.SparePartLifecycleService sparePartLifecycleService;
     private final ObjectMapper objectMapper;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS);
@@ -1050,6 +1052,7 @@ public class WorkOrderService {
         List<ResolvedCompletionMeterSnapshot> completionMeterSnapshots =
                 resolveCompletionMeterSnapshots(entity, request);
         issueCompletionMaterials(entity, request);
+        executeSparePartLifecycleOperations(entity, request);
         workOrderCompletionService.createActualCostsOnCompletion(entity);
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());
@@ -1081,6 +1084,67 @@ public class WorkOrderService {
                 entity,
                 saved);
         return toDetailDto(saved);
+    }
+
+    private void executeSparePartLifecycleOperations(WorkOrder workOrder, CompleteWorkOrderRequest request) {
+        List<com.toir.dto.workorder.WorkOrderSparePartLifecycleOperation> operations =
+                request.sparePartLifecycleOperations();
+        if (operations == null || operations.isEmpty()) {
+            return;
+        }
+        UUID actorId = scopeAccessService.currentUserIdOrNull();
+        Set<String> operationKeys = new HashSet<>();
+        for (com.toir.dto.workorder.WorkOrderSparePartLifecycleOperation operation : operations) {
+            if (!operationKeys.add(operation.clientOperationKey())) {
+                throw RestException.conflict(
+                        "LIFECYCLE_OPERATION_KEY_DUPLICATE: clientOperationKey must be unique within completion");
+            }
+            String idempotencyKey = "work-order:" + workOrder.getId() + ":" + operation.clientOperationKey();
+            switch (operation.operationType()) {
+                case INSTALL -> {
+                    if (operation.install() == null) {
+                        throw RestException.badRequest("INSTALL_OPERATION_REQUIRED: install payload is required");
+                    }
+                    var install = operation.install();
+                    sparePartLifecycleService.install(
+                            workOrder.getEquipmentId(),
+                            idempotencyKey,
+                            actorId,
+                            new com.toir.dto.sparepartlifecycle.InstallSparePartCommand(
+                                    install.equipmentNodeId(), install.slotCode(), install.positionLabel(),
+                                    install.sparePartId(), install.quantity(), install.serialNumber(), install.lotNumber(),
+                                    install.installedAt(), workOrder.getId(), install.sourceMaterialUsageId(),
+                                    install.externalSourceReason(), install.notes())
+                    );
+                }
+                case REMOVE -> {
+                    if (operation.remove() == null) {
+                        throw RestException.badRequest("REMOVE_OPERATION_REQUIRED: remove payload is required");
+                    }
+                    var remove = operation.remove();
+                    sparePartLifecycleService.remove(
+                            idempotencyKey,
+                            actorId,
+                            new com.toir.dto.sparepartlifecycle.RemoveSparePartCommand(
+                                    remove.installationId(), remove.removedAt(), workOrder.getId(),
+                                    remove.disposition(), remove.reason(), remove.notes())
+                    );
+                }
+                case REPLACE -> {
+                    if (operation.replace() == null) {
+                        throw RestException.badRequest("REPLACE_OPERATION_REQUIRED: replace payload is required");
+                    }
+                    var replace = operation.replace();
+                    sparePartLifecycleService.replace(
+                            idempotencyKey,
+                            actorId,
+                            new com.toir.dto.sparepartlifecycle.ReplaceSparePartCommand(
+                                    replace.oldInstallationId(), replace.newPart(), replace.replacedAt(), workOrder.getId(),
+                                    replace.oldPartDisposition(), replace.reason(), replace.notes())
+                    );
+                }
+            }
+        }
     }
 
     @Transactional

@@ -10,6 +10,8 @@ import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderCloseReadinessDto;
 import com.toir.dto.workorder.WorkOrderTaskDto;
 import com.toir.dto.workorder.WorkOrderTaskStatusUpdateRequest;
+import com.toir.dto.workorder.WorkOrderSparePartLifecycleOperation;
+import com.toir.dto.sparepartlifecycle.InstallSparePartCommand;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.materialusage.RepairMaterialUsageDto;
 import com.toir.entity.CompletionAct;
@@ -72,6 +74,7 @@ import com.toir.enums.WarehouseEquipmentStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
+import com.toir.enums.sparepartlifecycle.SparePartLifecycleCommandType;
 import com.toir.enums.WarrantyHandling;
 import com.toir.repository.CompletionActRepository;
 import com.toir.repository.CertificationTypeRepository;
@@ -118,6 +121,7 @@ import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.service.maintanance.WorkOrderSparePartRequirementService;
+import com.toir.service.sparepartlifecycle.SparePartLifecycleService;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
@@ -313,6 +317,9 @@ class WorkOrderServiceTest {
 
     @Mock
     MaintenanceAutomationService maintenanceAutomationService;
+
+    @Mock
+    SparePartLifecycleService sparePartLifecycleService;
 
     @Mock
     ObjectMapper objectMapper;
@@ -3289,6 +3296,37 @@ class WorkOrderServiceTest {
         assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
         verify(repairMaterialUsageService).register(workOrderId, usage);
         verify(repository).save(workOrder);
+    }
+
+    @Test
+    void explicitLifecycleOperationUsesWorkOrderScopedIdempotencyAndSameDomainService() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID partId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setEquipmentId(equipmentId);
+        InstallSparePartCommand install = new InstallSparePartCommand(
+                null, "front left", "Front left", partId, java.math.BigDecimal.ONE,
+                null, null, null, null, null, "external test source", null);
+        WorkOrderSparePartLifecycleOperation operation = new WorkOrderSparePartLifecycleOperation(
+                "install-front-left", SparePartLifecycleCommandType.INSTALL, install, null, null);
+        CompleteWorkOrderRequest request = new CompleteWorkOrderRequest(
+                "done", "summary", null, null, null, null, null, null,
+                null, null, null, null, List.of(operation));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+
+        ReflectionTestUtils.invokeMethod(service, "executeSparePartLifecycleOperations", workOrder, request);
+
+        verify(sparePartLifecycleService).install(
+                eq(equipmentId),
+                eq("work-order:" + workOrderId + ":install-front-left"),
+                eq(actorId),
+                argThat(command -> workOrderId.equals(command.workOrderId())
+                        && partId.equals(command.sparePartId())
+                        && "front left".equals(command.slotCode()))
+        );
     }
 
     @Test

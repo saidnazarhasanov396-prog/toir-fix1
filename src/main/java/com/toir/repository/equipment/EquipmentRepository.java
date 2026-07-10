@@ -13,9 +13,11 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -26,6 +28,10 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
 
     @Query(value = "SELECT * FROM equipment WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<Equipment> findByIdAndIsDeletedFalse(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select equipment from Equipment equipment where equipment.id = :id and equipment.isDeleted = false")
+    Optional<Equipment> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
 
     @Query(value = "SELECT * FROM equipment WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Equipment> findAllByIsDeletedFalseOrderByUpdatedAtDesc();

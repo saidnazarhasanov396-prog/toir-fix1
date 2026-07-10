@@ -18,6 +18,7 @@ import com.toir.repository.equipment.MeterStatsProjection;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
+import com.toir.service.sparepartlifecycle.SparePartLifecycleEvaluationService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,6 +64,8 @@ class MeterServiceStatsTest {
     EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     @Mock
     ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
+    @Mock
+    SparePartLifecycleEvaluationService sparePartLifecycleEvaluationService;
     @Mock
     MaintenanceAutomationService maintenanceAutomationService;
     @Mock

@@ -22,6 +22,7 @@ import com.toir.service.equipment.EquipmentAttributeService;
 import com.toir.service.equipment.EquipmentManualAttributeService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.file_management.FileService;
+import com.toir.service.sparepartlifecycle.VehicleMeterProjectionGuard;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -73,6 +74,8 @@ class VehicleServiceDriverAssignmentTest {
     EmployeeRepository employeeRepository;
     @Mock
     EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
+    @Mock
+    VehicleMeterProjectionGuard vehicleMeterProjectionGuard;
 
     @InjectMocks
     VehicleService service;

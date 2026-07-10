@@ -1,6 +1,7 @@
 package com.toir.repository.equipment;
 
 import com.toir.entity.equipment.EquipmentMeter;
+import com.toir.enums.MeterType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -62,6 +63,31 @@ public interface EquipmentMeterRepository extends JpaRepository<EquipmentMeter, 
 
     @Query(value = "SELECT * FROM equipment_meters WHERE equipment_id = :equipmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<EquipmentMeter> findAllByEquipmentIdAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId);
+
+    @Query("""
+            select meter
+            from EquipmentMeter meter
+            where meter.equipmentId = :equipmentId
+              and meter.meterType = :meterType
+              and meter.active = true
+              and meter.primary = true
+              and meter.isDeleted = false
+            order by meter.updatedAt desc
+            """)
+    List<EquipmentMeter> findAllActivePrimary(@Param("equipmentId") UUID equipmentId,
+                                               @Param("meterType") MeterType meterType);
+
+    @Query("""
+            select meter
+            from EquipmentMeter meter
+            where meter.equipmentId = :equipmentId
+              and meter.meterType = :meterType
+              and meter.active = true
+              and meter.isDeleted = false
+            order by meter.updatedAt desc
+            """)
+    List<EquipmentMeter> findAllActiveByEquipmentAndType(@Param("equipmentId") UUID equipmentId,
+                                                          @Param("meterType") MeterType meterType);
 
     @Query(value = """
         WITH filtered_meters AS (
