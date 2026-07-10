@@ -55,7 +55,6 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -73,6 +72,7 @@ class DashboardServiceKpiTest {
     @Mock RepairRequestRepository repairRequestRepository;
     @Mock DefectRepository defectRepository;
     @Mock PprTaskRepository pprTaskRepository;
+    @Mock PprTaskQueryService pprTaskQueryService;
     @Mock WorkOrderRepository workOrderRepository;
     @Mock EquipmentRepository equipmentRepository;
     @Mock DepartmentRepository departmentRepository;
@@ -109,6 +109,7 @@ class DashboardServiceKpiTest {
         lenient().when(userRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         lenient().when(repairRequestRepository.search(any(), any(), any())).thenReturn(List.of());
         lenient().when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(pprTaskQueryService.countOverdueTasks(any(), any(), any())).thenReturn(0L);
         lenient().when(workOrderRepository.search(any(), any(), any())).thenReturn(List.of());
         lenient().when(reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
         lenient().when(warehouseStockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
@@ -374,23 +375,23 @@ class DashboardServiceKpiTest {
     }
 
     @Test
-    void overviewDoesNotTreatPostponedPprTasksAsOverdueByDueDate() {
+    void overviewUsesSharedOverdueTaskCountForKpi() {
         UUID departmentId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
         when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
                 equipment(equipmentId, departmentId, "Pump A")));
-        com.toir.entity.PprTask postponed = new com.toir.entity.PprTask();
-        postponed.setId(UUID.randomUUID());
-        postponed.setEquipmentId(equipmentId);
-        postponed.setStatus(com.toir.enums.PprTaskStatus.POSTPONED);
-        postponed.setDueDate(LocalDateTime.now().minusDays(1));
-        com.toir.entity.PprTask overdue = new com.toir.entity.PprTask();
-        overdue.setId(UUID.randomUUID());
-        overdue.setEquipmentId(equipmentId);
-        overdue.setStatus(com.toir.enums.PprTaskStatus.OVERDUE);
-
         when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
-                .thenReturn(List.of(postponed, overdue));
+                .thenReturn(List.of(pprTask(equipmentId, com.toir.enums.PprTaskStatus.PLANNED)));
+        when(pprTaskQueryService.countOverdueTasks(departmentId, null, null)).thenReturn(12L);
+
+        var result = service.overview(departmentId);
+
+        assertThat(result.counters().overduePpr()).isEqualTo(12);
+    }
+
+    @Test
+    void overviewUsesSharedOverdueTaskCountForGlobalScope() {
+        when(pprTaskQueryService.countOverdueTasks(null, null, null)).thenReturn(1L);
 
         var result = service.overview(null);
 

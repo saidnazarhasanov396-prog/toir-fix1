@@ -408,7 +408,7 @@ class PprPlanControllerContractTest {
         UUID equipmentId = UUID.randomUUID();
         PprTaskDto task = taskDto(UUID.randomUUID(), equipmentId, "Pump 17", UUID.randomUUID(), "Monthly PM");
         when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
-        when(service.findTasks(departmentId, equipmentId, PprTaskStatus.COMPLETED, 1, 15))
+        when(service.findTasks(departmentId, equipmentId, PprTaskStatus.COMPLETED, false, 1, 15))
                 .thenReturn(new PageImpl<>(List.of(task), PageRequest.of(1, 15), 1));
 
         mockMvc.perform(get("/api/v1/ppr-plans/tasks")
@@ -420,7 +420,29 @@ class PprPlanControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()));
 
-        verify(service).findTasks(departmentId, equipmentId, PprTaskStatus.COMPLETED, 1, 15);
+        verify(service).findTasks(departmentId, equipmentId, PprTaskStatus.COMPLETED, false, 1, 15);
+    }
+
+    @Test
+    void taskListPassesSemanticOverdueFilterToService() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        PprTaskDto task = taskDto(UUID.randomUUID(), equipmentId, "Pump 17", UUID.randomUUID(), "Monthly PM");
+        when(scopeAccessService.enforceDepartmentScope(departmentId)).thenReturn(departmentId);
+        when(service.findTasks(departmentId, equipmentId, null, true, 1, 15))
+                .thenReturn(new PageImpl<>(List.of(task), PageRequest.of(1, 15), 42));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/tasks")
+                        .param("departmentId", departmentId.toString())
+                        .param("equipmentId", equipmentId.toString())
+                        .param("overdue", "true")
+                        .param("page", "1")
+                        .param("size", "15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.totalElements").value(42));
+
+        verify(service).findTasks(departmentId, equipmentId, null, true, 1, 15);
     }
 
     @Test

@@ -82,6 +82,74 @@ class PprPlanRepositoryStatsTest {
                 .containsExactlyInAnyOrder("PPR-TASK-SCOPE-1", "PPR-TASK-SCOPE-2");
     }
 
+    @Test
+    void searchTasksWithOverduePredicateMatchesDashboardRuleAndKeepsPageTotal() {
+        UUID departmentId = UUID.randomUUID();
+        UUID otherDepartmentId = UUID.randomUUID();
+        UUID equipmentId = equipmentRepository.saveAndFlush(equipment("EQ-PPR-OVERDUE-1", departmentId)).getId();
+        UUID otherEquipmentId = equipmentRepository.saveAndFlush(equipment("EQ-PPR-OVERDUE-2", otherDepartmentId)).getId();
+        LocalDateTime now = LocalDateTime.of(2026, 6, 10, 12, 0);
+        PprPlan targetPlan = plan("PPR-OVERDUE-FILTER-1", departmentId);
+        PprTask explicitOverdue = task(targetPlan, "PPR-OVERDUE-FILTER-1", PprTaskStatus.OVERDUE, now.plusDays(1));
+        explicitOverdue.setEquipmentId(equipmentId);
+        targetPlan.getTasks().add(explicitOverdue);
+        PprTask plannedPastDue = task(targetPlan, "PPR-OVERDUE-FILTER-2", PprTaskStatus.PLANNED, now.minusMinutes(1));
+        plannedPastDue.setEquipmentId(equipmentId);
+        targetPlan.getTasks().add(plannedPastDue);
+        PprTask approvedPastDue = task(targetPlan, "PPR-OVERDUE-FILTER-3", PprTaskStatus.APPROVED, now.minusHours(1));
+        approvedPastDue.setEquipmentId(equipmentId);
+        targetPlan.getTasks().add(approvedPastDue);
+        PprTask inProgressPastDue = task(targetPlan, "PPR-OVERDUE-FILTER-4", PprTaskStatus.IN_PROGRESS, now.minusDays(1));
+        inProgressPastDue.setEquipmentId(equipmentId);
+        targetPlan.getTasks().add(inProgressPastDue);
+        PprTask dueAtBoundary = task(targetPlan, "PPR-OVERDUE-FILTER-5", PprTaskStatus.PLANNED, now);
+        dueAtBoundary.setEquipmentId(equipmentId);
+        targetPlan.getTasks().add(dueAtBoundary);
+        PprTask completedPastDue = task(targetPlan, "PPR-OVERDUE-FILTER-6", PprTaskStatus.COMPLETED, now.minusDays(1));
+        completedPastDue.setEquipmentId(equipmentId);
+        targetPlan.getTasks().add(completedPastDue);
+        PprTask cancelledPastDue = task(targetPlan, "PPR-OVERDUE-FILTER-7", PprTaskStatus.CANCELLED, now.minusDays(1));
+        cancelledPastDue.setEquipmentId(equipmentId);
+        targetPlan.getTasks().add(cancelledPastDue);
+        PprTask postponedPastDue = task(targetPlan, "PPR-OVERDUE-FILTER-8", PprTaskStatus.POSTPONED, now.minusDays(1));
+        postponedPastDue.setEquipmentId(equipmentId);
+        targetPlan.getTasks().add(postponedPastDue);
+        PprTask softDeletedPastDue = task(targetPlan, "PPR-OVERDUE-FILTER-9", PprTaskStatus.PLANNED, now.minusDays(1));
+        softDeletedPastDue.setEquipmentId(equipmentId);
+        softDeletedPastDue.setDeleted(true);
+        targetPlan.getTasks().add(softDeletedPastDue);
+        repository.saveAndFlush(targetPlan);
+
+        PprPlan otherPlan = plan("PPR-OVERDUE-FILTER-10", otherDepartmentId);
+        PprTask otherDepartmentPastDue = task(otherPlan, "PPR-OVERDUE-FILTER-11", PprTaskStatus.PLANNED, now.minusDays(1));
+        otherDepartmentPastDue.setEquipmentId(otherEquipmentId);
+        otherPlan.getTasks().add(otherDepartmentPastDue);
+        repository.saveAndFlush(otherPlan);
+
+        var firstPage = taskRepository.searchTasks(
+                departmentId,
+                null,
+                null,
+                true,
+                now,
+                PageRequest.of(0, 2)
+        );
+
+        assertThat(firstPage.getTotalElements()).isEqualTo(4);
+        assertThat(firstPage.getContent()).hasSize(2);
+        assertThat(taskRepository.searchTasks(departmentId, null, null, true, now))
+                .extracting(PprTask::getCode)
+                .containsExactlyInAnyOrder(
+                        "PPR-OVERDUE-FILTER-1",
+                        "PPR-OVERDUE-FILTER-2",
+                        "PPR-OVERDUE-FILTER-3",
+                        "PPR-OVERDUE-FILTER-4"
+                );
+        assertThat(taskRepository.searchTasks(departmentId, null, PprTaskStatus.PLANNED, true, now))
+                .extracting(PprTask::getCode)
+                .containsExactly("PPR-OVERDUE-FILTER-2");
+    }
+
     private PprPlan plan(String code, UUID departmentId) {
         PprPlan plan = new PprPlan();
         plan.setCode(code);

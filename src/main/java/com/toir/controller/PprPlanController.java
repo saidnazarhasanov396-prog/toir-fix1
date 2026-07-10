@@ -138,9 +138,10 @@ public class PprPlanController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) PprTaskStatus status,
+            @RequestParam(defaultValue = "false") boolean overdue,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(service.findTasks(scopedDepartment(departmentId), equipmentId, status, page, size));
+        return ResponseEntity.ok(service.findTasks(scopedDepartment(departmentId), equipmentId, status, overdue, page, size));
     }
 
     @GetMapping("/tasks/stats")
