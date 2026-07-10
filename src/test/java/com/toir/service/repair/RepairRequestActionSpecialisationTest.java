@@ -27,11 +27,15 @@ import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.repair.RepairRequestTemplateActionRepository;
 import com.toir.repository.repair.RepairRequestTemplateRepository;
+import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.users.EmployeeSpecialisationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.CounteragentService;
 import com.toir.service.MeterService;
 import com.toir.service.NotificationService;
+import com.toir.service.OperationalIssueLifecycleSyncService;
+import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
 import com.toir.service.maintanance.MaintenanceDueEventService;
@@ -45,6 +49,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -59,14 +64,17 @@ class RepairRequestActionSpecialisationTest {
 
     @Mock RepairRequestRepository repository;
     @Mock EquipmentRepository equipmentRepository;
+    @Mock CounteragentService counteragentService;
     @Mock DepartmentRepository departmentRepository;
     @Mock LocationRepository locationRepository;
     @Mock UserRepository userRepository;
     @Mock DefectRepository defectRepository;
     @Mock WorkOrderRepository workOrderRepository;
+    @Mock BrigadeMemberRepository brigadeMemberRepository;
     @Mock AuditBuilderService auditBuilderService;
     @Mock ScopeAccessService scopeAccessService;
     @Mock NotificationService notificationService;
+    @Mock OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
     @Mock EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     @Mock MaintenanceTemplateRepository maintenanceTemplateRepository;
     @Mock MaintenanceOperationRepository maintenanceOperationRepository;
@@ -81,6 +89,7 @@ class RepairRequestActionSpecialisationTest {
     @Mock MaintenanceDueEventService maintenanceDueEventService;
     @Mock ObjectMapper objectMapper;
     @Mock EmployeeSpecialisationRepository employeeSpecialisationRepository;
+    @Mock AttachmentGroupService attachmentGroupService;
 
     @InjectMocks
     RepairRequestService service;
@@ -108,6 +117,7 @@ class RepairRequestActionSpecialisationTest {
         lenient().when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(any()))
                 .thenReturn(List.of());
         lenient().when(effectiveRuleResolver.resolveApplicable(any())).thenReturn(List.of());
+        lenient().when(attachmentGroupService.getPhotoSummaries(any(), any())).thenReturn(Map.of());
     }
 
     @Test

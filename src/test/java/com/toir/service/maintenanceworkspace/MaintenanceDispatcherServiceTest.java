@@ -85,7 +85,7 @@ class MaintenanceDispatcherServiceTest {
                 "Pump seal leak",
                 PriorityLevel.CRITICAL,
                 RequestStatus.OPEN,
-                Instant.parse("2026-07-10T09:00:00Z"),
+                Instant.parse("2026-07-20T09:00:00Z"),
                 "line stopped"
         );
         RepairRequest otherDepartment = repairRequest(
@@ -95,7 +95,7 @@ class MaintenanceDispatcherServiceTest {
                 "Pump seal leak",
                 PriorityLevel.CRITICAL,
                 RequestStatus.OPEN,
-                Instant.parse("2026-07-10T09:00:00Z"),
+                Instant.parse("2026-07-20T09:00:00Z"),
                 "line stopped"
         );
         Defect matchingTextButWrongType = defect(equipmentId, "DF-1", "Pump seal leak", "HIGH");
@@ -106,7 +106,7 @@ class MaintenanceDispatcherServiceTest {
                 "Pump seal leak",
                 PriorityLevel.CRITICAL,
                 WorkOrderStatus.SUSPENDED,
-                Instant.parse("2026-07-10T09:00:00Z")
+                Instant.parse("2026-07-20T09:00:00Z")
         );
         when(repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
                 .thenReturn(List.of(matchingEmergency, otherDepartment));
