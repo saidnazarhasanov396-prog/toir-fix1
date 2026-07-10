@@ -32,6 +32,7 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
+import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
@@ -87,6 +88,7 @@ class AnalyticsPbacScopeTest {
     CalibrationRecordRepository calibrationRecordRepository;
     MaintenanceDueEventRepository maintenanceDueEventRepository;
     UserRepository userRepository;
+    RepairMaterialUsageRepository repairMaterialUsageRepository;
     ScopeAccessService scopeAccessService;
     LegacyStockProjectionService legacyStockProjectionService;
     CounteragentService counteragentService;
@@ -122,6 +124,7 @@ class AnalyticsPbacScopeTest {
         calibrationRecordRepository = mock(CalibrationRecordRepository.class);
         maintenanceDueEventRepository = mock(MaintenanceDueEventRepository.class);
         userRepository = mock(UserRepository.class);
+        repairMaterialUsageRepository = mock(RepairMaterialUsageRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
         legacyStockProjectionService = mock(LegacyStockProjectionService.class);
         counteragentService = mock(CounteragentService.class);
@@ -151,6 +154,7 @@ class AnalyticsPbacScopeTest {
                 counteragentService,
                 maintenanceDueEventRepository,
                 userRepository,
+                repairMaterialUsageRepository,
                 scopeAccessService,
                 legacyStockProjectionService
         );
@@ -436,6 +440,7 @@ class AnalyticsPbacScopeTest {
         when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(repairMaterialUsageRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(counteragentService.load(org.mockito.ArgumentMatchers.<java.util.Collection<UUID>>any())).thenReturn(List.of());
     }
 

@@ -76,6 +76,10 @@ class DashboardControllerContractTest {
                 List.of(),
                 List.of(),
                 new DashboardOverview.MaintenanceDueCounts(0, 0, 0, 0, 0),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
                 List.of());
         when(service.overview(null)).thenReturn(overview);
 

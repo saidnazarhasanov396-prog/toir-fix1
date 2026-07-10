@@ -8,6 +8,7 @@ import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
+import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.User;
 import com.toir.entity.warehouse.Warehouse;
@@ -37,6 +38,7 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
+import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
@@ -105,6 +107,7 @@ public class DashboardService {
     private final CounteragentService counteragentService;
     private final MaintenanceDueEventRepository maintenanceDueEventRepository;
     private final UserRepository userRepository;
+    private final RepairMaterialUsageRepository repairMaterialUsageRepository;
     private final ScopeAccessService scopeAccessService;
     private final LegacyStockProjectionService legacyStockProjectionService;
 
@@ -563,7 +566,7 @@ public class DashboardService {
                         .thenComparing(Comparator.comparingLong(
                                 (Map.Entry<UUID, Long> e) ->
                                         downtimeMinutesByEquipment.getOrDefault(e.getKey(), 0L)).reversed()))
-                .limit(8)
+                .limit(10)
                 .map(entry -> {
                     Equipment eq = equipById.get(entry.getKey());
                     if (eq == null) return null;
@@ -577,6 +580,110 @@ public class DashboardService {
                             openDefectsByEquipment.getOrDefault(eq.getId(), 0L),
                             entry.getValue(),
                             downtimeMinutesByEquipment.getOrDefault(eq.getId(), 0L) / 60.0);
+                })
+                .filter(Objects::nonNull)
+                .toList();
+
+        List<TopEquipmentByFailures> topEquipmentByFailures = failuresByEquipment.entrySet().stream()
+                .sorted(Comparator.<Map.Entry<UUID, Long>>comparingLong(Map.Entry::getValue).reversed())
+                .limit(10)
+                .map(entry -> {
+                    Equipment eq = equipById.get(entry.getKey());
+                    if (eq == null) return null;
+                    String deptName = eq.getDepartmentId() != null && deptById.containsKey(eq.getDepartmentId())
+                            ? deptById.get(eq.getDepartmentId()).getName() : "";
+                    return new TopEquipmentByFailures(
+                            eq.getId(),
+                            eq.getCode(),
+                            eq.getName(),
+                            deptName,
+                            entry.getValue(),
+                            openDefectsByEquipment.getOrDefault(eq.getId(), 0L));
+                })
+                .filter(Objects::nonNull)
+                .toList();
+
+        // Total completed repair duration per equipment (started_at → completed_at).
+        Map<UUID, double[]> repairAggByEquipment = new LinkedHashMap<>();
+        for (WorkOrder wo : allWorkOrders) {
+            if (wo.getEquipmentId() == null) continue;
+            if (wo.getStatus() != WorkOrderStatus.COMPLETED && wo.getStatus() != WorkOrderStatus.CLOSED) {
+                continue;
+            }
+            Instant start = wo.getStartedAt() != null ? wo.getStartedAt() : wo.getCreatedAt();
+            Instant end = wo.getCompletedAt() != null ? wo.getCompletedAt() : wo.getUpdatedAt();
+            if (start == null || end == null || !end.isAfter(start)) continue;
+            double hours = Duration.between(start, end).toMinutes() / 60.0;
+            double[] agg = repairAggByEquipment.computeIfAbsent(wo.getEquipmentId(), id -> new double[2]);
+            agg[0] += hours; // total hours
+            agg[1] += 1;     // work order count
+        }
+        List<TopEquipmentByRepairTime> topEquipmentByRepairTime = repairAggByEquipment.entrySet().stream()
+                .sorted(Comparator.<Map.Entry<UUID, double[]>>comparingDouble(e -> e.getValue()[0]).reversed())
+                .limit(10)
+                .map(entry -> {
+                    Equipment eq = equipById.get(entry.getKey());
+                    if (eq == null) return null;
+                    String deptName = eq.getDepartmentId() != null && deptById.containsKey(eq.getDepartmentId())
+                            ? deptById.get(eq.getDepartmentId()).getName() : "";
+                    return new TopEquipmentByRepairTime(
+                            eq.getId(),
+                            eq.getCode(),
+                            eq.getName(),
+                            deptName,
+                            Math.round(entry.getValue()[0] * 10.0) / 10.0,
+                            (long) entry.getValue()[1]);
+                })
+                .filter(Objects::nonNull)
+                .toList();
+
+        Set<UUID> scopedWorkOrderIds = allWorkOrders.stream()
+                .map(WorkOrder::getId)
+                .collect(Collectors.toSet());
+        List<RepairMaterialUsage> materialUsages = repairMaterialUsageRepository
+                .findAllByIsDeletedFalseOrderByUpdatedAtDesc()
+                .stream()
+                .filter(u -> departmentId == null || scopedWorkOrderIds.contains(u.getWorkOrderId()))
+                .toList();
+        Map<UUID, double[]> spareUsageAgg = new LinkedHashMap<>();
+        for (RepairMaterialUsage usage : materialUsages) {
+            if (usage.getSparePartId() == null) continue;
+            double[] agg = spareUsageAgg.computeIfAbsent(usage.getSparePartId(), id -> new double[2]);
+            agg[0] += usage.getQuantity();
+            agg[1] += 1;
+        }
+        List<TopSparePartUsage> topSparePartsByUsage = spareUsageAgg.entrySet().stream()
+                .sorted(Comparator.<Map.Entry<UUID, double[]>>comparingDouble(e -> e.getValue()[0]).reversed())
+                .limit(10)
+                .map(entry -> {
+                    SparePart part = partById.get(entry.getKey());
+                    if (part == null) return null;
+                    return new TopSparePartUsage(
+                            part.getId(),
+                            part.getCode(),
+                            part.getName(),
+                            Math.round(entry.getValue()[0] * 100.0) / 100.0,
+                            part.getUnit() != null ? part.getUnit() : "",
+                            (long) entry.getValue()[1]);
+                })
+                .filter(Objects::nonNull)
+                .toList();
+
+        List<TopBrokenEquipmentResponsible> topBrokenEquipmentResponsibles = topEquipmentByFailures.stream()
+                .map(item -> {
+                    Equipment eq = equipById.get(item.id());
+                    if (eq == null) return null;
+                    User responsible = eq.getResponsibleId() != null
+                            ? userById.get(eq.getResponsibleId())
+                            : null;
+                    return new TopBrokenEquipmentResponsible(
+                            eq.getId(),
+                            eq.getCode(),
+                            eq.getName(),
+                            item.failureCount(),
+                            responsible != null ? responsible.getId() : null,
+                            responsible != null ? responsible.getFullName() : null,
+                            responsible != null ? responsible.getPosition() : null);
                 })
                 .filter(Objects::nonNull)
                 .toList();
@@ -747,7 +854,11 @@ public class DashboardService {
                 counters, planFact, kpis, topProblem, downtimeByEq, latestDowntimes, latestMovements,
                 counteragentLoad, financialReviewWorkloadByRole, financialReviewWorkloadByDepartment,
                 counteragentReconciliation, lowStockItems, repeatedDefects, maintenanceKpis, maintenanceDueCounts,
-                problemDepartments);
+                problemDepartments,
+                topEquipmentByFailures,
+                topEquipmentByRepairTime,
+                topSparePartsByUsage,
+                topBrokenEquipmentResponsibles);
     }
 
     public Page<DashboardEmergencyEventDto> emergencyEvents(
