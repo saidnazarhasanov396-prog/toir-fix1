@@ -555,6 +555,12 @@ public class DashboardService {
                 .collect(Collectors.groupingBy(Defect::getEquipmentId, Collectors.counting()));
         Map<UUID, Long> failuresByEquipment = allDefects.stream()
                 .collect(Collectors.groupingBy(Defect::getEquipmentId, Collectors.counting()));
+        Map<UUID, Instant> latestDetectedByEquipment = allDefects.stream()
+                .filter(d -> d.getDetectedAt() != null)
+                .collect(Collectors.toMap(
+                        Defect::getEquipmentId,
+                        Defect::getDetectedAt,
+                        (a, b) -> a.isAfter(b) ? a : b));
         Map<UUID, Long> downtimeMinutesByEquipment = calculatedReliabilityByEquipment.entrySet().stream()
                 .filter(entry -> entry.getValue().totalDowntimeMinutes() > 0)
                 .collect(Collectors.toMap(
@@ -598,7 +604,8 @@ public class DashboardService {
                             eq.getName(),
                             deptName,
                             entry.getValue(),
-                            openDefectsByEquipment.getOrDefault(eq.getId(), 0L));
+                            openDefectsByEquipment.getOrDefault(eq.getId(), 0L),
+                            latestDetectedByEquipment.get(eq.getId()));
                 })
                 .filter(Objects::nonNull)
                 .toList();
@@ -645,12 +652,21 @@ public class DashboardService {
                 .stream()
                 .filter(u -> departmentId == null || scopedWorkOrderIds.contains(u.getWorkOrderId()))
                 .toList();
+        // [0]=quantity sum, [1]=issue count; latestIssuedAt tracked separately
         Map<UUID, double[]> spareUsageAgg = new LinkedHashMap<>();
+        Map<UUID, Instant> latestIssuedBySparePart = new LinkedHashMap<>();
         for (RepairMaterialUsage usage : materialUsages) {
             if (usage.getSparePartId() == null) continue;
             double[] agg = spareUsageAgg.computeIfAbsent(usage.getSparePartId(), id -> new double[2]);
             agg[0] += usage.getQuantity();
             agg[1] += 1;
+            Instant issuedAt = usage.getIssuedAt() != null ? usage.getIssuedAt() : usage.getCreatedAt();
+            if (issuedAt != null) {
+                latestIssuedBySparePart.merge(
+                        usage.getSparePartId(),
+                        issuedAt,
+                        (a, b) -> a.isAfter(b) ? a : b);
+            }
         }
         List<TopSparePartUsage> topSparePartsByUsage = spareUsageAgg.entrySet().stream()
                 .sorted(Comparator.<Map.Entry<UUID, double[]>>comparingDouble(e -> e.getValue()[0]).reversed())
@@ -664,7 +680,8 @@ public class DashboardService {
                             part.getName(),
                             Math.round(entry.getValue()[0] * 100.0) / 100.0,
                             part.getUnit() != null ? part.getUnit() : "",
-                            (long) entry.getValue()[1]);
+                            (long) entry.getValue()[1],
+                            latestIssuedBySparePart.get(entry.getKey()));
                 })
                 .filter(Objects::nonNull)
                 .toList();
@@ -683,7 +700,8 @@ public class DashboardService {
                             item.failureCount(),
                             responsible != null ? responsible.getId() : null,
                             responsible != null ? responsible.getFullName() : null,
-                            responsible != null ? responsible.getPosition() : null);
+                            responsible != null ? responsible.getPosition() : null,
+                            item.latestDetectedAt());
                 })
                 .filter(Objects::nonNull)
                 .toList();

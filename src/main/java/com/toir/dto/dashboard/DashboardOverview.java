@@ -118,7 +118,8 @@ public record DashboardOverview(
             String name,
             String department,
             long failureCount,
-            long openDefects
+            long openDefects,
+            Instant latestDetectedAt
     ) {}
 
     /** Top equipment by total completed repair duration (hours). */
@@ -138,7 +139,8 @@ public record DashboardOverview(
             String name,
             double quantity,
             String unit,
-            long issueCount
+            long issueCount,
+            Instant latestIssuedAt
     ) {}
 
     /** Responsible person for equipment among top broken assets. */
@@ -149,7 +151,8 @@ public record DashboardOverview(
             long failureCount,
             UUID responsibleId,
             String responsibleName,
-            String responsiblePosition
+            String responsiblePosition,
+            Instant latestDetectedAt
     ) {}
 
     public record DowntimeByEquipment(UUID equipmentId, EquipmentRef equipment, long downtimeMinutes) {}
