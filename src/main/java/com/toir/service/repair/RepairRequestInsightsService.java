@@ -1,11 +1,15 @@
 package com.toir.service.repair;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.toir.dto.repairrequest.RepairRequestCloseReadinessDto;
 import com.toir.dto.repairrequest.RepairRequestCloseReadinessItemDto;
 import com.toir.dto.repairrequest.RepairRequestCostKind;
 import com.toir.dto.repairrequest.RepairRequestCostRowDto;
 import com.toir.dto.repairrequest.RepairRequestCostsSummaryDto;
+import com.toir.dto.repairrequest.RepairRequestTimelineEventDto;
+import com.toir.dto.repairrequest.RepairRequestTimelineEventType;
+import com.toir.entity.AuditLog;
 import com.toir.entity.LaborEntry;
 import com.toir.entity.SparePart;
 import com.toir.entity.contractors.ContractorWork;
@@ -42,11 +46,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -87,6 +93,10 @@ public class RepairRequestInsightsService {
     @Transactional(readOnly = true)
     public RepairRequestCostsSummaryDto getCostsSummary(RepairRequest request) {
         List<ActualCost> costs = deduplicateCosts(actualCostRepository.findAllForRepairRequest(request.getId()));
+        if (costs.isEmpty()) {
+            return new RepairRequestCostsSummaryDto(
+                    request.getId(), DEFAULT_CURRENCY, 0, 0, 0, 0, List.of());
+        }
         Map<UUID, WorkOrder> workOrders = loadWorkOrders(costs);
         CostEnrichment enrichment = loadCostEnrichment(costs, workOrders);
 
@@ -215,6 +225,238 @@ public class RepairRequestInsightsService {
                 warnings,
                 groups
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<RepairRequestTimelineEventDto> getTimeline(RepairRequest request) {
+        List<RepairRequestTimelineEventDto> events = new ArrayList<>();
+        Instant createdAt = request.getCreatedAt() != null ? request.getCreatedAt() : request.getDetectedAt();
+        if (createdAt != null) {
+            events.add(new RepairRequestTimelineEventDto(
+                    syntheticEventId(request.getId(), "created"),
+                    RepairRequestTimelineEventType.CREATED,
+                    createdAt,
+                    request.getReporterId(),
+                    null,
+                    null,
+                    requestInitialStatus(request),
+                    null,
+                    null,
+                    null
+            ));
+        }
+
+        String previousStatus = requestInitialStatus(request);
+        for (AuditLog audit : safeList(auditLogRepository
+                .findRepairRequestTimelineAudits(request.getId().toString()))) {
+            if (audit == null || audit.getAction() == com.toir.enums.AuditAction.CREATE) {
+                continue;
+            }
+            String newStatus = snapshotStatus(audit.getCurrentSnapshot());
+            RepairRequestTimelineEventType type = classifyAuditEvent(audit, newStatus, previousStatus);
+            if (type != null && audit.getCreatedAt() != null) {
+                events.add(new RepairRequestTimelineEventDto(
+                        audit.getId() == null
+                                ? syntheticEventId(request.getId(), "audit:" + audit.getCreatedAt() + ":" + type)
+                                : audit.getId(),
+                        type,
+                        audit.getCreatedAt(),
+                        audit.getUserId(),
+                        null,
+                        statusChanged(previousStatus, newStatus) ? previousStatus : null,
+                        statusChanged(previousStatus, newStatus) ? newStatus : null,
+                        audit.getMessage(),
+                        null,
+                        null
+                ));
+            }
+            if (newStatus != null) {
+                previousStatus = newStatus;
+            }
+        }
+
+        for (Defect defect : safeList(defectRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))) {
+            if (defect == null || defect.getId() == null || defect.getCreatedAt() == null) {
+                continue;
+            }
+            events.add(new RepairRequestTimelineEventDto(
+                    syntheticEventId(request.getId(), "defect:" + defect.getId()),
+                    RepairRequestTimelineEventType.DEFECT_LINKED,
+                    defect.getCreatedAt(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    joinNonBlank(defect.getCode(), defect.getTitle()),
+                    "DEFECT",
+                    defect.getId()
+            ));
+        }
+
+        for (WorkOrder workOrder : safeList(workOrderRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))) {
+            if (workOrder == null || workOrder.getId() == null || workOrder.getCreatedAt() == null) {
+                continue;
+            }
+            events.add(new RepairRequestTimelineEventDto(
+                    syntheticEventId(request.getId(), "work-order:" + workOrder.getId()),
+                    RepairRequestTimelineEventType.WORK_ORDER_LINKED,
+                    workOrder.getCreatedAt(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    joinNonBlank(workOrder.getNumber(), workOrder.getTitle()),
+                    "WORK_ORDER",
+                    workOrder.getId()
+            ));
+        }
+
+        List<MeterReading> readings = safeList(meterReadingRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(request.getId()));
+        List<UUID> meterIds = readings.stream()
+                .map(MeterReading::getMeterId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID, EquipmentMeter> meters = meterIds.isEmpty()
+                ? Map.of()
+                : mapById(equipmentMeterRepository.findAllByIdInAndIsDeletedFalse(meterIds), EquipmentMeter::getId);
+        for (MeterReading reading : readings) {
+            Instant occurredAt = reading == null
+                    ? null
+                    : reading.getReadAt() != null ? reading.getReadAt() : reading.getCreatedAt();
+            if (reading == null || reading.getId() == null || occurredAt == null) {
+                continue;
+            }
+            events.add(new RepairRequestTimelineEventDto(
+                    syntheticEventId(request.getId(), "meter-reading:" + reading.getId()),
+                    RepairRequestTimelineEventType.METER_READING,
+                    occurredAt,
+                    reading.getRecordedByUserId(),
+                    null,
+                    null,
+                    null,
+                    meterReadingMessage(reading, meters),
+                    null,
+                    null
+            ));
+        }
+
+        Map<UUID, User> actors = loadTimelineActors(events);
+        return deduplicateTimeline(events).stream()
+                .map(event -> withActorName(event, actors))
+                .sorted(Comparator
+                        .comparing(RepairRequestTimelineEventDto::occurredAt)
+                        .thenComparing(event -> event.id().toString()))
+                .toList();
+    }
+
+    private String meterReadingMessage(MeterReading reading, Map<UUID, EquipmentMeter> meters) {
+        EquipmentMeter meter = reading.getMeterId() == null ? null : meters.get(reading.getMeterId());
+        if (meter == null || !hasText(meter.getName())) {
+            return "Meter reading: " + formatNumber(reading.getValue());
+        }
+        String unit = hasText(meter.getUnit()) ? " " + meter.getUnit().trim() : "";
+        return "%s: %s%s".formatted(meter.getName().trim(), formatNumber(reading.getValue()), unit);
+    }
+
+    private RepairRequestTimelineEventType classifyAuditEvent(AuditLog audit,
+                                                               String newStatus,
+                                                               String previousStatus) {
+        String message = audit.getMessage() == null ? "" : audit.getMessage().toLowerCase(Locale.ROOT);
+        if (audit.getAction() == com.toir.enums.AuditAction.CLOSE || "CLOSED".equals(newStatus)) {
+            return RepairRequestTimelineEventType.CLOSED;
+        }
+        if (audit.getAction() == com.toir.enums.AuditAction.CANCEL || "REJECTED".equals(newStatus)) {
+            return RepairRequestTimelineEventType.REJECTED;
+        }
+        if (message.contains("warranty decision") || message.contains("гарант")) {
+            return RepairRequestTimelineEventType.WARRANTY_DECISION;
+        }
+        if (message.contains("clarification") || message.contains("уточнен")) {
+            return RepairRequestTimelineEventType.CLARIFICATION_REQUESTED;
+        }
+        if (message.contains("assigned") || message.contains("назначен")) {
+            return RepairRequestTimelineEventType.ASSIGNED;
+        }
+        return statusChanged(previousStatus, newStatus)
+                ? RepairRequestTimelineEventType.STATUS_CHANGE
+                : null;
+    }
+
+    private String snapshotStatus(String snapshot) {
+        if (!hasText(snapshot)) {
+            return null;
+        }
+        try {
+            JsonNode statusNode = objectMapper.readTree(snapshot).path("status");
+            return statusNode.isTextual() && hasText(statusNode.asText()) ? statusNode.asText() : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String requestInitialStatus(RepairRequest request) {
+        return RequestStatus.OPEN.name();
+    }
+
+    private boolean statusChanged(String previousStatus, String newStatus) {
+        return newStatus != null && !Objects.equals(previousStatus, newStatus);
+    }
+
+    private UUID syntheticEventId(UUID requestId, String discriminator) {
+        return UUID.nameUUIDFromBytes(
+                ("repair-request:" + requestId + ":" + discriminator).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String joinNonBlank(String first, String second) {
+        if (hasText(first) && hasText(second)) {
+            return first.trim() + " · " + second.trim();
+        }
+        if (hasText(first)) {
+            return first.trim();
+        }
+        return hasText(second) ? second.trim() : null;
+    }
+
+    private Map<UUID, User> loadTimelineActors(List<RepairRequestTimelineEventDto> events) {
+        List<UUID> actorIds = events.stream()
+                .map(RepairRequestTimelineEventDto::actorId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (actorIds.isEmpty()) {
+            return Map.of();
+        }
+        return mapById(userRepository.findAllByIdInAndIsDeletedFalse(actorIds), User::getId);
+    }
+
+    private RepairRequestTimelineEventDto withActorName(RepairRequestTimelineEventDto event,
+                                                        Map<UUID, User> actors) {
+        User actor = event.actorId() == null ? null : actors.get(event.actorId());
+        return new RepairRequestTimelineEventDto(
+                event.id(),
+                event.type(),
+                event.occurredAt(),
+                event.actorId(),
+                actor == null ? null : actor.getFullName(),
+                event.fromStatus(),
+                event.toStatus(),
+                event.message(),
+                event.targetType(),
+                event.targetId()
+        );
+    }
+
+    private List<RepairRequestTimelineEventDto> deduplicateTimeline(List<RepairRequestTimelineEventDto> events) {
+        Map<String, RepairRequestTimelineEventDto> unique = new LinkedHashMap<>();
+        for (RepairRequestTimelineEventDto event : events) {
+            String key = event.type() + "|" + event.occurredAt() + "|" + event.targetId() + "|" + event.toStatus();
+            unique.putIfAbsent(key, event);
+        }
+        return List.copyOf(unique.values());
     }
 
     private Map<String, CloseReadinessGroupStatus> readinessGroups() {

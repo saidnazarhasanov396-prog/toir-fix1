@@ -5,6 +5,9 @@ import com.toir.dto.repairrequest.RepairRequestCostKind;
 import com.toir.dto.repairrequest.RepairRequestCloseReadinessDto;
 import com.toir.dto.repairrequest.RepairRequestCloseReadinessItemDto;
 import com.toir.dto.repairrequest.RepairRequestCostsSummaryDto;
+import com.toir.dto.repairrequest.RepairRequestTimelineEventDto;
+import com.toir.dto.repairrequest.RepairRequestTimelineEventType;
+import com.toir.entity.AuditLog;
 import com.toir.entity.LaborEntry;
 import com.toir.entity.SparePart;
 import com.toir.entity.defects.Defect;
@@ -18,6 +21,7 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.User;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.AuditAction;
 import com.toir.enums.CloseReadinessGroupStatus;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.RequestStatus;
@@ -46,6 +50,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -231,6 +236,26 @@ class RepairRequestInsightsServiceTest {
     }
 
     @Test
+    void costsSummaryReturnsZerosWithoutRunningEmptyBatchQueries() {
+        RepairRequest request = repairRequest(UUID.randomUUID(), RequestStatus.OPEN);
+        when(actualCostRepository.findAllForRepairRequest(request.getId())).thenReturn(List.of());
+
+        RepairRequestCostsSummaryDto result = service.getCostsSummary(request);
+
+        assertThat(result.totalCost()).isZero();
+        assertThat(result.rows()).isEmpty();
+        verifyNoInteractions(
+                workOrderRepository,
+                costCategoryRepository,
+                laborEntryRepository,
+                materialUsageRepository,
+                sparePartRepository,
+                contractorWorkRepository,
+                userRepository
+        );
+    }
+
+    @Test
     void closeReadinessBlocksOpenRecordsAndReportsNonBlockingWarnings() {
         RepairRequest request = repairRequest(UUID.randomUUID(), RequestStatus.IN_PROGRESS);
         request.setWarrantyActiveAtCreation(true);
@@ -328,6 +353,160 @@ class RepairRequestInsightsServiceTest {
         assertThat(result.groups().values()).containsOnly(CloseReadinessGroupStatus.READY);
     }
 
+    @Test
+    void timelineCuratesAuditEventsAndResolvesActorNamesOldestFirst() {
+        RepairRequest request = repairRequest(UUID.randomUUID(), RequestStatus.CLOSED);
+        request.setCreatedAt(Instant.parse("2026-07-01T09:00:00Z"));
+        UUID actorId = UUID.randomUUID();
+        AuditLog assigned = audit(
+                "Заявка назначена исполнителю",
+                AuditAction.UPDATE,
+                "{\"status\":\"ASSIGNED\"}",
+                Instant.parse("2026-07-01T10:00:00Z"),
+                actorId
+        );
+        AuditLog closed = audit(
+                "Закрыта заявка",
+                AuditAction.CLOSE,
+                "{\"status\":\"CLOSED\"}",
+                Instant.parse("2026-07-02T10:00:00Z"),
+                actorId
+        );
+        User actor = new User();
+        actor.setId(actorId);
+        actor.setFullName("Ivanov I.");
+
+        when(auditLogRepository.findRepairRequestTimelineAudits(request.getId().toString()))
+                .thenReturn(List.of(assigned, closed));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of());
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of());
+        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(request.getId()))
+                .thenReturn(List.of());
+        when(userRepository.findAllByIdInAndIsDeletedFalse(List.of(actorId))).thenReturn(List.of(actor));
+
+        List<RepairRequestTimelineEventDto> result = service.getTimeline(request);
+
+        assertThat(result).extracting(RepairRequestTimelineEventDto::type)
+                .containsExactly(
+                        RepairRequestTimelineEventType.CREATED,
+                        RepairRequestTimelineEventType.ASSIGNED,
+                        RepairRequestTimelineEventType.CLOSED
+                );
+        assertThat(result.get(1).actorName()).isEqualTo("Ivanov I.");
+        assertThat(result.get(1).fromStatus()).isEqualTo("OPEN");
+        assertThat(result.get(1).toStatus()).isEqualTo("ASSIGNED");
+        assertThat(result.get(2).fromStatus()).isEqualTo("ASSIGNED");
+        assertThat(result.get(2).toStatus()).isEqualTo("CLOSED");
+    }
+
+    @Test
+    void timelineAddsLinkedRecordsAndEnrichedMeterReadings() {
+        RepairRequest request = repairRequest(UUID.randomUUID(), RequestStatus.IN_PROGRESS);
+        request.setCreatedAt(Instant.parse("2026-07-01T08:00:00Z"));
+        Defect defect = new Defect();
+        defect.setId(UUID.randomUUID());
+        defect.setCode("DEF-2026-0001");
+        defect.setTitle("Bearing noise");
+        defect.setCreatedAt(Instant.parse("2026-07-01T09:00:00Z"));
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(UUID.randomUUID());
+        workOrder.setNumber("WO-2026-000123");
+        workOrder.setTitle("Replace bearing");
+        workOrder.setCreatedAt(Instant.parse("2026-07-01T10:00:00Z"));
+        UUID actorId = UUID.randomUUID();
+        UUID meterId = UUID.randomUUID();
+        MeterReading reading = new MeterReading();
+        reading.setId(UUID.randomUUID());
+        reading.setMeterId(meterId);
+        reading.setValue(123.5);
+        reading.setReadAt(Instant.parse("2026-07-01T11:00:00Z"));
+        reading.setRecordedByUserId(actorId);
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(meterId);
+        meter.setName("Operating hours");
+        meter.setUnit("h");
+        User actor = new User();
+        actor.setId(actorId);
+        actor.setFullName("Petrov P.");
+
+        when(auditLogRepository.findRepairRequestTimelineAudits(request.getId().toString()))
+                .thenReturn(List.of());
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of(defect));
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of(workOrder));
+        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(request.getId()))
+                .thenReturn(List.of(reading));
+        when(equipmentMeterRepository.findAllByIdInAndIsDeletedFalse(List.of(meterId)))
+                .thenReturn(List.of(meter));
+        when(userRepository.findAllByIdInAndIsDeletedFalse(List.of(actorId))).thenReturn(List.of(actor));
+
+        List<RepairRequestTimelineEventDto> result = service.getTimeline(request);
+
+        assertThat(result).extracting(RepairRequestTimelineEventDto::type)
+                .containsExactly(
+                        RepairRequestTimelineEventType.CREATED,
+                        RepairRequestTimelineEventType.DEFECT_LINKED,
+                        RepairRequestTimelineEventType.WORK_ORDER_LINKED,
+                        RepairRequestTimelineEventType.METER_READING
+                );
+        assertThat(result.get(1).targetType()).isEqualTo("DEFECT");
+        assertThat(result.get(1).targetId()).isEqualTo(defect.getId());
+        assertThat(result.get(2).targetType()).isEqualTo("WORK_ORDER");
+        assertThat(result.get(2).targetId()).isEqualTo(workOrder.getId());
+        assertThat(result.get(3).message()).isEqualTo("Operating hours: 123.5 h");
+        assertThat(result.get(3).actorName()).isEqualTo("Petrov P.");
+    }
+
+    @Test
+    void timelineClassifiesClarificationWarrantyAndRejectionEvenWithMalformedSnapshot() {
+        RepairRequest request = repairRequest(UUID.randomUUID(), RequestStatus.REJECTED);
+        request.setCreatedAt(Instant.parse("2026-07-01T08:00:00Z"));
+        AuditLog clarification = audit(
+                "Заявка требует уточнения",
+                AuditAction.UPDATE,
+                "{\"status\":\"NEEDS_CLARIFICATION\"}",
+                Instant.parse("2026-07-01T09:00:00Z"),
+                null
+        );
+        AuditLog warranty = audit(
+                "Warranty decision recorded: CONTACT_SUPPLIER",
+                AuditAction.UPDATE,
+                "not-json",
+                Instant.parse("2026-07-01T10:00:00Z"),
+                null
+        );
+        AuditLog rejected = audit(
+                "Заявка отклонена",
+                AuditAction.CANCEL,
+                "{\"status\":\"REJECTED\"}",
+                Instant.parse("2026-07-01T11:00:00Z"),
+                null
+        );
+        when(auditLogRepository.findRepairRequestTimelineAudits(request.getId().toString()))
+                .thenReturn(List.of(clarification, warranty, rejected));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of());
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of());
+        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(request.getId()))
+                .thenReturn(List.of());
+
+        List<RepairRequestTimelineEventDto> result = service.getTimeline(request);
+
+        assertThat(result).extracting(RepairRequestTimelineEventDto::type)
+                .containsExactly(
+                        RepairRequestTimelineEventType.CREATED,
+                        RepairRequestTimelineEventType.CLARIFICATION_REQUESTED,
+                        RepairRequestTimelineEventType.WARRANTY_DECISION,
+                        RepairRequestTimelineEventType.REJECTED
+                );
+        assertThat(result.getLast().fromStatus()).isEqualTo("NEEDS_CLARIFICATION");
+        assertThat(result.getLast().toStatus()).isEqualTo("REJECTED");
+    }
+
     private RepairRequest repairRequest(UUID id, RequestStatus status) {
         RepairRequest request = new RepairRequest();
         request.setId(id);
@@ -350,5 +529,20 @@ class RepairRequestInsightsServiceTest {
         cost.setNotes(notes);
         cost.setCostDate(costDate);
         return cost;
+    }
+
+    private AuditLog audit(String message,
+                           AuditAction action,
+                           String currentSnapshot,
+                           Instant createdAt,
+                           UUID userId) {
+        AuditLog audit = new AuditLog();
+        audit.setId(UUID.randomUUID());
+        audit.setMessage(message);
+        audit.setAction(action);
+        audit.setCurrentSnapshot(currentSnapshot);
+        audit.setCreatedAt(createdAt);
+        audit.setUserId(userId);
+        return audit;
     }
 }
