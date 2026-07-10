@@ -555,11 +555,11 @@ public class DashboardService {
                 .collect(Collectors.groupingBy(Defect::getEquipmentId, Collectors.counting()));
         Map<UUID, Long> failuresByEquipment = allDefects.stream()
                 .collect(Collectors.groupingBy(Defect::getEquipmentId, Collectors.counting()));
-        Map<UUID, Long> downtimeMinutesByEquipment = allDowntimes.stream()
-                .filter(d -> d.getEquipmentId() != null)
-                .collect(Collectors.groupingBy(
-                        DowntimeEvent::getEquipmentId,
-                        Collectors.summingLong(IndustrialKpiAggregations::downtimeMinutes)));
+        Map<UUID, Long> downtimeMinutesByEquipment = calculatedReliabilityByEquipment.entrySet().stream()
+                .filter(entry -> entry.getValue().totalDowntimeMinutes() > 0)
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().totalDowntimeMinutes()));
 
         List<TopProblemEquipment> topProblem = failuresByEquipment.entrySet().stream()
                 .sorted(Comparator.<Map.Entry<UUID, Long>>comparingLong(Map.Entry::getValue).reversed()
@@ -688,19 +688,21 @@ public class DashboardService {
                 .filter(Objects::nonNull)
                 .toList();
 
-        List<DowntimeByEquipment> downtimeByEq = allDowntimes.stream()
-                .collect(Collectors.groupingBy(
-                        DowntimeEvent::getEquipmentId,
-                        Collectors.summingLong(IndustrialKpiAggregations::downtimeMinutes)))
-                .entrySet().stream()
-                .sorted(Map.Entry.<UUID, Long>comparingByValue().reversed())
+        // Same reliability-derived downtime as analytics (events + repair/WO windows),
+        // not only raw DowntimeEvent rows — otherwise the chart is empty when plant
+        // downtime is captured via defects/requests without formal downtime events.
+        List<DowntimeByEquipment> downtimeByEq = calculatedReliabilityByEquipment.entrySet().stream()
+                .filter(entry -> entry.getValue().totalDowntimeMinutes() > 0)
+                .sorted(Comparator.<Map.Entry<UUID, ReliabilityDowntimeCalculator.EquipmentReliability>>comparingLong(
+                                e -> e.getValue().totalDowntimeMinutes())
+                        .reversed())
                 .limit(8)
                 .map(entry -> {
                     Equipment eq = equipById.get(entry.getKey());
                     return new DowntimeByEquipment(
                             entry.getKey(),
                             eq != null ? new EquipmentRef(eq.getId(), eq.getCode(), eq.getName()) : null,
-                            entry.getValue());
+                            entry.getValue().totalDowntimeMinutes());
                 })
                 .toList();
 
@@ -848,7 +850,12 @@ public class DashboardService {
 
         MaintenanceDueCounts maintenanceDueCounts = maintenanceDueCounts(departmentId);
         List<ProblemDepartment> problemDepartments = problemDepartments(
-                allRequests, allWorkOrders, allDowntimes, deptById);
+                allRequests,
+                allWorkOrders,
+                allDowntimes,
+                deptById,
+                equipById,
+                calculatedReliabilityByEquipment);
 
         return new DashboardOverview(
                 counters, planFact, kpis, topProblem, downtimeByEq, latestDowntimes, latestMovements,
@@ -1294,19 +1301,46 @@ public class DashboardService {
             List<RepairRequest> requests,
             List<WorkOrder> workOrders,
             List<DowntimeEvent> downtimes,
-            Map<UUID, Department> departments
+            Map<UUID, Department> departments,
+            Map<UUID, Equipment> equipmentById,
+            Map<UUID, ReliabilityDowntimeCalculator.EquipmentReliability> reliabilityByEquipment
     ) {
-        Map<UUID, Long> downtimeMinutes = downtimes.stream()
+        // Prefer reliability-derived downtime (aligned with analytics) over raw DowntimeEvent only.
+        Map<UUID, Long> reliabilityDowntimeMinutes = new LinkedHashMap<>();
+        Map<UUID, Long> reliabilityDowntimeEvents = new LinkedHashMap<>();
+        reliabilityByEquipment.forEach((equipmentId, reliability) -> {
+            if (reliability.totalDowntimeMinutes() <= 0) {
+                return;
+            }
+            Equipment equipment = equipmentById.get(equipmentId);
+            UUID departmentId = equipment != null ? equipment.getDepartmentId() : null;
+            if (departmentId == null) {
+                return;
+            }
+            reliabilityDowntimeMinutes.merge(departmentId, reliability.totalDowntimeMinutes(), Long::sum);
+            reliabilityDowntimeEvents.merge(departmentId, (long) reliability.failureEvents(), Long::sum);
+        });
+        Map<UUID, Long> eventDowntimeMinutes = downtimes.stream()
+                .filter(d -> d.getDepartmentId() != null)
                 .collect(Collectors.groupingBy(
                         DowntimeEvent::getDepartmentId,
                         Collectors.summingLong(IndustrialKpiAggregations::downtimeMinutes)));
-        Map<UUID, Long> downtimeEvents = downtimes.stream()
+        Map<UUID, Long> eventDowntimeEvents = downtimes.stream()
+                .filter(d -> d.getDepartmentId() != null)
                 .collect(Collectors.groupingBy(DowntimeEvent::getDepartmentId, Collectors.counting()));
+        final Map<UUID, Long> downtimeMinutes = reliabilityDowntimeMinutes.isEmpty()
+                ? eventDowntimeMinutes
+                : reliabilityDowntimeMinutes;
+        final Map<UUID, Long> downtimeEvents = reliabilityDowntimeEvents.isEmpty()
+                ? eventDowntimeEvents
+                : reliabilityDowntimeEvents;
         Map<UUID, Long> emergencies = requests.stream()
                 .filter(IndustrialKpiAggregations::isEmergencyRequest)
+                .filter(r -> r.getDepartmentId() != null)
                 .collect(Collectors.groupingBy(RepairRequest::getDepartmentId, Collectors.counting()));
         Map<UUID, Long> repairs = workOrders.stream()
                 .filter(IndustrialKpiAggregations::isRepairWorkOrder)
+                .filter(w -> w.getDepartmentId() != null)
                 .collect(Collectors.groupingBy(WorkOrder::getDepartmentId, Collectors.counting()));
 
         Set<UUID> departmentIds = new HashSet<>();
