@@ -16,12 +16,13 @@ public record EquipmentMeterDto(
         double currentValue,
         Instant lastReadAt,
         Double rolloverValue,
-        boolean active
+        boolean active,
+        boolean primary
 ) {
     public static EquipmentMeterDto from(EquipmentMeter m,String equipmentName) {
         return new EquipmentMeterDto(
                 m.getId(), m.getEquipmentId(),equipmentName, m.getMeterType(), m.getName(), m.getUnit(),
-                m.getCurrentValue(), m.getLastReadAt(), m.getRolloverValue(), m.isActive()
+                m.getCurrentValue(), m.getLastReadAt(), m.getRolloverValue(), m.isActive(), m.isPrimary()
         );
     }
 }

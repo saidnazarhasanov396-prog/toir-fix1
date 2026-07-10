@@ -19,6 +19,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
+import com.toir.service.sparepartlifecycle.SparePartLifecycleEvaluationService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import com.toir.util.SortUtils;
@@ -29,6 +30,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -56,6 +59,7 @@ public class MeterService {
     private final AuditBuilderService auditBuilderService;
     private final EquipmentStatusLifecycleService equipmentStatusLifecycleService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
+    private final SparePartLifecycleEvaluationService sparePartLifecycleEvaluationService;
     private final ForecastService forecastService;
 
     @Transactional(readOnly = true)
@@ -132,6 +136,7 @@ public class MeterService {
         meter.setCurrentValue(request.initialValue());
         meter.setRolloverValue(request.rolloverValue());
         if (request.active() != null) meter.setActive(request.active());
+        if (request.primary() != null) meter.setPrimary(request.primary());
         EquipmentMeter saved = meterRepository.save(meter);
 
         auditBuilderService.log(
@@ -156,6 +161,7 @@ public class MeterService {
         meter.setUnit(request.unit());
         meter.setRolloverValue(request.rolloverValue());
         if (request.active() != null) meter.setActive(request.active());
+        if (request.primary() != null) meter.setPrimary(request.primary());
         EquipmentMeter saved = meterRepository.save(meter);
 
         auditBuilderService.log(
@@ -207,6 +213,11 @@ public class MeterService {
             throw RestException.conflict("Meter is not active: " + meter.getId());
         }
         equipmentStatusLifecycleService.assertOperationallyAllowed(meter.getEquipmentId(), "add meter reading");
+        Instant readAt = request.readAt() != null ? request.readAt() : Instant.now();
+        if (meter.getLastReadAt() != null && readAt.isBefore(meter.getLastReadAt())) {
+            throw RestException.conflict(
+                    "METER_READING_OUT_OF_ORDER: reading timestamp is older than the canonical current reading");
+        }
         double newValue = request.value();
         double previous = meter.getCurrentValue();
         Double delta = null;
@@ -218,8 +229,6 @@ public class MeterService {
             throw RestException.conflict(
                     "Reading value (" + newValue + ") is less than current meter value (" + previous + ")");
         }
-
-        Instant readAt = request.readAt() != null ? request.readAt() : Instant.now();
 
         MeterReading reading = new MeterReading();
         reading.setMeterId(meter.getId());
@@ -262,6 +271,8 @@ public class MeterService {
                 savedMeter
         );
 
+        triggerSparePartLifecycleAfterCommit(meter.getId(), readAt);
+
         MaintenanceAutomationService automationService = maintenanceAutomationServiceProvider.getIfAvailable();
         if (automationService != null) {
             try {
@@ -292,6 +303,26 @@ public class MeterService {
         }
 
         return enrichReading(saved);
+    }
+
+    private void triggerSparePartLifecycleAfterCommit(UUID meterId, Instant evaluatedAt) {
+        Runnable evaluation = () -> {
+            try {
+                sparePartLifecycleEvaluationService.reevaluateForMeter(meterId, evaluatedAt);
+            } catch (RuntimeException exception) {
+                log.error("spare_part_lifecycle_after_meter_reading_failed meterId={}", meterId, exception);
+            }
+        };
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            evaluation.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                evaluation.run();
+            }
+        });
     }
 
     private void syncVehicleMeter(EquipmentMeter meter, double newValue) {
@@ -367,6 +398,11 @@ public class MeterService {
                 null
         );
 
+        if (reading.getMeterId() != null) {
+            rebuildCurrentMeterProjection(reading.getMeterId());
+            triggerSparePartLifecycleAfterCommit(reading.getMeterId(), Instant.now());
+        }
+
         if (reading.getDelta() != null) {
             try {
                 LocalDate usageDate = reading.getReadAt().atZone(ZoneId.systemDefault()).toLocalDate();
@@ -382,6 +418,23 @@ public class MeterService {
             }
         }
 
+    }
+
+    private void rebuildCurrentMeterProjection(UUID meterId) {
+        EquipmentMeter meter = getMeterOrThrow(meterId);
+        readingRepository.findTopByMeterIdAndIsDeletedFalseOrderByReadAtDesc(meterId)
+                .ifPresentOrElse(
+                        latest -> {
+                            meter.setCurrentValue(latest.getValue());
+                            meter.setLastReadAt(latest.getReadAt());
+                        },
+                        () -> {
+                            meter.setCurrentValue(0);
+                            meter.setLastReadAt(null);
+                        }
+                );
+        meterRepository.save(meter);
+        syncVehicleMeter(meter, meter.getCurrentValue());
     }
 
     private EquipmentMeter getMeterOrThrow(UUID id) {

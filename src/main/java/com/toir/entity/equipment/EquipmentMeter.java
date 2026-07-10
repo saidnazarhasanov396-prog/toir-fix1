@@ -43,4 +43,7 @@ public class EquipmentMeter extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
+    @Column(name = "is_primary", nullable = false)
+    private boolean primary = false;
+
 }

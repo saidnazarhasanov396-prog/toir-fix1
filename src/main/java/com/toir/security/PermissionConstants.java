@@ -71,6 +71,17 @@ public final class PermissionConstants {
     public static final String SPARE_PART_CREATE = "SPARE_PART_CREATE";
     public static final String SPARE_PART_UPDATE = "SPARE_PART_UPDATE";
     public static final String SPARE_PART_DELETE = "SPARE_PART_DELETE";
+    public static final String SPARE_PART_LIFE_RULE_READ = "SPARE_PART_LIFE_RULE_READ";
+    public static final String SPARE_PART_LIFE_RULE_CREATE = "SPARE_PART_LIFE_RULE_CREATE";
+    public static final String SPARE_PART_LIFE_RULE_UPDATE = "SPARE_PART_LIFE_RULE_UPDATE";
+    public static final String SPARE_PART_LIFE_RULE_DELETE = "SPARE_PART_LIFE_RULE_DELETE";
+    public static final String SPARE_PART_INSTALLATION_READ = "SPARE_PART_INSTALLATION_READ";
+    public static final String SPARE_PART_INSTALL = "SPARE_PART_INSTALL";
+    public static final String SPARE_PART_REMOVE = "SPARE_PART_REMOVE";
+    public static final String SPARE_PART_REPLACE = "SPARE_PART_REPLACE";
+    public static final String SPARE_PART_DUE_READ = "SPARE_PART_DUE_READ";
+    public static final String SPARE_PART_DUE_ACKNOWLEDGE = "SPARE_PART_DUE_ACKNOWLEDGE";
+    public static final String SPARE_PART_EXPIRY_OVERRIDE = "SPARE_PART_EXPIRY_OVERRIDE";
     public static final String STOCK_READ = "STOCK_READ";
     public static final String STOCK_MOVE = "STOCK_MOVE";
     public static final String STOCK_ISSUE = "STOCK_ISSUE";

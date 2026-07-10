@@ -44,6 +44,11 @@ public interface MaintenanceDueEventRepository extends JpaRepository<Maintenance
 
     List<MaintenanceDueEvent> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
+    List<MaintenanceDueEvent> findAllByEquipmentIdAndStatusInAndIsDeletedFalseOrderByUpdatedAtDesc(
+            UUID equipmentId,
+            Collection<MaintenanceDueEventStatus> statuses
+    );
+
     @Query("""
             select e
             from MaintenanceDueEvent e

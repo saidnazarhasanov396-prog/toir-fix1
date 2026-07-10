@@ -14,5 +14,16 @@ public record EquipmentMeterRequest(
         @NotBlank String unit,
         @PositiveOrZero double initialValue,
         Double rolloverValue,
-        Boolean active
-) {}
+        Boolean active,
+        Boolean primary
+) {
+    public EquipmentMeterRequest(UUID equipmentId,
+                                 MeterType meterType,
+                                 String name,
+                                 String unit,
+                                 double initialValue,
+                                 Double rolloverValue,
+                                 Boolean active) {
+        this(equipmentId, meterType, name, unit, initialValue, rolloverValue, active, false);
+    }
+}

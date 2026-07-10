@@ -10,15 +10,24 @@ import com.toir.enums.DefectStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
 import com.toir.repository.KnowledgeArticleRepository;
+import com.toir.repository.LocationRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.defects.DefectListLineRepository;
 import com.toir.repository.defects.DefectListRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.UserRepository;
 import com.toir.service.defects.DefectService;
+import com.toir.service.OperationalIssueLifecycleSyncService;
+import com.toir.service.attachment.AttachmentGroupService;
+import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.util.AuditBuilderService;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,15 +66,31 @@ class DefectPbacScopeTest {
     @Mock
     EquipmentRepository equipmentRepository;
     @Mock
+    EquipmentNodeRepository equipmentNodeRepository;
+    @Mock
     RepairRequestRepository repairRequestRepository;
     @Mock
     WorkOrderRepository workOrderRepository;
+    @Mock
+    DepartmentRepository departmentRepository;
+    @Mock
+    LocationRepository locationRepository;
+    @Mock
+    UserRepository userRepository;
+    @Mock
+    BrigadeMemberRepository brigadeMemberRepository;
     @Mock
     KnowledgeArticleRepository knowledgeRepository;
     @Mock
     AuditBuilderService auditBuilderService;
     @Mock
     ScopeAccessService scopeAccessService;
+    @Mock
+    EquipmentStatusLifecycleService equipmentStatusLifecycleService;
+    @Mock
+    OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
+    @Mock
+    AttachmentGroupService attachmentGroupService;
 
     @InjectMocks
     DefectService service;
@@ -78,6 +103,7 @@ class DefectPbacScopeTest {
         departmentA = UUID.randomUUID();
         departmentB = UUID.randomUUID();
         when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(attachmentGroupService.getPhotoSummaries(any(), any())).thenReturn(Map.of());
     }
 
     @Test

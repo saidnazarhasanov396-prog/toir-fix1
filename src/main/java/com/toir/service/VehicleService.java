@@ -42,6 +42,7 @@ import com.toir.service.equipment.EquipmentManualAttributeService;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
+import com.toir.service.sparepartlifecycle.VehicleMeterProjectionGuard;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
@@ -80,6 +81,7 @@ public class VehicleService {
     private final AttachmentGroupService attachmentGroupService;
     private final EmployeeRepository employeeRepository;
     private final EmployeeWorkRoleAssignmentRepository employeeWorkRoleAssignmentRepository;
+    private final VehicleMeterProjectionGuard vehicleMeterProjectionGuard;
 
     private static final Set<String> DTO_SORT_FIELDS = Set.of(
             "status",
@@ -298,6 +300,12 @@ public class VehicleService {
         boolean equipmentTypeChanged = isEquipmentTypeChanged(equipment.getEquipmentTypeId(), request.equipmentTypeId());
         validateAttributesForTypeChange(equipmentTypeChanged, request.attributes());
         validateAssignedDriver(request.assignedDriverId(), request.assignedDriverUsageLimitMinutes(), request.departmentId(), equipmentId);
+        vehicleMeterProjectionGuard.assertCompatibleUpdate(
+                equipmentId,
+                details,
+                request.currentOdometerKm(),
+                request.currentEngineHours()
+        );
         VehicleLocationSnapshot fromLocation = vehicleLocationSnapshot(equipment);
         applyEquipment(equipment, request);
         applyDetails(details, request);
@@ -953,8 +961,12 @@ public class VehicleService {
         details.setCarryingCapacity(request.carryingCapacity());
         details.setSeatCount(request.seatCount());
         applyAssignedDriver(details, request.assignedDriverId(), request.assignedDriverUsageLimitMinutes());
-        details.setCurrentOdometerKm(request.currentOdometerKm() != null ? request.currentOdometerKm() : 0);
-        details.setCurrentEngineHours(request.currentEngineHours() != null ? request.currentEngineHours() : 0);
+        if (request.currentOdometerKm() != null) {
+            details.setCurrentOdometerKm(request.currentOdometerKm());
+        }
+        if (request.currentEngineHours() != null) {
+            details.setCurrentEngineHours(request.currentEngineHours());
+        }
         details.setRegistrationCertificateNumber(request.registrationCertificateNumber());
         details.setInsurancePolicyNumber(request.insurancePolicyNumber());
         details.setInsuranceExpiryDate(request.insuranceExpiryDate());

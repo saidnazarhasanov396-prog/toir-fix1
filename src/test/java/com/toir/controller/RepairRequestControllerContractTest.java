@@ -3,14 +3,24 @@ package com.toir.controller;
 import com.toir.controller.repair.RepairRequestController;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.repairrequest.RepairRequestDto;
+import com.toir.dto.repairrequest.RepairRequestCloseReadinessDto;
+import com.toir.dto.repairrequest.RepairRequestCloseReadinessItemDto;
+import com.toir.dto.repairrequest.RepairRequestCostKind;
+import com.toir.dto.repairrequest.RepairRequestCostRowDto;
+import com.toir.dto.repairrequest.RepairRequestCostsSummaryDto;
 import com.toir.dto.repairrequest.RepairRequestFilterRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
+import com.toir.dto.repairrequest.RepairRequestTimelineEventDto;
+import com.toir.dto.repairrequest.RepairRequestTimelineEventType;
 import com.toir.dto.repairrequest.WarrantyPreviewResponse;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.WorkOrderBriefDto;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.CriticalityLevel;
+import com.toir.enums.ActualCostStatus;
+import com.toir.enums.CloseReadinessGroupStatus;
+import com.toir.enums.CloseReadinessSeverity;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.MeterReadingContext;
 import com.toir.enums.MeterSource;
@@ -24,6 +34,7 @@ import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.repair.RepairRequestService;
+import com.toir.service.repair.RepairRequestInsightsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +49,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -62,6 +74,9 @@ class RepairRequestControllerContractTest {
     RepairRequestService service;
 
     @Mock
+    RepairRequestInsightsService insightsService;
+
+    @Mock
     RepairRequestRepository repository;
 
     @Mock
@@ -73,7 +88,8 @@ class RepairRequestControllerContractTest {
     void setUp() {
         lenient().when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         lenient().when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairRequestController(service, repository, scopeAccessService))
+        mockMvc = MockMvcBuilders.standaloneSetup(
+                        new RepairRequestController(service, insightsService, repository, scopeAccessService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -237,6 +253,92 @@ class RepairRequestControllerContractTest {
                 .andExpect(jsonPath("$.linkedDefects").isEmpty())
                 .andExpect(jsonPath("$.linkedWorkOrders").isArray())
                 .andExpect(jsonPath("$.linkedWorkOrders").isEmpty());
+    }
+
+    @Test
+    void detailInsightsEndpointsMatchFrontendJsonContracts() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        RepairRequest entity = new RepairRequest();
+        entity.setId(requestId);
+        entity.setDepartmentId(UUID.randomUUID());
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(entity));
+        when(insightsService.getCloseReadiness(entity)).thenReturn(new RepairRequestCloseReadinessDto(
+                requestId,
+                RequestStatus.COMPLETED,
+                false,
+                Instant.parse("2026-07-10T10:00:00Z"),
+                true,
+                false,
+                List.of(new RepairRequestCloseReadinessItemDto(
+                        "OPEN_DEFECTS",
+                        "2 linked defects are still open",
+                        CloseReadinessSeverity.BLOCKING,
+                        "defects",
+                        "related"
+                )),
+                List.of(),
+                Map.of("defects", CloseReadinessGroupStatus.BLOCKED)
+        ));
+        when(insightsService.getCostsSummary(entity)).thenReturn(new RepairRequestCostsSummaryDto(
+                requestId,
+                "UZS",
+                100_000,
+                100_000,
+                0,
+                0,
+                List.of(new RepairRequestCostRowDto(
+                        UUID.randomUUID(),
+                        RepairRequestCostKind.LABOR,
+                        "Ivanov I. — 4h @ 25000",
+                        workOrderId,
+                        "WO-2026-000123",
+                        ActualCostStatus.APPROVED,
+                        100_000,
+                        Instant.parse("2026-07-08T00:00:00Z")
+                ))
+        ));
+        when(insightsService.getTimeline(entity)).thenReturn(List.of(new RepairRequestTimelineEventDto(
+                UUID.randomUUID(),
+                RepairRequestTimelineEventType.STATUS_CHANGE,
+                Instant.parse("2026-07-05T09:12:00Z"),
+                actorId,
+                "Ivanov I.",
+                "IN_REVIEW",
+                "APPROVED",
+                null,
+                null,
+                null
+        )));
+
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/close-readiness", requestId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.repairRequestId").value(requestId.toString()))
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.ready").value(false))
+                .andExpect(jsonPath("$.isOverdue").value(true))
+                .andExpect(jsonPath("$.reactionOverdue").value(false))
+                .andExpect(jsonPath("$.blockers[0].severity").value("BLOCKING"))
+                .andExpect(jsonPath("$.blockers[0].targetTab").value("related"))
+                .andExpect(jsonPath("$.groups.defects").value("BLOCKED"));
+
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/costs-summary", requestId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestId").value(requestId.toString()))
+                .andExpect(jsonPath("$.currency").value("UZS"))
+                .andExpect(jsonPath("$.totalCost").value(100_000))
+                .andExpect(jsonPath("$.rows[0].kind").value("LABOR"))
+                .andExpect(jsonPath("$.rows[0].workOrderNumber").value("WO-2026-000123"))
+                .andExpect(jsonPath("$.rows[0].status").value("APPROVED"));
+
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/timeline", requestId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].type").value("STATUS_CHANGE"))
+                .andExpect(jsonPath("$[0].actorId").value(actorId.toString()))
+                .andExpect(jsonPath("$[0].actorName").value("Ivanov I."))
+                .andExpect(jsonPath("$[0].fromStatus").value("IN_REVIEW"))
+                .andExpect(jsonPath("$[0].toStatus").value("APPROVED"));
     }
 
     @Test

@@ -42,6 +42,7 @@ import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentService;
 import com.toir.service.equipment.EquipmentAttributeService;
 import com.toir.service.equipment.EquipmentManualAttributeService;
+import com.toir.service.sparepartlifecycle.VehicleMeterProjectionGuard;
 import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import org.junit.jupiter.api.Test;
@@ -118,6 +119,9 @@ class VehicleServiceTest {
 
     @Mock
     AttachmentGroupService attachmentGroupService;
+
+    @Mock
+    VehicleMeterProjectionGuard vehicleMeterProjectionGuard;
 
     @BeforeEach
     void setUp() {
@@ -474,6 +478,36 @@ class VehicleServiceTest {
         ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(equipmentRepository).save(equipmentCaptor.capture());
         assertThat(equipmentCaptor.getValue().getDaysOfResourceRemaining()).isEqualTo(120L);
+    }
+
+    @Test
+    void updateVehicleChecksMeterOwnedProjectionBeforeApplyingDetails() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "VH-METER-GUARD", "Meter Guard", "INV-METER-GUARD");
+        VehicleDetails details = details(equipmentId, "01A169AA", null);
+        details.setCurrentOdometerKm(1_000);
+        details.setCurrentEngineHours(25);
+        VehicleRequest request = withEquipmentTypeAndAttributes(
+                fullRequest("VH-METER-GUARD", "Meter Guard", "INV-METER-GUARD", "01A169AA", null),
+                equipment.getEquipmentTypeId(),
+                null
+        );
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        doThrow(RestException.conflict("METER_PROJECTION_READ_ONLY: use a meter reading"))
+                .when(vehicleMeterProjectionGuard)
+                .assertCompatibleUpdate(
+                        equipmentId,
+                        details,
+                        request.currentOdometerKm(),
+                        request.currentEngineHours()
+                );
+
+        assertThatThrownBy(() -> service.update(equipmentId, request))
+                .hasMessageStartingWith("METER_PROJECTION_READ_ONLY:");
+        verify(equipmentRepository, never()).save(any());
+        verify(vehicleDetailsRepository, never()).save(any());
     }
 
     @Test
