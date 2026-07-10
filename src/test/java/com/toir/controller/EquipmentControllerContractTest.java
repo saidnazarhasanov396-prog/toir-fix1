@@ -45,12 +45,14 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.support.WebDataBinderFactory;
 import org.springframework.web.context.request.NativeWebRequest;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
 import com.toir.dto.equipment.EquipmentStatsResponse;
 
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -669,7 +671,7 @@ class EquipmentControllerContractTest {
         EquipmentDto.Ref locationRef = new EquipmentDto.Ref(locationId, "LOC-001", "Main Workshop");
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, locationId, locationRef);
 
-        when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
+        when(service.search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/equipment"))
@@ -682,12 +684,72 @@ class EquipmentControllerContractTest {
     }
 
     @Test
+    void listDeclaresOptionalHasWarrantyRequestParam() {
+        Method listMethod = List.of(EquipmentController.class.getDeclaredMethods()).stream()
+                .filter(method -> method.getName().equals("list"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(listMethod.getParameters())
+                .anySatisfy(parameter -> {
+                    RequestParam requestParam = parameter.getAnnotation(RequestParam.class);
+                    assertThat(requestParam).isNotNull();
+                    assertThat(requestParam.name().isBlank() ? parameter.getName() : requestParam.name())
+                            .isEqualTo("hasWarranty");
+                    assertThat(parameter.getType()).isEqualTo(Boolean.class);
+                    assertThat(requestParam.required()).isFalse();
+                });
+    }
+
+    @Test
+    void listWithHasWarrantyTrueIsAccepted() throws Exception {
+        when(service.search(null, null, null, null, null, null, null, null, false, false, Boolean.TRUE, null, 0, 20))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        mockMvc.perform(get("/api/v1/equipment")
+                        .param("hasWarranty", "true"))
+                .andExpect(status().isOk());
+
+        verify(service).search(null, null, null, null, null, null, null, null, false, false, Boolean.TRUE, null, 0, 20);
+    }
+
+    @Test
+    void listWithHasWarrantyFalseIsAccepted() throws Exception {
+        when(service.search(null, null, null, null, null, null, null, null, false, false, Boolean.FALSE, null, 0, 20))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        mockMvc.perform(get("/api/v1/equipment")
+                        .param("hasWarranty", "false"))
+                .andExpect(status().isOk());
+
+        verify(service).search(null, null, null, null, null, null, null, null, false, false, Boolean.FALSE, null, 0, 20);
+    }
+
+    @Test
+    void listWithVehicleStatusAndHasWarrantyFiltersIsAccepted() throws Exception {
+        when(service.search(null, null, null, EquipmentStatus.ACTIVE, EquipmentCategory.VEHICLE, null, null, null,
+                false, false, Boolean.TRUE, null, 0, 20))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+
+        mockMvc.perform(get("/api/v1/equipment")
+                        .param("status", "ACTIVE")
+                        .param("category", "VEHICLE")
+                        .param("hasWarranty", "true")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk());
+
+        verify(service).search(null, null, null, EquipmentStatus.ACTIVE, EquipmentCategory.VEHICLE, null, null, null,
+                false, false, Boolean.TRUE, null, 0, 20);
+    }
+
+    @Test
     void listWithNullLocationIdReturnsLocationNull() throws Exception {
         UUID id = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, null, null);
 
-        when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
+        when(service.search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/equipment"))
@@ -704,7 +766,7 @@ class EquipmentControllerContractTest {
         UUID missingLocationId = UUID.randomUUID();
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, missingLocationId, null);
 
-        when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
+        when(service.search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/equipment"))
@@ -731,7 +793,7 @@ class EquipmentControllerContractTest {
         );
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, departmentId, locationId, locationRef, departmentRef, placement);
 
-        when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
+        when(service.search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/equipment"))
@@ -758,7 +820,7 @@ class EquipmentControllerContractTest {
         );
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, warehouseId, warehouseRef, null, placement);
 
-        when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
+        when(service.search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/equipment"))
@@ -929,7 +991,7 @@ class EquipmentControllerContractTest {
         );
         EquipmentDto dto = equipmentDto(id, equipmentTypeId, null, null, null, null, placement);
 
-        when(service.search(null, null, null, null, null, null, null, null, false, false, null, 0, 20))
+        when(service.search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/equipment"))
@@ -944,7 +1006,7 @@ class EquipmentControllerContractTest {
     @Test
     void listPassesMxikFilterToService() throws Exception {
         UUID mxikId = UUID.randomUUID();
-        when(service.search(null, null, null, null, null, null, null, null, false, false, mxikId, null, 0, 20))
+        when(service.search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, mxikId, null, 0, 20))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         mockMvc.perform(get("/api/v1/equipment").param("mxikId", mxikId.toString()))
@@ -952,12 +1014,12 @@ class EquipmentControllerContractTest {
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content").isEmpty());
 
-        verify(service).search(null, null, null, null, null, null, null, null, false, false, mxikId, null, 0, 20);
+        verify(service).search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, mxikId, null, 0, 20);
     }
 
     @Test
     void listShouldSupportBusinessSearchByCode() throws Exception {
-        when(service.search(null, null, null, null, null, null, null, null, false, false, "EQ-2026-0012", 0, 20))
+        when(service.search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, "EQ-2026-0012", 0, 20))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         MvcResult result = mockMvc.perform(get("/api/v1/equipment").param("search", "EQ-2026-0012"))
@@ -969,12 +1031,12 @@ class EquipmentControllerContractTest {
 
         assertNull(result.getResolvedException());
 
-        verify(service).search(null, null, null, null, null, null, null, null, false, false, "EQ-2026-0012", 0, 20);
+        verify(service).search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, "EQ-2026-0012", 0, 20);
     }
 
     @Test
     void listShouldSupportBusinessSearchByNameAndReturnEmptyPage() throws Exception {
-        when(service.search(null, null, null, null, null, null, null, null, false, false, "compressor", 0, 20))
+        when(service.search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, "compressor", 0, 20))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         MvcResult result = mockMvc.perform(get("/api/v1/equipment").param("search", "compressor"))
@@ -986,7 +1048,7 @@ class EquipmentControllerContractTest {
 
         assertNull(result.getResolvedException());
 
-        verify(service).search(null, null, null, null, null, null, null, null, false, false, "compressor", 0, 20);
+        verify(service).search(null, null, null, null, null, null, null, null, false, false, (Boolean) null, "compressor", 0, 20);
     }
 
     @Test

@@ -9,6 +9,7 @@ public record MaintenanceWorkspaceItem(
         String code,
         String title,
         UUID equipmentId,
+        String equipmentName,
         UUID departmentId,
         UUID locationId,
         String priority,

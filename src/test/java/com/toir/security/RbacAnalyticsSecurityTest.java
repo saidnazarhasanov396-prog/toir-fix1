@@ -6,6 +6,7 @@ import com.toir.controller.DowntimeAnalyticsCompatibilityController;
 import com.toir.controller.ParetoController;
 import com.toir.controller.ReliabilityPassportController.ReliabilityPassport;
 import com.toir.service.AnalyticsService;
+import com.toir.service.DashboardCockpitService;
 import com.toir.service.DashboardLifecycleService;
 import com.toir.service.DashboardService;
 import com.toir.service.ParetoService;
@@ -58,6 +59,9 @@ class RbacAnalyticsSecurityTest {
 
     @MockBean
     DashboardService dashboardService;
+
+    @MockBean
+    DashboardCockpitService dashboardCockpitService;
 
     @MockBean
     AnalyticsService analyticsService;

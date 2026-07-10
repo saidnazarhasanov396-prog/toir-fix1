@@ -38,6 +38,7 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
+import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
@@ -91,6 +92,7 @@ class DashboardServiceKpiTest {
     @Mock CalibrationRecordRepository calibrationRecordRepository;
     @Mock MaintenanceDueEventRepository maintenanceDueEventRepository;
     @Mock UserRepository userRepository;
+    @Mock RepairMaterialUsageRepository repairMaterialUsageRepository;
     @Mock ScopeAccessService scopeAccessService;
     @Mock LegacyStockProjectionService legacyStockProjectionService;
     @Mock CounteragentService counteragentService;
@@ -124,6 +126,7 @@ class DashboardServiceKpiTest {
         lenient().when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         lenient().when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         lenient().when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(repairMaterialUsageRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         lenient().when(counteragentService.load(org.mockito.ArgumentMatchers.<java.util.Collection<UUID>>any())).thenReturn(List.of());
     }
 

@@ -1,8 +1,10 @@
 package com.toir.controller;
 
+import com.toir.dto.dashboard.CockpitOverview;
 import com.toir.dto.dashboard.DashboardEmergencyEventDto;
 import com.toir.dto.dashboard.DashboardOverview;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.service.DashboardCockpitService;
 import com.toir.service.DashboardLifecycleService;
 import com.toir.service.DashboardService;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,11 +37,14 @@ class DashboardControllerContractTest {
     @Mock
     DashboardLifecycleService lifecycleService;
 
+    @Mock
+    DashboardCockpitService cockpitService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new DashboardController(service, lifecycleService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new DashboardController(service, lifecycleService, cockpitService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -49,7 +54,10 @@ class DashboardControllerContractTest {
         DashboardOverview overview = new DashboardOverview(
                 new DashboardOverview.Counters(
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO, 0, 0, 0, 0, 0, 0, 0),
+                        0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO,
+                        0, 0, 0,
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                        0, 0, 0, 0),
                 new DashboardOverview.PlanFact(0, 0, 0),
                 new DashboardOverview.Kpis(
                         0, 0, 9.0, 0, 0, 0, 0, 0, 33.333, 33.333,
@@ -68,6 +76,10 @@ class DashboardControllerContractTest {
                 List.of(),
                 List.of(),
                 new DashboardOverview.MaintenanceDueCounts(0, 0, 0, 0, 0),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
                 List.of());
         when(service.overview(null)).thenReturn(overview);
 
@@ -115,5 +127,46 @@ class DashboardControllerContractTest {
                 .andExpect(jsonPath("$.content[0].eventKey").value("rr:" + sourceId))
                 .andExpect(jsonPath("$.content[0].sourceType").value("REPAIR_REQUEST"))
                 .andExpect(jsonPath("$.content[0].detailPath").value("/repair-requests/" + sourceId));
+    }
+
+    @Test
+    void cockpitReturnsManagementOverview() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        CockpitOverview overview = new CockpitOverview(
+                Instant.parse("2026-07-09T03:00:00Z"),
+                departmentId,
+                new CockpitOverview.HealthSummary(
+                        "WARNING",
+                        new CockpitOverview.DomainStatus("WARNING", List.of("emergency_active")),
+                        new CockpitOverview.DomainStatus("OK", List.of()),
+                        new CockpitOverview.DomainStatus("OK", List.of()),
+                        new CockpitOverview.DomainStatus("OK", List.of())),
+                new CockpitOverview.OperationsBlock(
+                        2, 7, 1, 4, 1, 3, 12.5, 80.0, 5.0, 91.0, 14.0, 2.0),
+                new CockpitOverview.EquipmentBlock(
+                        120, 8, 2, 93.3,
+                        List.of(new CockpitOverview.StatusCount("ACTIVE", 110))),
+                new CockpitOverview.WorkOrdersBlock(
+                        15, 2,
+                        List.of(new CockpitOverview.StatusCount("IN_PROGRESS", 9)),
+                        List.of(new CockpitOverview.StatusCount("EMERGENCY", 2))),
+                new CockpitOverview.FinanceBlock(
+                        1000.0, 250.0, 750.0, 25.0, 3, 1, 0, 4, 1, 2, BigDecimal.TEN),
+                new CockpitOverview.WarehouseBlock(
+                        BigDecimal.valueOf(5000), 6, 2, 4, 1, 0),
+                new CockpitOverview.PeopleBlock(1, 2, 3),
+                new CockpitOverview.TrendsBlock(
+                        List.of(new CockpitOverview.MonthPoint("2026-07", 5, 3, 8.5)))
+        );
+        when(cockpitService.cockpit(eq(departmentId))).thenReturn(overview);
+
+        mockMvc.perform(get("/api/v1/dashboards/cockpit")
+                        .param("departmentId", departmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.departmentId").value(departmentId.toString()))
+                .andExpect(jsonPath("$.health.overallStatus").value("WARNING"))
+                .andExpect(jsonPath("$.operations.activeEmergencies").value(2))
+                .andExpect(jsonPath("$.equipment.statusDistribution[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$.trends.months[0].month").value("2026-07"));
     }
 }

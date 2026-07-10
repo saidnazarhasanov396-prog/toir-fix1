@@ -88,14 +88,14 @@ class EquipmentPbacScopeTest {
         UUID currentDepartmentId = UUID.randomUUID();
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
         when(service.search(eq(currentDepartmentId), eq(requestedDepartmentId), isNull(), isNull(), isNull(),
-                isNull(), isNull(), isNull(), eq(false), eq(false), isNull(), eq(0), eq(20)))
+                isNull(), isNull(), isNull(), eq(false), eq(false), isNull(Boolean.class), isNull(), eq(0), eq(20)))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         mockMvc.perform(get("/api/v1/equipment").param("departmentId", requestedDepartmentId.toString()))
                 .andExpect(status().isOk());
 
         verify(service).search(eq(currentDepartmentId), eq(requestedDepartmentId), isNull(), isNull(), isNull(),
-                isNull(), isNull(), isNull(), eq(false), eq(false), isNull(), eq(0), eq(20));
+                isNull(), isNull(), isNull(), eq(false), eq(false), isNull(Boolean.class), isNull(), eq(0), eq(20));
     }
 
     @Test
@@ -113,14 +113,14 @@ class EquipmentPbacScopeTest {
     void adminCanRequestGlobalList() throws Exception {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(service.search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                eq(false), eq(false), isNull(), eq(0), eq(20)))
+                eq(false), eq(false), isNull(Boolean.class), isNull(), eq(0), eq(20)))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         mockMvc.perform(get("/api/v1/equipment"))
                 .andExpect(status().isOk());
 
         verify(service).search(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                eq(false), eq(false), isNull(), eq(0), eq(20));
+                eq(false), eq(false), isNull(Boolean.class), isNull(), eq(0), eq(20));
     }
 
     @Test

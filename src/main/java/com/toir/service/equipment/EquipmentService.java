@@ -226,7 +226,26 @@ public class EquipmentService {
                                      int page,
                                      int pageSize) {
         return search(scopeDepartmentId, departmentId, equipmentTypeId, status, category, warehouseId, locationType,
-                outsideReason, overdueOnly, availableForReplacement, search, page, pageSize, null, "asc");
+                outsideReason, overdueOnly, availableForReplacement, (Boolean) null, search, page, pageSize);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentDto> search(UUID scopeDepartmentId,
+                                     UUID departmentId,
+                                     UUID equipmentTypeId,
+                                     EquipmentStatus status,
+                                     EquipmentCategory category,
+                                     UUID warehouseId,
+                                     EquipmentLocationType locationType,
+                                     EquipmentOutsideReason outsideReason,
+                                     boolean overdueOnly,
+                                     boolean availableForReplacement,
+                                     Boolean hasWarranty,
+                                     String search,
+                                     int page,
+                                     int pageSize) {
+        return search(scopeDepartmentId, departmentId, equipmentTypeId, status, category, warehouseId, locationType,
+                outsideReason, overdueOnly, availableForReplacement, hasWarranty, search, page, pageSize, null, "asc");
     }
 
     @Transactional(readOnly = true)
@@ -245,7 +264,27 @@ public class EquipmentService {
                                      int page,
                                      int pageSize) {
         return search(scopeDepartmentId, departmentId, equipmentTypeId, status, category, warehouseId, locationType,
-                outsideReason, overdueOnly, availableForReplacement, mxikId, search, page, pageSize, null, "asc");
+                outsideReason, overdueOnly, availableForReplacement, null, mxikId, search, page, pageSize);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentDto> search(UUID scopeDepartmentId,
+                                     UUID departmentId,
+                                     UUID equipmentTypeId,
+                                     EquipmentStatus status,
+                                     EquipmentCategory category,
+                                     UUID warehouseId,
+                                     EquipmentLocationType locationType,
+                                     EquipmentOutsideReason outsideReason,
+                                     boolean overdueOnly,
+                                     boolean availableForReplacement,
+                                     Boolean hasWarranty,
+                                     UUID mxikId,
+                                     String search,
+                                     int page,
+                                     int pageSize) {
+        return search(scopeDepartmentId, departmentId, equipmentTypeId, status, category, warehouseId, locationType,
+                outsideReason, overdueOnly, availableForReplacement, hasWarranty, mxikId, search, page, pageSize, null, "asc");
     }
 
     @Transactional(readOnly = true)
@@ -279,6 +318,28 @@ public class EquipmentService {
                                      EquipmentOutsideReason outsideReason,
                                      boolean overdueOnly,
                                      boolean availableForReplacement,
+                                     Boolean hasWarranty,
+                                     String search,
+                                     int page,
+                                     int pageSize,
+                                     String sortBy,
+                                     String sortDir) {
+        return search(scopeDepartmentId, departmentId, equipmentTypeId, status, category, warehouseId, locationType,
+                outsideReason, overdueOnly, availableForReplacement, hasWarranty, null, search, page, pageSize, sortBy, sortDir);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EquipmentDto> search(UUID scopeDepartmentId,
+                                     UUID departmentId,
+                                     UUID equipmentTypeId,
+                                     EquipmentStatus status,
+                                     EquipmentCategory category,
+                                     UUID warehouseId,
+                                     EquipmentLocationType locationType,
+                                     EquipmentOutsideReason outsideReason,
+                                     boolean overdueOnly,
+                                     boolean availableForReplacement,
+                                     Boolean hasWarranty,
                                      UUID mxikId,
                                      String search,
                                      int page,
@@ -309,6 +370,7 @@ public class EquipmentService {
                         equipmentTypeId,
                         status,
                         category,
+                        hasWarranty,
                         searchPattern,
                         pageable
                 );
@@ -324,6 +386,7 @@ public class EquipmentService {
                         status,
                         category,
                         mxikId,
+                        hasWarranty,
                         searchPattern,
                         pageable
                 );
@@ -341,6 +404,7 @@ public class EquipmentService {
                         outsideReason,
                         overdueOnly,
                         LocalDate.now(),
+                        hasWarranty,
                         searchPattern,
                         pageable
                 );
@@ -357,6 +421,7 @@ public class EquipmentService {
                         overdueOnly,
                         LocalDate.now(),
                         mxikId,
+                        hasWarranty,
                         searchPattern,
                         pageable
                 );

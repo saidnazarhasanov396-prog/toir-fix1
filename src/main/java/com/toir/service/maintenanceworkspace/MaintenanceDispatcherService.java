@@ -7,6 +7,7 @@ import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherSummary;
 import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceItem;
 import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceFilter;
 import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.users.BrigadeMember;
 import com.toir.entity.repair.RepairRequest;
@@ -17,6 +18,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
+import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,9 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Locale;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +39,7 @@ public class MaintenanceDispatcherService {
     private final DefectRepository defectRepository;
     private final WorkOrderRepository workOrderRepository;
     private final BrigadeMemberRepository brigadeMemberRepository;
+    private final EquipmentRepository equipmentRepository;
 
     @Transactional(readOnly = true)
     public MaintenanceDispatcherSummary summary() {
@@ -56,33 +59,35 @@ public class MaintenanceDispatcherService {
     @Transactional(readOnly = true)
     public MaintenanceDispatcherQueues queues(MaintenanceWorkspaceFilter filter) {
         Instant now = Instant.now();
+
         List<RepairRequest> requests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         List<Defect> defects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         List<WorkOrder> workOrders = workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        Map<UUID, String> equipmentNames = loadEquipmentNames(requests,defects, workOrders);
 
         List<MaintenanceWorkspaceItem> emergency = requests.stream()
                 .filter(this::isOpenRequest)
                 .filter(r -> r.getEmergencyReason() != null && !r.getEmergencyReason().isBlank())
-                .map(r -> requestItem(r, now, "Emergency repair request", "Assign master"))
+                .map(r -> requestItem(r, now, "Emergency repair request", "Assign master", equipmentNames))
                 .toList();
         List<MaintenanceWorkspaceItem> unassigned = requests.stream()
                 .filter(this::isOpenRequest)
                 .filter(r -> r.getAssignedToId() == null)
-                .map(r -> requestItem(r, now, "Owner is not assigned", "Assign master"))
+                .map(r -> requestItem(r, now, "Owner is not assigned", "Assign master", equipmentNames))
                 .toList();
         List<MaintenanceWorkspaceItem> overdue = requests.stream()
                 .filter(this::isOpenRequest)
                 .filter(r -> r.getTargetCompletionAt() != null && r.getTargetCompletionAt().isBefore(now))
-                .map(r -> requestItem(r, now, "Target completion is overdue", "Escalate"))
+                .map(r -> requestItem(r, now, "Target completion is overdue", "Escalate", equipmentNames))
                 .toList();
         List<MaintenanceWorkspaceItem> newDefects = defects.stream()
                 .filter(d -> d.getStatus() == DefectStatus.OPEN || d.getStatus() == DefectStatus.IN_ANALYSIS)
-                .map(d -> defectItem(d, now, "Defect needs triage", "Create work order"))
+                .map(d -> defectItem(d, now, "Defect needs triage", "Create work order", equipmentNames))
                 .toList();
         List<MaintenanceWorkspaceItem> blockedWorkOrders = workOrders.stream()
                 .filter(this::isActiveWorkOrder)
                 .filter(this::hasBlocker)
-                .map(w -> workOrderItem(w, now, blockerReason(w), "Open detail"))
+                .map(w -> workOrderItem(w, now, blockerReason(w), "Open detail", equipmentNames))
                 .toList();
         emergency = filterItems(emergency, filter);
         newDefects = filterItems(newDefects, filter);
@@ -215,21 +220,126 @@ public class MaintenanceDispatcherService {
         return "Blocked by completion requirements";
     }
 
-    private MaintenanceWorkspaceItem requestItem(RepairRequest r, Instant now, String blocker, String nextAction) {
-        return new MaintenanceWorkspaceItem("REPAIR_REQUEST", r.getId(), r.getNumber(), r.getTitle(), r.getEquipmentId(), r.getDepartmentId(), r.getLocationId(),
-                value(r.getPriority()), value(r.getCriticality()), value(r.getStatus()), ageHours(r.getDetectedAt(), now), r.getAssignedToId(), blocker, nextAction,
-                "/repair-requests/" + r.getId(), r.getCreatedAt(), r.getTargetCompletionAt());
+    private MaintenanceWorkspaceItem requestItem(
+            RepairRequest r,
+            Instant now,
+            String blocker,
+            String nextAction,
+            Map<UUID, String> equipmentNames
+    ) {
+        return new MaintenanceWorkspaceItem(
+                "REPAIR_REQUEST",
+                r.getId(),
+                r.getNumber(),
+                r.getTitle(),
+                r.getEquipmentId(),
+                equipmentName(equipmentNames, r.getEquipmentId()),
+                r.getDepartmentId(),
+                r.getLocationId(),
+                value(r.getPriority()),
+                value(r.getCriticality()),
+                value(r.getStatus()),
+                ageHours(r.getDetectedAt(), now),
+                r.getAssignedToId(),
+                blocker,
+                nextAction,
+                "/repair-requests/" + r.getId(),
+                r.getCreatedAt(),
+                r.getTargetCompletionAt()
+        );
     }
 
-    private MaintenanceWorkspaceItem defectItem(Defect d, Instant now, String blocker, String nextAction) {
-        return new MaintenanceWorkspaceItem("DEFECT", d.getId(), d.getCode(), d.getTitle(), d.getEquipmentId(), null, null, d.getSeverity(), null, value(d.getStatus()),
-                ageHours(d.getDetectedAt(), now), null, blocker, nextAction, "/defects/" + d.getId(), d.getCreatedAt(), null);
+    private MaintenanceWorkspaceItem defectItem(
+            Defect d,
+            Instant now,
+            String blocker,
+            String nextAction,
+            Map<UUID, String> equipmentNames
+    ) {
+        return new MaintenanceWorkspaceItem(
+                "DEFECT",
+                d.getId(),
+                d.getCode(),
+                d.getTitle(),
+                d.getEquipmentId(),
+                equipmentName(equipmentNames, d.getEquipmentId()),
+                null,
+                null,
+                d.getSeverity(),
+                null,
+                value(d.getStatus()),
+                ageHours(d.getDetectedAt(), now),
+                null,
+                blocker,
+                nextAction,
+                "/defects/" + d.getId(),
+                d.getCreatedAt(),
+                null
+        );
     }
 
-    private MaintenanceWorkspaceItem workOrderItem(WorkOrder w, Instant now, String blocker, String nextAction) {
-        return new MaintenanceWorkspaceItem("WORK_ORDER", w.getId(), w.getNumber(), w.getTitle(), w.getEquipmentId(), w.getDepartmentId(), w.getLocationId(),
-                value(w.getPriority()), null, value(w.getStatus()), ageHours(w.getCreatedAt(), now), performerUserId(w), blocker, nextAction,
-                "/work-orders/" + w.getId(), w.getCreatedAt(), w.getEndPlannedAt());
+    private MaintenanceWorkspaceItem workOrderItem(
+            WorkOrder w,
+            Instant now,
+            String blocker,
+            String nextAction,
+            Map<UUID, String> equipmentNames
+    ) {
+        return new MaintenanceWorkspaceItem(
+                "WORK_ORDER",
+                w.getId(),
+                w.getNumber(),
+                w.getTitle(),
+                w.getEquipmentId(),
+                equipmentName(equipmentNames, w.getEquipmentId()),
+                w.getDepartmentId(),
+                w.getLocationId(),
+                value(w.getPriority()),
+                null,
+                value(w.getStatus()),
+                ageHours(w.getCreatedAt(), now),
+                performerUserId(w),
+                blocker,
+                nextAction,
+                "/work-orders/" + w.getId(),
+                w.getCreatedAt(),
+                w.getEndPlannedAt()
+        );
+    }
+
+
+    private Map<UUID, String> loadEquipmentNames(
+            List<RepairRequest> requests,
+            List<Defect> defects,
+            List<WorkOrder> workOrders
+    ) {
+        Set<UUID> equipmentIds = Stream.of(
+                        requests.stream().map(RepairRequest::getEquipmentId),
+                        defects.stream().map(Defect::getEquipmentId),
+                        workOrders.stream().map(WorkOrder::getEquipmentId)
+                )
+                .flatMap(stream -> stream)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (equipmentIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds).stream()
+                .collect(Collectors.toMap(
+                        Equipment::getId,
+                        this::equipmentDisplayName,
+                        (left, right) -> left
+                ));
+    }
+
+    private String equipmentName(Map<UUID, String> equipmentNames, UUID equipmentId) {
+        return equipmentId == null ? null : equipmentNames.get(equipmentId);
+    }
+
+    private String equipmentDisplayName(Equipment equipment) {
+        return equipment.getName(); // Equipment.java ga qarab aniq fieldni qo‘yamiz
     }
 
     private java.util.UUID performerUserId(WorkOrder workOrder) {
@@ -266,11 +376,13 @@ public class MaintenanceDispatcherService {
         }
         return contains(item.code(), normalizedQuery)
                 || contains(item.title(), normalizedQuery)
+                || contains(item.equipmentName(), normalizedQuery)
                 || contains(item.objectType(), normalizedQuery)
                 || contains(item.priority(), normalizedQuery)
                 || contains(item.status(), normalizedQuery)
                 || contains(item.blockerReason(), normalizedQuery)
                 || contains(item.nextAction(), normalizedQuery);
+
     }
 
     private boolean matchesUuid(UUID actual, UUID expected) {

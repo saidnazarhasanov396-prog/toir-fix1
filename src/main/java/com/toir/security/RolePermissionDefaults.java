@@ -96,7 +96,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.METER_READ,
                 PermissionConstants.METER_READING_CREATE,
                 PermissionConstants.CALIBRATION_RECORD_READ,
-    
+
                 PermissionConstants.CALIBRATION_RECORD_CREATE,
                 PermissionConstants.CALIBRATION_RECORD_UPDATE,
                 PermissionConstants.EMPLOYEE_READ,

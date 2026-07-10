@@ -21,7 +21,11 @@ public record DashboardOverview(
         List<RepeatedDefectsEquipment> repeatedDefectsEquipment,
         List<MaintenanceKpiRow> maintenanceKpis,
         MaintenanceDueCounts maintenanceDueCounts,
-        List<ProblemDepartment> problemDepartments
+        List<ProblemDepartment> problemDepartments,
+        List<TopEquipmentByFailures> topEquipmentByFailures,
+        List<TopEquipmentByRepairTime> topEquipmentByRepairTime,
+        List<TopSparePartUsage> topSparePartsByUsage,
+        List<TopBrokenEquipmentResponsible> topBrokenEquipmentResponsibles
 ) {
     public DashboardOverview(
             Counters counters,
@@ -43,7 +47,7 @@ public record DashboardOverview(
                 latestStockMovements, counteragentLoad, financialReviewWorkloadByRole,
                 financialReviewWorkloadByDepartment, counteragentReconciliation, lowStockItems,
                 repeatedDefectsEquipment, maintenanceKpis, new MaintenanceDueCounts(0, 0, 0, 0, 0),
-                List.of());
+                List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     public record Counters(
@@ -65,6 +69,12 @@ public record DashboardOverview(
             long pendingActualCosts,
             long dueSoonActualCosts,
             long overdueActualCosts,
+            /** Monetary total of pending actual costs (same scope as pendingActualCosts count). */
+            BigDecimal pendingActualCostAmount,
+            /** Monetary total of due-soon pending actual costs. */
+            BigDecimal dueSoonActualCostAmount,
+            /** Monetary total of overdue pending actual costs. */
+            BigDecimal overdueActualCostAmount,
             long counteragentWorkAwaitingReflection,
             long conditionAlarms,
             long expiringCertifications,
@@ -99,6 +109,50 @@ public record DashboardOverview(
             long openDefects,
             long failureCount,
             double downtimeHours
+    ) {}
+
+    /** Top equipment by defect/failure count (break frequency). */
+    public record TopEquipmentByFailures(
+            UUID id,
+            String code,
+            String name,
+            String department,
+            long failureCount,
+            long openDefects,
+            Instant latestDetectedAt
+    ) {}
+
+    /** Top equipment by total completed repair duration (hours). */
+    public record TopEquipmentByRepairTime(
+            UUID id,
+            String code,
+            String name,
+            String department,
+            double repairHours,
+            long workOrderCount
+    ) {}
+
+    /** Top spare parts by issued quantity on work orders. */
+    public record TopSparePartUsage(
+            UUID id,
+            String code,
+            String name,
+            double quantity,
+            String unit,
+            long issueCount,
+            Instant latestIssuedAt
+    ) {}
+
+    /** Responsible person for equipment among top broken assets. */
+    public record TopBrokenEquipmentResponsible(
+            UUID equipmentId,
+            String equipmentCode,
+            String equipmentName,
+            long failureCount,
+            UUID responsibleId,
+            String responsibleName,
+            String responsiblePosition,
+            Instant latestDetectedAt
     ) {}
 
     public record DowntimeByEquipment(UUID equipmentId, EquipmentRef equipment, long downtimeMinutes) {}
