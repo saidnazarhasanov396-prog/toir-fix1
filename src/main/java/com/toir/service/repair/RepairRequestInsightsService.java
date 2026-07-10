@@ -1,12 +1,17 @@
 package com.toir.service.repair;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.dto.repairrequest.RepairRequestCloseReadinessDto;
+import com.toir.dto.repairrequest.RepairRequestCloseReadinessItemDto;
 import com.toir.dto.repairrequest.RepairRequestCostKind;
 import com.toir.dto.repairrequest.RepairRequestCostRowDto;
 import com.toir.dto.repairrequest.RepairRequestCostsSummaryDto;
 import com.toir.entity.LaborEntry;
 import com.toir.entity.SparePart;
 import com.toir.entity.contractors.ContractorWork;
+import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.EquipmentMeter;
+import com.toir.entity.equipment.MeterReading;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.CostCategory;
@@ -15,6 +20,11 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.User;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.CloseReadinessGroupStatus;
+import com.toir.enums.CloseReadinessSeverity;
+import com.toir.enums.DefectStatus;
+import com.toir.enums.RequestStatus;
+import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.AuditLogRepository;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.LaborEntryRepository;
@@ -39,6 +49,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -48,6 +59,16 @@ import java.util.stream.Collectors;
 public class RepairRequestInsightsService {
 
     private static final String DEFAULT_CURRENCY = "UZS";
+    private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES = Set.of(
+            WorkOrderStatus.COMPLETED,
+            WorkOrderStatus.CLOSED,
+            WorkOrderStatus.CANCELLED
+    );
+    private static final Set<DefectStatus> TERMINAL_DEFECT_STATUSES = Set.of(
+            DefectStatus.RESOLVED,
+            DefectStatus.CLOSED,
+            DefectStatus.CANCELLED
+    );
 
     private final ActualCostRepository actualCostRepository;
     private final WorkOrderRepository workOrderRepository;
@@ -89,6 +110,145 @@ public class RepairRequestInsightsService {
                 materialCost,
                 rows
         );
+    }
+
+    @Transactional(readOnly = true)
+    public RepairRequestCloseReadinessDto getCloseReadiness(RepairRequest request) {
+        Instant checkedAt = Instant.now();
+        List<WorkOrder> workOrders = safeList(workOrderRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()));
+        List<Defect> defects = safeList(defectRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()));
+        List<EquipmentMeter> activeMeters = request.getEquipmentId() == null
+                ? List.of()
+                : safeList(equipmentMeterRepository
+                .findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(request.getEquipmentId()));
+        List<MeterReading> readings = safeList(meterReadingRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(request.getId()));
+
+        List<RepairRequestCloseReadinessItemDto> blockers = new ArrayList<>();
+        List<RepairRequestCloseReadinessItemDto> warnings = new ArrayList<>();
+        Map<String, CloseReadinessGroupStatus> groups = readinessGroups();
+
+        if (request.getStatus() != RequestStatus.COMPLETED) {
+            addBlocker(blockers, groups,
+                    "REQUEST_NOT_COMPLETED",
+                    "Repair request must be completed before it can be closed",
+                    "workOrders",
+                    "overview");
+        }
+        if (workOrders.isEmpty()) {
+            addBlocker(blockers, groups,
+                    "NO_LINKED_WORK_ORDERS",
+                    "No work order is linked to this repair request",
+                    "workOrders",
+                    "related");
+        } else {
+            long openWorkOrders = workOrders.stream()
+                    .filter(workOrder -> workOrder.getStatus() == null
+                            || !TERMINAL_WORK_ORDER_STATUSES.contains(workOrder.getStatus()))
+                    .count();
+            if (openWorkOrders > 0) {
+                addBlocker(blockers, groups,
+                        "OPEN_WORK_ORDERS",
+                        "%d linked work order(s) are still open".formatted(openWorkOrders),
+                        "workOrders",
+                        "related");
+            }
+        }
+
+        long openDefects = defects.stream()
+                .filter(defect -> defect.getStatus() == null || !TERMINAL_DEFECT_STATUSES.contains(defect.getStatus()))
+                .count();
+        if (openDefects > 0) {
+            addBlocker(blockers, groups,
+                    "OPEN_DEFECTS",
+                    "%d linked defect(s) are still open".formatted(openDefects),
+                    "defects",
+                    "related");
+        }
+
+        if (Boolean.TRUE.equals(request.getWarrantyActiveAtCreation()) && request.getWarrantyHandling() == null) {
+            addWarning(warnings, groups,
+                    "WARRANTY_DECISION_PENDING",
+                    "Warranty decision has not been recorded",
+                    "warranty",
+                    "warranty");
+        }
+
+        Set<UUID> recordedMeterIds = readings.stream()
+                .map(MeterReading::getMeterId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        long missingMeters = activeMeters.stream()
+                .map(EquipmentMeter::getId)
+                .filter(Objects::nonNull)
+                .filter(meterId -> !recordedMeterIds.contains(meterId))
+                .count();
+        if (missingMeters > 0) {
+            addWarning(warnings, groups,
+                    "METER_READINGS_MISSING",
+                    "%d active equipment meter(s) have no repair-request reading".formatted(missingMeters),
+                    "meterReadings",
+                    "resources");
+        }
+
+        boolean overdue = request.getTargetCompletionAt() != null
+                && request.getActualCompletionAt() == null
+                && request.getTargetCompletionAt().isBefore(checkedAt);
+        if (overdue) {
+            addWarning(warnings, groups,
+                    "TARGET_COMPLETION_OVERDUE",
+                    "Target completion date has passed",
+                    "sla",
+                    "overview");
+        }
+
+        return new RepairRequestCloseReadinessDto(
+                request.getId(),
+                request.getStatus(),
+                blockers.isEmpty(),
+                checkedAt,
+                overdue,
+                false,
+                blockers,
+                warnings,
+                groups
+        );
+    }
+
+    private Map<String, CloseReadinessGroupStatus> readinessGroups() {
+        Map<String, CloseReadinessGroupStatus> groups = new LinkedHashMap<>();
+        groups.put("workOrders", CloseReadinessGroupStatus.READY);
+        groups.put("defects", CloseReadinessGroupStatus.READY);
+        groups.put("warranty", CloseReadinessGroupStatus.READY);
+        groups.put("meterReadings", CloseReadinessGroupStatus.READY);
+        groups.put("sla", CloseReadinessGroupStatus.READY);
+        return groups;
+    }
+
+    private void addBlocker(List<RepairRequestCloseReadinessItemDto> blockers,
+                            Map<String, CloseReadinessGroupStatus> groups,
+                            String code,
+                            String message,
+                            String group,
+                            String targetTab) {
+        blockers.add(new RepairRequestCloseReadinessItemDto(
+                code, message, CloseReadinessSeverity.BLOCKING, group, targetTab));
+        groups.put(group, CloseReadinessGroupStatus.BLOCKED);
+    }
+
+    private void addWarning(List<RepairRequestCloseReadinessItemDto> warnings,
+                            Map<String, CloseReadinessGroupStatus> groups,
+                            String code,
+                            String message,
+                            String group,
+                            String targetTab) {
+        warnings.add(new RepairRequestCloseReadinessItemDto(
+                code, message, CloseReadinessSeverity.WARNING, group, targetTab));
+        groups.compute(group, (ignored, status) -> status == CloseReadinessGroupStatus.BLOCKED
+                ? CloseReadinessGroupStatus.BLOCKED
+                : CloseReadinessGroupStatus.WARNING);
     }
 
     private List<ActualCost> deduplicateCosts(List<ActualCost> costs) {

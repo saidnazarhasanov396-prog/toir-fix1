@@ -2,9 +2,14 @@ package com.toir.service.repair;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.repairrequest.RepairRequestCostKind;
+import com.toir.dto.repairrequest.RepairRequestCloseReadinessDto;
+import com.toir.dto.repairrequest.RepairRequestCloseReadinessItemDto;
 import com.toir.dto.repairrequest.RepairRequestCostsSummaryDto;
 import com.toir.entity.LaborEntry;
 import com.toir.entity.SparePart;
+import com.toir.entity.defects.Defect;
+import com.toir.entity.equipment.EquipmentMeter;
+import com.toir.entity.equipment.MeterReading;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.CostCategory;
@@ -13,7 +18,11 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.User;
 import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.CloseReadinessGroupStatus;
+import com.toir.enums.DefectStatus;
 import com.toir.enums.RequestStatus;
+import com.toir.enums.WorkOrderStatus;
+import com.toir.enums.WarrantyHandling;
 import com.toir.repository.AuditLogRepository;
 import com.toir.repository.CostCategoryRepository;
 import com.toir.repository.LaborEntryRepository;
@@ -219,6 +228,104 @@ class RepairRequestInsightsServiceTest {
         assertThat(result.rows()).extracting(row -> row.sourceLabel())
                 .containsExactly("Ivanov I. — 4h @ 25000", "Bearing 6205 × 2");
         assertThat(result.rows().getFirst().workOrderNumber()).isEqualTo("WO-2026-000123");
+    }
+
+    @Test
+    void closeReadinessBlocksOpenRecordsAndReportsNonBlockingWarnings() {
+        RepairRequest request = repairRequest(UUID.randomUUID(), RequestStatus.IN_PROGRESS);
+        request.setWarrantyActiveAtCreation(true);
+        request.setTargetCompletionAt(Instant.now().minusSeconds(60));
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(UUID.randomUUID());
+        workOrder.setStatus(WorkOrderStatus.IN_PROGRESS);
+        Defect defect = new Defect();
+        defect.setId(UUID.randomUUID());
+        defect.setStatus(DefectStatus.OPEN);
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(UUID.randomUUID());
+        meter.setEquipmentId(request.getEquipmentId());
+        meter.setActive(true);
+
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of(workOrder));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of(defect));
+        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(request.getEquipmentId()))
+                .thenReturn(List.of(meter));
+        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(request.getId()))
+                .thenReturn(List.of());
+
+        RepairRequestCloseReadinessDto result = service.getCloseReadiness(request);
+
+        assertThat(result.ready()).isFalse();
+        assertThat(result.isOverdue()).isTrue();
+        assertThat(result.reactionOverdue()).isFalse();
+        assertThat(result.blockers()).extracting(RepairRequestCloseReadinessItemDto::code)
+                .containsExactly("REQUEST_NOT_COMPLETED", "OPEN_WORK_ORDERS", "OPEN_DEFECTS");
+        assertThat(result.warnings()).extracting(RepairRequestCloseReadinessItemDto::code)
+                .containsExactly("WARRANTY_DECISION_PENDING", "METER_READINGS_MISSING", "TARGET_COMPLETION_OVERDUE");
+        assertThat(result.groups())
+                .containsEntry("workOrders", CloseReadinessGroupStatus.BLOCKED)
+                .containsEntry("defects", CloseReadinessGroupStatus.BLOCKED)
+                .containsEntry("warranty", CloseReadinessGroupStatus.WARNING)
+                .containsEntry("meterReadings", CloseReadinessGroupStatus.WARNING)
+                .containsEntry("sla", CloseReadinessGroupStatus.WARNING);
+    }
+
+    @Test
+    void closeReadinessRequiresAtLeastOneLinkedWorkOrder() {
+        RepairRequest request = repairRequest(UUID.randomUUID(), RequestStatus.COMPLETED);
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of());
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of());
+        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(request.getEquipmentId()))
+                .thenReturn(List.of());
+        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(request.getId()))
+                .thenReturn(List.of());
+
+        RepairRequestCloseReadinessDto result = service.getCloseReadiness(request);
+
+        assertThat(result.ready()).isFalse();
+        assertThat(result.blockers()).extracting(RepairRequestCloseReadinessItemDto::code)
+                .containsExactly("NO_LINKED_WORK_ORDERS");
+    }
+
+    @Test
+    void closeReadinessIsReadyWhenBlockingRulesPassAndCompletionSuppressesOverdueWarning() {
+        RepairRequest request = repairRequest(UUID.randomUUID(), RequestStatus.COMPLETED);
+        request.setWarrantyActiveAtCreation(true);
+        request.setWarrantyHandling(WarrantyHandling.NO_WARRANTY_ISSUE);
+        request.setTargetCompletionAt(Instant.parse("2026-07-01T09:00:00Z"));
+        request.setActualCompletionAt(Instant.parse("2026-07-02T09:00:00Z"));
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(UUID.randomUUID());
+        workOrder.setStatus(WorkOrderStatus.COMPLETED);
+        Defect defect = new Defect();
+        defect.setId(UUID.randomUUID());
+        defect.setStatus(DefectStatus.RESOLVED);
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setId(UUID.randomUUID());
+        MeterReading reading = new MeterReading();
+        reading.setId(UUID.randomUUID());
+        reading.setMeterId(meter.getId());
+
+        when(workOrderRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of(workOrder));
+        when(defectRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(request.getId()))
+                .thenReturn(List.of(defect));
+        when(equipmentMeterRepository.findAllByEquipmentIdAndActiveTrueAndIsDeletedFalse(request.getEquipmentId()))
+                .thenReturn(List.of(meter));
+        when(meterReadingRepository.findAllByRepairRequestIdAndIsDeletedFalseOrderByReadAtDesc(request.getId()))
+                .thenReturn(List.of(reading));
+
+        RepairRequestCloseReadinessDto result = service.getCloseReadiness(request);
+
+        assertThat(result.ready()).isTrue();
+        assertThat(result.isOverdue()).isFalse();
+        assertThat(result.blockers()).isEmpty();
+        assertThat(result.warnings()).isEmpty();
+        assertThat(result.groups().values()).containsOnly(CloseReadinessGroupStatus.READY);
     }
 
     private RepairRequest repairRequest(UUID id, RequestStatus status) {
