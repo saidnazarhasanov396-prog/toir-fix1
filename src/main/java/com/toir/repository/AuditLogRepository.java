@@ -50,4 +50,14 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID>, JpaSp
             "AND (CAST(:searchPattern AS text) IS NULL OR al.message ILIKE CAST(:searchPattern AS text) OR al.entity_type ILIKE CAST(:searchPattern AS text))",
             nativeQuery = true)
     Page<AuditLog> findAllByIsDeletedFalseOrderByCreatedAtDesc(@Param("module") String module, @Param("action") String action, @Param("fromDate") LocalDate fromDate, @Param("toDate") LocalDate toDate, @Param("searchPattern") String searchPattern, @Param("userId") UUID userId, @Param("pageable") Pageable pageable);
+
+    @Query(value = """
+            SELECT *
+            FROM audit_logs
+            WHERE is_deleted = false
+              AND lower(entity_type) = 'repair_request'
+              AND entity_id = :entityId
+            ORDER BY created_at ASC, id ASC
+            """, nativeQuery = true)
+    List<AuditLog> findRepairRequestTimelineAudits(@Param("entityId") String entityId);
 }

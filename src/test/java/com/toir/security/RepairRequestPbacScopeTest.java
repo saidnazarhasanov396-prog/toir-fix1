@@ -13,6 +13,7 @@ import com.toir.enums.RequestStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.repair.RepairRequestService;
+import com.toir.service.repair.RepairRequestInsightsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,6 +49,9 @@ class RepairRequestPbacScopeTest {
     RepairRequestService service;
 
     @Mock
+    RepairRequestInsightsService insightsService;
+
+    @Mock
     RepairRequestRepository repository;
 
     @Mock
@@ -58,7 +62,7 @@ class RepairRequestPbacScopeTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new RepairRequestController(service, repository, scopeAccessService)
+                        new RepairRequestController(service, insightsService, repository, scopeAccessService)
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -132,6 +136,20 @@ class RepairRequestPbacScopeTest {
                 .andExpect(status().isForbidden());
 
         verify(service, never()).findById(requestId);
+    }
+
+    @Test
+    void detailInsightsDenyDifferentDepartmentBeforeDelegating() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        RepairRequest request = repairRequest(requestId, departmentId, UUID.randomUUID(), null);
+        when(repository.findByIdAndIsDeletedFalse(requestId)).thenReturn(Optional.of(request));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
+
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/costs-summary", requestId))
+                .andExpect(status().isForbidden());
+
+        verify(insightsService, never()).getCostsSummary(request);
     }
 
     @Test

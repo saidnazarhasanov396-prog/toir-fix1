@@ -11,6 +11,7 @@ import com.toir.enums.RequestStatus;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairRequestService;
+import com.toir.service.repair.RepairRequestInsightsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +60,9 @@ class RbacRepairRequestSecurityTest {
 
     @MockBean
     RepairRequestService repairRequestService;
+
+    @MockBean
+    RepairRequestInsightsService repairRequestInsightsService;
 
     @MockBean
     ApprovalService approvalService;
@@ -118,6 +122,32 @@ class RbacRepairRequestSecurityTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/repair-requests/stats"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.REPAIR_REQUEST_READ)
+    void repairRequestReadCanReadAllDetailInsights() throws Exception {
+        UUID requestId = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/close-readiness", requestId))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/costs-summary", requestId))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/timeline", requestId))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.USER_READ)
+    void unrelatedPermissionCannotReadDetailInsights() throws Exception {
+        UUID requestId = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/close-readiness", requestId))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/costs-summary", requestId))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/repair-requests/{id}/timeline", requestId))
+                .andExpect(status().isForbidden());
     }
 
     @Test
