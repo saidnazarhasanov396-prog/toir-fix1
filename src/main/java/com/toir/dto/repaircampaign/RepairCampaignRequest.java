@@ -6,6 +6,9 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.toir.dto.common.MoneyDecimalStringDeserializer;
 import com.toir.dto.sparepartlifecycle.DecimalStringSerializer;
 import com.toir.enums.RepairCampaignScopeType;
+import com.toir.validation.ValidIsoCurrency;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -22,16 +25,17 @@ public record RepairCampaignRequest(
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
         @PositiveOrZero
+        @Digits(integer = 15, fraction = 4)
         @JsonSerialize(using = DecimalStringSerializer.class)
         @JsonDeserialize(using = MoneyDecimalStringDeserializer.class)
         BigDecimal totalBudget,
         RepairCampaignScopeType scopeType,
         UUID equipmentTypeId,
-        List<RepairCampaignDepartmentDto> participantDepartments,
+        List<@Valid RepairCampaignDepartmentDto> participantDepartments,
         @JsonAlias("description") String description,
         String notes,
         UUID maintenanceBudgetId,
-        @NotBlank String currencyCode
+        @NotBlank @ValidIsoCurrency String currencyCode
 ) {
     public RepairCampaignRequest(
             String code,
@@ -66,6 +70,6 @@ public record RepairCampaignRequest(
 
     public RepairCampaignRequest {
         totalBudget = totalBudget == null ? BigDecimal.ZERO : totalBudget;
-        currencyCode = currencyCode == null ? "UZS" : currencyCode;
+        currencyCode = currencyCode == null ? "UZS" : currencyCode.trim();
     }
 }

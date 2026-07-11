@@ -162,6 +162,52 @@ class RepairCampaignControllerContractTest {
     }
 
     @Test
+    void campaignOwnedMoneyRejectsMoreThanFifteenIntegerDigits() throws Exception {
+        String campaign = """
+                {"name":"Oversized budget","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"1234567890123456.0000","currencyCode":"UZS"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(campaign))
+                .andExpect(status().isBadRequest());
+
+        String participant = """
+                {"name":"Oversized participant","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"100","currencyCode":"UZS","participantDepartments":[
+                   {"departmentId":"%s","role":"PARTICIPANT","plannedBudget":"1234567890123456.0000"}
+                 ]}
+                """.formatted(UUID.randomUUID());
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(participant))
+                .andExpect(status().isBadRequest());
+
+        String stage = """
+                {"sequence":1,"name":"Oversized stage","startDate":"2026-01-01",
+                 "endDate":"2026-01-02","plannedCost":"1234567890123456.0000"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/stages", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content(stage))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void currencyCodeMustBeUppercaseIso4217() throws Exception {
+        for (String currency : List.of("uzs", "ZZZ")) {
+            String body = """
+                    {"name":"Currency boundary","startDate":"2026-01-01","endDate":"2026-02-01",
+                     "totalBudget":"100.0000","currencyCode":"%s"}
+                    """.formatted(currency);
+            mockMvc.perform(post("/api/v1/repair-campaigns")
+                            .contentType("application/json")
+                            .content(body))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
     void explicitNullCampaignMoneyIsRejected() throws Exception {
         String nullTotalBudget = """
                 {"name":"Null budget","startDate":"2026-01-01","endDate":"2026-02-01",

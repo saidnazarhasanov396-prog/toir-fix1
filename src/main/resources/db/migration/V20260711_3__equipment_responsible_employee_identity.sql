@@ -2,18 +2,30 @@ CREATE TEMPORARY TABLE equipment_responsible_identity_classification (
     equipment_id uuid PRIMARY KEY,
     original_responsible_id uuid NOT NULL,
     classification varchar(48) NOT NULL,
-    mapped_employee_id uuid
+    mapped_employee_id uuid,
+    user_match boolean NOT NULL,
+    employee_match_count bigint NOT NULL
 ) ON COMMIT DROP;
 
 INSERT INTO equipment_responsible_identity_classification (
     equipment_id,
     original_responsible_id,
     classification,
-    mapped_employee_id
+    mapped_employee_id,
+    user_match,
+    employee_match_count
 )
 SELECT e.id,
        e.responsible_id,
        CASE
+           WHEN direct_employee.id IS NOT NULL
+                AND legacy_user.id IS NOT NULL
+                AND (
+                    employee_mapping.match_count > 1
+                    OR (employee_mapping.match_count = 1
+                        AND employee_mapping.employee_id <> direct_employee.id)
+                )
+               THEN 'AMBIGUOUS'
            WHEN direct_employee.id IS NOT NULL THEN 'VALID_EMPLOYEE'
            WHEN legacy_user.id IS NOT NULL AND employee_mapping.match_count = 1
                THEN 'LEGACY_USER_WITH_UNIQUE_EMPLOYEE'
@@ -27,10 +39,13 @@ SELECT e.id,
                 AND employee_mapping.match_count = 1
                THEN employee_mapping.employee_id
            ELSE NULL
-       END
+       END,
+       legacy_user.id IS NOT NULL,
+       employee_mapping.match_count
 FROM equipment e
 LEFT JOIN hr_employees direct_employee
        ON direct_employee.id = e.responsible_id
+      AND direct_employee.is_deleted = false
 LEFT JOIN users legacy_user
        ON legacy_user.id = e.responsible_id
 LEFT JOIN LATERAL (
@@ -38,6 +53,7 @@ LEFT JOIN LATERAL (
            min(employee.id::text)::uuid AS employee_id
     FROM hr_employees employee
     WHERE employee.user_id = e.responsible_id
+      AND employee.is_deleted = false
 ) employee_mapping ON true
 WHERE e.responsible_id IS NOT NULL;
 
@@ -54,20 +70,26 @@ BEGIN
     FROM equipment_responsible_identity_classification;
 
     IF ambiguous_count > 0 OR unresolved_count > 0 THEN
-        SELECT string_agg(equipment_id::text, ', ' ORDER BY equipment_id)
+        SELECT string_agg(
+                   format('equipment_id=%s responsible_uuid=%s user_match=%s employee_match_count=%s',
+                          equipment_id, original_responsible_id, user_match, employee_match_count),
+                   '; ' ORDER BY equipment_id)
         INTO ambiguous_examples
         FROM (
-            SELECT equipment_id
+            SELECT equipment_id, original_responsible_id, user_match, employee_match_count
             FROM equipment_responsible_identity_classification
             WHERE classification = 'AMBIGUOUS'
             ORDER BY equipment_id
             LIMIT 10
         ) bounded_ambiguous;
 
-        SELECT string_agg(equipment_id::text, ', ' ORDER BY equipment_id)
+        SELECT string_agg(
+                   format('equipment_id=%s responsible_uuid=%s user_match=%s employee_match_count=%s',
+                          equipment_id, original_responsible_id, user_match, employee_match_count),
+                   '; ' ORDER BY equipment_id)
         INTO unresolved_examples
         FROM (
-            SELECT equipment_id
+            SELECT equipment_id, original_responsible_id, user_match, employee_match_count
             FROM equipment_responsible_identity_classification
             WHERE classification = 'UNRESOLVED'
             ORDER BY equipment_id
@@ -75,7 +97,7 @@ BEGIN
         ) bounded_unresolved;
 
         RAISE EXCEPTION
-            'equipment responsible identity migration blocked: AMBIGUOUS=% (equipment ids: %); UNRESOLVED=% (equipment ids: %)',
+            'equipment responsible identity migration blocked: AMBIGUOUS=% (evidence: %); UNRESOLVED=% (evidence: %)',
             ambiguous_count,
             coalesce(ambiguous_examples, 'none'),
             unresolved_count,

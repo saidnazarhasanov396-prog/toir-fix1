@@ -61,6 +61,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Currency;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -673,6 +674,14 @@ public class RepairCampaignService {
         }
         if (r.totalBudget().compareTo(BigDecimal.ZERO) < 0) {
             throw RestException.badRequest("Total budget must be non-negative");
+        }
+        try {
+            if (!r.currencyCode().equals(r.currencyCode().toUpperCase(java.util.Locale.ROOT))) {
+                throw new IllegalArgumentException();
+            }
+            Currency.getInstance(r.currencyCode());
+        } catch (IllegalArgumentException exception) {
+            throw RestException.badRequest("currencyCode must be an uppercase ISO-4217 currency code");
         }
         RepairCampaignScopeType scopeType = effectiveScopeType(r.scopeType());
         if (scopeType == RepairCampaignScopeType.EQUIPMENT_TYPE && r.equipmentTypeId() == null) {

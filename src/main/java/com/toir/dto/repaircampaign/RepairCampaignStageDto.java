@@ -7,6 +7,7 @@ import com.toir.dto.sparepartlifecycle.DecimalStringSerializer;
 import com.toir.entity.repair.RepairCampaignStage;
 import com.toir.enums.RepairCampaignStatus;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -21,20 +22,20 @@ public record RepairCampaignStageDto(
         @NotBlank String name,
         @NotNull LocalDate startDate,
         @NotNull LocalDate endDate,
-        @PositiveOrZero @JsonSerialize(using = DecimalStringSerializer.class)
+        @PositiveOrZero @Digits(integer = 15, fraction = 4) @JsonSerialize(using = DecimalStringSerializer.class)
         @JsonDeserialize(using = MoneyDecimalStringDeserializer.class) BigDecimal plannedCost,
-        @PositiveOrZero @JsonSerialize(using = DecimalStringSerializer.class)
+        @PositiveOrZero @Digits(integer = 15, fraction = 4) @JsonSerialize(using = DecimalStringSerializer.class)
         @JsonDeserialize(using = MoneyDecimalStringDeserializer.class) BigDecimal actualCost,
         RepairCampaignStatus status,
         String notes,
         int workOrderCount,
         int completedWorkOrderCount,
-        @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal approvedActual,
-        @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal pendingActual,
+        @Digits(integer = 15, fraction = 4) @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal approvedActual,
+        @Digits(integer = 15, fraction = 4) @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal pendingActual,
         UUID budgetLineId,
-        @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal budgetLinePlanned,
-        @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal budgetLineActual,
-        @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal budgetLineRemaining
+        @Digits(integer = 15, fraction = 4) @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal budgetLinePlanned,
+        @Digits(integer = 15, fraction = 4) @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal budgetLineActual,
+        @Digits(integer = 15, fraction = 4) @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal budgetLineRemaining
 ) {
     public RepairCampaignStageDto {
         plannedCost = plannedCost == null ? BigDecimal.ZERO : plannedCost;

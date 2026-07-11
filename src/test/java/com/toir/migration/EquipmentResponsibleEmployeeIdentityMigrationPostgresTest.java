@@ -44,7 +44,8 @@ class EquipmentResponsibleEmployeeIdentityMigrationPostgresTest {
                     );
                     CREATE TABLE hr_employees (
                         id uuid PRIMARY KEY,
-                        user_id uuid
+                        user_id uuid,
+                        is_deleted boolean NOT NULL DEFAULT false
                     );
                     CREATE TABLE equipment (
                         id uuid PRIMARY KEY,
@@ -59,7 +60,7 @@ class EquipmentResponsibleEmployeeIdentityMigrationPostgresTest {
     }
 
     @Test
-    void preservesValidEmployeeIdentityEvenWhenTheSameIdIsAlsoAUser() throws Exception {
+    void conflictingEmployeeAndUserIdentityFailsAsAmbiguous() throws Exception {
         UUID sharedId = UUID.randomUUID();
         UUID otherEmployeeId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
@@ -68,10 +69,39 @@ class EquipmentResponsibleEmployeeIdentityMigrationPostgresTest {
         insertEmployee(otherEmployeeId, sharedId);
         insertEquipment(equipmentId, sharedId, null, null);
 
-        executeMigration();
+        assertMigrationFailsWith("AMBIGUOUS=1", equipmentId);
 
         assertThat(responsibleId(equipmentId)).isEqualTo(sharedId);
         assertThat(updatedAt(equipmentId)).isEqualTo(ORIGINAL_TIME);
+    }
+
+    @Test
+    void preservesValidEmployeeIdentity() throws Exception {
+        UUID employeeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        insertEmployee(employeeId, null);
+        insertEquipment(equipmentId, employeeId, null, null);
+
+        executeMigration();
+
+        assertThat(responsibleId(equipmentId)).isEqualTo(employeeId);
+        assertThat(updatedAt(equipmentId)).isEqualTo(ORIGINAL_TIME);
+    }
+
+    @Test
+    void ignoresDeletedEmployeesWhenResolvingUniqueLegacyUser() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID activeEmployeeId = UUID.randomUUID();
+        UUID deletedEmployeeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        insertUser(userId);
+        insertEmployee(activeEmployeeId, userId);
+        insertEmployee(deletedEmployeeId, userId, true);
+        insertEquipment(equipmentId, userId, null, null);
+
+        executeMigration();
+
+        assertThat(responsibleId(equipmentId)).isEqualTo(activeEmployeeId);
     }
 
     @Test
@@ -114,9 +144,10 @@ class EquipmentResponsibleEmployeeIdentityMigrationPostgresTest {
         insertEmployee(convertibleEmployeeId, convertibleUserId);
         insertEquipment(convertibleEquipmentId, convertibleUserId, null, null);
         insertUser(userOnlyId);
-        insertEquipment(UUID.randomUUID(), userOnlyId, null, null);
+        UUID unresolvedEquipmentId = UUID.randomUUID();
+        insertEquipment(unresolvedEquipmentId, userOnlyId, null, null);
 
-        assertMigrationFailsWith("UNRESOLVED");
+        assertMigrationFailsWith("UNRESOLVED=1", unresolvedEquipmentId);
 
         assertThat(responsibleId(convertibleEquipmentId)).isEqualTo(convertibleUserId);
         assertThat(identityConstraintExists()).isFalse();
@@ -129,16 +160,18 @@ class EquipmentResponsibleEmployeeIdentityMigrationPostgresTest {
         insertUser(userId);
         insertEmployee(UUID.randomUUID(), userId);
         insertEmployee(UUID.randomUUID(), userId);
-        insertEquipment(UUID.randomUUID(), userId, null, null);
+        UUID equipmentId = UUID.randomUUID();
+        insertEquipment(equipmentId, userId, null, null);
 
-        assertMigrationFailsWith("AMBIGUOUS");
+        assertMigrationFailsWith("AMBIGUOUS=1", equipmentId);
     }
 
     @Test
     void orphanIdentityFailsAsUnresolved() throws Exception {
-        insertEquipment(UUID.randomUUID(), UUID.randomUUID(), null, null);
+        UUID equipmentId = UUID.randomUUID();
+        insertEquipment(equipmentId, UUID.randomUUID(), null, null);
 
-        assertMigrationFailsWith("UNRESOLVED");
+        assertMigrationFailsWith("UNRESOLVED=1", equipmentId);
     }
 
     @Test
@@ -163,11 +196,15 @@ class EquipmentResponsibleEmployeeIdentityMigrationPostgresTest {
                 "Operational responsible Employee identity; references hr_employees.id");
     }
 
-    private void assertMigrationFailsWith(String classification) {
+    private void assertMigrationFailsWith(String classification, UUID equipmentId) {
         assertThatThrownBy(this::executeMigration)
                 .isInstanceOf(SQLException.class)
                 .hasMessageContaining("equipment responsible identity migration blocked")
-                .hasMessageContaining(classification);
+                .hasMessageContaining(classification)
+                .hasMessageContaining("equipment_id=" + equipmentId)
+                .hasMessageContaining("responsible_uuid=")
+                .hasMessageContaining("user_match=")
+                .hasMessageContaining("employee_match_count=");
     }
 
     private void executeMigration() throws Exception {
@@ -191,7 +228,11 @@ class EquipmentResponsibleEmployeeIdentityMigrationPostgresTest {
     }
 
     private void insertEmployee(UUID id, UUID userId) throws Exception {
-        executeUpdate("INSERT INTO hr_employees (id, user_id) VALUES (?, ?)", id, userId);
+        insertEmployee(id, userId, false);
+    }
+
+    private void insertEmployee(UUID id, UUID userId, boolean deleted) throws Exception {
+        executeUpdate("INSERT INTO hr_employees (id, user_id, is_deleted) VALUES (?, ?, ?)", id, userId, deleted);
     }
 
     private void insertEquipment(UUID id, UUID responsibleId, UUID createdBy, UUID updatedBy) throws Exception {

@@ -134,6 +134,25 @@ class RepairCampaignServiceTest {
     }
 
     @Test
+    void createNormalizesSurroundingCurrencyWhitespace() {
+        RepairCampaignRequest request = new RepairCampaignRequest(
+                null, "Currency normalization", null,
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 2, 1),
+                new BigDecimal("1.0000"), RepairCampaignScopeType.CUSTOM, null, List.of(),
+                null, null, null, " UZS "
+        );
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
+        when(repository.save(any(RepairCampaign.class))).thenAnswer(invocation -> {
+            RepairCampaign campaign = invocation.getArgument(0);
+            campaign.setId(UUID.randomUUID());
+            return campaign;
+        });
+
+        assertThat(service.create(request).currencyCode()).isEqualTo("UZS");
+    }
+
+    @Test
     void generateWorkOrdersRejectsDraftCampaign() {
         UUID campaignId = UUID.randomUUID();
         RepairCampaign campaign = campaign(campaignId, null);
@@ -176,6 +195,20 @@ class RepairCampaignServiceTest {
         verify(repository).findLockedByIdAndIsDeletedFalse(campaignId);
         verify(repository, never()).findByIdAndIsDeletedFalse(campaignId);
         assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.IN_PROGRESS);
+    }
+
+    @Test
+    void approvalFinalizationSerializesStatusTransitionOnCampaignRow() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.save(campaign)).thenReturn(campaign);
+
+        service.finalizeApprovalFromApprovalRequest(campaignId);
+
+        verify(repository).findLockedByIdAndIsDeletedFalse(campaignId);
+        verify(repository, never()).findByIdAndIsDeletedFalse(campaignId);
+        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.APPROVED);
     }
 
     @Test
@@ -337,7 +370,7 @@ class RepairCampaignServiceTest {
         equipment.setCode("P-1");
         equipment.setName("Pump");
         equipment.setDepartmentId(UUID.randomUUID());
-        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
         when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
                 .thenReturn(List.of(equipment));
@@ -701,7 +734,7 @@ class RepairCampaignServiceTest {
         approvedUnallocated.setCostCategoryId(UUID.randomUUID());
         approvedUnallocated.setAmount(100);
 
-        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(workOrderRepository.findAllByRepairCampaignIdAndIsDeletedFalseOrderByUpdatedAtDesc(campaignId))
                 .thenReturn(List.of(closedOrder));
         when(contractorWorkRepository.findAllByWorkOrderIdInAndIsDeletedFalse(List.of(closedOrder.getId())))

@@ -8,6 +8,7 @@ import com.toir.entity.repair.RepairCampaignDepartment;
 import com.toir.enums.RepairCampaignDepartmentRole;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Digits;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -18,6 +19,7 @@ public record RepairCampaignDepartmentDto(
         String departmentName,
         @NotNull RepairCampaignDepartmentRole role,
         @PositiveOrZero
+        @Digits(integer = 15, fraction = 4)
         @JsonSerialize(using = DecimalStringSerializer.class)
         @JsonDeserialize(using = MoneyDecimalStringDeserializer.class)
         BigDecimal plannedBudget,
