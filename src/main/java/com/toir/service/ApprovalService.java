@@ -414,6 +414,7 @@ public class ApprovalService implements ApprovalOrchestrator {
             case PROCUREMENT_REQUEST, PROCUREMENT -> procurementRequestServiceProvider.getObject().validateCanApprove(targetId);
             case REPAIR_REQUEST -> repairRequestServiceProvider.getObject().assertMeterReadingsReadyForApproval(targetId);
             case MAINTENANCE_REGULATION -> maintenanceRegulationServiceProvider.getObject().validateCanApprove(targetId);
+            case PLANNED_SHUTDOWN -> loadPlannedShutdownApprovalSnapshot(targetId);
             case EQUIPMENT_COMMISSIONING -> {
                 if (equipmentCommissioningActServiceProvider == null) {
                     throw RestException.conflict("Equipment commissioning approval service is unavailable");
@@ -426,6 +427,34 @@ public class ApprovalService implements ApprovalOrchestrator {
     }
 
     private record TargetMetadata(String title, String description) {
+    }
+
+    private PlannedShutdownApprovalSnapshot loadPlannedShutdownApprovalSnapshot(UUID targetId) {
+        String status = jdbcTemplate.queryForObject(
+                "select status from planned_shutdowns where id = ? and is_deleted = false", String.class, targetId);
+        Long scopeVersion = jdbcTemplate.queryForObject(
+                "select scope_version from planned_shutdowns where id = ? and is_deleted = false", Long.class, targetId);
+        Long approvalVersion = jdbcTemplate.queryForObject(
+                "select approval_scope_version from planned_shutdowns where id = ? and is_deleted = false",
+                Long.class, targetId);
+        String scopeHash = jdbcTemplate.queryForObject(
+                "select approval_scope_hash from planned_shutdowns where id = ? and is_deleted = false",
+                String.class, targetId);
+        if (!"PENDING_APPROVAL".equals(status)) {
+            throw RestException.conflict("PLANNED_SHUTDOWN_NOT_PENDING_APPROVAL");
+        }
+        if (scopeVersion == null || !Objects.equals(scopeVersion, approvalVersion)
+                || scopeHash == null || !scopeHash.matches("[0-9a-f]{64}")) {
+            throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_SCOPE_STALE");
+        }
+        return new PlannedShutdownApprovalSnapshot(scopeVersion, scopeHash);
+    }
+
+    private record PlannedShutdownApprovalSnapshot(Long scopeVersion, String scopeHash) {}
+
+    private static String plannedShutdownApprovalPayload(PlannedShutdownApprovalSnapshot snapshot) {
+        return "{\"scopeVersion\":" + snapshot.scopeVersion()
+                + ",\"scopeHash\":\"" + snapshot.scopeHash() + "\"}";
     }
 
     @Transactional
@@ -530,20 +559,33 @@ public class ApprovalService implements ApprovalOrchestrator {
 
         ApprovalActionType effectiveActionType = actionType == null ? ApprovalActionType.APPROVE : actionType;
         lockApprovalTargetAction(normalizedType, documentId, effectiveActionType);
-        return findPendingApproval(normalizedType, documentId, effectiveActionType)
-                .map(this::toDtoAfterReuse)
-                .orElseGet(() -> createNewApproval(
-                        targetType,
-                        documentId,
-                        StringUtils.hasText(title) ? title : normalizedType + " approval",
-                        effectiveRequesterId,
-                        description,
-                        effectiveApproverId == null
-                                ? List.of()
-                                : List.of(new CreateApprovalRequest.StepInput(effectiveApproverId, approverRole)),
-                        effectiveActionType,
-                        true
-                ));
+        java.util.Optional<ApprovalRequest> pending = findPendingApproval(normalizedType, documentId,
+                effectiveActionType);
+        if (pending.isPresent() && targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
+            PlannedShutdownApprovalSnapshot snapshot = loadPlannedShutdownApprovalSnapshot(documentId);
+            if (!Objects.equals(pending.get().getPayloadJson(), plannedShutdownApprovalPayload(snapshot))) {
+                ApprovalRequest stale = pending.get();
+                stale.setStatus(ApprovalStatus.CANCELLED);
+                stale.setCompletedAt(Instant.now());
+                requestRepository.saveAndFlush(stale);
+                governanceService.record(stale, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
+                        effectiveRequesterId, "Superseded by a newer planned shutdown scope snapshot");
+                pending = java.util.Optional.empty();
+            }
+        }
+        if (pending.isPresent()) return toDtoAfterReuse(pending.get());
+        return createNewApproval(
+                targetType,
+                documentId,
+                StringUtils.hasText(title) ? title : normalizedType + " approval",
+                effectiveRequesterId,
+                description,
+                effectiveApproverId == null
+                        ? List.of()
+                        : List.of(new CreateApprovalRequest.StepInput(effectiveApproverId, approverRole)),
+                effectiveActionType,
+                true
+        );
     }
 
     private void lockApprovalTargetAction(String normalizedType, UUID documentId, ApprovalActionType actionType) {
@@ -1082,13 +1124,8 @@ public class ApprovalService implements ApprovalOrchestrator {
         request.setCurrentStep(1);
         request.setActionType(actionType);
         if (targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
-            Long scopeVersion = jdbcTemplate.queryForObject(
-                    "select scope_version from planned_shutdowns where id = ? and is_deleted = false",
-                    Long.class, targetId);
-            if (scopeVersion == null) {
-                throw RestException.conflict("Planned shutdown approval scope is unavailable");
-            }
-            request.setPayloadJson("{\"scopeVersion\":" + scopeVersion + "}");
+            PlannedShutdownApprovalSnapshot snapshot = loadPlannedShutdownApprovalSnapshot(targetId);
+            request.setPayloadJson(plannedShutdownApprovalPayload(snapshot));
         }
         if (request.getExpiresAt() == null) {
             request.setExpiresAt(Instant.now().plus(slaPolicyService.slaFor(request)));

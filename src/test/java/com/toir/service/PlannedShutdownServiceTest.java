@@ -74,6 +74,8 @@ class PlannedShutdownServiceTest {
             new com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy();
     @Spy private com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy transitionPolicy =
             new com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy();
+    @Spy private com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher approvalScopeHasher =
+            new com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher();
     @Mock private SafetyPermitRepository safetyPermitRepository;
     @Mock private ScopeAccessService scopeAccessService;
     @Mock private AuditBuilderService auditBuilderService;
@@ -427,6 +429,22 @@ class PlannedShutdownServiceTest {
     }
 
     @Test
+    void metadataUpdateIsPreApprovalOnlyAndInvalidatesScopeSnapshot() {
+        UUID id = UUID.randomUUID(); UUID departmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, departmentId, 4L, PlannedShutdownStatus.APPROVED);
+        shutdown.setResponsibleEmployeeId(employeeId);
+        shutdown.setApprovalScopeVersion(2L); shutdown.setApprovalScopeHash("a".repeat(64));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        PlannedShutdownUpdateRequest request = new PlannedShutdownUpdateRequest(4L, shutdown.getCode(),
+                shutdown.getName(), shutdown.getShutdownType(), departmentId, employeeId, shutdown.getStartAt(),
+                shutdown.getEndAt(), shutdown.getReason(), null, null, null, null);
+
+        assertThatThrownBy(() -> service.update(id, request))
+                .hasMessageContaining("METADATA_UPDATE_NOT_ALLOWED:APPROVED");
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void updateFlushesAndReturnsTheNewOptimisticVersion() {
         UUID id = UUID.randomUUID(); UUID departmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();
         PlannedShutdown shutdown = shutdown(id, departmentId, 4L, PlannedShutdownStatus.DRAFT);
@@ -445,6 +463,9 @@ class PlannedShutdownServiceTest {
 
         assertThat(response.version()).isEqualTo(5L);
         assertThat(response.name()).isEqualTo("Annual updated");
+        assertThat(response.scopeVersion()).isEqualTo(1L);
+        assertThat(response.approvalScopeVersion()).isNull();
+        assertThat(response.approvalScopeHash()).isNull();
         verify(repository).saveAndFlush(shutdown);
     }
 

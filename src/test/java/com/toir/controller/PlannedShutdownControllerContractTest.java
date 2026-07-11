@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -202,9 +203,19 @@ class PlannedShutdownControllerContractTest {
     void lifecycleEndpointsUseVersionedTypedCommands() throws Exception {
         UUID id = UUID.randomUUID(); UUID departmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();
         var response = detail(id, departmentId, employeeId, PlannedShutdownStatus.PREPARATION);
+        when(service.formScope(eq(id), any())).thenReturn(response);
+        when(service.beginReadiness(eq(id), any())).thenReturn(response);
+        when(service.requestApproval(eq(id), any())).thenReturn(response);
         when(service.prepare(eq(id), any())).thenReturn(response);
         when(service.reschedule(eq(id), any())).thenReturn(response);
         when(service.extend(eq(id), any())).thenReturn(response);
+
+        for (String action : List.of("form-scope", "begin-readiness", "request-approval")) {
+            mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/" + action, id)
+                            .contentType("application/json")
+                            .content("{\"version\":3,\"reason\":\"advance\"}"))
+                    .andExpect(status().isOk());
+        }
 
         mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/prepare", id)
                         .contentType("application/json")
@@ -220,6 +231,31 @@ class PlannedShutdownControllerContractTest {
                         .content("{\"version\":3,\"newEndAt\":\"2026-08-05T00:00:00Z\","
                                 + "\"reason\":\"emergency\"}"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void everyLifecycleOperationHasAStablePostMapping() {
+        java.util.Map<String, String> expected = java.util.Map.ofEntries(
+                java.util.Map.entry("formScope", "/{id}/form-scope"),
+                java.util.Map.entry("beginReadiness", "/{id}/begin-readiness"),
+                java.util.Map.entry("requestApproval", "/{id}/request-approval"),
+                java.util.Map.entry("prepare", "/{id}/prepare"),
+                java.util.Map.entry("startShutdown", "/{id}/start-shutdown"),
+                java.util.Map.entry("confirmSafeState", "/{id}/confirm-safe-state"),
+                java.util.Map.entry("startRepair", "/{id}/start-repair"),
+                java.util.Map.entry("startTesting", "/{id}/start-testing"),
+                java.util.Map.entry("startStartup", "/{id}/start-startup"),
+                java.util.Map.entry("complete", "/{id}/complete"),
+                java.util.Map.entry("close", "/{id}/close"),
+                java.util.Map.entry("cancel", "/{id}/cancel"),
+                java.util.Map.entry("reschedule", "/{id}/reschedule"),
+                java.util.Map.entry("extend", "/{id}/extend"));
+        expected.forEach((name, path) -> {
+            var method = java.util.Arrays.stream(PlannedShutdownController.class.getDeclaredMethods())
+                    .filter(candidate -> candidate.getName().equals(name)).findFirst().orElseThrow();
+            assertThat(method.getAnnotation(org.springframework.web.bind.annotation.PostMapping.class).value())
+                    .containsExactly(path);
+        });
     }
 
     private static PlannedShutdownDetailResponse detail(UUID id, UUID departmentId, UUID employeeId,

@@ -12,6 +12,9 @@ class PlannedShutdownLifecyclePermissionContractTest {
     @Test
     void everyLifecycleEndpointUsesItsExactOperationPermission() {
         Map<String, String> expected = Map.ofEntries(
+                Map.entry("formScope", "PLANNED_SHUTDOWN_UPDATE"),
+                Map.entry("beginReadiness", "PLANNED_SHUTDOWN_UPDATE"),
+                Map.entry("requestApproval", "PLANNED_SHUTDOWN_UPDATE"),
                 Map.entry("prepare", "PLANNED_SHUTDOWN_PREPARE"),
                 Map.entry("startShutdown", "PLANNED_SHUTDOWN_PREPARE"),
                 Map.entry("confirmSafeState", "PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE"),

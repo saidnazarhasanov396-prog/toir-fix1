@@ -20,6 +20,8 @@ class PlannedShutdownCoreMigrationContractTest {
             "src/main/resources/db/migration/V20260711_5__planned_shutdown_scope_version.sql");
     private static final Path WORK_ITEM_EQUIPMENT_MIGRATION = Path.of(
             "src/main/resources/db/migration/V20260711_6__planned_shutdown_work_item_equipment_required.sql");
+    private static final Path APPROVAL_ROUTE_MIGRATION = Path.of(
+            "src/main/resources/db/migration/V20260711_7__planned_shutdown_approval_route.sql");
 
     @Test
     void migrationCreatesTheCompleteShutdownAggregateWithExplicitForeignKeys() throws Exception {
@@ -191,6 +193,16 @@ class PlannedShutdownCoreMigrationContractTest {
         Field equipmentId = Class.forName("com.toir.entity.plannedshutdown.PlannedShutdownWorkItem")
                 .getDeclaredField("equipmentId");
         assertThat(equipmentId.getAnnotation(Column.class).nullable()).isFalse();
+    }
+
+    @Test
+    void approvalRouteSeedsExactIndependentProductionAndHseRoles() throws Exception {
+        String sql = Files.readString(APPROVAL_ROUTE_MIGRATION);
+        assertThat(sql).contains("'PLANNED_SHUTDOWN_APPROVAL'")
+                .contains("(1, 'PLANNED_SHUTDOWN_PRODUCTION_APPROVER')")
+                .contains("(2, 'PLANNED_SHUTDOWN_HSE_APPROVER')")
+                .doesNotContain("PRODUCTION_MANAGER")
+                .doesNotContain("HSE_MANAGER");
     }
 
     private static void assertEnumValues(String className, String... expected) throws Exception {

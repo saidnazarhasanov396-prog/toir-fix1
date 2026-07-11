@@ -240,6 +240,27 @@ public class PlannedShutdownController {
         return ResponseEntity.ok(service.history(id));
     }
 
+    @PostMapping("/{id}/form-scope")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownDetailResponse> formScope(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.formScope(id, request));
+    }
+
+    @PostMapping("/{id}/begin-readiness")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownDetailResponse> beginReadiness(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.beginReadiness(id, request));
+    }
+
+    @PostMapping("/{id}/request-approval")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownDetailResponse> requestApproval(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.requestApproval(id, request));
+    }
+
     @PostMapping("/{id}/prepare")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_PREPARE')")
     public ResponseEntity<PlannedShutdownDetailResponse> prepare(@PathVariable UUID id,
