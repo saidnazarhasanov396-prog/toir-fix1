@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Do not convert authentication, RBAC, audit, or action actors from User to Employee.
-- Add `V20260711_1__equipment_responsible_employee_identity.sql`; do not edit applied migrations.
+- Add `V20260711_3__equipment_responsible_employee_identity.sql`; versions `_1` and `_2` already exist, and applied migrations must not be edited.
 - Never infer identity by name, phone, or email, and never silently null/delete unresolved rows.
 - Normal APIs reject User-only UUIDs and have no User-to-Employee fallback.
 - Preserve and finally commit/push every pre-existing working-tree change as explicitly authorized.
@@ -107,7 +107,7 @@ Run `./mvnw -Dtest=OperationalAssignmentSeedIdentityContractTest,SampleDataSeede
 ### Task 3: Add safe Equipment identity migration
 
 **Files:**
-- Create: `src/main/resources/db/migration/V20260711_1__equipment_responsible_employee_identity.sql`
+- Create: `src/main/resources/db/migration/V20260711_3__equipment_responsible_employee_identity.sql`
 - Create: `src/test/java/com/toir/migration/EquipmentResponsibleEmployeeIdentityMigrationContractTest.java`
 - Create: `src/test/java/com/toir/migration/EquipmentResponsibleEmployeeIdentityMigrationPostgresTest.java`
 

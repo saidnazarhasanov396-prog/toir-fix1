@@ -29,7 +29,7 @@ Post-seed contract checks will prove that every non-null Equipment responsible I
 
 ## Equipment Migration Design
 
-The next migration is `V20260711_1__equipment_responsible_employee_identity.sql`.
+The verified next migration is `V20260711_3__equipment_responsible_employee_identity.sql`; versions `V20260711_1` and `V20260711_2` already exist in the current checkout.
 
 For each non-null `equipment.responsible_id`, classification is:
 
