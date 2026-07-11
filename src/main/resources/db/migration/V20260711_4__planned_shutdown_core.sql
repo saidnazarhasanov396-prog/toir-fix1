@@ -125,6 +125,8 @@ CREATE TABLE planned_shutdown_work_items (
         FOREIGN KEY (planned_shutdown_id) REFERENCES planned_shutdowns(id),
     CONSTRAINT fk_planned_shutdown_work_items_equipment
         FOREIGN KEY (equipment_id) REFERENCES equipment(id),
+    CONSTRAINT uq_planned_shutdown_work_items_id_shutdown
+        UNIQUE (id, planned_shutdown_id),
     CONSTRAINT chk_planned_shutdown_work_items_source_type
         CHECK (source_type IN ('MANUAL', 'DEFECT', 'PPR', 'WORK_ORDER', 'REPAIR_CAMPAIGN')),
     CONSTRAINT chk_planned_shutdown_work_items_source_identity CHECK (
@@ -367,8 +369,9 @@ ALTER TABLE work_orders
     ADD COLUMN shutdown_work_item_id uuid,
     ADD CONSTRAINT fk_work_orders_planned_shutdown
         FOREIGN KEY (planned_shutdown_id) REFERENCES planned_shutdowns(id),
-    ADD CONSTRAINT fk_work_orders_shutdown_work_item
-        FOREIGN KEY (shutdown_work_item_id) REFERENCES planned_shutdown_work_items(id),
+    ADD CONSTRAINT fk_work_orders_shutdown_work_item_owner
+        FOREIGN KEY (shutdown_work_item_id, planned_shutdown_id)
+        REFERENCES planned_shutdown_work_items(id, planned_shutdown_id),
     ADD CONSTRAINT chk_work_orders_shutdown_link_pair CHECK (
         shutdown_work_item_id IS NULL OR planned_shutdown_id IS NOT NULL
     );

@@ -66,7 +66,7 @@ class PlannedShutdownCoreMigrationContractTest {
 
     @Test
     void migrationDefinesActiveRowUniquenessAndWorkOrderLinks() throws Exception {
-        String sql = Files.readString(MIGRATION).toLowerCase();
+        String sql = Files.readString(MIGRATION).toLowerCase().replaceAll("\\s+", " ");
 
         for (String index : List.of(
                 "uq_planned_shutdowns_active_code",
@@ -84,10 +84,12 @@ class PlannedShutdownCoreMigrationContractTest {
         assertThat(sql)
                 .contains("add column planned_shutdown_id uuid")
                 .contains("add column shutdown_work_item_id uuid")
+                .contains("constraint uq_planned_shutdown_work_items_id_shutdown unique (id, planned_shutdown_id)")
                 .contains("fk_work_orders_planned_shutdown")
                 .contains("foreign key (planned_shutdown_id) references planned_shutdowns(id)")
-                .contains("fk_work_orders_shutdown_work_item")
-                .contains("foreign key (shutdown_work_item_id) references planned_shutdown_work_items(id)")
+                .contains("fk_work_orders_shutdown_work_item_owner")
+                .contains("foreign key (shutdown_work_item_id, planned_shutdown_id) references planned_shutdown_work_items(id, planned_shutdown_id)")
+                .contains("shutdown_work_item_id is null or planned_shutdown_id is not null")
                 .contains("idx_work_orders_planned_shutdown_id")
                 .contains("idx_work_orders_shutdown_work_item_id");
     }
