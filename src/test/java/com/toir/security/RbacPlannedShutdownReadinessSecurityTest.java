@@ -106,6 +106,20 @@ class RbacPlannedShutdownReadinessSecurityTest {
         performProductionReturn().andExpect(status().isForbidden());
     }
 
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_READ)
+    void readPermissionCanListCanonicalWorkItems() throws Exception {
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/work-items", UUID.randomUUID()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_UPDATE)
+    void updatePermissionAloneCannotReadCanonicalWorkItems() throws Exception {
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/work-items", UUID.randomUUID()))
+                .andExpect(status().isForbidden());
+    }
+
     private org.springframework.test.web.servlet.ResultActions performComplete() throws Exception {
         return mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/readiness/{itemId}/complete",
                 UUID.randomUUID(), UUID.randomUUID()).contentType("application/json").content("{\"version\":1}"));

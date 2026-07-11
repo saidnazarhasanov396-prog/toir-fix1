@@ -21,6 +21,7 @@ import com.toir.enums.PlannedShutdownItemStatus;
 import com.toir.enums.PlannedShutdownReadinessSeverity;
 import com.toir.enums.SafetyPermitStatus;
 import com.toir.exception.RestException;
+import com.toir.exception.PlannedShutdownBlockerException;
 import com.toir.repository.PlannedShutdownRepository;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.PprTaskRepository;
@@ -90,14 +91,19 @@ public class PlannedShutdownService {
 
     @Transactional(readOnly = true)
     public List<PlannedShutdownDto> findAllFiltered(UUID departmentId, PlanStatus status, String search) {
+        UUID effectiveDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
+        if (!scopeAccessService.isScopeAdmin()) {
+            scopeAccessService.assertCanAccessDepartment(effectiveDepartmentId);
+        }
         String statusStr = status != null ? status.name() : null;
         String searchPattern = (search != null && !search.isBlank()) ? "%" + search.trim().toLowerCase() + "%" : null;
-        return repository.findAllFiltered(departmentId, statusStr, searchPattern).stream()
+        return repository.findAllFiltered(effectiveDepartmentId, statusStr, searchPattern).stream()
                 .map(PlannedShutdownDto::from).toList();
     }
 
     @Transactional
     public PlannedShutdownDetailResponse create(PlannedShutdownCreateRequest r) {
+        scopeAccessService.assertCanAccessDepartment(r.departmentId());
         validateWindow(r.startAt(), r.endAt());
         validateOwnership(r.departmentId(), r.responsibleEmployeeId());
         String code = normalizeOrGenerateCode(r.code());
@@ -252,8 +258,7 @@ public class PlannedShutdownService {
             changed.add(asset);
         });
         assetRepository.saveAllAndFlush(changed);
-        shutdown.setScopeVersion(shutdown.getScopeVersion() + 1);
-        PlannedShutdown saved = repository.saveAndFlush(shutdown);
+        PlannedShutdown saved = incrementScope(shutdown);
         List<PlannedShutdownAssetResponse> active = changed.stream().filter(asset -> !asset.isDeleted())
                 .sorted(Comparator.comparing(PlannedShutdownAsset::getOrderNumber))
                 .map(PlannedShutdownAssetResponse::from).toList();
@@ -669,12 +674,13 @@ public class PlannedShutdownService {
         if (!submissionBlockers.isEmpty()) {
             String codes = submissionBlockers.stream().map(PlannedShutdownBlocker::code).distinct().sorted()
                     .collect(java.util.stream.Collectors.joining(","));
-            throw RestException.conflict("APPROVAL_REQUEST_BLOCKED:" + codes);
+            throw new PlannedShutdownBlockerException(org.springframework.http.HttpStatus.CONFLICT,
+                    "APPROVAL_REQUEST_BLOCKED:" + codes, shutdown.getVersion(), submissionBlockers);
         }
-        shutdown.setApprovalScopeVersion(shutdown.getScopeVersion());
-        shutdown.setApprovalScopeHash(computeApprovalScopeHash(shutdown));
         shutdown.setApprovedStartAt(shutdown.getPlannedStartAt());
         shutdown.setApprovedEndAt(shutdown.getPlannedEndAt());
+        shutdown.setApprovalScopeVersion(shutdown.getScopeVersion());
+        shutdown.setApprovalScopeHash(computeApprovalScopeHash(shutdown));
         return detail(executeTransition(shutdown, PlannedShutdownStatus.PENDING_APPROVAL, requireUserActor(),
                 request.reason(), request.correlationKey(), null));
     }
@@ -685,11 +691,11 @@ public class PlannedShutdownService {
         requireVersion(shutdown, request.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.PREPARATION);
         ApprovalEvidence evidence = currentApprovalEvidence(shutdown);
-        if (!evidence.currentScope()) throw RestException.conflict("APPROVAL_SCOPE_STALE");
-        if (!evidence.productionApproved()) throw RestException.conflict("APPROVAL_PRODUCTION_MISSING");
-        if (!evidence.hseApproved()) throw RestException.conflict("APPROVAL_HSE_MISSING");
+        if (!evidence.currentScope()) throw blocker(shutdown, "APPROVAL_SCOPE_STALE");
+        if (!evidence.productionApproved()) throw blocker(shutdown, "APPROVAL_PRODUCTION_MISSING");
+        if (!evidence.hseApproved()) throw blocker(shutdown, "APPROVAL_HSE_MISSING");
         if (Objects.equals(evidence.productionActor(), evidence.hseActor())) {
-            throw RestException.conflict("APPROVAL_SEPARATION_OF_DUTY_REQUIRED");
+            throw blocker(shutdown, "APPROVAL_SEPARATION_OF_DUTY_REQUIRED");
         }
         return detail(executeTransition(shutdown, PlannedShutdownStatus.PREPARATION, requireUserActor(),
                 request.reason(), request.correlationKey(), null));
@@ -700,7 +706,8 @@ public class PlannedShutdownService {
         PlannedShutdown shutdown = findLocked(id);
         requireVersion(shutdown, request.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.SHUTDOWN_STARTED);
-        requireProceed(assessReadinessFacts(shutdown, Instant.now()), "SHUTDOWN_START_BLOCKED");
+        requireProceed(assessReadinessFacts(shutdown, Instant.now()), "SHUTDOWN_START_BLOCKED",
+                shutdown.getVersion());
         return detail(executeTransition(shutdown, PlannedShutdownStatus.SHUTDOWN_STARTED, requireUserActor(),
                 request.reason(), request.correlationKey(), null));
     }
@@ -711,7 +718,7 @@ public class PlannedShutdownService {
         requireVersion(shutdown, request.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.SAFE_STATE);
         requireProceed(readinessPolicy.evaluateSafeState(readinessFacts(shutdown, Instant.now())),
-                "SAFE_STATE_BLOCKED");
+                "SAFE_STATE_BLOCKED", shutdown.getVersion());
         return detail(executeTransition(shutdown, PlannedShutdownStatus.SAFE_STATE, requireUserActor(),
                 request.reason(), request.correlationKey(), null));
     }
@@ -721,14 +728,14 @@ public class PlannedShutdownService {
         requireVersion(shutdown, r.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.REPAIR_IN_PROGRESS);
         requireProceed(readinessPolicy.evaluateSafeState(readinessFacts(shutdown, Instant.now())),
-                "REPAIR_START_BLOCKED");
+                "REPAIR_START_BLOCKED", shutdown.getVersion());
         return detail(executeTransition(shutdown, PlannedShutdownStatus.REPAIR_IN_PROGRESS, requireUserActor(),
                 r.reason(), r.correlationKey(), null));
     }
     @Transactional public PlannedShutdownDetailResponse startTesting(UUID id, PlannedShutdownTransitionRequest r) {
         PlannedShutdown shutdown = findLocked(id); requireVersion(shutdown, r.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.TESTING);
-        requireNoActiveWorkOrders(id, "TESTING_ACTIVE_WORK_ORDERS");
+        requireNoActiveWorkOrders(shutdown, "TESTING_ACTIVE_WORK_ORDERS");
         return detail(executeTransition(shutdown, PlannedShutdownStatus.TESTING, requireUserActor(),
                 r.reason(), r.correlationKey(), null));
     }
@@ -742,8 +749,8 @@ public class PlannedShutdownService {
     @Transactional public PlannedShutdownDetailResponse complete(UUID id, PlannedShutdownTransitionRequest r) {
         PlannedShutdown shutdown = findLocked(id); requireVersion(shutdown, r.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.COMPLETED);
-        requireNoActiveWorkOrders(id, "COMPLETION_ACTIVE_WORK_ORDERS");
-        requireAllIsolationReleased(id, "COMPLETION_ISOLATION_UNRELEASED");
+        requireNoActiveWorkOrders(shutdown, "COMPLETION_ACTIVE_WORK_ORDERS");
+        requireAllIsolationReleased(shutdown, "COMPLETION_ISOLATION_UNRELEASED");
         evidenceService.requireStartupReady(id);
         evidenceService.productionReturn(id, shutdown.getScopeVersion(), shutdown.getWindowVersion());
         return detail(executeTransition(shutdown, PlannedShutdownStatus.COMPLETED, requireUserActor(),
@@ -752,8 +759,8 @@ public class PlannedShutdownService {
     @Transactional public PlannedShutdownDetailResponse close(UUID id, PlannedShutdownTransitionRequest r) {
         PlannedShutdown shutdown = findLocked(id); requireVersion(shutdown, r.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.CLOSED);
-        requireNoActiveWorkOrders(id, "CLOSE_ACTIVE_WORK_ORDERS");
-        requireAllIsolationReleased(id, "CLOSE_ISOLATION_UNRELEASED");
+        requireNoActiveWorkOrders(shutdown, "CLOSE_ACTIVE_WORK_ORDERS");
+        requireAllIsolationReleased(shutdown, "CLOSE_ISOLATION_UNRELEASED");
         evidenceService.requireStartupReady(id);
         evidenceService.productionReturn(id, shutdown.getScopeVersion(), shutdown.getWindowVersion());
         UUID actor = requireUserActor();
@@ -812,11 +819,11 @@ public class PlannedShutdownService {
         PlannedShutdown shutdown = findLocked(id);
         requireVersion(shutdown, request.version());
         if (!transitionPolicy.canCancel(shutdown.getLifecycleStatus())) {
-            throw RestException.conflict("CANCEL_NOT_ALLOWED:" + shutdown.getLifecycleStatus());
+            throw blocker(shutdown, "CANCEL_NOT_ALLOWED");
         }
-        requireNoActiveWorkOrders(id, "CANCEL_ACTIVE_WORK_ORDERS");
+        requireNoActiveWorkOrders(shutdown, "CANCEL_ACTIVE_WORK_ORDERS");
         return detail(executeTransition(shutdown, PlannedShutdownStatus.CANCELLED, requireUserActor(),
-                requireReason(request.reason(), "CANCEL_REASON_REQUIRED"), request.correlationKey(), null));
+                requireReason(request.reason(), "CANCEL_REASON_REQUIRED", shutdown), request.correlationKey(), null));
     }
 
     @Transactional
@@ -824,9 +831,9 @@ public class PlannedShutdownService {
         PlannedShutdown shutdown = findLocked(id);
         requireVersion(shutdown, request.version());
         if (!transitionPolicy.canReschedule(shutdown.getLifecycleStatus())) {
-            throw RestException.conflict("RESCHEDULE_NOT_ALLOWED:" + shutdown.getLifecycleStatus());
+            throw blocker(shutdown, "RESCHEDULE_NOT_ALLOWED");
         }
-        String reason = requireReason(request.reason(), "RESCHEDULE_REASON_REQUIRED");
+        String reason = requireReason(request.reason(), "RESCHEDULE_REASON_REQUIRED", shutdown);
         validateWindow(request.newStartAt(), request.newEndAt());
         Window old = window(shutdown);
         shutdown.setStartAt(request.newStartAt());
@@ -861,12 +868,13 @@ public class PlannedShutdownService {
         PlannedShutdown shutdown = findLocked(id);
         requireVersion(shutdown, request.version());
         if (!transitionPolicy.canExtend(shutdown.getLifecycleStatus())) {
-            throw RestException.conflict("EXTENSION_NOT_ALLOWED:" + shutdown.getLifecycleStatus());
+            throw blocker(shutdown, "EXTENSION_NOT_ALLOWED");
         }
-        String reason = requireReason(request.reason(), "EXTENSION_REASON_REQUIRED");
+        String reason = requireReason(request.reason(), "EXTENSION_REASON_REQUIRED", shutdown);
         Instant currentEnd = effectiveEnd(shutdown);
         if (currentEnd == null || request.newEndAt() == null || !request.newEndAt().isAfter(currentEnd)) {
-            throw RestException.badRequest("EXTENSION_END_MUST_INCREASE");
+            throw blocker(org.springframework.http.HttpStatus.BAD_REQUEST, shutdown,
+                    "EXTENSION_END_MUST_INCREASE");
         }
         Window old = window(shutdown); PlannedShutdownStatus current = shutdown.getLifecycleStatus();
         shutdown.setEffectiveExtensionEndAt(request.newEndAt());
@@ -884,8 +892,10 @@ public class PlannedShutdownService {
     }
 
     private PlannedShutdown find(UUID id) {
-        return repository.findByIdAndIsDeletedFalse(id)
+        PlannedShutdown shutdown = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Planned shutdown not found: " + id));
+        scopeAccessService.assertCanAccessDepartment(shutdown.getDepartmentId());
+        return shutdown;
     }
 
     private PlannedShutdownReadinessScopeResponse readinessScope(PlannedShutdown shutdown) {
@@ -1098,8 +1108,10 @@ public class PlannedShutdownService {
     }
 
     private PlannedShutdown findLocked(UUID id) {
-        return repository.findByIdAndIsDeletedFalseForUpdate(id)
+        PlannedShutdown shutdown = repository.findByIdAndIsDeletedFalseForUpdate(id)
                 .orElseThrow(() -> RestException.notFound("Planned shutdown not found: " + id));
+        scopeAccessService.assertCanAccessDepartment(shutdown.getDepartmentId());
+        return shutdown;
     }
 
     private List<PlannedShutdownAssetResponse> assetResponses(UUID id) {
@@ -1147,7 +1159,7 @@ public class PlannedShutdownService {
                 && transitionPolicy.canReschedule(from) && suppliedOldWindow != null;
         if (!orthogonalExtension && !cancellation && !rescheduleReset
                 && !transitionPolicy.canTransition(from, target)) {
-            throw RestException.conflict("TRANSITION_NOT_ALLOWED:" + from + "->" + target);
+            throw blocker(shutdown, "TRANSITION_NOT_ALLOWED");
         }
         Window oldWindow = suppliedOldWindow == null ? window(shutdown) : suppliedOldWindow;
         Instant now = Instant.now();
@@ -1202,17 +1214,18 @@ public class PlannedShutdownService {
         return readinessPolicy.evaluateReadiness(readinessFacts(shutdown, at));
     }
 
-    private static void requireProceed(PlannedShutdownReadinessAssessment assessment, String prefix) {
+    private static void requireProceed(PlannedShutdownReadinessAssessment assessment, String prefix, Long version) {
         if (!assessment.canProceed()) {
             String codes = assessment.blockers().stream().map(PlannedShutdownBlocker::code).distinct()
                     .sorted().collect(java.util.stream.Collectors.joining(","));
-            throw RestException.conflict(prefix + ":" + codes);
+            throw new PlannedShutdownBlockerException(org.springframework.http.HttpStatus.CONFLICT,
+                    prefix + ":" + codes, version, assessment.blockers());
         }
     }
 
     private void requireAllowedTransition(PlannedShutdown shutdown, PlannedShutdownStatus target) {
         if (!transitionPolicy.canTransition(shutdown.getLifecycleStatus(), target)) {
-            throw RestException.conflict("TRANSITION_NOT_ALLOWED:" + shutdown.getLifecycleStatus() + "->" + target);
+            throw blocker(shutdown, "TRANSITION_NOT_ALLOWED");
         }
     }
 
@@ -1224,6 +1237,9 @@ public class PlannedShutdownService {
             throw RestException.conflict("APPROVAL_REQUEST_INVALID");
         }
         if (!Objects.equals(shutdown.getApprovalScopeVersion(), shutdown.getScopeVersion())) {
+            throw RestException.conflict("APPROVAL_SCOPE_STALE");
+        }
+        if (!Objects.equals(shutdown.getApprovalScopeHash(), computeApprovalScopeHash(shutdown))) {
             throw RestException.conflict("APPROVAL_SCOPE_STALE");
         }
         if (!approvalScopeMatches(approval, shutdown.getScopeVersion(), shutdown.getApprovalScopeHash())) {
@@ -1239,7 +1255,8 @@ public class PlannedShutdownService {
 
     private ApprovalEvidence currentApprovalEvidence(PlannedShutdown shutdown) {
         boolean current = shutdown.getApprovalScopeVersion() != null
-                && Objects.equals(shutdown.getApprovalScopeVersion(), shutdown.getScopeVersion());
+                && Objects.equals(shutdown.getApprovalScopeVersion(), shutdown.getScopeVersion())
+                && Objects.equals(shutdown.getApprovalScopeHash(), computeApprovalScopeHash(shutdown));
         if (!current) return new ApprovalEvidence(false, false, false);
         return approvalRequestRepository.findAllByTargetTypeAndTargetIdAndIsDeletedFalse(
                         com.toir.enums.ApprovalTargetType.PLANNED_SHUTDOWN.name(), shutdown.getId()).stream()
@@ -1277,8 +1294,10 @@ public class PlannedShutdownService {
                 && Objects.equals(hash.group(1), scopeHash);
     }
 
-    private static String requireReason(String reason, String code) {
-        if (reason == null || reason.isBlank()) throw RestException.badRequest(code);
+    private static String requireReason(String reason, String code, PlannedShutdown shutdown) {
+        if (reason == null || reason.isBlank()) {
+            throw blocker(org.springframework.http.HttpStatus.BAD_REQUEST, shutdown, code);
+        }
         return reason.trim();
     }
 
@@ -1299,15 +1318,25 @@ public class PlannedShutdownService {
                 isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id));
     }
 
-    private void requireNoActiveWorkOrders(UUID id, String code) {
-        if (workOrderRepository.existsActiveByPlannedShutdownId(id)) throw RestException.conflict(code);
+    private void requireNoActiveWorkOrders(PlannedShutdown shutdown, String code) {
+        if (workOrderRepository.existsActiveByPlannedShutdownId(shutdown.getId())) throw blocker(shutdown, code);
     }
 
-    private void requireAllIsolationReleased(UUID id, String code) {
+    private void requireAllIsolationReleased(PlannedShutdown shutdown, String code) {
         boolean unreleased = isolationPointRepository
-                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id).stream()
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdown.getId()).stream()
                 .anyMatch(point -> point.getReleasedAt() == null);
-        if (unreleased) throw RestException.conflict(code);
+        if (unreleased) throw blocker(shutdown, code);
+    }
+
+    private static PlannedShutdownBlockerException blocker(PlannedShutdown shutdown, String code) {
+        return blocker(org.springframework.http.HttpStatus.CONFLICT, shutdown, code);
+    }
+
+    private static PlannedShutdownBlockerException blocker(org.springframework.http.HttpStatus status,
+            PlannedShutdown shutdown, String code) {
+        return new PlannedShutdownBlockerException(status, code, shutdown.getVersion(), List.of(
+                new PlannedShutdownBlocker(code, code, "PLANNED_SHUTDOWN", shutdown.getId())));
     }
 
     private void persistHistory(PlannedShutdown shutdown, PlannedShutdownStatus from, PlannedShutdownStatus to,
@@ -1516,8 +1545,7 @@ public class PlannedShutdownService {
 
     private static void requireVersion(PlannedShutdown shutdown, Long expected) {
         if (expected == null || !Objects.equals(shutdown.getVersion(), expected)) {
-            throw RestException.conflict("Planned shutdown was changed; expected version " + expected
-                    + " but found " + shutdown.getVersion());
+            throw blocker(shutdown, "VERSION_CONFLICT");
         }
     }
 

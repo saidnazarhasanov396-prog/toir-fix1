@@ -36,6 +36,22 @@ class PlannedShutdownApprovalScopeHasherTest {
         assertThat(hash(f)).isNotEqualTo(first);
     }
 
+    @Test
+    void scopeAndEffectiveWindowVersionsArePartOfApprovalSnapshot() {
+        Fixture f = fixture();
+        f.root.setScopeVersion(4L);
+        f.root.setWindowVersion(2L);
+        f.root.setApprovedStartAt(Instant.parse("2026-08-01T00:00:00Z"));
+        f.root.setApprovedEndAt(Instant.parse("2026-08-02T00:00:00Z"));
+        String first = hash(f);
+
+        f.root.setScopeVersion(5L);
+        assertThat(hash(f)).isNotEqualTo(first);
+        f.root.setScopeVersion(4L);
+        f.root.setEffectiveExtensionEndAt(Instant.parse("2026-08-02T01:00:00Z"));
+        assertThat(hash(f)).isNotEqualTo(first);
+    }
+
     private String hash(Fixture f) {
         return hasher.hash(f.root, List.of(f.assetA, f.assetB), List.of(f.workA, f.workB),
                 List.of(f.readinessA, f.readinessB), List.of(f.isolationA, f.isolationB));

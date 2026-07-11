@@ -17,6 +17,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownGenerationRequestRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownWorkItemRepository;
 import com.toir.service.WorkOrderService;
+import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,7 @@ public class PlannedShutdownWorkOrderGenerationService {
     private final PlannedShutdownGenerationRequestRepository generationRequestRepository;
     private final WorkOrderRepository workOrderRepository;
     private final WorkOrderService workOrderService;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional
     public PlannedShutdownWorkOrderGenerationResponse generate(UUID shutdownId,
@@ -51,6 +53,7 @@ public class PlannedShutdownWorkOrderGenerationService {
         if (normalizedKey.length() > 255) throw RestException.badRequest("IDEMPOTENCY_KEY_TOO_LONG");
         PlannedShutdown shutdown = shutdownRepository.findByIdAndIsDeletedFalseForUpdate(shutdownId)
                 .orElseThrow(() -> RestException.notFound("Planned shutdown not found: " + shutdownId));
+        scopeAccessService.assertCanAccessDepartment(shutdown.getDepartmentId());
         if (!GENERATION_ALLOWED.contains(shutdown.getLifecycleStatus())) {
             throw RestException.conflict("WORK_ORDER_GENERATION_NOT_ALLOWED:" + shutdown.getLifecycleStatus());
         }

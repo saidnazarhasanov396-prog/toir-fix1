@@ -10,6 +10,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PlannedShutdownLifecyclePermissionContractTest {
     @Test
+    void everyMappedShutdownApiHasACompileTimeOperationPermission() {
+        java.util.Set<String> allowed = java.util.Arrays.stream(PermissionConstants.class.getDeclaredFields())
+                .filter(field -> java.lang.reflect.Modifier.isStatic(field.getModifiers()))
+                .filter(field -> field.getName().startsWith("PLANNED_SHUTDOWN_"))
+                .map(field -> {
+                    try { return (String) field.get(null); }
+                    catch (IllegalAccessException ex) { throw new AssertionError(ex); }
+                }).collect(java.util.stream.Collectors.toSet());
+
+        java.util.Arrays.stream(PlannedShutdownController.class.getDeclaredMethods())
+                .filter(method -> java.util.Arrays.stream(method.getAnnotations()).anyMatch(annotation ->
+                        annotation.annotationType().getPackageName().equals("org.springframework.web.bind.annotation")))
+                .forEach(method -> {
+                    PreAuthorize authorization = method.getAnnotation(PreAuthorize.class);
+                    assertThat(authorization).as(method.getName()).isNotNull();
+                    long domainPermissions = allowed.stream()
+                            .filter(permission -> authorization.value().contains("hasAuthority('" + permission + "')"))
+                            .count();
+                    assertThat(domainPermissions).as(method.getName()).isEqualTo(1);
+                });
+    }
+
+    @Test
     void everyLifecycleEndpointUsesItsExactOperationPermission() {
         Map<String, String> expected = Map.ofEntries(
                 Map.entry("formScope", "PLANNED_SHUTDOWN_UPDATE"),

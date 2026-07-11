@@ -13,6 +13,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.PlannedShutdownStatus;
 import com.toir.enums.PlanStatus;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.exception.RestException;
 import com.toir.service.ApprovalService;
 import com.toir.service.PlannedShutdownService;
 import org.junit.jupiter.api.BeforeEach;
@@ -259,6 +260,42 @@ class PlannedShutdownControllerContractTest {
             assertThat(method.getAnnotation(org.springframework.web.bind.annotation.PostMapping.class).value())
                     .containsExactly(path);
         });
+    }
+
+    @Test
+    void lifecycleBlockersExposeStableCodesAndAggregateVersion() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(service.startShutdown(eq(id), any())).thenThrow(new com.toir.exception.PlannedShutdownBlockerException(
+                org.springframework.http.HttpStatus.CONFLICT,
+                "SHUTDOWN_START_BLOCKED:APPROVAL_SCOPE_STALE,PERMIT_INACTIVE", 17L, List.of(
+                new com.toir.dto.plannedshutdown.PlannedShutdownBlocker(
+                        "APPROVAL_SCOPE_STALE", "Approval is stale", "PLANNED_SHUTDOWN", id),
+                new com.toir.dto.plannedshutdown.PlannedShutdownBlocker(
+                        "PERMIT_INACTIVE", "Permit is inactive", "PLANNED_SHUTDOWN", id))));
+
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/start-shutdown", id)
+                        .contentType("application/json")
+                        .content("{\"version\":17,\"reason\":\"start\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.version").value(17))
+                .andExpect(jsonPath("$.blockers[0].code").value("APPROVAL_SCOPE_STALE"))
+                .andExpect(jsonPath("$.blockers[1].code").value("PERMIT_INACTIVE"));
+    }
+
+    @Test
+    void lifecycleValidationBlockersUseStableBadRequestPayload() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(service.extend(eq(id), any())).thenThrow(new com.toir.exception.PlannedShutdownBlockerException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "EXTENSION_REASON_REQUIRED", 9L, List.of(
+                new com.toir.dto.plannedshutdown.PlannedShutdownBlocker(
+                        "EXTENSION_REASON_REQUIRED", "Reason is required", "PLANNED_SHUTDOWN", id))));
+
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/extend", id)
+                        .contentType("application/json")
+                        .content("{\"version\":9,\"newEndAt\":\"2026-08-05T00:00:00Z\",\"reason\":\"x\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.version").value(9))
+                .andExpect(jsonPath("$.blockers[0].code").value("EXTENSION_REASON_REQUIRED"));
     }
 
     private static PlannedShutdownDetailResponse detail(UUID id, UUID departmentId, UUID employeeId,

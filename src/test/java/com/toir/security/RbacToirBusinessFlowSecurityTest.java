@@ -90,7 +90,8 @@ class RbacToirBusinessFlowSecurityTest {
         assertThat(ApprovalDomainPermissions.approvePermissionFor(ApprovalTargetType.REPAIR_CAMPAIGN))
                 .contains("REPAIR_CAMPAIGN_APPROVE");
         assertThat(ApprovalSecurityExpressions.CAN_CREATE)
-                .contains("PLANNED_SHUTDOWN_APPROVE", "REPAIR_CAMPAIGN_APPROVE");
+                .contains("PLANNED_SHUTDOWN_REQUEST_APPROVAL", "PLANNED_SHUTDOWN_APPROVE",
+                        "REPAIR_CAMPAIGN_APPROVE");
         assertThat(ApprovalSecurityExpressions.CAN_APPROVE)
                 .contains("PLANNED_SHUTDOWN_APPROVE", "REPAIR_CAMPAIGN_APPROVE");
         assertThat(ApprovalSecurityExpressions.CAN_REJECT)
@@ -327,7 +328,7 @@ class RbacToirBusinessFlowSecurityTest {
                 Arguments.of(PlannedShutdownController.class, "replaceAssets",
                         new Class<?>[]{UUID.class, PlannedShutdownAssetReplaceRequest.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
                 Arguments.of(PlannedShutdownController.class, "listWorkItems",
-                        new Class<?>[]{UUID.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
+                        new Class<?>[]{UUID.class}, PermissionConstants.PLANNED_SHUTDOWN_READ),
                 Arguments.of(PlannedShutdownController.class, "addWorkItem",
                         new Class<?>[]{UUID.class, PlannedShutdownWorkItemRequest.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
                 Arguments.of(PlannedShutdownController.class, "updateWorkItem",

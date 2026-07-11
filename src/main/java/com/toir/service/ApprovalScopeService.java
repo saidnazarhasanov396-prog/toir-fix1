@@ -19,6 +19,7 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.PlannedShutdownRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.repair.RepairRequestRepository;
@@ -40,6 +41,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
+import com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher;
 
 @Service
 @RequiredArgsConstructor
@@ -56,6 +58,7 @@ public class ApprovalScopeService {
     private final FinanceScopeService financeScopeService;
     private final UserRepository userRepository;
     private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
+    private final PlannedShutdownRepository plannedShutdownRepository;
     private final SecurityAccessService securityAccessService;
 
     public boolean canReadApproval(ApprovalRequest approval) {
@@ -101,12 +104,39 @@ public class ApprovalScopeService {
                 || currentStep.getStepNumber() != approval.getCurrentStep()) {
             throw forbidden();
         }
+        assertPlannedShutdownSeparationOfDuty(approval, currentStep);
         if (scopeAccessService.isScopeAdmin() && currentStep.getApproverId() != null) {
             return;
         }
         if (!canCurrentPrincipalActOnStep(currentStep)) {
             throw forbidden();
         }
+    }
+
+    private void assertPlannedShutdownSeparationOfDuty(ApprovalRequest approval, ApprovalStep currentStep) {
+        if (effectiveTargetType(approval) != ApprovalTargetType.PLANNED_SHUTDOWN
+                || !isCriticalShutdownApprovalRole(currentStep.getApproverRole())) {
+            return;
+        }
+        Set<UUID> actorIds = currentPrincipalIds();
+        if (actorIds.contains(approval.getRequesterId())) {
+            throw new AccessDeniedException("Planned shutdown approval separation of duty forbids requester self-approval");
+        }
+        boolean alreadyApprovedOtherCriticalStep = approval.getSteps().stream()
+                .filter(step -> step != currentStep)
+                .filter(step -> step.getDecision() == ApprovalDecision.APPROVED)
+                .filter(step -> isCriticalShutdownApprovalRole(step.getApproverRole()))
+                .map(ApprovalStep::getDecidedById)
+                .filter(Objects::nonNull)
+                .anyMatch(actorIds::contains);
+        if (alreadyApprovedOtherCriticalStep) {
+            throw new AccessDeniedException("Planned shutdown approval separation of duty requires distinct production and HSE approvers");
+        }
+    }
+
+    private static boolean isCriticalShutdownApprovalRole(String role) {
+        return PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE.equals(role)
+                || PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE.equals(role);
     }
 
     public void assertCanCancelApproval(ApprovalRequest approval) {
@@ -275,6 +305,8 @@ public class ApprovalScopeService {
                     ? Optional.empty()
                     : equipmentCommissioningActRepository.findByIdAndIsDeletedFalse(targetId)
                             .map(com.toir.entity.equipment.EquipmentCommissioningAct::getTargetDepartmentId);
+            case PLANNED_SHUTDOWN -> plannedShutdownRepository.findByIdAndIsDeletedFalse(targetId)
+                    .map(com.toir.entity.PlannedShutdown::getDepartmentId);
             default -> Optional.empty();
         };
     }
@@ -303,7 +335,7 @@ public class ApprovalScopeService {
         return switch (targetType) {
             case PPR_PLAN, PPR_TASK, REPAIR_REQUEST, WORK_ORDER,
                  PROCUREMENT, PROCUREMENT_REQUEST, BUDGET, MAINTENANCE_BUDGET, ACTUAL_COST,
-                 EQUIPMENT_COMMISSIONING -> true;
+                 EQUIPMENT_COMMISSIONING, PLANNED_SHUTDOWN -> true;
             default -> false;
         };
     }

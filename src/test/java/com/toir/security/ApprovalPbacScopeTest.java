@@ -708,6 +708,21 @@ class ApprovalPbacScopeTest {
     }
 
     @Test
+    void plannedShutdownApprovalCreationUsesLinkedDepartmentScope() {
+        UUID userId = UUID.randomUUID();
+        UUID shutdownId = UUID.randomUUID();
+        ScopeAccessService access = scopeAccessService(userId, Optional.empty(), false);
+        when(access.canAccessDepartment(any())).thenReturn(false);
+
+        CreateApprovalRequest request = new CreateApprovalRequest(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), shutdownId, "Shutdown approval", userId,
+                "Approve current scope", List.of());
+
+        assertThatThrownBy(() -> scope(access).assertCanCreateApproval(request))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
     void currentPendingApproverCanDecideAndRequesterCannotDecide() {
         UUID requesterId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
@@ -734,6 +749,54 @@ class ApprovalPbacScopeTest {
 
         assertThat(scope.canReadApproval(approval)).isTrue();
         scope.assertCanDecideApproval(approval, approval.getSteps().getFirst());
+    }
+
+    @Test
+    void plannedShutdownRequesterCannotApproveProductionOrHseRoleStep() {
+        UUID requesterId = UUID.randomUUID();
+        ApprovalRequest approval = roleBasedApproval(UUID.randomUUID(), requesterId,
+                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE,
+                UUID.randomUUID());
+        approval.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
+        ScopeAccessService access = scopeAccessService(requesterId, Optional.empty(), false);
+        UserRepository users = mock(UserRepository.class);
+        when(users.findByIdAndIsDeletedFalse(requesterId)).thenReturn(Optional.of(activeUser(requesterId,
+                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE)));
+
+        assertThatThrownBy(() -> scope(access, mock(WorkOrderRepository.class), users)
+                .assertCanDecideApproval(approval, approval.getSteps().getFirst()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("separation of duty");
+    }
+
+    @Test
+    void plannedShutdownSameActorCannotApproveProductionAndHseSteps() {
+        UUID requesterId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = roleBasedApproval(UUID.randomUUID(), requesterId,
+                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE,
+                UUID.randomUUID());
+        approval.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
+        ApprovalStep production = new ApprovalStep();
+        production.setRequest(approval);
+        production.setStepNumber(1);
+        production.setApproverRole(
+                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE);
+        production.setDecision(ApprovalDecision.APPROVED);
+        production.setDecidedById(actorId);
+        ApprovalStep hse = approval.getSteps().getFirst();
+        hse.setStepNumber(2);
+        approval.setSteps(List.of(production, hse));
+        approval.setCurrentStep(2);
+        ScopeAccessService access = scopeAccessService(actorId, Optional.empty(), false);
+        UserRepository users = mock(UserRepository.class);
+        when(users.findByIdAndIsDeletedFalse(actorId)).thenReturn(Optional.of(activeUser(actorId,
+                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE)));
+
+        assertThatThrownBy(() -> scope(access, mock(WorkOrderRepository.class), users)
+                .assertCanDecideApproval(approval, hse))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("separation of duty");
     }
 
     @Test
@@ -1293,6 +1356,7 @@ class ApprovalPbacScopeTest {
                 mock(FinanceScopeService.class),
                 userRepository,
                 mock(com.toir.repository.equipment.EquipmentCommissioningActRepository.class),
+                mock(com.toir.repository.PlannedShutdownRepository.class),
                 new SecurityAccessService()
         );
     }

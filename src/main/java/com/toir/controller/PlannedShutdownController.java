@@ -94,7 +94,7 @@ public class PlannedShutdownController {
     }
 
     @GetMapping("/{id}/work-items")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
     public ResponseEntity<PlannedShutdownWorkItemScopeResponse> listWorkItems(@PathVariable UUID id) {
         return ResponseEntity.ok(service.listWorkItems(id));
     }

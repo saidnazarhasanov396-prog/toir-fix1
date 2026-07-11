@@ -17,6 +17,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownWorkItemRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownGenerationRequestRepository;
 import com.toir.service.WorkOrderService;
+import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -36,8 +37,29 @@ class PlannedShutdownWorkOrderGenerationServiceTest {
     private final PlannedShutdownGenerationRequestRepository requests = mock(PlannedShutdownGenerationRequestRepository.class);
     private final WorkOrderRepository workOrders = mock(WorkOrderRepository.class);
     private final WorkOrderService workOrderService = mock(WorkOrderService.class);
+    private final ScopeAccessService scopeAccessService = mock(ScopeAccessService.class);
     private final PlannedShutdownWorkOrderGenerationService service =
-            new PlannedShutdownWorkOrderGenerationService(shutdowns, items, requests, workOrders, workOrderService);
+            new PlannedShutdownWorkOrderGenerationService(shutdowns, items, requests, workOrders, workOrderService,
+                    scopeAccessService);
+
+    @Test
+    void generationRejectsShutdownFromUnrelatedDepartmentBeforeItemAccess() {
+        UUID shutdownId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        PlannedShutdown shutdown = new PlannedShutdown();
+        shutdown.setId(shutdownId);
+        shutdown.setDepartmentId(departmentId);
+        shutdown.setStatus(PlannedShutdownStatus.APPROVED);
+        when(shutdowns.findByIdAndIsDeletedFalseForUpdate(shutdownId)).thenReturn(Optional.of(shutdown));
+        when(scopeAccessService.canAccessDepartment(departmentId)).thenReturn(false);
+        doThrow(new org.springframework.security.access.AccessDeniedException("scope"))
+                .when(scopeAccessService).assertCanAccessDepartment(departmentId);
+
+        assertThatThrownBy(() -> service.generate(shutdownId,
+                new PlannedShutdownWorkOrderGenerationRequest(List.of()), "pbac"))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        verifyNoInteractions(items, requests, workOrders, workOrderService);
+    }
 
     @Test
     void requiresIdempotencyKeyBeforeMutation() {

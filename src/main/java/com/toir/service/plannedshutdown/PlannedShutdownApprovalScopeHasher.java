@@ -18,7 +18,9 @@ public class PlannedShutdownApprovalScopeHasher {
         List<String> facts = new ArrayList<>();
         facts.add(line("ROOT", s.getCode(), s.getName(), s.getShutdownType(), s.getDepartmentId(),
                 s.getResponsibleEmployeeId(), s.getPlannedStartAt(), s.getPlannedEndAt(), s.getReason(),
-                s.getObjective(), s.getNotes(), s.getRiskLevel(), s.getRiskScore()));
+                s.getObjective(), s.getNotes(), s.getRiskLevel(), s.getRiskScore(), s.getScopeVersion(),
+                s.getWindowVersion(), s.getApprovedStartAt(), s.getApprovedEndAt(),
+                s.getEffectiveExtensionEndAt()));
         assets.stream().map(a -> line("ASSET", a.getEquipmentId(), a.getDisposition(), a.getInclusionReason()))
                 .sorted().forEach(facts::add);
         work.stream().map(w -> line("WORK", w.getSourceType(), w.getSourceId(), w.getEquipmentId(), w.getTitle(),

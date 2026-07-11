@@ -92,6 +92,7 @@ class PlannedShutdownLifecycleServiceTest {
         lenient().when(historyRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(scopeAccessService.currentUserIdOrNull()).thenReturn(actor);
         lenient().when(scopeAccessService.currentEmployeeId()).thenReturn(Optional.of(actor));
+        lenient().when(scopeAccessService.canAccessDepartment(any())).thenReturn(true);
         lenient().when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
                 .thenReturn(List.of());
         lenient().when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
@@ -252,7 +253,7 @@ class PlannedShutdownLifecycleServiceTest {
     void approvalFinalizationRequiresCurrentProductionAndHseStepsWithSeparationOfDuty() {
         shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
         shutdown.setApprovalScopeVersion(3L);
-        shutdown.setApprovalScopeHash("a".repeat(64));
+        shutdown.setApprovalScopeHash(currentScopeHash());
         ApprovalRequest approval = approval(actor, UUID.randomUUID(), UUID.randomUUID());
 
         var result = service.finalizeApprovalFromApprovalRequest(id, approval);
@@ -270,7 +271,7 @@ class PlannedShutdownLifecycleServiceTest {
                 .hasMessageContaining("APPROVAL_SCOPE_STALE");
 
         shutdown.setApprovalScopeVersion(3L);
-        shutdown.setApprovalScopeHash("a".repeat(64));
+        shutdown.setApprovalScopeHash(currentScopeHash());
         ApprovalRequest selfApproved = approval(actor, actor, UUID.randomUUID());
         assertThatThrownBy(() -> service.finalizeApprovalFromApprovalRequest(id, selfApproved))
                 .hasMessageContaining("APPROVAL_PRODUCTION_MISSING");
@@ -280,7 +281,7 @@ class PlannedShutdownLifecycleServiceTest {
     void approvalRejectsSubstringRoleAndSameActorAcrossProductionAndHse() {
         shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
         shutdown.setApprovalScopeVersion(3L);
-        shutdown.setApprovalScopeHash("a".repeat(64));
+        shutdown.setApprovalScopeHash(currentScopeHash());
         ApprovalRequest substring = approval(actor, UUID.randomUUID(), UUID.randomUUID());
         substring.getSteps().getFirst().setApproverRole("FAKE_"
                 + PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE);
@@ -291,6 +292,22 @@ class PlannedShutdownLifecycleServiceTest {
         ApprovalRequest same = approval(actor, sameActor, sameActor);
         assertThatThrownBy(() -> service.finalizeApprovalFromApprovalRequest(id, same))
                 .hasMessageContaining("APPROVAL_SEPARATION_OF_DUTY_REQUIRED");
+    }
+
+    @Test
+    void approvalFinalizationRecomputesCurrentOperationalScopeHash() {
+        shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
+        shutdown.setApprovalScopeVersion(3L);
+        shutdown.setApprovedStartAt(shutdown.getPlannedStartAt());
+        shutdown.setApprovedEndAt(shutdown.getPlannedEndAt());
+        String approvedHash = approvalScopeHasher.hash(shutdown, List.of(), List.of(), List.of(), List.of());
+        shutdown.setApprovalScopeHash(approvedHash);
+        ApprovalRequest approval = approval(actor, UUID.randomUUID(), UUID.randomUUID());
+        approval.setPayloadJson("{\"scopeVersion\":3,\"scopeHash\":\"" + approvedHash + "\"}");
+        shutdown.setObjective("mutated after approval request");
+
+        assertThatThrownBy(() -> service.finalizeApprovalFromApprovalRequest(id, approval))
+                .hasMessageContaining("APPROVAL_SCOPE_STALE");
     }
 
     @Test
@@ -440,7 +457,7 @@ class PlannedShutdownLifecycleServiceTest {
         request.setActionType(ApprovalActionType.APPROVE);
         request.setRequesterId(requester);
         request.setStatus(ApprovalStatus.APPROVED);
-        request.setPayloadJson("{\"scopeVersion\":3,\"scopeHash\":\"" + "a".repeat(64) + "\"}");
+        request.setPayloadJson("{\"scopeVersion\":3,\"scopeHash\":\"" + shutdown.getApprovalScopeHash() + "\"}");
         request.setSteps(List.of(step(request, PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE, productionActor),
                 step(request, PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE, hseActor)));
         return request;
@@ -454,5 +471,9 @@ class PlannedShutdownLifecycleServiceTest {
         step.setDecision(ApprovalDecision.APPROVED);
         step.setDecidedById(decidedBy);
         return step;
+    }
+
+    private String currentScopeHash() {
+        return approvalScopeHasher.hash(shutdown, List.of(), List.of(), List.of(), List.of());
     }
 }

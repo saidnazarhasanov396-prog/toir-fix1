@@ -32,6 +32,7 @@ import com.toir.util.AuditBuilderService;
 import org.springframework.http.HttpStatus;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
@@ -82,6 +83,52 @@ class PlannedShutdownServiceTest {
 
     @InjectMocks
     private PlannedShutdownService service;
+
+    @BeforeEach
+    void allowDefaultDepartmentScope() {
+        lenient().when(scopeAccessService.canAccessDepartment(any())).thenReturn(true);
+        lenient().when(scopeAccessService.enforceDepartmentScope(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @Test
+    void departmentPbacRejectsUnrelatedDepartmentReadAndMutation() {
+        UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, departmentId, 4L, PlannedShutdownStatus.DRAFT);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        doThrow(new org.springframework.security.access.AccessDeniedException("scope"))
+                .when(scopeAccessService).assertCanAccessDepartment(departmentId);
+
+        assertThatThrownBy(() -> service.get(id))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        assertThatThrownBy(() -> service.update(id, new PlannedShutdownUpdateRequest(
+                4L, "PS-100", "Annual", "PLANNED", departmentId, UUID.randomUUID(),
+                Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"),
+                "Maintenance", null, null, null, null)))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    }
+
+    @Test
+    void createAndListEnforceCurrentDepartmentScopeInsideService() {
+        UUID requestedDepartment = UUID.randomUUID();
+        UUID currentDepartment = UUID.randomUUID();
+        doThrow(new org.springframework.security.access.AccessDeniedException("scope"))
+                .when(scopeAccessService).assertCanAccessDepartment(requestedDepartment);
+        when(scopeAccessService.enforceDepartmentScope(requestedDepartment)).thenReturn(currentDepartment);
+        when(repository.findAllFiltered(eq(currentDepartment), isNull(), isNull())).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.create(new PlannedShutdownCreateRequest(
+                "PS-100", "Annual", "PLANNED", requestedDepartment, UUID.randomUUID(),
+                Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"),
+                "Maintenance", null, null, null, null,
+                List.of(new PlannedShutdownAssetRequest(UUID.randomUUID(), PlannedShutdownAssetDisposition.STOPPED,
+                        "main", 0)))))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+
+        service.findAllFiltered(requestedDepartment, null, null);
+        verify(repository).findAllFiltered(currentDepartment, null, null);
+    }
 
     @Test
     void completeAndReopenReadinessCaptureServerActorAndEvidence() {
@@ -474,6 +521,8 @@ class PlannedShutdownServiceTest {
         UUID id = UUID.randomUUID(); UUID departmentId = UUID.randomUUID();
         UUID keptEquipmentId = UUID.randomUUID(); UUID removedEquipmentId = UUID.randomUUID(); UUID addedEquipmentId = UUID.randomUUID();
         PlannedShutdown shutdown = shutdown(id, departmentId, 2L, PlannedShutdownStatus.SCOPE_FORMATION);
+        shutdown.setApprovalScopeVersion(0L);
+        shutdown.setApprovalScopeHash("a".repeat(64));
         var kept = asset(id, keptEquipmentId, PlannedShutdownAssetDisposition.STOPPED, 0);
         kept.setInclusionReason("old reason");
         var removed = asset(id, removedEquipmentId, PlannedShutdownAssetDisposition.RESERVE, 1);
@@ -490,6 +539,8 @@ class PlannedShutdownServiceTest {
                 new PlannedShutdownAssetRequest(addedEquipmentId, PlannedShutdownAssetDisposition.RUNNING, "support", 1))));
 
         assertThat(response.scopeVersion()).isEqualTo(1L);
+        assertThat(shutdown.getApprovalScopeVersion()).isNull();
+        assertThat(shutdown.getApprovalScopeHash()).isNull();
         assertThat(response.assets()).extracting(a -> a.id()).contains(kept.getId());
         assertThat(removed.isDeleted()).isTrue();
         assertThat(kept.getInclusionReason()).isEqualTo("primary");
