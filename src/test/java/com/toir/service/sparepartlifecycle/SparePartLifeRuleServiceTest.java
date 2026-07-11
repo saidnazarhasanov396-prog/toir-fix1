@@ -133,6 +133,66 @@ class SparePartLifeRuleServiceTest {
         verify(ruleRepository, never()).save(any());
     }
 
+    @Test
+    void reviseRejectsMovingEquipmentRuleToNodeScope() {
+        UUID partId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID nodeId = UUID.randomUUID();
+        UUID ruleId = UUID.randomUUID();
+        SparePartLifeRule previous = new SparePartLifeRule();
+        previous.setId(ruleId);
+        previous.setSparePartId(partId);
+        previous.setEquipmentId(equipmentId);
+        previous.setScopeType(SparePartLifeRuleScope.EQUIPMENT);
+        when(ruleRepository.findByIdAndIsDeletedFalse(ruleId)).thenReturn(Optional.of(previous));
+        // Bir xil part/equipment, ammo node qo'shilgan -> node scope. Bu rad etilishi kerak.
+        SparePartLifeRuleRequest request = request(partId, equipmentId, nodeId, null);
+
+        assertThatThrownBy(() -> service.revise(ruleId, request))
+                .hasMessageStartingWith("RULE_REVISION_PART_IMMUTABLE:");
+        verify(ruleRepository, never()).save(any());
+    }
+
+    @Test
+    void reviseKeepsExactScopeAndIncrementsRevisionForThatTuple() {
+        UUID partId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID ruleId = UUID.randomUUID();
+        SparePartLifeRule previous = new SparePartLifeRule();
+        previous.setId(ruleId);
+        previous.setSparePartId(partId);
+        previous.setEquipmentId(equipmentId);
+        previous.setScopeType(SparePartLifeRuleScope.EQUIPMENT);
+        previous.setActive(true);
+        previous.setRevision(1);
+        SparePart part = new SparePart();
+        part.setId(partId);
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        when(ruleRepository.findByIdAndIsDeletedFalse(ruleId)).thenReturn(Optional.of(previous));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(partId)).thenReturn(Optional.of(part));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(slotNormalizer.normalizeNullable(null)).thenReturn(null);
+        when(ruleRepository.findAllBySparePartIdAndActiveTrueAndIsDeletedFalse(partId)).thenReturn(List.of());
+        when(ruleRepository.findAllBySparePartIdAndIsDeletedFalse(partId)).thenReturn(List.of(previous));
+        when(ruleRepository.save(any(SparePartLifeRule.class))).thenAnswer(invocation -> {
+            SparePartLifeRule saved = invocation.getArgument(0);
+            if (saved.getId() == null) {
+                saved.setId(UUID.randomUUID());
+            }
+            return saved;
+        });
+        when(limitRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Bir xil equipment scope (node/slot yo'q), part o'zgarmaydi.
+        SparePartLifeRuleRequest request = request(partId, equipmentId, null, null);
+        var revised = service.revise(ruleId, request);
+
+        assertThat(previous.isActive()).isFalse();
+        assertThat(revised.scopeType()).isEqualTo(SparePartLifeRuleScope.EQUIPMENT);
+        assertThat(revised.revision()).isEqualTo(2);
+    }
+
     private static SparePartLifeRuleRequest request(UUID partId,
                                                     UUID equipmentId,
                                                     UUID nodeId,
