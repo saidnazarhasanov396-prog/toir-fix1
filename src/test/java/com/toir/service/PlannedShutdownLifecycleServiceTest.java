@@ -290,7 +290,7 @@ class PlannedShutdownLifecycleServiceTest {
 
         var result = service.finalizeApprovalFromApprovalRequest(id, approval);
 
-        assertThat(result.status()).isEqualTo(PlanStatus.APPROVED);
+        assertThat(result.status()).isEqualTo(PlannedShutdownStatus.APPROVED);
         verify(repository).findByIdAndIsDeletedFalseForUpdate(id);
     }
 

@@ -9,7 +9,6 @@ import com.toir.entity.PlannedShutdown;
 import com.toir.entity.Department;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.users.Employee;
-import com.toir.enums.PlanStatus;
 import com.toir.enums.PlannedShutdownAssetDisposition;
 import com.toir.enums.PlannedShutdownStatus;
 import com.toir.exception.RestException;
@@ -320,7 +319,7 @@ class PlannedShutdownServiceTest {
         s1.setStartAt(Instant.parse("2026-05-19T10:00:00Z"));
         s1.setEndAt(Instant.parse("2026-05-19T18:00:00Z"));
         s1.setReason("Routine check");
-        s1.setStatus(PlanStatus.DRAFT);
+        s1.setStatus(PlannedShutdownStatus.DRAFT);
 
         when(repository.findAllFiltered(departmentId, "DRAFT", "%annual%")).thenReturn(List.of(s1));
 
