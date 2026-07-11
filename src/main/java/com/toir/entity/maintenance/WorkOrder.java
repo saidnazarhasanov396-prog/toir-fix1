@@ -80,6 +80,12 @@ public class WorkOrder extends ActorStampedEntity {
     @Column(name = "generation_key", length = 512)
     private String generationKey;
 
+    @Column(name = "planned_shutdown_id")
+    private UUID plannedShutdownId;
+
+    @Column(name = "shutdown_work_item_id")
+    private UUID shutdownWorkItemId;
+
     @Column(name = "counteragent_id")
     private UUID counteragentId;
 

@@ -17,6 +17,11 @@ import com.toir.repository.PlannedShutdownRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownAssetRepository;
+import com.toir.repository.plannedshutdown.PlannedShutdownWorkItemRepository;
+import com.toir.repository.PprTaskRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
+import com.toir.service.plannedshutdown.PlannedShutdownWorkItemPolicy;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.util.AuditBuilderService;
 import org.springframework.http.HttpStatus;
@@ -44,9 +49,14 @@ class PlannedShutdownServiceTest {
     private PlannedShutdownRepository repository;
 
     @Mock private PlannedShutdownAssetRepository assetRepository;
+    @Mock private PlannedShutdownWorkItemRepository workItemRepository;
     @Mock private DepartmentRepository departmentRepository;
     @Mock private EmployeeRepository employeeRepository;
     @Mock private EquipmentRepository equipmentRepository;
+    @Mock private DefectRepository defectRepository;
+    @Mock private PprTaskRepository pprTaskRepository;
+    @Mock private WorkOrderRepository workOrderRepository;
+    @Mock private PlannedShutdownWorkItemPolicy workItemPolicy;
     @Mock private AuditBuilderService auditBuilderService;
 
     @InjectMocks

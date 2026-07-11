@@ -17,9 +17,11 @@ public record PlannedShutdownDetailResponse(
         Instant actualShutdownAt, Instant actualSafeStateAt, Instant actualRepairStartAt,
         Instant actualTestingStartAt, Instant actualStartupAt, Instant actualCompletedAt,
         String rescheduleReason, String extensionReason, Long closureVersion, Instant createdAt, Instant updatedAt,
-        List<PlannedShutdownAssetResponse> assets
+        List<PlannedShutdownAssetResponse> assets,
+        List<PlannedShutdownWorkItemResponse> workItems
 ) {
-    public static PlannedShutdownDetailResponse from(PlannedShutdown s, List<PlannedShutdownAssetResponse> assets) {
+    public static PlannedShutdownDetailResponse from(PlannedShutdown s, List<PlannedShutdownAssetResponse> assets,
+            List<PlannedShutdownWorkItemResponse> workItems) {
         return new PlannedShutdownDetailResponse(s.getId(), s.getVersion(), s.getCode(), s.getName(),
                 s.getShutdownType(), s.getDepartmentId(), s.getResponsibleEmployeeId(), s.getPlannedStartAt(),
                 s.getPlannedEndAt(), s.getReason(), s.getObjective(), s.getNotes(), s.getRiskLevel(), s.getRiskScore(),
@@ -27,6 +29,10 @@ public record PlannedShutdownDetailResponse(
                 s.getApprovedStartAt(), s.getApprovedEndAt(), s.getEffectiveExtensionEndAt(), s.getActualShutdownAt(),
                 s.getActualSafeStateAt(), s.getActualRepairStartAt(), s.getActualTestingStartAt(), s.getActualStartupAt(),
                 s.getActualCompletedAt(), s.getRescheduleReason(), s.getExtensionReason(), s.getClosureVersion(),
-                s.getCreatedAt(), s.getUpdatedAt(), assets);
+                s.getCreatedAt(), s.getUpdatedAt(), assets, workItems);
+    }
+
+    public static PlannedShutdownDetailResponse from(PlannedShutdown s, List<PlannedShutdownAssetResponse> assets) {
+        return from(s, assets, List.of());
     }
 }

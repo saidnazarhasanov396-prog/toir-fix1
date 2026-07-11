@@ -8,6 +8,8 @@ import com.toir.dto.plannedshutdown.PlannedShutdownDetailResponse;
 import com.toir.dto.plannedshutdown.PlannedShutdownUpdateRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownAssetReplaceRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownAssetScopeResponse;
+import com.toir.dto.plannedshutdown.PlannedShutdownWorkItemRequest;
+import com.toir.dto.plannedshutdown.PlannedShutdownWorkItemReorderRequest;
 import com.toir.enums.PlannedShutdownStatus;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.enums.PlanStatus;
@@ -290,7 +292,7 @@ class RbacToirBusinessFlowSecurityTest {
                 Instant.parse("2026-08-02T00:00:00Z"), "Maintenance", null, null, null, null,
                 PlannedShutdownStatus.DRAFT, 0L, null, null,
                 null, null, null, null, null, null, null, null, null,
-                null, null, 0L, null, null, List.of());
+                null, null, 0L, null, null, List.of(), List.of());
     }
 
     private static String campaignPayload() {
@@ -321,6 +323,16 @@ class RbacToirBusinessFlowSecurityTest {
                         new Class<?>[]{UUID.class}, PermissionConstants.PLANNED_SHUTDOWN_READ),
                 Arguments.of(PlannedShutdownController.class, "replaceAssets",
                         new Class<?>[]{UUID.class, PlannedShutdownAssetReplaceRequest.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
+                Arguments.of(PlannedShutdownController.class, "listWorkItems",
+                        new Class<?>[]{UUID.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
+                Arguments.of(PlannedShutdownController.class, "addWorkItem",
+                        new Class<?>[]{UUID.class, PlannedShutdownWorkItemRequest.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
+                Arguments.of(PlannedShutdownController.class, "updateWorkItem",
+                        new Class<?>[]{UUID.class, UUID.class, PlannedShutdownWorkItemRequest.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
+                Arguments.of(PlannedShutdownController.class, "removeWorkItem",
+                        new Class<?>[]{UUID.class, UUID.class, Long.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
+                Arguments.of(PlannedShutdownController.class, "reorderWorkItems",
+                        new Class<?>[]{UUID.class, PlannedShutdownWorkItemReorderRequest.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
                 Arguments.of(RepairCampaignController.class, "get",
                         new Class<?>[]{UUID.class}, PermissionConstants.REPAIR_CAMPAIGN_READ),
                 Arguments.of(RepairCampaignController.class, "create",

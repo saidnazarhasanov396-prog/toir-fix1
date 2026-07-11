@@ -4,7 +4,12 @@ import com.toir.dto.plannedshutdown.PlannedShutdownDto;
 import com.toir.dto.plannedshutdown.PlannedShutdownDetailResponse;
 import com.toir.dto.plannedshutdown.PlannedShutdownAssetScopeResponse;
 import com.toir.dto.plannedshutdown.PlannedShutdownAssetResponse;
+import com.toir.dto.plannedshutdown.PlannedShutdownWorkItemResponse;
+import com.toir.dto.plannedshutdown.PlannedShutdownWorkItemScopeResponse;
 import com.toir.enums.PlannedShutdownAssetDisposition;
+import com.toir.enums.PlannedShutdownItemStatus;
+import com.toir.enums.PlannedShutdownWorkItemSourceType;
+import com.toir.enums.PriorityLevel;
 import com.toir.enums.PlannedShutdownStatus;
 import com.toir.enums.PlanStatus;
 import com.toir.exception.GlobalExceptionHandler;
@@ -27,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -127,12 +133,49 @@ class PlannedShutdownControllerContractTest {
         verify(service).replaceAssets(eq(id), any());
     }
 
+    @Test
+    void workItemCrudAndReorderEndpointsExposeTypedScopeVersions() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        var response = new PlannedShutdownWorkItemScopeResponse(id, 5L, 3L, List.of(
+                new PlannedShutdownWorkItemResponse(itemId, PlannedShutdownWorkItemSourceType.MANUAL, null,
+                        equipmentId, "Inspect bearing", PriorityLevel.HIGH, true, true, 45, "A", 0,
+                        PlannedShutdownItemStatus.PENDING)));
+        when(service.listWorkItems(id)).thenReturn(response);
+        when(service.addWorkItem(eq(id), any())).thenReturn(response);
+        when(service.updateWorkItem(eq(id), eq(itemId), any())).thenReturn(response);
+        when(service.removeWorkItem(id, itemId, 5L)).thenReturn(response);
+        when(service.reorderWorkItems(eq(id), any())).thenReturn(response);
+
+        String body = """
+                {"version":5,"sourceType":"MANUAL","equipmentId":"%s","title":"Inspect bearing",\
+                 "priority":"HIGH","requiresShutdown":true,"requiresIsolation":true,\
+                 "plannedDurationMinutes":45,"criticality":"A","orderNumber":0}
+                """.formatted(equipmentId);
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/work-items", id))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.scopeVersion").value(3));
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/work-items", id)
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.workItems[0].sourceType").value("MANUAL"));
+        mockMvc.perform(put("/api/v1/planned-shutdowns/{id}/work-items/{itemId}", id, itemId)
+                        .contentType("application/json").content(body))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/v1/planned-shutdowns/{id}/work-items/{itemId}", id, itemId)
+                        .param("version", "5"))
+                .andExpect(status().isOk());
+        mockMvc.perform(put("/api/v1/planned-shutdowns/{id}/work-items/reorder", id)
+                        .contentType("application/json")
+                        .content("{\"version\":5,\"itemIds\":[\"" + itemId + "\"]}"))
+                .andExpect(status().isOk());
+    }
+
     private static PlannedShutdownDetailResponse detail(UUID id, UUID departmentId, UUID employeeId,
             PlannedShutdownStatus status) {
         return new PlannedShutdownDetailResponse(id, 3L, "PS-1", "Annual", "PLANNED", departmentId, employeeId,
                 Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"), "Maintenance",
                 "Objective", null, "HIGH", new java.math.BigDecimal("7.5000"), status, 1L, null, null,
                 null, null, null, null, null, null, null, null, null,
-                null, null, 0L, null, null, List.of());
+                null, null, 0L, null, null, List.of(), List.of());
     }
 }

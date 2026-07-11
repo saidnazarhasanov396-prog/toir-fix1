@@ -5,19 +5,26 @@ import com.toir.entity.Department;
 import com.toir.entity.PlannedShutdown;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.plannedshutdown.PlannedShutdownAsset;
+import com.toir.entity.plannedshutdown.PlannedShutdownWorkItem;
 import com.toir.entity.users.Employee;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PlannedShutdownAssetDisposition;
 import com.toir.enums.PlannedShutdownStatus;
+import com.toir.enums.PlannedShutdownWorkItemSourceType;
 import com.toir.exception.RestException;
 import com.toir.repository.PlannedShutdownRepository;
+import com.toir.repository.PprTaskRepository;
+import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownAssetRepository;
+import com.toir.repository.plannedshutdown.PlannedShutdownWorkItemRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.service.plannedshutdown.PlannedShutdownWorkItemPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,9 +40,14 @@ public class PlannedShutdownService {
 
     private final PlannedShutdownRepository repository;
     private final PlannedShutdownAssetRepository assetRepository;
+    private final PlannedShutdownWorkItemRepository workItemRepository;
     private final DepartmentRepository departmentRepository;
     private final EmployeeRepository employeeRepository;
     private final EquipmentRepository equipmentRepository;
+    private final DefectRepository defectRepository;
+    private final PprTaskRepository pprTaskRepository;
+    private final WorkOrderRepository workOrderRepository;
+    private final PlannedShutdownWorkItemPolicy workItemPolicy;
     private final AuditBuilderService auditBuilderService;
 
     private static final Pattern CODE_PATTERN = Pattern.compile("[A-Z0-9-]{3,64}");
@@ -115,7 +127,7 @@ public class PlannedShutdownService {
     @Transactional(readOnly = true)
     public PlannedShutdownDetailResponse get(UUID id) {
         PlannedShutdown shutdown = find(id);
-        return PlannedShutdownDetailResponse.from(shutdown, assetResponses(id));
+        return PlannedShutdownDetailResponse.from(shutdown, assetResponses(id), workItemResponses(id));
     }
 
     @Transactional
@@ -148,7 +160,7 @@ public class PlannedShutdownService {
         auditBuilderService.log("planned_shutdown", id.toString(), AuditAction.UPDATE,
                 AuditModule.PLANNED_SHUTDOWN, "Плановая остановка обновлена", before,
                 PlannedShutdownAuditSnapshot.from(saved));
-        return PlannedShutdownDetailResponse.from(saved, assetResponses(id));
+        return PlannedShutdownDetailResponse.from(saved, assetResponses(id), workItemResponses(id));
     }
 
     @Transactional(readOnly = true)
@@ -188,6 +200,11 @@ public class PlannedShutdownService {
             changed.add(asset);
         }
         existingByEquipment.values().forEach(asset -> {
+            if (workItemRepository.existsByPlannedShutdownIdAndEquipmentIdAndIsDeletedFalse(
+                    id, asset.getEquipmentId())) {
+                throw RestException.conflict("Cannot remove scope equipment referenced by an active work item: "
+                        + asset.getEquipmentId());
+            }
             asset.setDeleted(true);
             changed.add(asset);
         });
@@ -201,6 +218,99 @@ public class PlannedShutdownService {
         auditBuilderService.log("planned_shutdown_scope", id.toString(), AuditAction.UPDATE,
                 AuditModule.PLANNED_SHUTDOWN, "Граница плановой остановки обновлена", before, after);
         return new PlannedShutdownAssetScopeResponse(id, saved.getVersion(), saved.getScopeVersion(), active);
+    }
+
+    @Transactional(readOnly = true)
+    public PlannedShutdownWorkItemScopeResponse listWorkItems(UUID id) {
+        PlannedShutdown shutdown = find(id);
+        return workItemScope(shutdown);
+    }
+
+    @Transactional
+    public PlannedShutdownWorkItemScopeResponse addWorkItem(UUID id, PlannedShutdownWorkItemRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        workItemPolicy.validate(request);
+        requireScopedSource(id, request);
+        requireCanonicalAvailable(id, null, request);
+        PlannedShutdownWorkItem item = new PlannedShutdownWorkItem();
+        item.setPlannedShutdownId(id);
+        apply(item, request);
+        saveWorkItem(item);
+        PlannedShutdown saved = incrementScope(shutdown);
+        auditBuilderService.log("planned_shutdown_work_item", item.getId().toString(), AuditAction.CREATE,
+                AuditModule.PLANNED_SHUTDOWN, "Источник работ привязан к плановой остановке", null,
+                WorkItemAuditSnapshot.from(saved.getScopeVersion(), item));
+        return workItemScope(saved);
+    }
+
+    @Transactional
+    public PlannedShutdownWorkItemScopeResponse updateWorkItem(
+            UUID id, UUID itemId, PlannedShutdownWorkItemRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        PlannedShutdownWorkItem item = findWorkItem(id, itemId);
+        workItemPolicy.validate(request);
+        workItemPolicy.requireIdentityMutable(shutdown.getLifecycleStatus(), item.getSourceType(), item.getSourceId(),
+                request.sourceType(), request.sourceId());
+        requireScopedSource(id, request);
+        requireCanonicalAvailable(id, itemId, request);
+        WorkItemAuditSnapshot before = WorkItemAuditSnapshot.from(shutdown.getScopeVersion(), item);
+        apply(item, request);
+        saveWorkItem(item);
+        PlannedShutdown saved = incrementScope(shutdown);
+        auditBuilderService.log("planned_shutdown_work_item", itemId.toString(), AuditAction.UPDATE,
+                AuditModule.PLANNED_SHUTDOWN, "Источник работ плановой остановки обновлён", before,
+                WorkItemAuditSnapshot.from(saved.getScopeVersion(), item));
+        return workItemScope(saved);
+    }
+
+    @Transactional
+    public PlannedShutdownWorkItemScopeResponse removeWorkItem(UUID id, UUID itemId, Long version) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, version);
+        PlannedShutdownWorkItem item = findWorkItem(id, itemId);
+        if (workOrderRepository.existsActiveByShutdownWorkItemId(itemId)) {
+            throw RestException.conflict("Work item has an active linked Work Order");
+        }
+        WorkItemAuditSnapshot before = WorkItemAuditSnapshot.from(shutdown.getScopeVersion(), item);
+        item.setDeleted(true);
+        workItemRepository.saveAndFlush(item);
+        PlannedShutdown saved = incrementScope(shutdown);
+        auditBuilderService.log("planned_shutdown_work_item", itemId.toString(), AuditAction.DELETE,
+                AuditModule.PLANNED_SHUTDOWN, "Источник работ отвязан от плановой остановки", before,
+                new WorkItemAuditSnapshot(saved.getScopeVersion(), null));
+        return workItemScope(saved);
+    }
+
+    @Transactional
+    public PlannedShutdownWorkItemScopeResponse reorderWorkItems(
+            UUID id, PlannedShutdownWorkItemReorderRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        List<PlannedShutdownWorkItem> items = workItemRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id);
+        if (request.itemIds().size() != items.size() || new HashSet<>(request.itemIds()).size() != items.size()) {
+            throw RestException.badRequest("Reorder must contain every active work item exactly once");
+        }
+        Map<UUID, PlannedShutdownWorkItem> byId = items.stream()
+                .collect(java.util.stream.Collectors.toMap(PlannedShutdownWorkItem::getId, Function.identity()));
+        if (!byId.keySet().equals(new HashSet<>(request.itemIds()))) {
+            throw RestException.badRequest("Reorder contains a work item outside this shutdown");
+        }
+        int temporaryBase = items.stream().mapToInt(PlannedShutdownWorkItem::getOrderNumber).max().orElse(0)
+                + items.size() + 1;
+        for (int i = 0; i < request.itemIds().size(); i++) {
+            byId.get(request.itemIds().get(i)).setOrderNumber(temporaryBase + i);
+        }
+        workItemRepository.saveAllAndFlush(items);
+        for (int i = 0; i < request.itemIds().size(); i++) byId.get(request.itemIds().get(i)).setOrderNumber(i);
+        workItemRepository.saveAllAndFlush(items);
+        PlannedShutdown saved = incrementScope(shutdown);
+        auditBuilderService.log("planned_shutdown_work_items", id.toString(), AuditAction.UPDATE,
+                AuditModule.PLANNED_SHUTDOWN, "Порядок работ плановой остановки изменён", null,
+                request.itemIds());
+        return workItemScope(saved);
     }
 
     @Transactional
@@ -248,6 +358,96 @@ public class PlannedShutdownService {
     private List<PlannedShutdownAssetResponse> assetResponses(UUID id) {
         return assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id).stream()
                 .map(PlannedShutdownAssetResponse::from).toList();
+    }
+
+    private List<PlannedShutdownWorkItemResponse> workItemResponses(UUID id) {
+        return workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id).stream()
+                .map(PlannedShutdownWorkItemResponse::from).toList();
+    }
+
+    private PlannedShutdownWorkItemScopeResponse workItemScope(PlannedShutdown shutdown) {
+        return new PlannedShutdownWorkItemScopeResponse(shutdown.getId(), shutdown.getVersion(),
+                shutdown.getScopeVersion(), workItemResponses(shutdown.getId()));
+    }
+
+    private PlannedShutdownWorkItem findWorkItem(UUID shutdownId, UUID itemId) {
+        return workItemRepository.findByIdAndPlannedShutdownIdAndIsDeletedFalse(itemId, shutdownId)
+                .orElseThrow(() -> RestException.notFound("Shutdown work item not found: " + itemId));
+    }
+
+    private PlannedShutdown incrementScope(PlannedShutdown shutdown) {
+        shutdown.setScopeVersion(shutdown.getScopeVersion() + 1);
+        return repository.saveAndFlush(shutdown);
+    }
+
+    private void requireCanonicalAvailable(UUID shutdownId, UUID itemId, PlannedShutdownWorkItemRequest request) {
+        boolean duplicateSource = request.sourceId() != null && (itemId == null
+                ? workItemRepository.existsByPlannedShutdownIdAndSourceTypeAndSourceIdAndIsDeletedFalse(
+                        shutdownId, request.sourceType(), request.sourceId())
+                : workItemRepository.existsByPlannedShutdownIdAndSourceTypeAndSourceIdAndIdNotAndIsDeletedFalse(
+                        shutdownId, request.sourceType(), request.sourceId(), itemId));
+        if (duplicateSource) throw RestException.conflict("Source is already linked to this shutdown");
+        boolean duplicateOrder = itemId == null
+                ? workItemRepository.existsByPlannedShutdownIdAndOrderNumberAndIsDeletedFalse(
+                        shutdownId, request.orderNumber())
+                : workItemRepository.existsByPlannedShutdownIdAndOrderNumberAndIdNotAndIsDeletedFalse(
+                        shutdownId, request.orderNumber(), itemId);
+        if (duplicateOrder) throw RestException.conflict("Work item order number is already in use");
+    }
+
+    private void requireScopedSource(UUID shutdownId, PlannedShutdownWorkItemRequest request) {
+        boolean scoped = assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdownId)
+                .stream().anyMatch(asset -> request.equipmentId().equals(asset.getEquipmentId()));
+        if (!scoped) throw RestException.badRequest("Work item equipment is outside shutdown scope");
+        if (request.sourceType() == PlannedShutdownWorkItemSourceType.MANUAL) return;
+        UUID sourceEquipment = switch (request.sourceType()) {
+            case DEFECT -> defectRepository.findByIdAndIsDeletedFalse(request.sourceId())
+                    .orElseThrow(() -> RestException.notFound("Defect not found: " + request.sourceId()))
+                    .getEquipmentId();
+            case PPR -> pprTaskRepository.findByIdAndIsDeletedFalse(request.sourceId())
+                    .orElseThrow(() -> RestException.notFound("PPR task not found: " + request.sourceId()))
+                    .getEquipmentId();
+            case WORK_ORDER -> workOrderRepository.findByIdAndIsDeletedFalse(request.sourceId())
+                    .orElseThrow(() -> RestException.notFound("Work Order not found: " + request.sourceId()))
+                    .getEquipmentId();
+            case MANUAL, REPAIR_CAMPAIGN -> throw RestException.badRequest("Unsupported work item source type");
+        };
+        if (!request.equipmentId().equals(sourceEquipment)) {
+            throw RestException.badRequest("Work item equipment must match source equipment");
+        }
+    }
+
+    private static void apply(PlannedShutdownWorkItem item, PlannedShutdownWorkItemRequest request) {
+        item.setSourceType(request.sourceType());
+        item.setSourceId(request.sourceId());
+        item.setEquipmentId(request.equipmentId());
+        item.setTitle(request.title().trim());
+        item.setPriority(request.priority());
+        item.setRequiresShutdown(request.requiresShutdown());
+        item.setRequiresIsolation(request.requiresIsolation());
+        item.setPlannedDurationMinutes(request.plannedDurationMinutes());
+        item.setCriticality(normalizeNullable(request.criticality()));
+        item.setOrderNumber(request.orderNumber());
+    }
+
+    private PlannedShutdownWorkItem saveWorkItem(PlannedShutdownWorkItem item) {
+        try {
+            return workItemRepository.saveAndFlush(item);
+        } catch (DataIntegrityViolationException ex) {
+            String message = String.valueOf(ex.getMessage()).toLowerCase(Locale.ROOT);
+            Throwable cause = ex.getCause();
+            while (cause != null) {
+                message += " " + String.valueOf(cause.getMessage()).toLowerCase(Locale.ROOT);
+                cause = cause.getCause();
+            }
+            if (message.contains("uq_planned_shutdown_work_items_active_source")) {
+                throw RestException.conflict("Source is already linked to this shutdown");
+            }
+            if (message.contains("uq_planned_shutdown_work_items_active_order")) {
+                throw RestException.conflict("Work item order number is already in use");
+            }
+            throw ex;
+        }
     }
 
     private void validateOwnership(UUID departmentId, UUID employeeId) {
@@ -398,6 +598,12 @@ public class PlannedShutdownService {
     private record ScopeAuditSnapshot(Long scopeVersion, Object assets) {
         static ScopeAuditSnapshot from(Long version, List<PlannedShutdownAsset> assets) {
             return new ScopeAuditSnapshot(version, assets.stream().map(PlannedShutdownAssetResponse::from).toList());
+        }
+    }
+
+    private record WorkItemAuditSnapshot(Long scopeVersion, PlannedShutdownWorkItemResponse workItem) {
+        static WorkItemAuditSnapshot from(Long scopeVersion, PlannedShutdownWorkItem item) {
+            return new WorkItemAuditSnapshot(scopeVersion, PlannedShutdownWorkItemResponse.from(item));
         }
     }
 }

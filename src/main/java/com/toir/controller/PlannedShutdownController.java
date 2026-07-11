@@ -91,6 +91,41 @@ public class PlannedShutdownController {
         return ResponseEntity.ok(service.replaceAssets(id, request));
     }
 
+    @GetMapping("/{id}/work-items")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownWorkItemScopeResponse> listWorkItems(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.listWorkItems(id));
+    }
+
+    @PostMapping("/{id}/work-items")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownWorkItemScopeResponse> addWorkItem(
+            @PathVariable UUID id, @Valid @RequestBody PlannedShutdownWorkItemRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.addWorkItem(id, request));
+    }
+
+    @PutMapping("/{id}/work-items/{itemId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownWorkItemScopeResponse> updateWorkItem(
+            @PathVariable UUID id, @PathVariable UUID itemId,
+            @Valid @RequestBody PlannedShutdownWorkItemRequest request) {
+        return ResponseEntity.ok(service.updateWorkItem(id, itemId, request));
+    }
+
+    @DeleteMapping("/{id}/work-items/{itemId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownWorkItemScopeResponse> removeWorkItem(
+            @PathVariable UUID id, @PathVariable UUID itemId, @RequestParam Long version) {
+        return ResponseEntity.ok(service.removeWorkItem(id, itemId, version));
+    }
+
+    @PutMapping("/{id}/work-items/reorder")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownWorkItemScopeResponse> reorderWorkItems(
+            @PathVariable UUID id, @Valid @RequestBody PlannedShutdownWorkItemReorderRequest request) {
+        return ResponseEntity.ok(service.reorderWorkItems(id, request));
+    }
+
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_APPROVE')")
     public ResponseEntity<PlannedShutdownDto> reject(@PathVariable UUID id) {
