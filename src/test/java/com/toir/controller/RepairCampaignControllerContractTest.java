@@ -7,8 +7,12 @@ import com.toir.controller.repair.RepairCampaignController;
 import com.toir.dto.repaircampaign.RepairCampaignBudgetStageSummaryDto;
 import com.toir.dto.repaircampaign.RepairCampaignBudgetSummaryDto;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
+import com.toir.dto.repaircampaign.RepairCampaignWorkItemRequest;
+import com.toir.dto.repaircampaign.RepairCampaignWorkItemResponse;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignWorkItemSourceType;
+import com.toir.enums.RepairCampaignWorkItemStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.service.ApprovalService;
@@ -61,6 +65,29 @@ class RepairCampaignControllerContractTest {
         }
         assertThat(java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods())
                 .map(java.lang.reflect.Method::getName).filter(expected::containsKey)).hasSize(expected.size());
+    }
+
+    @Test
+    void addWorkItemIgnoresClientAttemptToSetServerOwnedStatus() throws Exception {
+        UUID campaignId = UUID.randomUUID(); UUID equipmentId = UUID.randomUUID(); UUID itemId = UUID.randomUUID();
+        when(workItemService.add(eq(campaignId), any(RepairCampaignWorkItemRequest.class)))
+                .thenReturn(new RepairCampaignWorkItemResponse(itemId, campaignId,
+                        RepairCampaignWorkItemSourceType.MANUAL, null, equipmentId, "manual",
+                        RepairCampaignWorkItemStatus.PENDING, 0, null, 2L));
+
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/work-items", campaignId)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"version":1,"sourceType":"MANUAL","sourceId":null,"equipmentId":"%s",
+                                 "title":"manual","status":"COMPLETED","orderNumber":0,"notes":null}
+                                """.formatted(equipmentId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(RepairCampaignWorkItemRequest.class);
+        verify(workItemService).add(eq(campaignId), captor.capture());
+        assertThat(java.util.Arrays.stream(captor.getValue().getClass().getRecordComponents())
+                .map(component -> component.getName())).doesNotContain("status");
     }
 
     @Mock

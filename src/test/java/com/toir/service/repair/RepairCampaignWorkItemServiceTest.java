@@ -57,7 +57,8 @@ class RepairCampaignWorkItemServiceTest {
         RepairCampaign campaign = campaign(RepairCampaignStatus.DRAFT, 3L);
         UUID equipmentId = UUID.randomUUID(); UUID sourceId = UUID.randomUUID();
         when(campaignRepository.findLockedByIdAndIsDeletedFalse(campaign.getId())).thenReturn(Optional.of(campaign));
-        when(sourceResolver.resolve(RepairCampaignWorkItemSourceType.DEFECT, sourceId, equipmentId, java.util.Set.of(campaign.getDepartmentId())))
+        when(sourceResolver.resolve(RepairCampaignWorkItemSourceType.DEFECT, sourceId,
+                new CanonicalWorkSourceResolver.ResolutionScope(equipmentId, java.util.Set.of(campaign.getDepartmentId()))))
                 .thenReturn(new CanonicalWorkSourceResolver.CanonicalWorkSource(sourceId, equipmentId, "Canonical"));
         when(repository.saveAndFlush(any())).thenAnswer(invocation -> {
             RepairCampaignWorkItem item = invocation.getArgument(0); item.setId(UUID.randomUUID()); return item;
@@ -70,6 +71,7 @@ class RepairCampaignWorkItemServiceTest {
                 sourceId, equipmentId, "ignored", 0));
 
         assertThat(result.title()).isEqualTo("Canonical");
+        assertThat(result.status()).isEqualTo(RepairCampaignWorkItemStatus.PENDING);
         assertThat(result.campaignVersion()).isEqualTo(4L);
         verify(auditBuilderService).log(eq("repair_campaign_work_item"), any(), eq(com.toir.enums.AuditAction.CREATE),
                 eq(com.toir.enums.AuditModule.REPAIR_CAMPAIGN), any(), isNull(), eq(result));
@@ -84,7 +86,7 @@ class RepairCampaignWorkItemServiceTest {
                 .isInstanceOf(RestException.class).hasMessageContaining("modified");
 
         UUID equipmentId = UUID.randomUUID(); UUID sourceId = UUID.randomUUID();
-        when(sourceResolver.resolve(any(), eq(sourceId), eq(equipmentId), any()))
+        when(sourceResolver.resolve(any(), eq(sourceId), any()))
                 .thenReturn(new CanonicalWorkSourceResolver.CanonicalWorkSource(sourceId, equipmentId, "canonical"));
         when(repository.existsByCampaignIdAndSourceTypeAndSourceIdAndIsDeletedFalse(
                 campaign.getId(), RepairCampaignWorkItemSourceType.DEFECT, sourceId)).thenReturn(true);
@@ -121,12 +123,31 @@ class RepairCampaignWorkItemServiceTest {
         var statusOnly = request(3L, RepairCampaignWorkItemSourceType.MANUAL, null,
                 item.getEquipmentId(), item.getTitle(), 0, RepairCampaignWorkItemStatus.COMPLETED, "done");
         assertThat(service.update(campaign.getId(), item.getId(), statusOnly).status())
-                .isEqualTo(RepairCampaignWorkItemStatus.COMPLETED);
+                .isEqualTo(RepairCampaignWorkItemStatus.PENDING);
 
         campaign.setVersion(4L);
         assertThatThrownBy(() -> service.update(campaign.getId(), item.getId(), request(4L,
                 RepairCampaignWorkItemSourceType.MANUAL, null, UUID.randomUUID(), "changed", 0)))
                 .hasMessageContaining("CAMPAIGN_SCOPE_FROZEN");
+    }
+
+    @Test
+    void genericPutCannotClearServerOwnedReplanRequiredStatus() {
+        RepairCampaign campaign = campaign(RepairCampaignStatus.DRAFT, 3L);
+        RepairCampaignWorkItem item = item(campaign, 0);
+        item.setStatus(RepairCampaignWorkItemStatus.REPLAN_REQUIRED);
+        when(campaignRepository.findLockedByIdAndIsDeletedFalse(campaign.getId())).thenReturn(Optional.of(campaign));
+        when(repository.findByIdAndCampaignIdAndIsDeletedFalse(item.getId(), campaign.getId()))
+                .thenReturn(Optional.of(item));
+        Equipment equipment = new Equipment(); equipment.setDepartmentId(campaign.getDepartmentId());
+        when(equipmentRepository.findByIdAndIsDeletedFalse(item.getEquipmentId())).thenReturn(Optional.of(equipment));
+        when(repository.saveAndFlush(item)).thenReturn(item);
+        when(campaignRepository.saveAndFlush(campaign)).thenAnswer(inv -> { campaign.setVersion(4L); return campaign; });
+
+        var attemptedClear = request(3L, RepairCampaignWorkItemSourceType.MANUAL, null,
+                item.getEquipmentId(), item.getTitle(), 0, RepairCampaignWorkItemStatus.PENDING, "keep status");
+        assertThat(service.update(campaign.getId(), item.getId(), attemptedClear).status())
+                .isEqualTo(RepairCampaignWorkItemStatus.REPLAN_REQUIRED);
     }
 
     @Test
@@ -171,6 +192,6 @@ class RepairCampaignWorkItemServiceTest {
     private static RepairCampaignWorkItemRequest request(Long version, RepairCampaignWorkItemSourceType type,
             UUID sourceId, UUID equipmentId, String title, int order,
             RepairCampaignWorkItemStatus status, String notes) {
-        return new RepairCampaignWorkItemRequest(version, type, sourceId, equipmentId, title, status, order, notes);
+        return new RepairCampaignWorkItemRequest(version, type, sourceId, equipmentId, title, order, notes);
     }
 }

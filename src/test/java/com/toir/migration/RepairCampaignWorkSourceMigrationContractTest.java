@@ -1,5 +1,7 @@
 package com.toir.migration;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.dto.repaircampaign.RepairCampaignWorkItemRequest;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.ManyToOne;
 import org.junit.jupiter.api.Test;
@@ -7,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,6 +24,7 @@ class RepairCampaignWorkSourceMigrationContractTest {
         String sql = Files.readString(MIGRATION).toLowerCase().replaceAll("\\s+", " ");
 
         assertThat(sql)
+                .contains("alter table repair_campaigns add column if not exists version bigint not null default 0")
                 .contains("create table repair_campaign_work_items")
                 .contains("constraint fk_repair_campaign_work_items_campaign")
                 .contains("foreign key (repair_campaign_id) references repair_campaigns(id)")
@@ -60,5 +64,18 @@ class RepairCampaignWorkSourceMigrationContractTest {
                 "sourceId", "equipmentId", "title", "status", "orderNumber", "notes"}) {
             assertThat(entity.getDeclaredField(field)).as(field).isNotNull();
         }
+    }
+
+    @Test
+    void genericRequestDoesNotExposeServerOwnedStatusEvenWhenJsonAttemptsIt() throws Exception {
+        assertThat(Arrays.stream(RepairCampaignWorkItemRequest.class.getRecordComponents())
+                .map(component -> component.getName())).doesNotContain("status");
+        UUID equipmentId = UUID.randomUUID();
+        String payload = """
+                {"version":1,"sourceType":"MANUAL","sourceId":null,"equipmentId":"%s",
+                 "title":"manual","status":"REPLAN_REQUIRED","orderNumber":0,"notes":null}
+                """.formatted(equipmentId);
+        RepairCampaignWorkItemRequest request = new ObjectMapper().readValue(payload, RepairCampaignWorkItemRequest.class);
+        assertThat(new ObjectMapper().writeValueAsString(request)).doesNotContain("status", "REPLAN_REQUIRED");
     }
 }

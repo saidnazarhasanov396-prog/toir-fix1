@@ -64,6 +64,7 @@ public class RepairCampaignWorkItemService {
         RepairCampaignWorkItem item = new RepairCampaignWorkItem();
         item.setCampaign(campaign);
         apply(item, request, input);
+        item.setStatus(RepairCampaignWorkItemStatus.PENDING);
         save(item);
         Long version = touch(campaign);
         RepairCampaignWorkItemResponse result = response(item, version);
@@ -161,8 +162,9 @@ public class RepairCampaignWorkItemService {
             return new ResolvedInput(request.equipmentId(), request.title().trim());
         }
         if (request.sourceId() == null) throw RestException.badRequest("Canonical work item sourceId is required");
-        var source = sourceResolver.resolve(request.sourceType(), request.sourceId(), request.equipmentId(),
-                campaignDepartments(campaign));
+        var source = sourceResolver.resolve(request.sourceType(), request.sourceId(),
+                new CanonicalWorkSourceResolver.ResolutionScope(
+                        request.equipmentId(), campaignDepartments(campaign)));
         return new ResolvedInput(source.equipmentId(), source.title());
     }
 
@@ -192,7 +194,6 @@ public class RepairCampaignWorkItemService {
         item.setSourceId(request.sourceId());
         item.setEquipmentId(input.equipmentId());
         item.setTitle(input.title());
-        item.setStatus(request.status() == null ? RepairCampaignWorkItemStatus.PENDING : request.status());
         item.setOrderNumber(request.orderNumber());
         item.setNotes(normalize(request.notes()));
     }

@@ -1414,10 +1414,12 @@ public class PlannedShutdownService {
                     .getEquipmentId();
             case REPAIR_REQUEST -> canonicalWorkSourceResolver.resolve(
                     com.toir.enums.RepairCampaignWorkItemSourceType.REPAIR_REQUEST,
-                    request.sourceId(), request.equipmentId(), Set.of()).equipmentId();
+                    request.sourceId(), new CanonicalWorkSourceResolver.ResolutionScope(
+                            request.equipmentId(), Set.of())).equipmentId();
             case INSPECTION_ROUND -> canonicalWorkSourceResolver.resolve(
                     com.toir.enums.RepairCampaignWorkItemSourceType.INSPECTION_ROUND,
-                    request.sourceId(), request.equipmentId(), Set.of()).equipmentId();
+                    request.sourceId(), new CanonicalWorkSourceResolver.ResolutionScope(
+                            request.equipmentId(), Set.of())).equipmentId();
             case WORK_ORDER -> workOrderRepository.findByIdAndIsDeletedFalse(request.sourceId())
                     .orElseThrow(() -> RestException.notFound("Work Order not found: " + request.sourceId()))
                     .getEquipmentId();

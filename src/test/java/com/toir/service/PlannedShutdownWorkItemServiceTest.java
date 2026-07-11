@@ -202,13 +202,17 @@ class PlannedShutdownWorkItemServiceTest {
                     == PlannedShutdownWorkItemSourceType.REPAIR_REQUEST
                     ? com.toir.enums.RepairCampaignWorkItemSourceType.REPAIR_REQUEST
                     : com.toir.enums.RepairCampaignWorkItemSourceType.INSPECTION_ROUND;
-            when(canonicalWorkSourceResolver.resolve(canonicalType, sourceId, equipmentId, java.util.Set.of()))
+            when(canonicalWorkSourceResolver.resolve(canonicalType, sourceId,
+                    new com.toir.service.repair.CanonicalWorkSourceResolver.ResolutionScope(
+                            equipmentId, java.util.Set.of())))
                     .thenReturn(new com.toir.service.repair.CanonicalWorkSourceResolver.CanonicalWorkSource(
                             sourceId, equipmentId, "canonical"));
 
             assertThat(service.addWorkItem(shutdownId, request(4L, shutdownType, sourceId, 0)).scopeVersion())
                     .isEqualTo(3L);
-            verify(canonicalWorkSourceResolver).resolve(canonicalType, sourceId, equipmentId, java.util.Set.of());
+            verify(canonicalWorkSourceResolver).resolve(canonicalType, sourceId,
+                    new com.toir.service.repair.CanonicalWorkSourceResolver.ResolutionScope(
+                            equipmentId, java.util.Set.of()));
             shutdown.setScopeVersion(2L);
         }
     }
@@ -218,7 +222,8 @@ class PlannedShutdownWorkItemServiceTest {
         UUID sourceId = UUID.randomUUID();
         when(canonicalWorkSourceResolver.resolve(
                 com.toir.enums.RepairCampaignWorkItemSourceType.REPAIR_REQUEST,
-                sourceId, equipmentId, java.util.Set.of()))
+                sourceId, new com.toir.service.repair.CanonicalWorkSourceResolver.ResolutionScope(
+                        equipmentId, java.util.Set.of())))
                 .thenThrow(RestException.notFound("Repair request not found: " + sourceId));
 
         assertThatThrownBy(() -> service.addWorkItem(shutdownId,

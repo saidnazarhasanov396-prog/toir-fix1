@@ -2,6 +2,7 @@ package com.toir.service.repair;
 
 import com.toir.entity.inspection.InspectionCheckpoint;
 import com.toir.enums.RepairCampaignWorkItemSourceType;
+import com.toir.enums.EquipmentStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WorkOrderRepository;
@@ -33,31 +34,36 @@ public class CanonicalWorkSourceResolver {
 
     public record CanonicalWorkSource(UUID sourceId, UUID equipmentId, String title) { }
 
-    private record ScopedSource(CanonicalWorkSource source, UUID sourceDepartmentId) { }
-
-    @Transactional(readOnly = true)
-    public CanonicalWorkSource resolve(RepairCampaignWorkItemSourceType type, UUID sourceId) {
-        return resolveInternal(type, sourceId, null).source();
+    public record ResolutionScope(UUID expectedEquipmentId, Set<UUID> campaignDepartmentIds) {
+        public ResolutionScope {
+            if (expectedEquipmentId == null) throw RestException.badRequest("CAMPAIGN_WORK_SOURCE_EQUIPMENT_REQUIRED");
+            campaignDepartmentIds = campaignDepartmentIds == null ? Set.of() : Set.copyOf(campaignDepartmentIds);
+        }
     }
+
+    private record ScopedSource(CanonicalWorkSource source, UUID sourceDepartmentId) { }
 
     @Transactional(readOnly = true)
     public CanonicalWorkSource resolve(
             RepairCampaignWorkItemSourceType type,
             UUID sourceId,
-            UUID expectedEquipmentId,
-            Set<UUID> campaignDepartmentIds
+            ResolutionScope scope
     ) {
-        ScopedSource scoped = resolveInternal(type, sourceId, expectedEquipmentId);
+        if (scope == null) throw RestException.badRequest("CAMPAIGN_WORK_SOURCE_SCOPE_REQUIRED");
+        ScopedSource scoped = resolveInternal(type, sourceId, scope.expectedEquipmentId());
         CanonicalWorkSource source = scoped.source();
-        if (!Objects.equals(source.equipmentId(), expectedEquipmentId)) {
+        if (!Objects.equals(source.equipmentId(), scope.expectedEquipmentId())) {
             throw RestException.badRequest("CAMPAIGN_WORK_SOURCE_EQUIPMENT_MISMATCH");
         }
         var equipment = equipmentRepository.findByIdAndIsDeletedFalse(source.equipmentId())
                 .orElseThrow(() -> RestException.notFound("Campaign work item equipment not found: " + source.equipmentId()));
-        if (campaignDepartmentIds != null && !campaignDepartmentIds.isEmpty()) {
-            if (!campaignDepartmentIds.contains(equipment.getDepartmentId())
+        if (equipment.getStatus() == EquipmentStatus.DECOMMISSIONED) {
+            throw RestException.badRequest("CAMPAIGN_WORK_SOURCE_EQUIPMENT_INACTIVE");
+        }
+        if (!scope.campaignDepartmentIds().isEmpty()) {
+            if (!scope.campaignDepartmentIds().contains(equipment.getDepartmentId())
                     || (scoped.sourceDepartmentId() != null
-                    && !campaignDepartmentIds.contains(scoped.sourceDepartmentId()))) {
+                    && !scope.campaignDepartmentIds().contains(scoped.sourceDepartmentId()))) {
                 throw RestException.badRequest("CAMPAIGN_WORK_SOURCE_FOREIGN_DEPARTMENT");
             }
         }
