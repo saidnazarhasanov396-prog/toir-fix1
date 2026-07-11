@@ -68,6 +68,10 @@ public class ApprovalScopeService {
         if (scopeAccessService.isScopeAdmin()) {
             return true;
         }
+        if (effectiveTargetType(approval) == ApprovalTargetType.PLANNED_SHUTDOWN
+                && !canAccessLinkedDocumentScope(effectiveTargetType(approval), effectiveTargetId(approval))) {
+            return false;
+        }
         return isRequester(approval)
                 || isCurrentPendingApprover(approval)
                 || canAccessLinkedDocumentScope(effectiveTargetType(approval), effectiveTargetId(approval));
@@ -97,6 +101,10 @@ public class ApprovalScopeService {
     }
 
     public void assertCanDecideApproval(ApprovalRequest approval, ApprovalStep currentStep) {
+        assertCanDecideApproval(approval, currentStep, null);
+    }
+
+    public void assertCanDecideApproval(ApprovalRequest approval, ApprovalStep currentStep, UUID delegatedForId) {
         if (approval == null
                 || approval.getStatus() != ApprovalStatus.PENDING
                 || currentStep == null
@@ -104,7 +112,18 @@ public class ApprovalScopeService {
                 || currentStep.getStepNumber() != approval.getCurrentStep()) {
             throw forbidden();
         }
+        if (!scopeAccessService.isScopeAdmin()
+                && effectiveTargetType(approval) == ApprovalTargetType.PLANNED_SHUTDOWN
+                && !canAccessLinkedDocumentScope(effectiveTargetType(approval), effectiveTargetId(approval))) {
+            throw forbidden();
+        }
         assertPlannedShutdownSeparationOfDuty(approval, currentStep);
+        if (delegatedForId != null) {
+            if (!Objects.equals(currentStep.getApproverId(), delegatedForId)) {
+                throw forbidden();
+            }
+            return;
+        }
         if (scopeAccessService.isScopeAdmin() && currentStep.getApproverId() != null) {
             return;
         }

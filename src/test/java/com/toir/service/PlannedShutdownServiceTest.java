@@ -591,6 +591,51 @@ class PlannedShutdownServiceTest {
     }
 
     @Test
+    void updateCannotTransferShutdownToUnauthorizedTargetDepartment() {
+        UUID id = UUID.randomUUID(); UUID sourceDepartment = UUID.randomUUID();
+        UUID targetDepartment = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, sourceDepartment, 4L, PlannedShutdownStatus.DRAFT);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        doAnswer(invocation -> {
+            if (targetDepartment.equals(invocation.getArgument(0))) {
+                throw new org.springframework.security.access.AccessDeniedException("target scope");
+            }
+            return null;
+        }).when(scopeAccessService).assertCanAccessDepartment(any());
+
+        assertThatThrownBy(() -> service.update(id, new PlannedShutdownUpdateRequest(4L, "PS-TEST", "Annual",
+                "PLANNED", targetDepartment, employeeId, shutdown.getStartAt(), shutdown.getEndAt(),
+                "Maintenance", null, null, null, null)))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        verifyNoInteractions(departmentRepository, employeeRepository, equipmentRepository);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateCannotTransferToUnauthorizedDepartmentEvenWhenAssetsWouldBeCompatible() {
+        UUID id = UUID.randomUUID(); UUID sourceDepartment = UUID.randomUUID();
+        UUID targetDepartment = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, sourceDepartment, 4L, PlannedShutdownStatus.DRAFT);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        doAnswer(invocation -> {
+            if (targetDepartment.equals(invocation.getArgument(0))) {
+                throw new org.springframework.security.access.AccessDeniedException("target scope");
+            }
+            return null;
+        }).when(scopeAccessService).assertCanAccessDepartment(any());
+        var compatible = asset(id, UUID.randomUUID(), PlannedShutdownAssetDisposition.STOPPED, 0);
+        lenient().when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(compatible));
+
+        assertThatThrownBy(() -> service.update(id, new PlannedShutdownUpdateRequest(4L, "PS-TEST", "Annual",
+                "PLANNED", targetDepartment, employeeId, shutdown.getStartAt(), shutdown.getEndAt(),
+                "Maintenance", null, null, null, null)))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        verify(assetRepository, never()).findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id);
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void updateRejectsDepartmentChangeThatConflictsWithExistingScope() {
         UUID id = UUID.randomUUID(); UUID oldDepartmentId = UUID.randomUUID(); UUID newDepartmentId = UUID.randomUUID();
         UUID employeeId = UUID.randomUUID(); UUID equipmentId = UUID.randomUUID();

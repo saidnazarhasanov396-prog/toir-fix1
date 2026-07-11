@@ -18,6 +18,9 @@ import java.util.UUID;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @WebMvcTest(controllers = PlannedShutdownController.class)
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtAuthenticationEntryPoint.class,
@@ -118,6 +121,17 @@ class RbacPlannedShutdownReadinessSecurityTest {
     void updatePermissionAloneCannotReadCanonicalWorkItems() throws Exception {
         mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/work-items", UUID.randomUUID()))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_PREPARE)
+    void operationalPermissionWithoutExtendCannotCreateExtensionHistory() throws Exception {
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/extend", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content("{\"version\":7,\"newEndAt\":\"2026-08-05T00:00:00Z\","
+                                + "\"reason\":\"emergency\"}"))
+                .andExpect(status().isForbidden());
+        verify(service, never()).extend(any(), any());
     }
 
     private org.springframework.test.web.servlet.ResultActions performComplete() throws Exception {

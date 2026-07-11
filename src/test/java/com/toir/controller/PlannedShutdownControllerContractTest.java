@@ -298,6 +298,24 @@ class PlannedShutdownControllerContractTest {
                 .andExpect(jsonPath("$.blockers[0].code").value("EXTENSION_REASON_REQUIRED"));
     }
 
+    @Test
+    void startupEvidenceBlockerMapsItsActualEntityAndCurrentVersion() throws Exception {
+        UUID id = UUID.randomUUID(); UUID testId = UUID.randomUUID();
+        when(service.startStartup(eq(id), any())).thenThrow(new com.toir.exception.PlannedShutdownBlockerException(
+                org.springframework.http.HttpStatus.CONFLICT, "STARTUP_TEST_FAILED", 12L, List.of(
+                new com.toir.dto.plannedshutdown.PlannedShutdownBlocker(
+                        "STARTUP_TEST_FAILED", "Mandatory startup test failed", "STARTUP_TEST", testId))));
+
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/start-startup", id)
+                        .contentType("application/json")
+                        .content("{\"version\":12,\"reason\":\"start\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.version").value(12))
+                .andExpect(jsonPath("$.blockers[0].code").value("STARTUP_TEST_FAILED"))
+                .andExpect(jsonPath("$.blockers[0].entityType").value("STARTUP_TEST"))
+                .andExpect(jsonPath("$.blockers[0].entityId").value(testId.toString()));
+    }
+
     private static PlannedShutdownDetailResponse detail(UUID id, UUID departmentId, UUID employeeId,
             PlannedShutdownStatus status) {
         return new PlannedShutdownDetailResponse(id, 3L, "PS-1", "Annual", "PLANNED", departmentId, employeeId,

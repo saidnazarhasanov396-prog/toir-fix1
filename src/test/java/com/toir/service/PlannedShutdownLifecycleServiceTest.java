@@ -3,6 +3,7 @@ package com.toir.service;
 import com.toir.dto.plannedshutdown.PlannedShutdownRescheduleRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownExtensionRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownTransitionRequest;
+import com.toir.dto.plannedshutdown.PlannedShutdownBlocker;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.PlannedShutdown;
@@ -228,6 +229,36 @@ class PlannedShutdownLifecycleServiceTest {
     }
 
     @Test
+    void auditedExtensionKeepsBaseApprovalsCurrentForSafeStateAndRepair() {
+        shutdown.setStatus(PlannedShutdownStatus.SHUTDOWN_STARTED);
+        shutdown.setApprovedStartAt(shutdown.getPlannedStartAt());
+        shutdown.setApprovedEndAt(shutdown.getPlannedEndAt());
+        shutdown.setApprovalScopeVersion(shutdown.getScopeVersion());
+        shutdown.setApprovalScopeHash(currentScopeHash());
+        ApprovalRequest approval = approval(actor, UUID.randomUUID(), UUID.randomUUID());
+        when(approvalRequestRepository.findAllByTargetTypeAndTargetIdAndIsDeletedFalse(anyString(), eq(id)))
+                .thenReturn(List.of(approval));
+        Instant extendedEnd = shutdown.getApprovedEndAt().plusSeconds(1800);
+        var proceed = new com.toir.dto.plannedshutdown.PlannedShutdownReadinessAssessment(true, List.of());
+        when(readinessPolicy.evaluateSafeState(any())).thenAnswer(invocation -> {
+            PlannedShutdownReadinessPolicy.Facts facts = invocation.getArgument(0);
+            assertThat(facts.productionApproved()).isTrue();
+            assertThat(facts.hseApproved()).isTrue();
+            assertThat(facts.approvalScopeCurrent()).isTrue();
+            assertThat(facts.approvedEndAt()).isEqualTo(extendedEnd);
+            return proceed;
+        });
+
+        service.extend(id, new PlannedShutdownExtensionRequest(7L, extendedEnd,
+                "production stabilization", "ext-current"));
+        service.confirmSafeState(id, command());
+        service.startRepair(id, command());
+
+        assertThat(shutdown.getLifecycleStatus()).isEqualTo(PlannedShutdownStatus.REPAIR_IN_PROGRESS);
+        verify(readinessPolicy, times(2)).evaluateSafeState(any());
+    }
+
+    @Test
     void cancellationRequiresReasonAndRecordsTerminalTransition() {
         shutdown.setStatus(PlannedShutdownStatus.PREPARATION);
         assertThatThrownBy(() -> service.cancel(id, new PlannedShutdownTransitionRequest(7L, " ", "c-0")))
@@ -322,8 +353,9 @@ class PlannedShutdownLifecycleServiceTest {
         assertThat(service.startStartup(id, command()).status()).isEqualTo(PlannedShutdownStatus.STARTUP);
         assertThat(service.complete(id, command()).status()).isEqualTo(PlannedShutdownStatus.COMPLETED);
         assertThat(service.close(id, command()).status()).isEqualTo(PlannedShutdownStatus.CLOSED);
-        verify(evidenceService, times(3)).requireStartupReady(id);
-        verify(evidenceService, times(2)).productionReturn(id, 3L, 2L);
+        verify(evidenceService, times(3)).startupBlockers(id);
+        verify(evidenceService, times(2)).productionReturnBlockers(id, 3L, 2L);
+        verify(reportService).closureBlockers(id);
         verify(reportService).createSnapshot(shutdown, actor);
         assertThatThrownBy(() -> service.close(id, command())).hasMessageContaining("TRANSITION_NOT_ALLOWED");
     }
@@ -331,14 +363,48 @@ class PlannedShutdownLifecycleServiceTest {
     @Test
     void currentStartupAndProductionEvidenceFailClosed() {
         shutdown.setStatus(PlannedShutdownStatus.TESTING);
-        doThrow(RestException.conflict("STARTUP_TEST_FAILED")).when(evidenceService).requireStartupReady(id);
+        when(evidenceService.startupBlockers(id)).thenReturn(List.of(new PlannedShutdownBlocker(
+                "STARTUP_TEST_FAILED", "failed", "STARTUP_TEST", UUID.randomUUID())));
         assertThatThrownBy(() -> service.startStartup(id, command())).hasMessageContaining("STARTUP_TEST_FAILED");
 
         reset(evidenceService);
         shutdown.setStatus(PlannedShutdownStatus.STARTUP);
-        when(evidenceService.productionReturn(id, 3L, 2L))
-                .thenThrow(RestException.conflict("PRODUCTION_RETURN_MISSING"));
+        when(evidenceService.productionReturnBlockers(id, 3L, 2L)).thenReturn(List.of(new PlannedShutdownBlocker(
+                "PRODUCTION_RETURN_MISSING", "missing", "PLANNED_SHUTDOWN", id)));
         assertThatThrownBy(() -> service.complete(id, command())).hasMessageContaining("PRODUCTION_RETURN_MISSING");
+    }
+
+    @Test
+    void transitionEvidenceFailuresAreTypedVersionedBlockers() {
+        shutdown.setStatus(PlannedShutdownStatus.TESTING);
+        PlannedShutdownBlocker failedTest = new PlannedShutdownBlocker(
+                "STARTUP_TEST_FAILED", "Mandatory test failed", "STARTUP_TEST", UUID.randomUUID());
+        when(evidenceService.startupBlockers(id)).thenReturn(List.of(failedTest));
+
+        assertThatThrownBy(() -> service.startStartup(id, command()))
+                .isInstanceOfSatisfying(com.toir.exception.PlannedShutdownBlockerException.class, ex -> {
+                    assertThat(ex.getVersion()).isEqualTo(7L);
+                    assertThat(ex.getBlockers()).containsExactly(failedTest);
+                });
+
+        reset(evidenceService);
+        shutdown.setStatus(PlannedShutdownStatus.STARTUP);
+        PlannedShutdownBlocker staleReturn = new PlannedShutdownBlocker(
+                "PRODUCTION_RETURN_STALE", "Production return is stale", "PRODUCTION_RETURN", UUID.randomUUID());
+        when(evidenceService.productionReturnBlockers(id, 3L, 2L)).thenReturn(List.of(staleReturn));
+        assertThatThrownBy(() -> service.complete(id, command()))
+                .isInstanceOfSatisfying(com.toir.exception.PlannedShutdownBlockerException.class,
+                        ex -> assertThat(ex.getBlockers()).containsExactly(staleReturn));
+
+        reset(evidenceService, reportService);
+        shutdown.setStatus(PlannedShutdownStatus.COMPLETED);
+        PlannedShutdownBlocker existingSnapshot = new PlannedShutdownBlocker(
+                "CLOSURE_SNAPSHOT_ALREADY_EXISTS", "Snapshot exists", "PLANNED_SHUTDOWN_CLOSURE_SNAPSHOT",
+                UUID.randomUUID());
+        when(reportService.closureBlockers(id)).thenReturn(List.of(existingSnapshot));
+        assertThatThrownBy(() -> service.close(id, command()))
+                .isInstanceOfSatisfying(com.toir.exception.PlannedShutdownBlockerException.class,
+                        ex -> assertThat(ex.getBlockers()).containsExactly(existingSnapshot));
     }
 
     @Test
@@ -351,9 +417,10 @@ class PlannedShutdownLifecycleServiceTest {
 
         var current = new com.toir.dto.plannedshutdown.PlannedShutdownProductionReturnResponse(
                 UUID.randomUUID(), id, 3L, 3L, actor, Instant.now(), "extended window stable");
-        when(evidenceService.productionReturn(id, 3L, 3L))
-                .thenThrow(RestException.conflict("PRODUCTION_RETURN_STALE"))
-                .thenReturn(current);
+        when(evidenceService.productionReturnBlockers(id, 3L, 3L))
+                .thenReturn(List.of(new PlannedShutdownBlocker(
+                        "PRODUCTION_RETURN_STALE", "stale", "PRODUCTION_RETURN", current.id())))
+                .thenReturn(List.of());
 
         assertThatThrownBy(() -> service.complete(id, command()))
                 .hasMessageContaining("PRODUCTION_RETURN_STALE");
@@ -396,7 +463,7 @@ class PlannedShutdownLifecycleServiceTest {
 
         assertThatThrownBy(() -> service.complete(id, command()))
                 .hasMessageContaining("COMPLETION_ISOLATION_UNRELEASED");
-        verify(evidenceService, never()).productionReturn(any(), any(), any());
+        verify(evidenceService, never()).productionReturnBlockers(any(), any(), any());
     }
 
     @Test

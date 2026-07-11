@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.Comparator;
 
 @Service
 @RequiredArgsConstructor
@@ -77,16 +78,29 @@ public class PlannedShutdownEvidenceService {
 
     @Transactional(readOnly = true)
     public void requireStartupReady(UUID shutdownId) {
+        List<PlannedShutdownBlocker> blockers = startupBlockers(shutdownId);
+        if (!blockers.isEmpty()) {
+            throw RestException.conflict(blockers.getFirst().code());
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlannedShutdownBlocker> startupBlockers(UUID shutdownId) {
         List<PlannedShutdownStartupTest> tests = currentTests(shutdownId);
         if (tests.stream().noneMatch(PlannedShutdownStartupTest::isMandatory)) {
-            throw RestException.conflict("STARTUP_TESTS_MISSING");
+            return List.of(new PlannedShutdownBlocker("STARTUP_TESTS_MISSING",
+                    "At least one mandatory startup test is required", "PLANNED_SHUTDOWN", shutdownId));
         }
-        if (tests.stream().anyMatch(test -> test.isMandatory() && test.getStatus() == PlannedShutdownItemStatus.FAILED)) {
-            throw RestException.conflict("STARTUP_TEST_FAILED");
-        }
-        if (tests.stream().anyMatch(test -> test.isMandatory() && test.getStatus() != PlannedShutdownItemStatus.PASSED)) {
-            throw RestException.conflict("STARTUP_TEST_INCOMPLETE");
-        }
+        return tests.stream().filter(PlannedShutdownStartupTest::isMandatory)
+                .filter(test -> test.getStatus() != PlannedShutdownItemStatus.PASSED)
+                .map(test -> test.getStatus() == PlannedShutdownItemStatus.FAILED
+                        ? new PlannedShutdownBlocker("STARTUP_TEST_FAILED", "Mandatory startup test failed",
+                                "STARTUP_TEST", test.getId())
+                        : new PlannedShutdownBlocker("STARTUP_TEST_INCOMPLETE",
+                                "Mandatory startup test is incomplete", "STARTUP_TEST", test.getId()))
+                .sorted(Comparator.comparing(PlannedShutdownBlocker::code)
+                        .thenComparing(blocker -> blocker.entityId() == null ? "" : blocker.entityId().toString()))
+                .toList();
     }
 
     @Transactional
@@ -124,14 +138,32 @@ public class PlannedShutdownEvidenceService {
     @Transactional(readOnly = true)
     public PlannedShutdownProductionReturnResponse productionReturn(UUID shutdownId,
             Long scopeVersion, Long windowVersion) {
+        List<PlannedShutdownBlocker> blockers = productionReturnBlockers(shutdownId, scopeVersion, windowVersion);
+        if (!blockers.isEmpty()) {
+            throw RestException.conflict(blockers.getFirst().code());
+        }
         PlannedShutdownProductionReturn signoff = productionReturnRepository
                 .findByPlannedShutdownIdAndIsDeletedFalse(shutdownId)
-                .orElseThrow(() -> RestException.conflict("PRODUCTION_RETURN_MISSING"));
+                .orElseThrow();
+        return PlannedShutdownProductionReturnResponse.from(signoff);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlannedShutdownBlocker> productionReturnBlockers(UUID shutdownId,
+            Long scopeVersion, Long windowVersion) {
+        var active = productionReturnRepository.findByPlannedShutdownIdAndIsDeletedFalse(shutdownId);
+        if (active.isEmpty()) {
+            return List.of(new PlannedShutdownBlocker("PRODUCTION_RETURN_MISSING",
+                    "Production return sign-off is missing", "PLANNED_SHUTDOWN", shutdownId));
+        }
+        PlannedShutdownProductionReturn signoff = active.get();
         if (!java.util.Objects.equals(signoff.getScopeVersion(), scopeVersion)
                 || !java.util.Objects.equals(signoff.getWindowVersion(), windowVersion)) {
-            throw RestException.conflict("PRODUCTION_RETURN_STALE");
+            return List.of(new PlannedShutdownBlocker("PRODUCTION_RETURN_STALE",
+                    "Production return sign-off does not match current scope and window",
+                    "PRODUCTION_RETURN", signoff.getId()));
         }
-        return PlannedShutdownProductionReturnResponse.from(signoff);
+        return List.of();
     }
 
     private List<PlannedShutdownStartupTest> currentTests(UUID id) {

@@ -118,6 +118,19 @@ class PlannedShutdownReportServiceTest {
     }
 
     @Test
+    void closureBlockerExposesExistingSnapshotIdentity() {
+        PlannedShutdownClosureSnapshot snapshot = new PlannedShutdownClosureSnapshot();
+        snapshot.setId(UUID.randomUUID()); snapshot.setPlannedShutdownId(shutdownId);
+        when(snapshotRepository.findByPlannedShutdownId(shutdownId)).thenReturn(Optional.of(snapshot));
+
+        assertThat(service.closureBlockers(shutdownId)).singleElement().satisfies(blocker -> {
+            assertThat(blocker.code()).isEqualTo("CLOSURE_SNAPSHOT_ALREADY_EXISTS");
+            assertThat(blocker.entityType()).isEqualTo("PLANNED_SHUTDOWN_CLOSURE_SNAPSHOT");
+            assertThat(blocker.entityId()).isEqualTo(snapshot.getId());
+        });
+    }
+
+    @Test
     void closureSnapshotIsSingleAndReadIsIdempotent() {
         PlannedShutdownClosureSnapshot existing = new PlannedShutdownClosureSnapshot();
         existing.setPlannedShutdownId(shutdownId);

@@ -61,6 +61,31 @@ class PlannedShutdownEvidenceServiceTest {
     }
 
     @Test
+    void typedEvidenceBlockersPreserveStableCodesAndEntityIdentity() {
+        PlannedShutdownStartupTest failed = startupTest(true, PlannedShutdownItemStatus.FAILED);
+        failed.setId(UUID.randomUUID());
+        when(testRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdownId))
+                .thenReturn(List.of(failed));
+
+        assertThat(service.startupBlockers(shutdownId))
+                .singleElement().satisfies(blocker -> {
+                    assertThat(blocker.code()).isEqualTo("STARTUP_TEST_FAILED");
+                    assertThat(blocker.entityType()).isEqualTo("STARTUP_TEST");
+                    assertThat(blocker.entityId()).isEqualTo(failed.getId());
+                });
+
+        PlannedShutdownProductionReturn stale = new PlannedShutdownProductionReturn();
+        stale.setId(UUID.randomUUID()); stale.setScopeVersion(2L); stale.setWindowVersion(1L);
+        when(productionReturnRepository.findByPlannedShutdownIdAndIsDeletedFalse(shutdownId))
+                .thenReturn(Optional.of(stale));
+        assertThat(service.productionReturnBlockers(shutdownId, 3L, 1L))
+                .singleElement().satisfies(blocker -> {
+                    assertThat(blocker.code()).isEqualTo("PRODUCTION_RETURN_STALE");
+                    assertThat(blocker.entityId()).isEqualTo(stale.getId());
+                });
+    }
+
+    @Test
     void resultCapturesMeasuredEvidenceAndIndependentPerformerVerifier() {
         UUID testId = UUID.randomUUID();
         PlannedShutdownStartupTest test = startupTest(true, PlannedShutdownItemStatus.PENDING);

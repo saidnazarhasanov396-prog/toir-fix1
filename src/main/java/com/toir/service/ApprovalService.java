@@ -884,6 +884,7 @@ public class ApprovalService implements ApprovalOrchestrator {
             if (!delegateApprover || !canActorActOnStep(current, actorId)) {
                 throw RestException.forbidden("Only designated approver can act on this step");
             }
+            approvalScopeService.assertCanDecideApproval(request, current, current.getApproverId());
             return current.getApproverId();
         }
         if (canActorActOnStep(current, actorId)) {

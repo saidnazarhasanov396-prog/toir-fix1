@@ -177,6 +177,7 @@ public class PlannedShutdownService {
                 PlannedShutdownStatus.READINESS_CHECK).contains(shutdown.getLifecycleStatus())) {
             throw RestException.conflict("METADATA_UPDATE_NOT_ALLOWED:" + shutdown.getLifecycleStatus());
         }
+        scopeAccessService.assertCanAccessDepartment(r.departmentId());
         validateWindow(r.startAt(), r.endAt());
         validateOwnership(r.departmentId(), r.responsibleEmployeeId());
         String code = normalizeCode(r.code());
@@ -742,7 +743,7 @@ public class PlannedShutdownService {
     @Transactional public PlannedShutdownDetailResponse startStartup(UUID id, PlannedShutdownTransitionRequest r) {
         PlannedShutdown shutdown = findLocked(id); requireVersion(shutdown, r.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.STARTUP);
-        evidenceService.requireStartupReady(id);
+        requireEvidence(shutdown, evidenceService.startupBlockers(id));
         return detail(executeTransition(shutdown, PlannedShutdownStatus.STARTUP, requireUserActor(),
                 r.reason(), r.correlationKey(), null));
     }
@@ -751,8 +752,9 @@ public class PlannedShutdownService {
         requireAllowedTransition(shutdown, PlannedShutdownStatus.COMPLETED);
         requireNoActiveWorkOrders(shutdown, "COMPLETION_ACTIVE_WORK_ORDERS");
         requireAllIsolationReleased(shutdown, "COMPLETION_ISOLATION_UNRELEASED");
-        evidenceService.requireStartupReady(id);
-        evidenceService.productionReturn(id, shutdown.getScopeVersion(), shutdown.getWindowVersion());
+        requireEvidence(shutdown, evidenceService.startupBlockers(id));
+        requireEvidence(shutdown, evidenceService.productionReturnBlockers(
+                id, shutdown.getScopeVersion(), shutdown.getWindowVersion()));
         return detail(executeTransition(shutdown, PlannedShutdownStatus.COMPLETED, requireUserActor(),
                 r.reason(), r.correlationKey(), null));
     }
@@ -761,8 +763,10 @@ public class PlannedShutdownService {
         requireAllowedTransition(shutdown, PlannedShutdownStatus.CLOSED);
         requireNoActiveWorkOrders(shutdown, "CLOSE_ACTIVE_WORK_ORDERS");
         requireAllIsolationReleased(shutdown, "CLOSE_ISOLATION_UNRELEASED");
-        evidenceService.requireStartupReady(id);
-        evidenceService.productionReturn(id, shutdown.getScopeVersion(), shutdown.getWindowVersion());
+        requireEvidence(shutdown, evidenceService.startupBlockers(id));
+        requireEvidence(shutdown, evidenceService.productionReturnBlockers(
+                id, shutdown.getScopeVersion(), shutdown.getWindowVersion()));
+        requireEvidence(shutdown, reportService.closureBlockers(id));
         UUID actor = requireUserActor();
         reportService.createSnapshot(shutdown, actor);
         shutdown.setClosureVersion(shutdown.getClosureVersion() + 1);
@@ -1337,6 +1341,14 @@ public class PlannedShutdownService {
             PlannedShutdown shutdown, String code) {
         return new PlannedShutdownBlockerException(status, code, shutdown.getVersion(), List.of(
                 new PlannedShutdownBlocker(code, code, "PLANNED_SHUTDOWN", shutdown.getId())));
+    }
+
+    private static void requireEvidence(PlannedShutdown shutdown, List<PlannedShutdownBlocker> blockers) {
+        if (blockers == null || blockers.isEmpty()) return;
+        String codes = blockers.stream().map(PlannedShutdownBlocker::code).distinct().sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+        throw new PlannedShutdownBlockerException(org.springframework.http.HttpStatus.CONFLICT,
+                codes, shutdown.getVersion(), blockers);
     }
 
     private void persistHistory(PlannedShutdown shutdown, PlannedShutdownStatus from, PlannedShutdownStatus to,

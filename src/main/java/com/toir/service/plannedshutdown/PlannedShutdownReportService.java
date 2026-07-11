@@ -107,6 +107,15 @@ public class PlannedShutdownReportService {
     }
 
     @Transactional(readOnly = true)
+    public List<PlannedShutdownBlocker> closureBlockers(UUID shutdownId) {
+        return snapshotRepository.findByPlannedShutdownId(shutdownId)
+                .map(snapshot -> List.of(new PlannedShutdownBlocker("CLOSURE_SNAPSHOT_ALREADY_EXISTS",
+                        "Closure snapshot already exists", "PLANNED_SHUTDOWN_CLOSURE_SNAPSHOT",
+                        snapshot.getId())))
+                .orElseGet(List::of);
+    }
+
+    @Transactional(readOnly = true)
     public PlannedShutdownClosureReport readSnapshot(UUID shutdownId) {
         PlannedShutdownClosureSnapshot snapshot = snapshotRepository.findByPlannedShutdownId(shutdownId)
                 .orElseThrow(() -> RestException.notFound("Closure snapshot not found"));
