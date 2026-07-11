@@ -7,9 +7,11 @@ import com.toir.entity.*;
 import com.toir.entity.contractors.ContractorWork;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.VehicleDetails;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.Employee;
 import com.toir.entity.users.User;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.entity.warehouse.WarehouseStock;
@@ -22,6 +24,7 @@ import com.toir.enums.ContractorWorkStatus;
 import com.toir.dto.dashboard.DashboardOverview.*;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.DowntimeType;
+import com.toir.enums.EquipmentCategory;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.enums.PprTaskStatus;
@@ -40,6 +43,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.repository.WorkOrderEquipmentTypeCountProjection;
@@ -107,6 +111,8 @@ public class DashboardService {
     private final CounteragentService counteragentService;
     private final MaintenanceDueEventRepository maintenanceDueEventRepository;
     private final UserRepository userRepository;
+    private final EmployeeRepository employeeRepository;
+    private final VehicleDetailsRepository vehicleDetailsRepository;
     private final RepairMaterialUsageRepository repairMaterialUsageRepository;
     private final ScopeAccessService scopeAccessService;
     private final LegacyStockProjectionService legacyStockProjectionService;
@@ -681,20 +687,35 @@ public class DashboardService {
                 .filter(Objects::nonNull)
                 .toList();
 
+        Set<UUID> topBrokenEquipmentIds = topEquipmentByFailures.stream()
+                .map(TopEquipmentByFailures::id)
+                .collect(Collectors.toCollection(HashSet::new));
+        Map<UUID, VehicleDetails> vehicleDetailsByEquipmentId = topBrokenEquipmentIds.isEmpty()
+                ? Map.of()
+                : vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(topBrokenEquipmentIds).stream()
+                .collect(Collectors.toMap(VehicleDetails::getEquipmentId, details -> details, (a, b) -> a));
+        Set<UUID> responsibleEmployeeIds = topEquipmentByFailures.stream()
+                .map(item -> canonicalResponsibleEmployeeId(equipById.get(item.id()), vehicleDetailsByEquipmentId))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
+        Map<UUID, Employee> employeeById = responsibleEmployeeIds.isEmpty()
+                ? Map.of()
+                : employeeRepository.findAllByIdInAndIsDeletedFalse(responsibleEmployeeIds).stream()
+                .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
+
         List<TopBrokenEquipmentResponsible> topBrokenEquipmentResponsibles = topEquipmentByFailures.stream()
                 .map(item -> {
                     Equipment eq = equipById.get(item.id());
                     if (eq == null) return null;
-                    User responsible = eq.getResponsibleId() != null
-                            ? userById.get(eq.getResponsibleId())
-                            : null;
+                    UUID responsibleEmployeeId = canonicalResponsibleEmployeeId(eq, vehicleDetailsByEquipmentId);
+                    Employee responsible = responsibleEmployeeId != null ? employeeById.get(responsibleEmployeeId) : null;
                     return new TopBrokenEquipmentResponsible(
                             eq.getId(),
                             eq.getCode(),
                             eq.getName(),
                             item.failureCount(),
-                            responsible != null ? responsible.getId() : null,
-                            responsible != null ? responsible.getFullName() : null,
+                            responsibleEmployeeId,
+                            responsible != null ? employeeFullName(responsible) : null,
                             responsible != null ? responsible.getPosition() : null,
                             item.latestDetectedAt());
                 })
@@ -1381,6 +1402,31 @@ public class DashboardService {
                         .thenComparing(ProblemDepartment::departmentName))
                 .limit(10)
                 .toList();
+    }
+
+    private UUID canonicalResponsibleEmployeeId(
+            Equipment equipment,
+            Map<UUID, VehicleDetails> vehicleDetailsByEquipmentId
+    ) {
+        if (equipment == null) {
+            return null;
+        }
+        if (equipment.getCategory() == EquipmentCategory.VEHICLE) {
+            VehicleDetails details = vehicleDetailsByEquipmentId.get(equipment.getId());
+            return details != null ? details.getAssignedDriverId() : null;
+        }
+        return equipment.getResponsibleId();
+    }
+
+    private String employeeFullName(Employee employee) {
+        return java.util.stream.Stream.of(
+                        employee.getLastName(),
+                        employee.getFirstName(),
+                        employee.getMiddleName())
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(part -> !part.isBlank())
+                .collect(Collectors.joining(" "));
     }
 
     private double max(List<DepartmentProblemMetrics> metrics, ToDoubleFunction<DepartmentProblemMetrics> value) {
