@@ -24,6 +24,7 @@ import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignDepartment;
 import com.toir.entity.repair.RepairCampaignStage;
+import com.toir.entity.users.Employee;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -48,6 +49,7 @@ import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairCampaignDepartmentRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.service.WorkOrderService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
@@ -97,6 +99,7 @@ public class RepairCampaignService {
     private final MaintenanceBudgetRepository maintenanceBudgetRepository;
     private final BudgetLineRepository budgetLineRepository;
     private final EquipmentRepository equipmentRepository;
+    private final EmployeeRepository employeeRepository;
     private final RepairAcceptanceRepository repairAcceptanceRepository;
     private final WorkOrderService workOrderService;
     private final AuditBuilderService auditBuilderService;
@@ -128,12 +131,17 @@ public class RepairCampaignService {
     public RepairCampaignDto create(RepairCampaignRequest r) {
         CodeGenerationUtils.rejectClientProvidedCode(r.code());
         validateCampaignRequest(r);
+        validateResponsibleEmployee(r.departmentId(), r.responsibleEmployeeId());
         validateMaintenanceBudgetLink(r);
 
         RepairCampaign c = new RepairCampaign();
         c.setCode(nextCode());
         c.setName(r.name());
         c.setDepartmentId(r.departmentId());
+        c.setCampaignType(r.campaignType());
+        c.setResponsibleEmployeeId(r.responsibleEmployeeId());
+        c.setPriority(r.priority());
+        c.setObjective(r.objective());
         c.setScopeType(effectiveScopeType(r.scopeType()));
         c.setEquipmentTypeId(r.equipmentTypeId());
         c.setMaintenanceBudgetId(r.maintenanceBudgetId());
@@ -144,6 +152,8 @@ public class RepairCampaignService {
         c.setCurrencyCode(r.currencyCode());
         c.setScope(r.description());
         c.setNotes(r.notes());
+        c.setStatus(RepairCampaignStatus.DRAFT);
+        c.setClosureVersion(0L);
         replaceParticipantDepartments(c, r.participantDepartments());
 
         RepairCampaign saved = repository.save(c);
@@ -154,17 +164,23 @@ public class RepairCampaignService {
     @Transactional
     public RepairCampaignDto update(UUID id, RepairCampaignRequest r) {
         RepairCampaign c = getLockedOrThrow(id);
+        validateExpectedVersion(c, r.version());
         if (c.getStatus() == RepairCampaignStatus.CLOSED || c.getStatus() == RepairCampaignStatus.CANCELLED) {
             throw RestException.badRequest("Closed/cancelled campaign cannot be updated");
         }
         CodeGenerationUtils.rejectClientProvidedCode(r.code());
         validateCampaignRequest(r);
+        validateResponsibleEmployee(r.departmentId(), r.responsibleEmployeeId());
         validateMaintenanceBudgetLink(r);
         validateExistingStageBudgetLines(c, r.maintenanceBudgetId());
 
         RepairCampaign before = snapshot(c);
         c.setName(r.name());
         c.setDepartmentId(r.departmentId());
+        c.setCampaignType(r.campaignType());
+        c.setResponsibleEmployeeId(r.responsibleEmployeeId());
+        c.setPriority(r.priority());
+        c.setObjective(r.objective());
         c.setScopeType(effectiveScopeType(r.scopeType()));
         c.setEquipmentTypeId(r.equipmentTypeId());
         c.setMaintenanceBudgetId(r.maintenanceBudgetId());
@@ -670,8 +686,8 @@ public class RepairCampaignService {
         if (r.startDate() == null || r.endDate() == null) {
             throw RestException.badRequest("Start date and end date are required");
         }
-        if (!r.endDate().isAfter(r.startDate())) {
-            throw RestException.badRequest("End date must be after start date");
+        if (r.endDate().isBefore(r.startDate())) {
+            throw RestException.badRequest("End date must be on or after start date");
         }
         if (r.totalBudget().compareTo(BigDecimal.ZERO) < 0) {
             throw RestException.badRequest("Total budget must be non-negative");
@@ -694,6 +710,32 @@ public class RepairCampaignService {
         if (scopeType == RepairCampaignScopeType.CROSS_DEPARTMENT
                 && safeList(r.participantDepartments()).isEmpty()) {
             throw RestException.badRequest("At least one participant department is required for CROSS_DEPARTMENT campaigns");
+        }
+    }
+
+    private void validateResponsibleEmployee(UUID departmentId, UUID responsibleEmployeeId) {
+        if (responsibleEmployeeId == null) {
+            return;
+        }
+        if (departmentId == null) {
+            throw RestException.badRequest("Campaign department is required for a responsible employee");
+        }
+        Employee employee = employeeRepository.findByIdAndIsDeletedFalse(responsibleEmployeeId)
+                .orElseThrow(() -> RestException.badRequest(
+                        "Responsible employee not found: " + responsibleEmployeeId));
+        if (!employee.isActive()) {
+            throw RestException.badRequest("Responsible employee must be active");
+        }
+        if (!departmentId.equals(employee.getDepartmentId())) {
+            throw RestException.badRequest("Responsible employee must belong to the campaign department");
+        }
+    }
+
+    private void validateExpectedVersion(RepairCampaign campaign, Long expectedVersion) {
+        if (expectedVersion != null && !Objects.equals(campaign.getVersion(), expectedVersion)) {
+            throw RestException.conflict(
+                    "Repair campaign version conflict: expected=" + expectedVersion
+                            + ", actual=" + campaign.getVersion());
         }
     }
 
@@ -1024,7 +1066,24 @@ public class RepairCampaignService {
                 budget == null ? BigDecimal.ZERO : decimal(budget.getTotalActual()),
                 budget == null ? BigDecimal.ZERO : decimal(budget.getTotalPlanned()).subtract(decimal(budget.getTotalActual())),
                 budget == null || budget.getStatus() == null ? null : budget.getStatus().name(),
-                c.getCurrencyCode()
+                c.getCurrencyCode(),
+                c.getCampaignType(),
+                c.getResponsibleEmployeeId(),
+                c.getPriority(),
+                c.getObjective(),
+                c.getVersion(),
+                c.getApprovalScopeVersion(),
+                c.getApprovalScopeHash(),
+                c.getApprovedAt(),
+                c.getPreparationStartedAt(),
+                c.getStartedAt(),
+                c.getSuspendedAt(),
+                c.getCompletedAt(),
+                c.getClosingStartedAt(),
+                c.getClosedAt(),
+                c.getCancelledAt(),
+                c.getSuspendedFromStatus(),
+                c.getClosureVersion()
         );
     }
 
@@ -1191,6 +1250,10 @@ public class RepairCampaignService {
         copy.setCode(source.getCode());
         copy.setName(source.getName());
         copy.setDepartmentId(source.getDepartmentId());
+        copy.setCampaignType(source.getCampaignType());
+        copy.setResponsibleEmployeeId(source.getResponsibleEmployeeId());
+        copy.setPriority(source.getPriority());
+        copy.setObjective(source.getObjective());
         copy.setScopeType(source.getScopeType());
         copy.setEquipmentTypeId(source.getEquipmentTypeId());
         copy.setMaintenanceBudgetId(source.getMaintenanceBudgetId());
@@ -1202,6 +1265,19 @@ public class RepairCampaignService {
         copy.setCurrencyCode(source.getCurrencyCode());
         copy.setScope(source.getScope());
         copy.setNotes(source.getNotes());
+        copy.setVersion(source.getVersion());
+        copy.setApprovalScopeVersion(source.getApprovalScopeVersion());
+        copy.setApprovalScopeHash(source.getApprovalScopeHash());
+        copy.setApprovedAt(source.getApprovedAt());
+        copy.setPreparationStartedAt(source.getPreparationStartedAt());
+        copy.setStartedAt(source.getStartedAt());
+        copy.setSuspendedAt(source.getSuspendedAt());
+        copy.setCompletedAt(source.getCompletedAt());
+        copy.setClosingStartedAt(source.getClosingStartedAt());
+        copy.setClosedAt(source.getClosedAt());
+        copy.setCancelledAt(source.getCancelledAt());
+        copy.setSuspendedFromStatus(source.getSuspendedFromStatus());
+        copy.setClosureVersion(source.getClosureVersion());
         return copy;
     }
 

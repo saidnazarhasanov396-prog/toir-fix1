@@ -14,9 +14,11 @@ import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignStage;
+import com.toir.entity.users.Employee;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignScopeType;
+import com.toir.enums.RepairCampaignPriority;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
@@ -31,6 +33,7 @@ import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairCampaignDepartmentRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.service.repair.RepairCampaignService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -94,6 +97,9 @@ class RepairCampaignServiceTest {
     private EquipmentRepository equipmentRepository;
 
     @Mock
+    private EmployeeRepository employeeRepository;
+
+    @Mock
     private RepairAcceptanceRepository repairAcceptanceRepository;
 
     @Mock
@@ -104,6 +110,94 @@ class RepairCampaignServiceTest {
 
     @InjectMocks
     private RepairCampaignService service;
+
+    @Test
+    void createRequiresActiveResponsibleEmployeeInCampaignDepartment() {
+        UUID campaignDepartmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        Employee employee = new Employee();
+        employee.setId(employeeId);
+        employee.setDepartmentId(UUID.randomUUID());
+        employee.setActive(true);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+
+        assertThatThrownBy(() -> service.create(taskOneRequest(
+                campaignDepartmentId, employeeId, LocalDate.of(2026, 2, 1))))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("campaign department");
+                });
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsInactiveResponsibleEmployee() {
+        UUID departmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        Employee employee = new Employee();
+        employee.setId(employeeId);
+        employee.setDepartmentId(departmentId);
+        employee.setActive(false);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+
+        assertThatThrownBy(() -> service.create(taskOneRequest(
+                departmentId, employeeId, LocalDate.of(2026, 2, 1))))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("must be active");
+                });
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createStoresLifecycleMetadataAndAllowsSingleDayWindow() {
+        UUID departmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        Employee employee = new Employee();
+        employee.setId(employeeId);
+        employee.setDepartmentId(departmentId);
+        employee.setActive(true);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
+        when(repository.save(any(RepairCampaign.class))).thenAnswer(invocation -> {
+            RepairCampaign campaign = invocation.getArgument(0);
+            campaign.setId(UUID.randomUUID());
+            campaign.setVersion(0L);
+            return campaign;
+        });
+
+        RepairCampaignDto result = service.create(taskOneRequest(
+                departmentId, employeeId, LocalDate.of(2026, 1, 1)));
+
+        assertThat(result.campaignType()).isEqualTo("MAJOR_OVERHAUL");
+        assertThat(result.responsibleEmployeeId()).isEqualTo(employeeId);
+        assertThat(result.priority()).isEqualTo(RepairCampaignPriority.HIGH);
+        assertThat(result.objective()).isEqualTo("Restore design capacity");
+        assertThat(result.version()).isZero();
+        assertThat(result.status()).isEqualTo(RepairCampaignStatus.DRAFT);
+        assertThat(result.closureVersion()).isZero();
+    }
+
+    @Test
+    void updateRejectsStaleOptimisticVersion() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setVersion(4L);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+
+        RepairCampaignRequest request = taskOneRequest(null, null, LocalDate.of(2026, 2, 1));
+
+        assertThatThrownBy(() -> service.update(campaignId, request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).contains("version");
+                });
+
+        verify(repository, never()).save(any());
+    }
 
     @Test
     void createPreservesFourDecimalBudgetAndCurrency() {
@@ -786,6 +880,33 @@ class RepairCampaignServiceTest {
                 });
 
         verify(repository, never()).save(campaign);
+    }
+
+    private RepairCampaignRequest taskOneRequest(
+            UUID departmentId,
+            UUID responsibleEmployeeId,
+            LocalDate endDate
+    ) {
+        return new RepairCampaignRequest(
+                null,
+                "Task 1 campaign",
+                departmentId,
+                LocalDate.of(2026, 1, 1),
+                endDate,
+                new BigDecimal("1000.0000"),
+                RepairCampaignScopeType.CUSTOM,
+                null,
+                List.of(),
+                "Legacy description",
+                null,
+                null,
+                "UZS",
+                "MAJOR_OVERHAUL",
+                responsibleEmployeeId,
+                RepairCampaignPriority.HIGH,
+                "Restore design capacity",
+                3L
+        );
     }
 
     private RepairCampaign campaign(UUID id, UUID maintenanceBudgetId) {
