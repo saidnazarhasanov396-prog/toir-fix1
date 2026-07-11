@@ -6,5 +6,5 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface PlannedShutdownClosureSnapshotRepository extends JpaRepository<PlannedShutdownClosureSnapshot, UUID> {
-    Optional<PlannedShutdownClosureSnapshot> findByPlannedShutdownIdAndIsDeletedFalse(UUID shutdownId);
+    Optional<PlannedShutdownClosureSnapshot> findByPlannedShutdownId(UUID shutdownId);
 }

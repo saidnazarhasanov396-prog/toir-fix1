@@ -19,6 +19,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -59,7 +62,7 @@ class PlannedShutdownReportServiceTest {
         shutdown.setActualShutdownAt(Instant.parse("2026-07-12T01:10:00Z"));
         shutdown.setActualCompletedAt(Instant.parse("2026-07-12T04:40:00Z"));
         lenient().when(snapshotRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
-        lenient().when(snapshotRepository.findByPlannedShutdownIdAndIsDeletedFalse(shutdownId))
+        lenient().when(snapshotRepository.findByPlannedShutdownId(shutdownId))
                 .thenReturn(Optional.empty());
         lenient().when(historyRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOccurredAtAsc(shutdownId))
                 .thenReturn(List.of());
@@ -119,15 +122,56 @@ class PlannedShutdownReportServiceTest {
         PlannedShutdownClosureSnapshot existing = new PlannedShutdownClosureSnapshot();
         existing.setPlannedShutdownId(shutdownId);
         existing.setSnapshotJson("{}");
-        when(snapshotRepository.findByPlannedShutdownIdAndIsDeletedFalse(shutdownId))
+        existing.setSnapshotHash(sha256("{}"));
+        when(snapshotRepository.findByPlannedShutdownId(shutdownId))
                 .thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> service.createSnapshot(shutdown, UUID.randomUUID()))
                 .hasMessageContaining("CLOSURE_SNAPSHOT_ALREADY_EXISTS");
         service.readSnapshot(shutdownId);
         service.readSnapshot(shutdownId);
-        verify(snapshotRepository, times(3)).findByPlannedShutdownIdAndIsDeletedFalse(shutdownId);
+        verify(snapshotRepository, times(3)).findByPlannedShutdownId(shutdownId);
         verify(snapshotRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void deletedSnapshotStillBlocksSecondSnapshot() {
+        PlannedShutdownClosureSnapshot existing = new PlannedShutdownClosureSnapshot();
+        existing.setPlannedShutdownId(shutdownId);
+        existing.setDeleted(true);
+        when(snapshotRepository.findByPlannedShutdownId(shutdownId)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.createSnapshot(shutdown, UUID.randomUUID()))
+                .hasMessageContaining("CLOSURE_SNAPSHOT_ALREADY_EXISTS");
+        verify(snapshotRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void readRejectsStoredJsonWhoseHashDoesNotMatch() {
+        PlannedShutdownClosureSnapshot tampered = new PlannedShutdownClosureSnapshot();
+        tampered.setPlannedShutdownId(shutdownId);
+        tampered.setSnapshotJson("{}");
+        tampered.setSnapshotHash("0".repeat(64));
+        when(snapshotRepository.findByPlannedShutdownId(shutdownId)).thenReturn(Optional.of(tampered));
+
+        assertThatThrownBy(() -> service.readSnapshot(shutdownId))
+                .hasMessageContaining("CLOSURE_SNAPSHOT_INTEGRITY_FAILED");
+    }
+
+    @Test
+    void snapshotEntityIsHibernateImmutableAndColumnsCannotBeUpdated() throws Exception {
+        assertThat(PlannedShutdownClosureSnapshot.class
+                .isAnnotationPresent(org.hibernate.annotations.Immutable.class)).isTrue();
+        for (var field : PlannedShutdownClosureSnapshot.class.getDeclaredFields()) {
+            jakarta.persistence.Column column = field.getAnnotation(jakarta.persistence.Column.class);
+            if (column != null) assertThat(column.updatable()).as(field.getName()).isFalse();
+        }
+        var overrides = PlannedShutdownClosureSnapshot.class
+                .getAnnotation(jakarta.persistence.AttributeOverrides.class);
+        assertThat(overrides).isNotNull();
+        assertThat(overrides.value()).extracting(jakarta.persistence.AttributeOverride::name)
+                .contains("updatedAt", "isDeleted");
+        assertThat(overrides.value()).allMatch(override -> !override.column().updatable());
     }
 
     private PlannedShutdownWorkItem workItem(UUID sourceId) {
@@ -135,5 +179,14 @@ class PlannedShutdownReportServiceTest {
         item.setSourceType(PlannedShutdownWorkItemSourceType.DEFECT);
         item.setSourceId(sourceId);
         return item;
+    }
+
+    private static String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 }

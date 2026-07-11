@@ -325,6 +325,31 @@ class PlannedShutdownLifecycleServiceTest {
     }
 
     @Test
+    void startupExtensionRequiresCurrentReapprovalBeforeCompletion() {
+        shutdown.setStatus(PlannedShutdownStatus.STARTUP);
+        shutdown.setApprovedEndAt(shutdown.getPlannedEndAt());
+        Instant extendedEnd = shutdown.getPlannedEndAt().plusSeconds(1800);
+        service.extend(id, new PlannedShutdownExtensionRequest(7L, extendedEnd, "startup stabilization", "ext-1"));
+        assertThat(shutdown.getWindowVersion()).isEqualTo(3L);
+
+        var current = new com.toir.dto.plannedshutdown.PlannedShutdownProductionReturnResponse(
+                UUID.randomUUID(), id, 3L, 3L, actor, Instant.now(), "extended window stable");
+        when(evidenceService.productionReturn(id, 3L, 3L))
+                .thenThrow(RestException.conflict("PRODUCTION_RETURN_STALE"))
+                .thenReturn(current);
+
+        assertThatThrownBy(() -> service.complete(id, command()))
+                .hasMessageContaining("PRODUCTION_RETURN_STALE");
+
+        var request = new com.toir.dto.plannedshutdown.PlannedShutdownProductionReturnRequest(
+                7L, "extended window stable");
+        when(evidenceService.approveProductionReturn(id, PlannedShutdownStatus.STARTUP, 3L, 3L, request, actor))
+                .thenReturn(current);
+        assertThat(service.approveProductionReturn(id, request).windowVersion()).isEqualTo(3L);
+        assertThat(service.complete(id, command()).status()).isEqualTo(PlannedShutdownStatus.COMPLETED);
+    }
+
+    @Test
     void completionAndCloseReportActiveWorkAndUnreleasedIsolationBeforeTaskSevenEvidence() {
         var point = new com.toir.entity.plannedshutdown.PlannedShutdownIsolationPoint();
         point.setAppliedAt(Instant.now());

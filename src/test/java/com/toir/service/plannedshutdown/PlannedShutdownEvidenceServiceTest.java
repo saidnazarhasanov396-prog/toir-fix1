@@ -9,6 +9,7 @@ import com.toir.enums.PlannedShutdownItemStatus;
 import com.toir.enums.PlannedShutdownStatus;
 import com.toir.repository.plannedshutdown.PlannedShutdownProductionReturnRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownStartupTestRepository;
+import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +21,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,13 +32,14 @@ import static org.mockito.Mockito.*;
 class PlannedShutdownEvidenceServiceTest {
     @Mock PlannedShutdownStartupTestRepository testRepository;
     @Mock PlannedShutdownProductionReturnRepository productionReturnRepository;
+    @Mock AuditBuilderService auditBuilderService;
     PlannedShutdownEvidenceService service;
     UUID shutdownId;
     UUID actor;
 
     @BeforeEach
     void setUp() {
-        service = new PlannedShutdownEvidenceService(testRepository, productionReturnRepository);
+        service = new PlannedShutdownEvidenceService(testRepository, productionReturnRepository, auditBuilderService);
         shutdownId = UUID.randomUUID();
         actor = UUID.randomUUID();
         lenient().when(testRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -95,8 +98,11 @@ class PlannedShutdownEvidenceServiceTest {
         verify(productionReturnRepository).saveAndFlush(argThat(saved -> saved.getApprovedById().equals(actor)
                 && saved.getEvidence().equals("stable pressure and temperature")));
 
+        PlannedShutdownProductionReturn sameFacts = new PlannedShutdownProductionReturn();
+        sameFacts.setScopeVersion(3L);
+        sameFacts.setWindowVersion(2L);
         when(productionReturnRepository.findByPlannedShutdownIdAndIsDeletedFalse(shutdownId))
-                .thenReturn(Optional.of(new PlannedShutdownProductionReturn()));
+                .thenReturn(Optional.of(sameFacts));
         assertThatThrownBy(() -> service.approveProductionReturn(shutdownId, PlannedShutdownStatus.STARTUP,
                 3L, 2L, new PlannedShutdownProductionReturnRequest(7L, "repeat"), actor))
                 .hasMessageContaining("PRODUCTION_RETURN_ALREADY_APPROVED");
@@ -112,6 +118,39 @@ class PlannedShutdownEvidenceServiceTest {
 
         assertThatThrownBy(() -> service.productionReturn(shutdownId, 3L, 4L))
                 .hasMessageContaining("PRODUCTION_RETURN_STALE");
+    }
+
+    @Test
+    void approveExtendCompletionStaleReapprovePreservesOldEvidenceAndAuthorizesCurrentWindow() {
+        AtomicReference<PlannedShutdownProductionReturn> active = new AtomicReference<>();
+        when(productionReturnRepository.findByPlannedShutdownIdAndIsDeletedFalse(shutdownId))
+                .thenAnswer(inv -> Optional.ofNullable(active.get()));
+        when(productionReturnRepository.saveAndFlush(any())).thenAnswer(inv -> {
+            PlannedShutdownProductionReturn saved = inv.getArgument(0);
+            if (saved.isDeleted()) active.compareAndSet(saved, null);
+            else active.set(saved);
+            return saved;
+        });
+
+        service.approveProductionReturn(shutdownId, PlannedShutdownStatus.STARTUP, 3L, 2L,
+                new PlannedShutdownProductionReturnRequest(7L, "window-2 stable"), actor);
+        PlannedShutdownProductionReturn old = active.get();
+        old.setId(UUID.randomUUID());
+        assertThat(service.productionReturn(shutdownId, 3L, 2L).windowVersion()).isEqualTo(2L);
+
+        assertThatThrownBy(() -> service.productionReturn(shutdownId, 3L, 3L))
+                .hasMessageContaining("PRODUCTION_RETURN_STALE");
+
+        var replacement = service.approveProductionReturn(shutdownId, PlannedShutdownStatus.STARTUP, 3L, 3L,
+                new PlannedShutdownProductionReturnRequest(8L, "extended window stable"), actor);
+
+        assertThat(old.isDeleted()).isTrue();
+        assertThat(old.getEvidence()).isEqualTo("window-2 stable");
+        assertThat(replacement.windowVersion()).isEqualTo(3L);
+        assertThat(service.productionReturn(shutdownId, 3L, 3L).evidence()).isEqualTo("extended window stable");
+        verify(productionReturnRepository, times(3)).saveAndFlush(any());
+        verify(auditBuilderService).log(eq("planned_shutdown_production_return"), eq(old.getId().toString()),
+                any(), any(), contains("stale"), any(), any());
     }
 
     @Test

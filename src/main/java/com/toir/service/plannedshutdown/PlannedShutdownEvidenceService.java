@@ -5,9 +5,12 @@ import com.toir.entity.plannedshutdown.PlannedShutdownProductionReturn;
 import com.toir.entity.plannedshutdown.PlannedShutdownStartupTest;
 import com.toir.enums.PlannedShutdownItemStatus;
 import com.toir.enums.PlannedShutdownStatus;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
 import com.toir.exception.RestException;
 import com.toir.repository.plannedshutdown.PlannedShutdownProductionReturnRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownStartupTestRepository;
+import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +27,7 @@ import java.util.UUID;
 public class PlannedShutdownEvidenceService {
     private final PlannedShutdownStartupTestRepository testRepository;
     private final PlannedShutdownProductionReturnRepository productionReturnRepository;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
     public List<PlannedShutdownStartupTestResponse> tests(UUID shutdownId) {
@@ -92,8 +96,20 @@ public class PlannedShutdownEvidenceService {
         if (status != PlannedShutdownStatus.STARTUP) {
             throw RestException.conflict("PRODUCTION_RETURN_NOT_ALLOWED:" + status);
         }
-        if (productionReturnRepository.findByPlannedShutdownIdAndIsDeletedFalse(shutdownId).isPresent()) {
-            throw RestException.conflict("PRODUCTION_RETURN_ALREADY_APPROVED");
+        var active = productionReturnRepository.findByPlannedShutdownIdAndIsDeletedFalse(shutdownId);
+        if (active.isPresent()) {
+            PlannedShutdownProductionReturn previous = active.get();
+            if (java.util.Objects.equals(previous.getScopeVersion(), scopeVersion)
+                    && java.util.Objects.equals(previous.getWindowVersion(), windowVersion)) {
+                throw RestException.conflict("PRODUCTION_RETURN_ALREADY_APPROVED");
+            }
+            ProductionReturnAuditSnapshot before = ProductionReturnAuditSnapshot.from(previous);
+            previous.setDeleted(true);
+            productionReturnRepository.saveAndFlush(previous);
+            String evidenceId = previous.getId() == null ? shutdownId.toString() : previous.getId().toString();
+            auditBuilderService.log("planned_shutdown_production_return", evidenceId, AuditAction.UPDATE,
+                    AuditModule.PLANNED_SHUTDOWN, "Retired stale production return sign-off", before,
+                    ProductionReturnAuditSnapshot.from(previous));
         }
         PlannedShutdownProductionReturn signoff = new PlannedShutdownProductionReturn();
         signoff.setPlannedShutdownId(shutdownId);
@@ -134,4 +150,13 @@ public class PlannedShutdownEvidenceService {
     }
 
     private static String normalize(String value) { return value == null ? null : value.trim(); }
+
+    private record ProductionReturnAuditSnapshot(UUID id, UUID shutdownId, Long scopeVersion,
+            Long windowVersion, UUID approvedById, Instant approvedAt, String evidence, boolean deleted) {
+        static ProductionReturnAuditSnapshot from(PlannedShutdownProductionReturn signoff) {
+            return new ProductionReturnAuditSnapshot(signoff.getId(), signoff.getPlannedShutdownId(),
+                    signoff.getScopeVersion(), signoff.getWindowVersion(), signoff.getApprovedById(),
+                    signoff.getApprovedAt(), signoff.getEvidence(), signoff.isDeleted());
+        }
+    }
 }

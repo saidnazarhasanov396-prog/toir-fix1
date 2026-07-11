@@ -39,7 +39,7 @@ public class PlannedShutdownReportService {
     @Transactional
     public PlannedShutdownClosureReport createSnapshot(PlannedShutdown shutdown, UUID actor) {
         UUID id = shutdown.getId();
-        if (snapshotRepository.findByPlannedShutdownIdAndIsDeletedFalse(id).isPresent()) {
+        if (snapshotRepository.findByPlannedShutdownId(id).isPresent()) {
             throw RestException.conflict("CLOSURE_SNAPSHOT_ALREADY_EXISTS");
         }
         Instant closedAt = Instant.now();
@@ -108,8 +108,12 @@ public class PlannedShutdownReportService {
 
     @Transactional(readOnly = true)
     public PlannedShutdownClosureReport readSnapshot(UUID shutdownId) {
-        String json = snapshotRepository.findByPlannedShutdownIdAndIsDeletedFalse(shutdownId)
-                .orElseThrow(() -> RestException.notFound("Closure snapshot not found")).getSnapshotJson();
+        PlannedShutdownClosureSnapshot snapshot = snapshotRepository.findByPlannedShutdownId(shutdownId)
+                .orElseThrow(() -> RestException.notFound("Closure snapshot not found"));
+        String json = snapshot.getSnapshotJson();
+        if (!validHash(snapshot.getSnapshotHash(), json)) {
+            throw RestException.conflict("CLOSURE_SNAPSHOT_INTEGRITY_FAILED");
+        }
         try { return objectMapper.readValue(json, PlannedShutdownClosureReport.class); }
         catch (JsonProcessingException ex) { throw new IllegalStateException("Invalid closure snapshot", ex); }
     }
@@ -122,6 +126,17 @@ public class PlannedShutdownReportService {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
+    }
+    private static boolean validHash(String storedHash, String json) {
+        if (storedHash == null || json == null) return false;
+        try {
+            byte[] stored = HexFormat.of().parseHex(storedHash);
+            byte[] calculated = MessageDigest.getInstance("SHA-256")
+                    .digest(json.getBytes(StandardCharsets.UTF_8));
+            return MessageDigest.isEqual(stored, calculated);
+        } catch (IllegalArgumentException | java.security.NoSuchAlgorithmException ex) {
+            return false;
+        }
     }
     private static long minutes(Instant start, Instant end) {
         return start == null || end == null ? 0 : Math.max(0, Duration.between(start, end).toMinutes());
