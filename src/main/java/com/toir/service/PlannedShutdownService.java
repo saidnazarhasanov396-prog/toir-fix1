@@ -118,6 +118,7 @@ public class PlannedShutdownService {
         s.setRiskScore(r.riskScore());
         s.setStatus(PlannedShutdownStatus.DRAFT);
         s.setScopeVersion(0L);
+        s.setWindowVersion(1L);
         PlannedShutdown saved = saveRoot(s, code);
         UUID shutdownId = saved.getId();
 
@@ -176,6 +177,8 @@ public class PlannedShutdownService {
         }
         validateExistingAssetDepartments(id, r.departmentId());
         PlannedShutdownAuditSnapshot before = PlannedShutdownAuditSnapshot.from(shutdown);
+        boolean windowChanged = !Objects.equals(shutdown.getPlannedStartAt(), r.startAt())
+                || !Objects.equals(shutdown.getPlannedEndAt(), r.endAt());
         shutdown.setCode(code);
         shutdown.setName(r.name());
         shutdown.setShutdownType(r.shutdownType().trim().toUpperCase(Locale.ROOT));
@@ -191,6 +194,7 @@ public class PlannedShutdownService {
         shutdown.setRiskLevel(normalizeNullable(r.riskLevel()));
         shutdown.setRiskScore(r.riskScore());
         shutdown.setScopeVersion(shutdown.getScopeVersion() + 1);
+        if (windowChanged) bumpWindowVersion(shutdown);
         shutdown.setApprovalScopeVersion(null);
         shutdown.setApprovalScopeHash(null);
         PlannedShutdown saved = saveRoot(shutdown, code);
@@ -774,6 +778,7 @@ public class PlannedShutdownService {
         shutdown.setApprovalScopeHash(null);
         shutdown.setRescheduleReason(reason);
         shutdown.setScopeVersion(shutdown.getScopeVersion() + 1);
+        bumpWindowVersion(shutdown);
         PlannedShutdownStatus from = shutdown.getLifecycleStatus();
         PlannedShutdownStatus target = EnumSet.of(PlannedShutdownStatus.DRAFT, PlannedShutdownStatus.SCOPE_FORMATION)
                 .contains(shutdown.getLifecycleStatus()) ? PlannedShutdownStatus.SCOPE_FORMATION
@@ -803,6 +808,7 @@ public class PlannedShutdownService {
         }
         Window old = window(shutdown); PlannedShutdownStatus current = shutdown.getLifecycleStatus();
         shutdown.setEffectiveExtensionEndAt(request.newEndAt());
+        bumpWindowVersion(shutdown);
         shutdown.setExtensionReason(reason);
         UUID actor = requireUserActor(); Instant now = Instant.now(); PlannedShutdown saved = repository.saveAndFlush(shutdown);
         Window changed = window(saved);
@@ -954,6 +960,10 @@ public class PlannedShutdownService {
     private static java.time.Instant effectiveEnd(PlannedShutdown shutdown) {
         return shutdown.getEffectiveExtensionEndAt() != null
                 ? shutdown.getEffectiveExtensionEndAt() : shutdown.getApprovedEndAt();
+    }
+
+    private static void bumpWindowVersion(PlannedShutdown shutdown) {
+        shutdown.setWindowVersion((shutdown.getWindowVersion() == null ? 1L : shutdown.getWindowVersion()) + 1L);
     }
 
     private boolean isCurrentResponsibleEmployee(PlannedShutdown shutdown) {

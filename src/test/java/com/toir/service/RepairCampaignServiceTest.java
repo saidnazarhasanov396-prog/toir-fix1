@@ -236,7 +236,7 @@ class RepairCampaignServiceTest {
         service.generateWorkOrders(campaignId, generateRequest(stageId), "generation-1");
 
         ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
-        verify(workOrderService).create(requestCaptor.capture());
+        verify(workOrderService).createGenerated(requestCaptor.capture());
         Object generationKey = WorkOrderRequest.class.getMethod("generationKey")
                 .invoke(requestCaptor.getValue());
         assertThat(generationKey).isEqualTo("RC:" + campaignId + ":" + stageId + ":" + equipmentId);
@@ -261,21 +261,21 @@ class RepairCampaignServiceTest {
         order.verify(workOrderRepository).lockGenerationKey(key);
         order.verify(workOrderRepository).findByGenerationKeyAndIsDeletedFalse(key);
         order.verify(workOrderService).findById(existing.getId());
-        verify(workOrderService, never()).create(any());
+        verify(workOrderService, never()).createGenerated(any());
     }
 
     @Test
     void generateWorkOrdersLocksBeforeCanonicalLookupAndCreate() {
         GenerationFixture fixture = generationFixture();
         String key = "RC:" + fixture.campaignId() + ":" + fixture.stageId() + ":" + fixture.equipmentId();
-        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID()));
+        when(workOrderService.createGenerated(any())).thenReturn(workOrderDto(UUID.randomUUID()));
 
         service.generateWorkOrders(fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1");
 
         InOrder order = inOrder(workOrderRepository, workOrderService);
         order.verify(workOrderRepository).lockGenerationKey(key);
         order.verify(workOrderRepository).findByGenerationKeyAndIsDeletedFalse(key);
-        order.verify(workOrderService).create(any());
+        order.verify(workOrderService).createGenerated(any());
     }
 
     @Test
@@ -290,7 +290,7 @@ class RepairCampaignServiceTest {
         second.setDepartmentId(UUID.randomUUID());
         when(equipmentRepository.findAllForMaintenanceRegulations(fixture.campaign().getEquipmentTypeId()))
                 .thenReturn(List.of(second, first));
-        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID()));
+        when(workOrderService.createGenerated(any())).thenReturn(workOrderDto(UUID.randomUUID()));
 
         service.generateWorkOrders(fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1");
 
@@ -312,7 +312,7 @@ class RepairCampaignServiceTest {
         second.setDepartmentId(UUID.randomUUID());
         when(equipmentRepository.findAllForMaintenanceRegulations(fixture.campaign().getEquipmentTypeId()))
                 .thenReturn(List.of(fixture.equipment(), second));
-        when(workOrderService.create(any()))
+        when(workOrderService.createGenerated(any()))
                 .thenReturn(workOrderDto(UUID.randomUUID()))
                 .thenThrow(new IllegalStateException("second create failed"));
 
@@ -321,7 +321,7 @@ class RepairCampaignServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("second create failed");
 
-        verify(workOrderService, org.mockito.Mockito.times(2)).create(any());
+        verify(workOrderService, org.mockito.Mockito.times(2)).createGenerated(any());
     }
 
     @Test

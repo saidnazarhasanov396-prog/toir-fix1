@@ -1,6 +1,7 @@
 package com.toir.service.plannedshutdown;
 
 import com.toir.dto.plannedshutdown.PlannedShutdownReadinessAssessment;
+import com.toir.dto.plannedshutdown.PlannedShutdownBlocker;
 import com.toir.dto.workorder.WorkOrderMaterialReadinessDto;
 import com.toir.entity.PlannedShutdown;
 import com.toir.entity.maintenance.WorkOrder;
@@ -72,6 +73,18 @@ class PlannedShutdownWorkOrderStartPolicyTest {
     }
 
     @Test
+    void deletedOrCancelledShutdownCannotAuthorizeStart() {
+        WorkOrder deleted = flagged();
+        deleted.setPlannedShutdownId(UUID.randomUUID()); deleted.setShutdownWorkItemId(UUID.randomUUID());
+        assertThatThrownBy(() -> policy.assertCanStart(deleted)).hasMessageContaining("PLANNED_SHUTDOWN_INACTIVE");
+
+        WorkOrder cancelled = linked(PlannedShutdownStatus.CANCELLED,
+                Instant.now().minusSeconds(60), Instant.now().plusSeconds(60));
+        assertThatThrownBy(() -> policy.assertCanStart(cancelled))
+                .hasMessageContaining("PLANNED_SHUTDOWN_STATUS_INELIGIBLE:CANCELLED");
+    }
+
+    @Test
     void currentSafeStateEvidenceAndEligibleAssignmentAreRequired() {
         WorkOrder workOrder = flagged();
         UUID shutdownId = UUID.randomUUID();
@@ -90,6 +103,43 @@ class PlannedShutdownWorkOrderStartPolicyTest {
         when(assignment.isCurrentlyEligible(workOrder)).thenReturn(false);
         assertThatThrownBy(() -> policy.assertCanStart(workOrder))
                 .hasMessageContaining("WORK_ORDER_ASSIGNMENT_INELIGIBLE");
+    }
+
+    @Test
+    void outsideEffectiveWindowBlocksBeforeEvidenceEvaluation() {
+        WorkOrder workOrder = linked(PlannedShutdownStatus.SAFE_STATE,
+                Instant.now().minusSeconds(120), Instant.now().minusSeconds(60));
+        assertThatThrownBy(() -> policy.assertCanStart(workOrder))
+                .hasMessageContaining("PLANNED_SHUTDOWN_WINDOW_INACTIVE");
+        verifyNoInteractions(shutdownService, materials, assignments);
+    }
+
+    @Test
+    void staleApprovalsIsolationAndPermitBlockersAreComposed() {
+        WorkOrder workOrder = linked(PlannedShutdownStatus.REPAIR_IN_PROGRESS,
+                Instant.now().minusSeconds(60), Instant.now().plusSeconds(60));
+        when(shutdownService.assessSafeState(workOrder.getPlannedShutdownId(), null)).thenReturn(
+                new PlannedShutdownReadinessAssessment(false, List.of(
+                        new PlannedShutdownBlocker("APPROVAL_SCOPE_STALE", "stale", "PLANNED_SHUTDOWN", workOrder.getPlannedShutdownId()),
+                        new PlannedShutdownBlocker("ISOLATION_NOT_VERIFIED", "missing", "ISOLATION_POINT", UUID.randomUUID()),
+                        new PlannedShutdownBlocker("PERMIT_INACTIVE", "inactive", "PLANNED_SHUTDOWN", workOrder.getPlannedShutdownId()))));
+        assertThatThrownBy(() -> policy.assertCanStart(workOrder))
+                .hasMessageContaining("APPROVAL_SCOPE_STALE")
+                .hasMessageContaining("ISOLATION_NOT_VERIFIED")
+                .hasMessageContaining("PERMIT_INACTIVE");
+    }
+
+    @Test
+    void criticalMaterialDeficitBlocksAfterCurrentShutdownEvidence() {
+        WorkOrder workOrder = linked(PlannedShutdownStatus.SAFE_STATE,
+                Instant.now().minusSeconds(60), Instant.now().plusSeconds(60));
+        when(shutdownService.assessSafeState(workOrder.getPlannedShutdownId(), null))
+                .thenReturn(new PlannedShutdownReadinessAssessment(true, List.of()));
+        when(materials.getReadiness(workOrder.getId())).thenReturn(new WorkOrderMaterialReadinessDto(
+                workOrder.getId(), workOrder.getEquipmentId(), MaterialReadinessStatus.SHORTAGE,
+                true, Instant.now(), List.of()));
+        assertThatThrownBy(() -> policy.assertCanStart(workOrder))
+                .hasMessageContaining("WORK_ORDER_CRITICAL_MATERIAL_DEFICIT");
     }
 
     private static WorkOrder flagged() {
@@ -116,5 +166,16 @@ class PlannedShutdownWorkOrderStartPolicyTest {
         item.setEquipmentId(workOrder.getEquipmentId());
         when(items.findByIdAndPlannedShutdownIdAndIsDeletedFalse(workOrder.getShutdownWorkItemId(), shutdownId))
                 .thenReturn(Optional.of(item));
+    }
+
+    private WorkOrder linked(PlannedShutdownStatus status, Instant start, Instant end) {
+        WorkOrder workOrder = flagged();
+        UUID shutdownId = UUID.randomUUID();
+        workOrder.setPlannedShutdownId(shutdownId);
+        workOrder.setShutdownWorkItemId(UUID.randomUUID());
+        when(shutdowns.findByIdAndIsDeletedFalse(shutdownId))
+                .thenReturn(Optional.of(shutdown(shutdownId, status, start, end)));
+        stubLinkedItem(workOrder, shutdownId);
+        return workOrder;
     }
 }

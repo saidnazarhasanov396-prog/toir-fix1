@@ -80,6 +80,7 @@ class PlannedShutdownLifecycleServiceTest {
         shutdown.setId(id);
         shutdown.setVersion(7L);
         shutdown.setScopeVersion(3L);
+        shutdown.setWindowVersion(2L);
         shutdown.setPlannedStartAt(Instant.parse("2026-07-12T01:00:00Z"));
         shutdown.setPlannedEndAt(Instant.parse("2026-07-12T05:00:00Z"));
         lenient().when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(Optional.of(shutdown));
@@ -135,6 +136,7 @@ class PlannedShutdownLifecycleServiceTest {
 
         assertThat(response.status()).isEqualTo(PlannedShutdownStatus.READINESS_CHECK);
         assertThat(response.scopeVersion()).isEqualTo(4L);
+        assertThat(response.windowVersion()).isEqualTo(3L);
         assertThat(response.approvalScopeVersion()).isNull();
         assertThat(response.approvalScopeHash()).isNull();
         assertThat(response.plannedStartAt()).isEqualTo(newStart);
@@ -207,6 +209,7 @@ class PlannedShutdownLifecycleServiceTest {
 
         assertThat(response.status()).isEqualTo(PlannedShutdownStatus.REPAIR_IN_PROGRESS);
         assertThat(response.effectiveExtensionEndAt()).isEqualTo(extended);
+        assertThat(response.windowVersion()).isEqualTo(3L);
         ArgumentCaptor<PlannedShutdownStatusHistory> history = ArgumentCaptor.forClass(PlannedShutdownStatusHistory.class);
         verify(historyRepository, times(2)).saveAndFlush(history.capture());
         assertThat(history.getAllValues()).extracting(PlannedShutdownStatusHistory::getFromStatus,

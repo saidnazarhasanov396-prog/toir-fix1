@@ -370,7 +370,7 @@ public class RepairCampaignService {
     @Transactional
     public WorkOrderDto createWorkOrder(UUID campaignId, UUID stageId, WorkOrderRequest request) {
         getStageForCampaign(campaignId, stageId);
-        return workOrderService.create(request.withRepairCampaign(campaignId, stageId));
+        return workOrderService.createCampaignLinked(request.withRepairCampaign(campaignId, stageId));
     }
 
     @Transactional
@@ -506,7 +506,8 @@ public class RepairCampaignService {
         if (existing.isPresent()) {
             return workOrderService.findById(existing.get().getId());
         }
-        WorkOrderDto created = workOrderService.create(generatedWorkOrderRequest(campaign, stage, equipment, request));
+        WorkOrderDto created = workOrderService.createGenerated(
+                generatedWorkOrderRequest(campaign, stage, equipment, request));
         workOrderRepository.flush();
         return created;
     }

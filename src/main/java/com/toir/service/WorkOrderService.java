@@ -772,11 +772,47 @@ public class WorkOrderService {
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request) {
-        return create(request, null);
+        return createPublic(request, null);
     }
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request, UUID createdById) {
+        return createPublic(request, createdById);
+    }
+
+    @Transactional
+    public WorkOrderDto createPublic(WorkOrderRequest request, UUID createdById) {
+        assertNoServerOwnedCreateFields(request);
+        return createInternal(request, createdById);
+    }
+
+    @Transactional
+    public WorkOrderDto createGenerated(WorkOrderRequest request) {
+        if (request.generationKey() == null || request.generationKey().isBlank()) {
+            throw RestException.badRequest("Generated work order requires a server generation key");
+        }
+        WorkOrderDto created = createInternal(request, null);
+        repository.flush();
+        return created;
+    }
+
+    @Transactional
+    public WorkOrderDto createCampaignLinked(WorkOrderRequest request) {
+        if (request.repairCampaignId() == null || request.repairCampaignStageId() == null) {
+            throw RestException.badRequest("Campaign-linked work order requires campaign and stage");
+        }
+        return createInternal(request, null);
+    }
+
+    private void assertNoServerOwnedCreateFields(WorkOrderRequest request) {
+        if (request.generationKey() != null || request.plannedShutdownId() != null
+                || request.shutdownWorkItemId() != null || request.repairCampaignId() != null
+                || request.repairCampaignStageId() != null) {
+            throw RestException.badRequest("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED");
+        }
+    }
+
+    private WorkOrderDto createInternal(WorkOrderRequest request, UUID createdById) {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
         }

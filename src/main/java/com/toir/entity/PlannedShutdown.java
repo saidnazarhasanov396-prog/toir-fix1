@@ -98,6 +98,9 @@ public class PlannedShutdown extends BaseEntity {
     @Column(name = "scope_version", nullable = false)
     private Long scopeVersion = 0L;
 
+    @Column(name = "window_version", nullable = false)
+    private Long windowVersion = 1L;
+
     @Column(name = "approval_scope_hash", length = 128)
     private String approvalScopeHash;
 
@@ -165,5 +168,6 @@ public class PlannedShutdown extends BaseEntity {
         if (plannedEndAt == null) {
             plannedEndAt = endAt;
         }
+        if (windowVersion == null || windowVersion < 1) windowVersion = 1L;
     }
 }

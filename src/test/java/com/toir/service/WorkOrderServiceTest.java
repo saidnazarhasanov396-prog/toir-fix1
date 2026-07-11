@@ -168,6 +168,17 @@ class WorkOrderServiceTest {
     @Mock
     com.toir.service.plannedshutdown.PlannedShutdownWorkOrderStartPolicy plannedShutdownStartPolicy;
 
+    @Test
+    void publicCreateRejectsServerOwnedCanonicalFieldsBeforeMutation() {
+        WorkOrderRequest poisoned = request(WorkOrderType.PLANNED, null, null, null)
+                .withGenerationKey("PS:forged")
+                .withPlannedShutdown(UUID.randomUUID(), UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.createPublic(poisoned, null))
+                .hasMessageContaining("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED");
+        verifyNoInteractions(repository);
+    }
+
     @Mock
     WorkOrderRepository repository;
 
@@ -786,7 +797,8 @@ class WorkOrderServiceTest {
         });
         mockSuccessfulCreateDependencies(request);
 
-        WorkOrderDto result = service.create(request);
+        WorkOrderDto result = service.createGenerated(request.withGenerationKey(
+                "PS:" + plannedShutdownId + ":" + shutdownWorkItemId + ":1"));
 
         ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
         verify(repository).save(captor.capture());

@@ -68,6 +68,9 @@ class RbacToirBusinessFlowSecurityTest {
     PlannedShutdownService plannedShutdownService;
 
     @MockBean
+    com.toir.service.plannedshutdown.PlannedShutdownWorkOrderGenerationService plannedShutdownWorkOrderGenerationService;
+
+    @MockBean
     RepairCampaignService repairCampaignService;
 
     @TestConfiguration
@@ -290,7 +293,7 @@ class RbacToirBusinessFlowSecurityTest {
         return new PlannedShutdownDetailResponse(UUID.randomUUID(), 0L, "PS-1", "Annual shutdown", "PLANNED",
                 UUID.randomUUID(), UUID.randomUUID(), Instant.parse("2026-08-01T00:00:00Z"),
                 Instant.parse("2026-08-02T00:00:00Z"), "Maintenance", null, null, null, null,
-                PlannedShutdownStatus.DRAFT, 0L, null, null,
+                PlannedShutdownStatus.DRAFT, 0L, 1L, null, null,
                 null, null, null, null, null, null, null, null, null,
                 null, null, 0L, null, null, List.of(), List.of());
     }
