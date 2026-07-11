@@ -198,9 +198,10 @@ class RbacToirBusinessFlowSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS)
     void campaignWorkOrderGeneratorCanGenerate() throws Exception {
-        when(repairCampaignService.generateWorkOrders(any(), any())).thenReturn(List.of());
+        when(repairCampaignService.generateWorkOrders(any(), any(), any())).thenReturn(List.of());
 
         mockMvc.perform(post("/api/v1/repair-campaigns/{id}/generate-work-orders", UUID.randomUUID())
+                        .header("Idempotency-Key", "security-test-generation")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isCreated());
@@ -266,7 +267,8 @@ class RbacToirBusinessFlowSecurityTest {
                         new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignCancelRequest.class},
                         PermissionConstants.REPAIR_CAMPAIGN_CANCEL),
                 Arguments.of(RepairCampaignController.class, "generateWorkOrders",
-                        new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest.class},
+                        new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest.class,
+                                String.class},
                         PermissionConstants.REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS)
         );
     }

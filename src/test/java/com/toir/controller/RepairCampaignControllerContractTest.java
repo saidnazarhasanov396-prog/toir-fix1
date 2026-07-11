@@ -25,9 +25,12 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -52,6 +55,28 @@ class RepairCampaignControllerContractTest {
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
+    }
+
+    @Test
+    void generateWorkOrdersRequiresIdempotencyKeyAndHandsItToService() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/generate-work-orders", campaignId)
+                        .contentType("application/json")
+                        .content("{\"stageId\":\"" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        when(service.generateWorkOrders(eq(campaignId), org.mockito.ArgumentMatchers.any(), eq("generation-1")))
+                .thenReturn(List.of());
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/generate-work-orders", campaignId)
+                        .header("Idempotency-Key", "generation-1")
+                        .contentType("application/json")
+                        .content("{\"stageId\":\"" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isCreated());
+
+        assertThat(mockingDetails(service).getInvocations())
+                .anySatisfy(invocation -> assertThat(invocation.getArguments())
+                        .containsExactly(campaignId, invocation.getArgument(1), "generation-1"));
     }
 
     @Test

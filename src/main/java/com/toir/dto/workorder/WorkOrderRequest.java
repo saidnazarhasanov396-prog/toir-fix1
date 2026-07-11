@@ -40,7 +40,8 @@ public record WorkOrderRequest(
         UUID repairCampaignStageId,
         UUID budgetLineId,
         Boolean requiresShutdown,
-        Boolean requiresIsolation
+        Boolean requiresIsolation,
+        String generationKey
 ) {
     public WorkOrderRequest {
         requiresShutdown = Boolean.TRUE.equals(requiresShutdown);
@@ -82,7 +83,7 @@ public record WorkOrderRequest(
                 repairRequestId, defectId, defectListId, pprTaskId, counteragentId, performerId, type, workType,
                 warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
                 summary, maintenanceDueEventId, cycleKey, repairActRequired, stoppageActRequired,
-                repairCampaignId, repairCampaignStageId, budgetLineId, null, null);
+                repairCampaignId, repairCampaignStageId, budgetLineId, null, null, null);
     }
 
     public WorkOrderRequest(
@@ -117,7 +118,7 @@ public record WorkOrderRequest(
                 repairRequestId, defectId, defectListId, pprTaskId, counteragentId, performerId, type, workType,
                 warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
                 summary, maintenanceDueEventId, cycleKey, repairActRequired, stoppageActRequired,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     public WorkOrderRequest(
@@ -154,7 +155,7 @@ public record WorkOrderRequest(
                 repairRequestId, defectId, defectListId, pprTaskId, counteragentId, performerId, type, workType,
                 warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
                 summary, maintenanceDueEventId, cycleKey, repairActRequired, stoppageActRequired,
-                repairCampaignId, repairCampaignStageId, null, null, null);
+                repairCampaignId, repairCampaignStageId, null, null, null, null);
     }
 
     public WorkOrderRequest(
@@ -186,7 +187,7 @@ public record WorkOrderRequest(
         this(number, title, equipmentId, equipmentNodeId, locationId, departmentId, workLocationNote,
                 repairRequestId, defectId, defectListId, pprTaskId, counteragentId, performerId, type, workType,
                 warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
-                summary, maintenanceDueEventId, cycleKey, null, null, null, null, null, null, null);
+                summary, maintenanceDueEventId, cycleKey, null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderRequest(
@@ -215,7 +216,7 @@ public record WorkOrderRequest(
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId,
                 null, pprTaskId, counteragentId, performerId, type, workType, warehouseId, replacementEquipmentId, priority,
                 startPlannedAt, endPlannedAt, createdById, summary, maintenanceDueEventId, cycleKey,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderRequest(
@@ -243,7 +244,7 @@ public record WorkOrderRequest(
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
                 counteragentId, null, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
                 endPlannedAt, createdById, summary, maintenanceDueEventId, cycleKey,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderRequest(
@@ -268,7 +269,7 @@ public record WorkOrderRequest(
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
                 counteragentId, null, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
-                endPlannedAt, createdById, summary, null, null, null, null, null, null, null, null, null);
+                endPlannedAt, createdById, summary, null, null, null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderRequest(
@@ -294,7 +295,7 @@ public record WorkOrderRequest(
     ) {
         this(number, title, equipmentId, equipmentNodeId, null, departmentId, null, repairRequestId, defectId, null, pprTaskId,
                 counteragentId, performerId, type, workType, warehouseId, replacementEquipmentId, priority, startPlannedAt,
-                endPlannedAt, createdById, summary, null, null, null, null, null, null, null, null, null);
+                endPlannedAt, createdById, summary, null, null, null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderRequest(String number,
@@ -316,7 +317,7 @@ public record WorkOrderRequest(
                             String summary) {
         this(number, title, equipmentId, null, null, departmentId, null, repairRequestId, defectId, null, pprTaskId, counteragentId, null, type,
                 workType, warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById,
-                summary, null, null, null, null, null, null, null, null, null);
+                summary, null, null, null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderRequest withRepairCampaign(UUID repairCampaignId, UUID repairCampaignStageId) {
@@ -351,7 +352,18 @@ public record WorkOrderRequest(
                 repairCampaignStageId,
                 budgetLineId,
                 requiresShutdown,
-                requiresIsolation
+                requiresIsolation,
+                generationKey
+        );
+    }
+
+    public WorkOrderRequest withGenerationKey(String generationKey) {
+        return new WorkOrderRequest(
+                number, title, equipmentId, equipmentNodeId, locationId, departmentId, workLocationNote,
+                repairRequestId, defectId, defectListId, pprTaskId, counteragentId, performerId, type, workType,
+                warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById, summary,
+                maintenanceDueEventId, cycleKey, repairActRequired, stoppageActRequired, repairCampaignId,
+                repairCampaignStageId, budgetLineId, requiresShutdown, requiresIsolation, generationKey
         );
     }
 }

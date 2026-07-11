@@ -824,6 +824,7 @@ public class WorkOrderService {
         }
         entity.setBudgetLineId(effectiveBudgetLineId);
         entity.setCycleKey(request.cycleKey());
+        entity.setGenerationKey(request.generationKey());
         entity.setCounteragentId(request.counteragentId());
         entity.setPerformer(performer);
         entity.setType(request.type());

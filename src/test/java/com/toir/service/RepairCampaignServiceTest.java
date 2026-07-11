@@ -1,10 +1,13 @@
 package com.toir.service;
 
 import com.toir.dto.repaircampaign.RepairCampaignDto;
+import com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
+import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.Department;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
@@ -32,9 +35,11 @@ import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -93,6 +98,185 @@ class RepairCampaignServiceTest {
 
     @InjectMocks
     private RepairCampaignService service;
+
+    @Test
+    void generateWorkOrdersRejectsDraftCampaign() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+
+        assertThatThrownBy(() -> service.generateWorkOrders(campaignId, generateRequest(), "generation-1"))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).containsIgnoringCase("approved");
+                });
+
+        verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void generateWorkOrdersUsesDeterministicPerEquipmentGenerationKey() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setStatus(RepairCampaignStatus.APPROVED);
+        campaign.setScopeType(RepairCampaignScopeType.EQUIPMENT_TYPE);
+        campaign.setEquipmentTypeId(UUID.randomUUID());
+        RepairCampaignStage stage = new RepairCampaignStage();
+        stage.setId(stageId);
+        stage.setCampaign(campaign);
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setCode("P-1");
+        equipment.setName("Pump");
+        equipment.setDepartmentId(UUID.randomUUID());
+        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
+        when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
+                .thenReturn(List.of(equipment));
+
+        service.generateWorkOrders(campaignId, generateRequest(stageId), "generation-1");
+
+        ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
+        verify(workOrderService).create(requestCaptor.capture());
+        Object generationKey = WorkOrderRequest.class.getMethod("generationKey")
+                .invoke(requestCaptor.getValue());
+        assertThat(generationKey).isEqualTo("RC:" + campaignId + ":" + stageId + ":" + equipmentId);
+    }
+
+    @Test
+    void generateWorkOrdersReturnsExistingCanonicalOrderOnReplay() {
+        GenerationFixture fixture = generationFixture();
+        String key = "RC:" + fixture.campaignId() + ":" + fixture.stageId() + ":" + fixture.equipmentId();
+        WorkOrder existing = new WorkOrder();
+        existing.setId(UUID.randomUUID());
+        existing.setGenerationKey(key);
+        com.toir.dto.workorder.WorkOrderDto existingDto = workOrderDto(existing.getId());
+        when(workOrderRepository.findByGenerationKeyAndIsDeletedFalse(key)).thenReturn(Optional.of(existing));
+        when(workOrderService.findById(existing.getId())).thenReturn(existingDto);
+
+        List<com.toir.dto.workorder.WorkOrderDto> result = service.generateWorkOrders(
+                fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1");
+
+        assertThat(result).hasSize(1);
+        verify(workOrderService).findById(existing.getId());
+        verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void generateWorkOrdersReturnsCanonicalOrderAfterUniqueConstraintRace() {
+        GenerationFixture fixture = generationFixture();
+        String key = "RC:" + fixture.campaignId() + ":" + fixture.stageId() + ":" + fixture.equipmentId();
+        WorkOrder existing = new WorkOrder();
+        existing.setId(UUID.randomUUID());
+        existing.setGenerationKey(key);
+        com.toir.dto.workorder.WorkOrderDto existingDto = workOrderDto(existing.getId());
+        when(workOrderRepository.findByGenerationKeyAndIsDeletedFalse(key))
+                .thenReturn(Optional.empty(), Optional.of(existing));
+        when(workOrderService.create(any())).thenThrow(new DataIntegrityViolationException("generation key race"));
+        when(workOrderService.findById(existing.getId())).thenReturn(existingDto);
+
+        List<com.toir.dto.workorder.WorkOrderDto> result = service.generateWorkOrders(
+                fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1");
+
+        assertThat(result).hasSize(1);
+        verify(workOrderService).findById(existing.getId());
+    }
+
+    @Test
+    void generateWorkOrdersDoesNotReturnPartialSuccessWhenSecondCreateFails() {
+        GenerationFixture fixture = generationFixture();
+        Equipment second = new Equipment();
+        second.setId(UUID.randomUUID());
+        second.setCode("P-2");
+        second.setName("Pump 2");
+        second.setDepartmentId(UUID.randomUUID());
+        when(equipmentRepository.findAllForMaintenanceRegulations(fixture.campaign().getEquipmentTypeId()))
+                .thenReturn(List.of(fixture.equipment(), second));
+        when(workOrderService.create(any()))
+                .thenReturn(workOrderDto(UUID.randomUUID()))
+                .thenThrow(new IllegalStateException("second create failed"));
+
+        assertThatThrownBy(() -> service.generateWorkOrders(
+                fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("second create failed");
+
+        verify(workOrderService, org.mockito.Mockito.times(2)).create(any());
+    }
+
+    @Test
+    void generateWorkOrdersRejectsBlankIdempotencyKey() {
+        UUID campaignId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.generateWorkOrders(campaignId, generateRequest(UUID.randomUUID()), "  "))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("Idempotency-Key");
+                });
+
+        verify(repository, never()).findByIdAndIsDeletedFalse(any());
+        verify(workOrderService, never()).create(any());
+    }
+
+    private RepairCampaignGenerateWorkOrdersRequest generateRequest() {
+        return generateRequest(UUID.randomUUID());
+    }
+
+    private RepairCampaignGenerateWorkOrdersRequest generateRequest(UUID stageId) {
+        return new RepairCampaignGenerateWorkOrdersRequest(
+                stageId,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    private GenerationFixture generationFixture() {
+        UUID campaignId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setStatus(RepairCampaignStatus.APPROVED);
+        campaign.setScopeType(RepairCampaignScopeType.EQUIPMENT_TYPE);
+        campaign.setEquipmentTypeId(UUID.randomUUID());
+        RepairCampaignStage stage = new RepairCampaignStage();
+        stage.setId(stageId);
+        stage.setCampaign(campaign);
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setCode("P-1");
+        equipment.setName("Pump");
+        equipment.setDepartmentId(UUID.randomUUID());
+        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
+        when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
+                .thenReturn(List.of(equipment));
+        return new GenerationFixture(campaignId, stageId, equipmentId, campaign, equipment);
+    }
+
+    private com.toir.dto.workorder.WorkOrderDto workOrderDto(UUID id) {
+        return new com.toir.dto.workorder.WorkOrderDto(
+                id, "WO-1", "Generated", UUID.randomUUID(), UUID.randomUUID(), null, null,
+                null, null, null, null, null, null, WorkOrderStatus.DRAFT,
+                com.toir.enums.WorkOrderType.OVERHAUL, com.toir.enums.WorkType.REPAIR,
+                com.toir.enums.PriorityLevel.MEDIUM, null, null, null, null, null, null, null,
+                null, null, null, null, null, List.of(), null, null, 0, 0
+        );
+    }
+
+    private record GenerationFixture(
+            UUID campaignId,
+            UUID stageId,
+            UUID equipmentId,
+            RepairCampaign campaign,
+            Equipment equipment
+    ) {
+    }
 
     @Test
     void findAllFilteredAppliesFiltersCorrectly() {

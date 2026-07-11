@@ -52,6 +52,7 @@ import com.toir.service.WorkOrderService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,6 +65,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -437,9 +439,16 @@ public class RepairCampaignService {
     }
 
     @Transactional
-    public List<WorkOrderDto> generateWorkOrders(UUID campaignId, RepairCampaignGenerateWorkOrdersRequest request) {
+    public List<WorkOrderDto> generateWorkOrders(
+            UUID campaignId,
+            RepairCampaignGenerateWorkOrdersRequest request,
+            String idempotencyKey
+    ) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw RestException.badRequest("Idempotency-Key header is required");
+        }
         RepairCampaign campaign = getOrThrow(campaignId);
-        assertCampaignAcceptsWorkOrders(campaign);
+        assertCampaignCanGenerateWorkOrders(campaign);
         if (campaign.getScopeType() != RepairCampaignScopeType.EQUIPMENT_TYPE || campaign.getEquipmentTypeId() == null) {
             throw RestException.badRequest("Work-order generation requires EQUIPMENT_TYPE campaign scope");
         }
@@ -453,14 +462,53 @@ public class RepairCampaignService {
                 ? Set.of()
                 : request.equipmentIds().stream().filter(Objects::nonNull).collect(Collectors.toSet());
 
-        return equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId())
+        List<WorkOrderDto> generated = equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId())
                 .stream()
                 .filter(equipment -> departmentId == null
                         || departmentId.equals(coalesce(equipment.getResponsibleDepartmentId(), equipment.getDepartmentId())))
                 .filter(equipment -> selectedEquipmentIds.isEmpty() || selectedEquipmentIds.contains(equipment.getId()))
-                .map(equipment -> generatedWorkOrderRequest(campaign, stage, equipment, request))
-                .map(workOrderService::create)
+                .map(equipment -> createOrFindGeneratedWorkOrder(campaign, stage, equipment, request))
                 .toList();
+        auditBuilderService.log(
+                "repair_campaign",
+                campaignId.toString(),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_CAMPAIGN,
+                "Generated repair campaign work orders",
+                null,
+                Map.of("idempotencyKey", idempotencyKey.trim(), "workOrderCount", generated.size())
+        );
+        return generated;
+    }
+
+    private void assertCampaignCanGenerateWorkOrders(RepairCampaign campaign) {
+        if (!EnumSet.of(RepairCampaignStatus.APPROVED, RepairCampaignStatus.IN_PROGRESS)
+                .contains(campaign.getStatus())) {
+            throw RestException.badRequest("Repair campaign must be approved before generating work orders");
+        }
+    }
+
+    private WorkOrderDto createOrFindGeneratedWorkOrder(
+            RepairCampaign campaign,
+            RepairCampaignStage stage,
+            Equipment equipment,
+            RepairCampaignGenerateWorkOrdersRequest request
+    ) {
+        String key = generationKey(campaign.getId(), stage.getId(), equipment.getId());
+        Optional<WorkOrder> existing = workOrderRepository.findByGenerationKeyAndIsDeletedFalse(key);
+        if (existing.isPresent()) {
+            return workOrderService.findById(existing.get().getId());
+        }
+        try {
+            WorkOrderDto created = workOrderService.create(generatedWorkOrderRequest(campaign, stage, equipment, request));
+            workOrderRepository.flush();
+            return created;
+        } catch (DataIntegrityViolationException race) {
+            return workOrderRepository.findByGenerationKeyAndIsDeletedFalse(key)
+                    .map(WorkOrder::getId)
+                    .map(workOrderService::findById)
+                    .orElseThrow(() -> race);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -591,7 +639,13 @@ public class RepairCampaignService {
                 null,
                 null
         );
-        return workOrderRequest.withRepairCampaign(campaign.getId(), stage.getId());
+        return workOrderRequest
+                .withRepairCampaign(campaign.getId(), stage.getId())
+                .withGenerationKey(generationKey(campaign.getId(), stage.getId(), equipment.getId()));
+    }
+
+    private String generationKey(UUID campaignId, UUID stageId, UUID equipmentId) {
+        return "RC:" + campaignId + ":" + stageId + ":" + equipmentId;
     }
 
     private String generatedTitle(RepairCampaign campaign, Equipment equipment, String template) {

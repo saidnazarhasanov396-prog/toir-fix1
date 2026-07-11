@@ -201,8 +201,12 @@ public class RepairCampaignController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS')")
     public ResponseEntity<List<WorkOrderDto>> generateWorkOrders(
             @PathVariable UUID id,
-            @RequestBody(required = false) RepairCampaignGenerateWorkOrdersRequest request
+            @RequestBody(required = false) RepairCampaignGenerateWorkOrdersRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.generateWorkOrders(id, request));
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw RestException.badRequest("Idempotency-Key header is required");
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.generateWorkOrders(id, request, idempotencyKey));
     }
 }

@@ -1,5 +1,6 @@
 package com.toir.migration;
 
+import com.toir.repository.WorkOrderRepository;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -21,5 +22,13 @@ class ToirStage1IntegrityMigrationContractTest {
         assertThat(sql).contains("uq_work_orders_active_generation_key");
         assertThat(sql).contains("numeric(19,4)");
         assertThat(sql).contains("currency_code varchar(3) not null default 'uzs'");
+    }
+
+    @Test
+    void workOrderRepositoryCanResolveCanonicalGenerationKey() throws Exception {
+        assertThat(WorkOrderRepository.class.getMethod(
+                "findByGenerationKeyAndIsDeletedFalse",
+                String.class
+        ).getReturnType()).isEqualTo(java.util.Optional.class);
     }
 }
