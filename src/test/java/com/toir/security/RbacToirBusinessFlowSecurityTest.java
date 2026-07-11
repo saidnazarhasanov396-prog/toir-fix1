@@ -10,6 +10,9 @@ import com.toir.enums.ApprovalTargetType;
 import com.toir.service.PlannedShutdownService;
 import com.toir.service.repair.RepairCampaignService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -18,12 +21,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -78,6 +83,22 @@ class RbacToirBusinessFlowSecurityTest {
                 .contains("PLANNED_SHUTDOWN_APPROVE", "REPAIR_CAMPAIGN_APPROVE");
         assertThat(ApprovalSecurityExpressions.CAN_REJECT)
                 .contains("PLANNED_SHUTDOWN_APPROVE", "REPAIR_CAMPAIGN_APPROVE");
+    }
+
+    @ParameterizedTest
+    @MethodSource("operationAnnotations")
+    void controllerOperationsDeclareExactBusinessFlowPermission(
+            Class<?> controller,
+            String methodName,
+            Class<?>[] parameterTypes,
+            String permission
+    ) throws Exception {
+        PreAuthorize annotation = controller.getDeclaredMethod(methodName, parameterTypes)
+                .getAnnotation(PreAuthorize.class);
+
+        assertThat(annotation).isNotNull();
+        assertThat(annotation.value())
+                .contains("hasAuthority('SYSTEM_ADMIN')", "hasAuthority('*')", "hasAuthority('" + permission + "')");
     }
 
     @Test
@@ -218,5 +239,35 @@ class RbacToirBusinessFlowSecurityTest {
         return new RepairCampaignDto(UUID.randomUUID(), "RC-1", "Annual repair", UUID.randomUUID(),
                 "Maintenance", RepairCampaignStatus.DRAFT, LocalDate.of(2026, 8, 1),
                 LocalDate.of(2026, 8, 10), 1000, 0, 1000, null, null, List.of());
+    }
+
+    private static Stream<Arguments> operationAnnotations() {
+        return Stream.of(
+                Arguments.of(PlannedShutdownController.class, "list",
+                        new Class<?>[]{UUID.class, PlanStatus.class, String.class, int.class, int.class, String.class, String.class},
+                        PermissionConstants.PLANNED_SHUTDOWN_READ),
+                Arguments.of(PlannedShutdownController.class, "create",
+                        new Class<?>[]{PlannedShutdownDto.class}, PermissionConstants.PLANNED_SHUTDOWN_CREATE),
+                Arguments.of(RepairCampaignController.class, "get",
+                        new Class<?>[]{UUID.class}, PermissionConstants.REPAIR_CAMPAIGN_READ),
+                Arguments.of(RepairCampaignController.class, "create",
+                        new Class<?>[]{com.toir.dto.repaircampaign.RepairCampaignRequest.class},
+                        PermissionConstants.REPAIR_CAMPAIGN_CREATE),
+                Arguments.of(RepairCampaignController.class, "update",
+                        new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignRequest.class},
+                        PermissionConstants.REPAIR_CAMPAIGN_UPDATE),
+                Arguments.of(RepairCampaignController.class, "start",
+                        new Class<?>[]{UUID.class}, PermissionConstants.REPAIR_CAMPAIGN_START),
+                Arguments.of(RepairCampaignController.class, "complete",
+                        new Class<?>[]{UUID.class}, PermissionConstants.REPAIR_CAMPAIGN_COMPLETE),
+                Arguments.of(RepairCampaignController.class, "close",
+                        new Class<?>[]{UUID.class}, PermissionConstants.REPAIR_CAMPAIGN_CLOSE),
+                Arguments.of(RepairCampaignController.class, "cancel",
+                        new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignCancelRequest.class},
+                        PermissionConstants.REPAIR_CAMPAIGN_CANCEL),
+                Arguments.of(RepairCampaignController.class, "generateWorkOrders",
+                        new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest.class},
+                        PermissionConstants.REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS)
+        );
     }
 }

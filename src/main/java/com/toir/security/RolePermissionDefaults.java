@@ -1,5 +1,6 @@
 package com.toir.security;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +9,32 @@ public final class RolePermissionDefaults {
 
     private RolePermissionDefaults() {
     }
+
+    private static final List<String> FULL_TOIR_BUSINESS_FLOW_PERMISSIONS = List.of(
+            PermissionConstants.PLANNED_SHUTDOWN_READ,
+            PermissionConstants.PLANNED_SHUTDOWN_CREATE,
+            PermissionConstants.PLANNED_SHUTDOWN_UPDATE,
+            PermissionConstants.PLANNED_SHUTDOWN_APPROVE,
+            PermissionConstants.PLANNED_SHUTDOWN_PREPARE,
+            PermissionConstants.PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE,
+            PermissionConstants.PLANNED_SHUTDOWN_START_REPAIR,
+            PermissionConstants.PLANNED_SHUTDOWN_TEST,
+            PermissionConstants.PLANNED_SHUTDOWN_STARTUP,
+            PermissionConstants.PLANNED_SHUTDOWN_CLOSE,
+            PermissionConstants.PLANNED_SHUTDOWN_CANCEL,
+            PermissionConstants.PLANNED_SHUTDOWN_RESCHEDULE,
+            PermissionConstants.PLANNED_SHUTDOWN_EXTEND,
+            PermissionConstants.REPAIR_CAMPAIGN_READ,
+            PermissionConstants.REPAIR_CAMPAIGN_CREATE,
+            PermissionConstants.REPAIR_CAMPAIGN_UPDATE,
+            PermissionConstants.REPAIR_CAMPAIGN_APPROVE,
+            PermissionConstants.REPAIR_CAMPAIGN_START,
+            PermissionConstants.REPAIR_CAMPAIGN_SUSPEND,
+            PermissionConstants.REPAIR_CAMPAIGN_COMPLETE,
+            PermissionConstants.REPAIR_CAMPAIGN_CLOSE,
+            PermissionConstants.REPAIR_CAMPAIGN_CANCEL,
+            PermissionConstants.REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS
+    );
 
     private static final Map<String, List<String>> DEFAULTS = buildDefaults();
 
@@ -42,7 +69,14 @@ public final class RolePermissionDefaults {
                 PermissionConstants.WORK_ORDER_READ,
                 PermissionConstants.REPAIR_REQUEST_READ,
                 PermissionConstants.TIMESHEET_CREATE,
-                PermissionConstants.KNOWLEDGE_READ
+                PermissionConstants.KNOWLEDGE_READ,
+                PermissionConstants.PLANNED_SHUTDOWN_READ,
+                PermissionConstants.PLANNED_SHUTDOWN_CREATE,
+                PermissionConstants.PLANNED_SHUTDOWN_UPDATE,
+                PermissionConstants.REPAIR_CAMPAIGN_READ,
+                PermissionConstants.REPAIR_CAMPAIGN_CREATE,
+                PermissionConstants.REPAIR_CAMPAIGN_UPDATE,
+                PermissionConstants.REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS
         ));
         defaults.put("RELIABILITY_ENGINEER", List.of(
                 PermissionConstants.READ_LEGACY,
@@ -66,7 +100,10 @@ public final class RolePermissionDefaults {
                 PermissionConstants.ANALYTICS_READ,
                 PermissionConstants.ANALYTICS_EXPORT,
                 PermissionConstants.WORK_ORDER_READ,
-                PermissionConstants.REPAIR_REQUEST_READ
+                PermissionConstants.REPAIR_REQUEST_READ,
+                PermissionConstants.PLANNED_SHUTDOWN_READ,
+                PermissionConstants.REPAIR_CAMPAIGN_READ,
+                PermissionConstants.REPAIR_CAMPAIGN_UPDATE
         ));
         defaults.put("FOREMAN", List.of(
                 PermissionConstants.READ_LEGACY,
@@ -132,7 +169,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.NOTIFICATION_READ,
                 PermissionConstants.NOTIFICATION_MARK_READ
         ));
-        defaults.put("TECHNICAL_DIRECTOR", List.of(
+        defaults.put("TECHNICAL_DIRECTOR", withAdditionalPermissions(List.of(
                 PermissionConstants.READ_LEGACY,
                 PermissionConstants.EQUIPMENT_READ,
                 PermissionConstants.EQUIPMENT_CREATE,
@@ -199,7 +236,7 @@ public final class RolePermissionDefaults {
                 PermissionConstants.NOTIFICATION_READ,
                 PermissionConstants.NOTIFICATION_MARK_READ,
                 PermissionConstants.NOTIFICATION_ADMIN
-        ));
+        ), FULL_TOIR_BUSINESS_FLOW_PERMISSIONS));
         List<String> chiefMaintenancePermissions = List.of(
                 PermissionConstants.READ_LEGACY,
                 PermissionConstants.REPAIR_REQUEST_READ,
@@ -246,7 +283,10 @@ public final class RolePermissionDefaults {
                 PermissionConstants.NOTIFICATION_READ,
                 PermissionConstants.NOTIFICATION_MARK_READ
         );
-        defaults.put("CHIEF_MECHANIC", chiefMaintenancePermissions);
+        defaults.put("CHIEF_MECHANIC", withAdditionalPermissions(
+                chiefMaintenancePermissions,
+                FULL_TOIR_BUSINESS_FLOW_PERMISSIONS
+        ));
         defaults.put("CHIEF_POWER_ENGINEER", chiefMaintenancePermissions);
         defaults.put("CHIEF_INSTRUMENT_ENGINEER", chiefMaintenancePermissions);
         List<String> shopLeadPermissions = List.of(
@@ -446,5 +486,11 @@ public final class RolePermissionDefaults {
         );
         defaults.put("MECHANIC", performerPermissions);
         return Map.copyOf(defaults);
+    }
+
+    private static List<String> withAdditionalPermissions(List<String> base, List<String> additional) {
+        List<String> merged = new ArrayList<>(base);
+        merged.addAll(additional);
+        return List.copyOf(merged);
     }
 }
