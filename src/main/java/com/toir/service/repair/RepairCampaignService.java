@@ -192,7 +192,7 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignDto finalizeApprovalFromApprovalRequest(UUID id) {
-        RepairCampaign c = getOrThrow(id);
+        RepairCampaign c = getLockedOrThrow(id);
         if (c.getStatus() != RepairCampaignStatus.DRAFT) {
             throw RestException.badRequest("Only DRAFT campaigns can be approved");
         }
