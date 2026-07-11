@@ -821,7 +821,6 @@ public class EquipmentService {
         validateWarrantyAttachmentForUpdate(request);
         validateCounteragentReferencesForUpdate(entity, request);
         validateMxik(request.mxikId());
-        validateResponsibleEmployee(request.responsibleId());
 
         applyForUpdate(entity, request);
         if (location != null) {
@@ -2036,6 +2035,7 @@ public class EquipmentService {
     }
 
     private void applyForUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        applyResponsibleUpdate(entity, request);
         entity.setName(request.name() != null ? request.name() : entity.getName());
         entity.setInventoryNumber(request.inventoryNumber()  != null ? request.inventoryNumber() : entity.getInventoryNumber());
         entity.setTechnicalNumber(request.technicalNumber() != null ? request.technicalNumber() : entity.getTechnicalNumber());
@@ -2048,7 +2048,6 @@ public class EquipmentService {
         entity.setLocationId(request.locationId() != null ? request.locationId() : entity.getLocationId());
         entity.setParentId(request.parentId());
         entity.setCriticalityClassId(request.criticalityClassId()  != null ? request.criticalityClassId() : entity.getCriticalityClassId());
-        entity.setResponsibleId(request.responsibleId() != null ? request.responsibleId() : entity.getResponsibleId());
         entity.setCounteragentId(request.counteragentId() != null ? request.counteragentId() : entity.getCounteragentId());
         entity.setManufacturer(request.manufacturer() != null ? request.manufacturer() : entity.getManufacturer());
         entity.setCategory(request.category() != null ? request.category() : entity.getCategory());
@@ -2088,6 +2087,18 @@ public class EquipmentService {
             ));
         }
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
+    }
+
+    private void applyResponsibleUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        if (Boolean.TRUE.equals(request.clearResponsible())) {
+            if (request.responsibleId() != null) {
+                throw RestException.badRequest("responsibleId must be omitted when clearResponsible is true");
+            }
+            entity.setResponsibleId(null);
+        } else if (request.responsibleId() != null) {
+            validateResponsibleEmployee(request.responsibleId());
+            entity.setResponsibleId(request.responsibleId());
+        }
     }
 
     private boolean hasExpectedLifetimeChange(EquipmentUpdateRequest request) {

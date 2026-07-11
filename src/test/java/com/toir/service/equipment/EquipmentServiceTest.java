@@ -1489,6 +1489,89 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void updateWithoutResponsibleDirectivePreservesExistingEmployee() {
+        Equipment existing = equipment("EQ-RESP-PRESERVE");
+        UUID responsibleId = UUID.randomUUID();
+        existing.setResponsibleId(responsibleId);
+        when(repository.findByIdAndIsDeletedFalse(existing.getId())).thenReturn(Optional.of(existing));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        service.update(existing.getId(), updateRequestWithResponsible(null, null));
+
+        assertThat(existing.getResponsibleId()).isEqualTo(responsibleId);
+        verify(employeeRepository, never()).findByIdAndIsDeletedFalse(any());
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void updateWithClearResponsibleClearsExistingEmployee() {
+        Equipment existing = equipment("EQ-RESP-CLEAR");
+        existing.setResponsibleId(UUID.randomUUID());
+        when(repository.findByIdAndIsDeletedFalse(existing.getId())).thenReturn(Optional.of(existing));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        service.update(existing.getId(), updateRequestWithResponsible(null, true));
+
+        assertThat(existing.getResponsibleId()).isNull();
+        verifyNoInteractions(employeeRepository, userRepository);
+    }
+
+    @Test
+    void updateRejectsResponsibleIdTogetherWithClearDirective() {
+        Equipment existing = equipment("EQ-RESP-CONTRADICTORY");
+        UUID responsibleId = UUID.randomUUID();
+        existing.setResponsibleId(UUID.randomUUID());
+        when(repository.findByIdAndIsDeletedFalse(existing.getId())).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.update(
+                existing.getId(),
+                updateRequestWithResponsible(responsibleId, true)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("responsibleId must be omitted when clearResponsible is true");
+
+        verify(repository, never()).save(any());
+        verifyNoInteractions(employeeRepository, userRepository);
+    }
+
+    @Test
+    void updateAssignsActiveEmployeeWithoutLinkedUser() {
+        Equipment existing = equipment("EQ-RESP-EMPLOYEE-ONLY");
+        UUID responsibleId = UUID.randomUUID();
+        Employee responsible = employee(responsibleId, true);
+        responsible.setUser(null);
+        when(repository.findByIdAndIsDeletedFalse(existing.getId())).thenReturn(Optional.of(existing));
+        when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(responsible));
+        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubEnrichment();
+
+        service.update(existing.getId(), updateRequestWithResponsible(responsibleId, false));
+
+        assertThat(existing.getResponsibleId()).isEqualTo(responsibleId);
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void updateRejectsUserOnlyUuidWithoutUserFallback() {
+        Equipment existing = equipment("EQ-RESP-USER-ONLY");
+        UUID userOnlyId = UUID.randomUUID();
+        when(repository.findByIdAndIsDeletedFalse(existing.getId())).thenReturn(Optional.of(existing));
+        when(employeeRepository.findByIdAndIsDeletedFalse(userOnlyId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.update(
+                existing.getId(),
+                updateRequestWithResponsible(userOnlyId, false)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Responsible employee not found");
+
+        verify(repository, never()).save(any());
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
     void createWithExpectedLifetimeYearsOnlyCalculatesAverageOperatingLifeHours() {
         UUID departmentId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequestWithExpectedLifetime("INV-AVG-1", departmentId, 2, null, null);
@@ -3955,6 +4038,16 @@ class EquipmentServiceTest {
                 null,
                 null,
                 null
+        );
+    }
+
+    private EquipmentUpdateRequest updateRequestWithResponsible(UUID responsibleId, Boolean clearResponsible) {
+        return new EquipmentUpdateRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                responsibleId, clearResponsible,
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null
         );
     }
 
