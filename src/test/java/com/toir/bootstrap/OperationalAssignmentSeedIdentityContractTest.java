@@ -37,6 +37,7 @@ class OperationalAssignmentSeedIdentityContractTest {
                 .contains("responsible_employee.id")
                 .contains("LEFT JOIN LATERAL")
                 .contains("HAVING count(*) = 1")
+                .contains("responsible_id = COALESCE(EXCLUDED.responsible_id, equipment.responsible_id)")
                 .doesNotContain("d.id, u.id");
     }
 
