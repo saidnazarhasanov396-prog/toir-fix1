@@ -1,9 +1,11 @@
 package com.toir.service.file_management;
 
 import com.toir.exception.RestException;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,7 +64,7 @@ class LocalFileResourceResolverTest {
         Files.createDirectories(storageRoot);
         Files.createDirectories(outsideRoot);
         Files.writeString(outsideRoot.resolve("secret.txt"), "secret", StandardCharsets.UTF_8);
-        Files.createSymbolicLink(storageRoot.resolve("external"), outsideRoot);
+        createSymbolicLinkOrSkip(storageRoot.resolve("external"), outsideRoot);
 
         assertThatThrownBy(() -> new LocalFileResourceResolver(storageRoot.toString())
                 .load("uploads/external/secret.txt"))
@@ -80,5 +82,17 @@ class LocalFileResourceResolverTest {
                 .load("uploads/../secret.txt"))
                 .isInstanceOf(RestException.class)
                 .hasMessage("File not found");
+    }
+
+    private static void createSymbolicLinkOrSkip(Path link, Path target) {
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (IOException | UnsupportedOperationException | SecurityException exception) {
+            Assumptions.assumeTrue(
+                    false,
+                    () -> "Symbolic-link creation is unavailable in this test environment: "
+                            + exception.getMessage()
+            );
+        }
     }
 }
