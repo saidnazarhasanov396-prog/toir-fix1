@@ -1,0 +1,20 @@
+package com.toir.enums;
+
+public enum PlannedShutdownStatus {
+    DRAFT,
+    SCOPE_FORMATION,
+    READINESS_CHECK,
+    PENDING_APPROVAL,
+    APPROVED,
+    PREPARATION,
+    SHUTDOWN_STARTED,
+    SAFE_STATE,
+    REPAIR_IN_PROGRESS,
+    TESTING,
+    STARTUP,
+    COMPLETED,
+    CLOSED,
+    CANCELLED,
+    RESCHEDULED,
+    EMERGENCY_EXTENDED
+}
