@@ -308,6 +308,46 @@ public class PlannedShutdownController {
         return ResponseEntity.ok(service.startTesting(id, request));
     }
 
+    @GetMapping("/{id}/startup-tests")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<List<PlannedShutdownStartupTestResponse>> startupTests(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.startupTests(id));
+    }
+
+    @PostMapping("/{id}/startup-tests")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_TEST')")
+    public ResponseEntity<PlannedShutdownStartupTestResponse> createStartupTest(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownStartupTestRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createStartupTest(id, request));
+    }
+
+    @PostMapping("/{id}/startup-tests/{testId}/result")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_TEST')")
+    public ResponseEntity<PlannedShutdownStartupTestResponse> recordStartupTestResult(
+            @PathVariable UUID id, @PathVariable UUID testId,
+            @Valid @RequestBody PlannedShutdownStartupTestResultRequest request) {
+        return ResponseEntity.ok(service.recordStartupTestResult(id, testId, request));
+    }
+
+    @PostMapping("/{id}/production-return")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_STARTUP')")
+    public ResponseEntity<PlannedShutdownProductionReturnResponse> approveProductionReturn(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownProductionReturnRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.approveProductionReturn(id, request));
+    }
+
+    @GetMapping("/{id}/production-return")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<PlannedShutdownProductionReturnResponse> productionReturn(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.productionReturn(id));
+    }
+
+    @GetMapping("/{id}/closure-report")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<PlannedShutdownClosureReport> closureReport(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.closureReport(id));
+    }
+
     @PostMapping("/{id}/start-startup")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_STARTUP')")
     public ResponseEntity<PlannedShutdownDetailResponse> startStartup(@PathVariable UUID id,

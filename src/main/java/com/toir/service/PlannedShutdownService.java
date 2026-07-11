@@ -77,6 +77,8 @@ public class PlannedShutdownService {
     private final PlannedShutdownReadinessLifecyclePolicy readinessLifecyclePolicy;
     private final PlannedShutdownTransitionPolicy transitionPolicy;
     private final PlannedShutdownApprovalScopeHasher approvalScopeHasher;
+    private final com.toir.service.plannedshutdown.PlannedShutdownEvidenceService evidenceService;
+    private final com.toir.service.plannedshutdown.PlannedShutdownReportService reportService;
     private final ScopeAccessService scopeAccessService;
     private final AuditBuilderService auditBuilderService;
 
@@ -584,6 +586,11 @@ public class PlannedShutdownService {
         PlannedShutdownIsolationPoint point = findIsolation(id, pointId);
         if (point.getVerifiedAt() == null) throw RestException.conflict("Isolation must be verified before release");
         if (point.getReleasedAt() != null) throw RestException.conflict("Isolation point is already released");
+        boolean priorUnreleased = isolationPointRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id).stream()
+                .anyMatch(candidate -> candidate.getReleasedAt() == null
+                        && candidate.getOrderNumber() < point.getOrderNumber());
+        if (priorUnreleased) throw RestException.conflict("ISOLATION_RELEASE_ORDER_VIOLATION");
         UUID actor = requireEmployeeActor();
         var before = PlannedShutdownIsolationPointResponse.from(point);
         point.setReleasedById(actor);
@@ -728,21 +735,76 @@ public class PlannedShutdownService {
     @Transactional public PlannedShutdownDetailResponse startStartup(UUID id, PlannedShutdownTransitionRequest r) {
         PlannedShutdown shutdown = findLocked(id); requireVersion(shutdown, r.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.STARTUP);
-        throw RestException.conflict("STARTUP_TEST_EVIDENCE_UNAVAILABLE");
+        evidenceService.requireStartupReady(id);
+        return detail(executeTransition(shutdown, PlannedShutdownStatus.STARTUP, requireUserActor(),
+                r.reason(), r.correlationKey(), null));
     }
     @Transactional public PlannedShutdownDetailResponse complete(UUID id, PlannedShutdownTransitionRequest r) {
         PlannedShutdown shutdown = findLocked(id); requireVersion(shutdown, r.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.COMPLETED);
         requireNoActiveWorkOrders(id, "COMPLETION_ACTIVE_WORK_ORDERS");
         requireAllIsolationReleased(id, "COMPLETION_ISOLATION_UNRELEASED");
-        throw RestException.conflict("PRODUCTION_RETURN_EVIDENCE_UNAVAILABLE");
+        evidenceService.requireStartupReady(id);
+        evidenceService.productionReturn(id, shutdown.getScopeVersion(), shutdown.getWindowVersion());
+        return detail(executeTransition(shutdown, PlannedShutdownStatus.COMPLETED, requireUserActor(),
+                r.reason(), r.correlationKey(), null));
     }
     @Transactional public PlannedShutdownDetailResponse close(UUID id, PlannedShutdownTransitionRequest r) {
         PlannedShutdown shutdown = findLocked(id); requireVersion(shutdown, r.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.CLOSED);
         requireNoActiveWorkOrders(id, "CLOSE_ACTIVE_WORK_ORDERS");
         requireAllIsolationReleased(id, "CLOSE_ISOLATION_UNRELEASED");
-        throw RestException.conflict("CLOSURE_SNAPSHOT_UNAVAILABLE");
+        evidenceService.requireStartupReady(id);
+        evidenceService.productionReturn(id, shutdown.getScopeVersion(), shutdown.getWindowVersion());
+        UUID actor = requireUserActor();
+        reportService.createSnapshot(shutdown, actor);
+        shutdown.setClosureVersion(shutdown.getClosureVersion() + 1);
+        return detail(executeTransition(shutdown, PlannedShutdownStatus.CLOSED, actor,
+                r.reason(), r.correlationKey(), null));
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlannedShutdownStartupTestResponse> startupTests(UUID id) {
+        find(id);
+        return evidenceService.tests(id);
+    }
+
+    @Transactional
+    public PlannedShutdownStartupTestResponse createStartupTest(UUID id, PlannedShutdownStartupTestRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        return evidenceService.createTest(id, shutdown.getLifecycleStatus(), request);
+    }
+
+    @Transactional
+    public PlannedShutdownStartupTestResponse recordStartupTestResult(UUID id, UUID testId,
+            PlannedShutdownStartupTestResultRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        return evidenceService.recordResult(id, testId, shutdown.getLifecycleStatus(), request, requireEmployeeActor());
+    }
+
+    @Transactional
+    public PlannedShutdownProductionReturnResponse approveProductionReturn(UUID id,
+            PlannedShutdownProductionReturnRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        evidenceService.requireStartupReady(id);
+        return evidenceService.approveProductionReturn(id, shutdown.getLifecycleStatus(), shutdown.getScopeVersion(),
+                shutdown.getWindowVersion(), request, requireUserActor());
+    }
+
+    @Transactional(readOnly = true)
+    public PlannedShutdownProductionReturnResponse productionReturn(UUID id) {
+        find(id);
+        PlannedShutdown shutdown = find(id);
+        return evidenceService.productionReturn(id, shutdown.getScopeVersion(), shutdown.getWindowVersion());
+    }
+
+    @Transactional(readOnly = true)
+    public PlannedShutdownClosureReport closureReport(UUID id) {
+        find(id);
+        return reportService.readSnapshot(id);
     }
 
     @Transactional
@@ -880,6 +942,13 @@ public class PlannedShutdownService {
                 : isolationPointRepository.existsByPlannedShutdownIdAndLockTagIdentifierAndIdNotAndIsDeletedFalse(
                         shutdownId, lockTag, pointId);
         if (duplicate) throw RestException.conflict("Isolation lock/tag is already in use: " + lockTag);
+        boolean duplicateOrder = pointId == null
+                ? isolationPointRepository.existsByPlannedShutdownIdAndOrderNumberAndIsDeletedFalse(
+                        shutdownId, request.orderNumber())
+                : isolationPointRepository.existsByPlannedShutdownIdAndOrderNumberAndIdNotAndIsDeletedFalse(
+                        shutdownId, request.orderNumber(), pointId);
+        if (duplicateOrder) throw RestException.conflict("Isolation release order is already in use: "
+                + request.orderNumber());
     }
 
     private void requireActiveEmployee(UUID employeeId) {
@@ -1237,7 +1306,7 @@ public class PlannedShutdownService {
     private void requireAllIsolationReleased(UUID id, String code) {
         boolean unreleased = isolationPointRepository
                 .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id).stream()
-                .anyMatch(point -> point.getAppliedAt() != null && point.getReleasedAt() == null);
+                .anyMatch(point -> point.getReleasedAt() == null);
         if (unreleased) throw RestException.conflict(code);
     }
 

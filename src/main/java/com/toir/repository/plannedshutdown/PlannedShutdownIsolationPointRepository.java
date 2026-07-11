@@ -11,4 +11,7 @@ public interface PlannedShutdownIsolationPointRepository extends JpaRepository<P
     Optional<PlannedShutdownIsolationPoint> findByIdAndPlannedShutdownIdAndIsDeletedFalse(UUID id, UUID shutdownId);
     boolean existsByPlannedShutdownIdAndLockTagIdentifierAndIsDeletedFalse(UUID shutdownId, String lockTagIdentifier);
     boolean existsByPlannedShutdownIdAndLockTagIdentifierAndIdNotAndIsDeletedFalse(UUID shutdownId, String lockTagIdentifier, UUID id);
+    boolean existsByPlannedShutdownIdAndOrderNumberAndIsDeletedFalse(UUID shutdownId, Integer orderNumber);
+    boolean existsByPlannedShutdownIdAndOrderNumberAndIdNotAndIsDeletedFalse(
+            UUID shutdownId, Integer orderNumber, UUID id);
 }

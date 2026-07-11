@@ -79,6 +79,7 @@ class PlannedShutdownWorkItemServiceTest {
                 new com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy(),
                 new com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy(),
                 new com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher(),
+                null, null,
                 scopeAccessService, audit);
         shutdownId = UUID.randomUUID();
         equipmentId = UUID.randomUUID();

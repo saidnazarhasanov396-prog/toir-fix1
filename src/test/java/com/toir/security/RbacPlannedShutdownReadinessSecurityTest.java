@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = PlannedShutdownController.class)
@@ -82,6 +83,29 @@ class RbacPlannedShutdownReadinessSecurityTest {
         performGenerate().andExpect(status().isForbidden());
     }
 
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_TEST)
+    void testPermissionCanRecordStartupResultButCannotApproveProductionReturn() throws Exception {
+        performStartupResult().andExpect(status().isOk());
+        performProductionReturn().andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_STARTUP)
+    void startupPermissionCanApproveProductionReturnButCannotRecordTest() throws Exception {
+        performProductionReturn().andExpect(status().isCreated());
+        performStartupResult().andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_READ)
+    void readPermissionCanReadClosureReportButCannotMutateEvidence() throws Exception {
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/closure-report", UUID.randomUUID()))
+                .andExpect(status().isOk());
+        performStartupResult().andExpect(status().isForbidden());
+        performProductionReturn().andExpect(status().isForbidden());
+    }
+
     private org.springframework.test.web.servlet.ResultActions performComplete() throws Exception {
         return mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/readiness/{itemId}/complete",
                 UUID.randomUUID(), UUID.randomUUID()).contentType("application/json").content("{\"version\":1}"));
@@ -102,5 +126,18 @@ class RbacPlannedShutdownReadinessSecurityTest {
                 .header("Idempotency-Key", "security-generation-1")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .content("{}"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions performStartupResult() throws Exception {
+        return mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/startup-tests/{testId}/result",
+                UUID.randomUUID(), UUID.randomUUID()).contentType("application/json")
+                .content("{\"version\":1,\"measuredValue\":\"42.0000\",\"unit\":\"bar\","
+                        + "\"passed\":true,\"evidence\":\"asset-1\",\"performerId\":\""
+                        + UUID.randomUUID() + "\"}"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions performProductionReturn() throws Exception {
+        return mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/production-return", UUID.randomUUID())
+                .contentType("application/json").content("{\"version\":1,\"evidence\":\"stable\"}"));
     }
 }

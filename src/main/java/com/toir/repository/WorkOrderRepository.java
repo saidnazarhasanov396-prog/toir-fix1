@@ -56,6 +56,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
             """, nativeQuery = true)
     boolean existsActiveByPlannedShutdownId(@Param("shutdownId") UUID shutdownId);
 
+    List<WorkOrder> findAllByPlannedShutdownIdAndIsDeletedFalseOrderByUpdatedAtDesc(UUID shutdownId);
+
     @Query(value = "SELECT COUNT(*) FROM work_orders WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
 

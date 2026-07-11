@@ -7,7 +7,9 @@ import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.PlannedShutdown;
 import com.toir.entity.plannedshutdown.PlannedShutdownStatusHistory;
+import com.toir.entity.plannedshutdown.PlannedShutdownIsolationPoint;
 import com.toir.enums.*;
+import com.toir.exception.RestException;
 import com.toir.repository.*;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -58,6 +60,8 @@ class PlannedShutdownLifecycleServiceTest {
     @Mock PlannedShutdownReadinessLifecyclePolicy readinessLifecyclePolicy;
     PlannedShutdownTransitionPolicy transitionPolicy = new PlannedShutdownTransitionPolicy();
     PlannedShutdownApprovalScopeHasher approvalScopeHasher = new PlannedShutdownApprovalScopeHasher();
+    @Mock PlannedShutdownEvidenceService evidenceService;
+    @Mock PlannedShutdownReportService reportService;
     @Mock ScopeAccessService scopeAccessService;
     @Mock AuditBuilderService audit;
 
@@ -73,7 +77,7 @@ class PlannedShutdownLifecycleServiceTest {
                 departmentRepository, employeeRepository, equipmentRepository, defectRepository, pprTaskRepository,
                 workOrderRepository, materialReadinessService, assignmentEligibilityService, safetyPermitRepository,
                 workItemPolicy, readinessPolicy, readinessLifecyclePolicy, transitionPolicy, approvalScopeHasher,
-                scopeAccessService, audit);
+                evidenceService, reportService, scopeAccessService, audit);
         id = UUID.randomUUID();
         actor = UUID.randomUUID();
         shutdown = new PlannedShutdown();
@@ -87,6 +91,7 @@ class PlannedShutdownLifecycleServiceTest {
         lenient().when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(historyRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(scopeAccessService.currentUserIdOrNull()).thenReturn(actor);
+        lenient().when(scopeAccessService.currentEmployeeId()).thenReturn(Optional.of(actor));
         lenient().when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
                 .thenReturn(List.of());
         lenient().when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
@@ -169,7 +174,7 @@ class PlannedShutdownLifecycleServiceTest {
     }
 
     @Test
-    void executesEveryCurrentlyReachableLegalServiceEdgeThenStopsAtTaskSevenGate() {
+    void executesEveryCurrentlyReachableLegalServiceEdgeThroughStartup() {
         shutdown.setStatus(PlannedShutdownStatus.DRAFT);
         var proceed = new com.toir.dto.plannedshutdown.PlannedShutdownReadinessAssessment(true, List.of());
         when(readinessPolicy.evaluateReadiness(any())).thenReturn(proceed);
@@ -194,8 +199,8 @@ class PlannedShutdownLifecycleServiceTest {
         assertThat(shutdown.getActualSafeStateAt()).isNotNull();
         assertThat(shutdown.getActualRepairStartAt()).isNotNull();
         assertThat(shutdown.getActualTestingStartAt()).isNotNull();
-        assertThatThrownBy(() -> service.startStartup(id, command()))
-                .hasMessageContaining("STARTUP_TEST_EVIDENCE_UNAVAILABLE");
+        assertThat(service.startStartup(id, command()).status()).isEqualTo(PlannedShutdownStatus.STARTUP);
+        assertThat(shutdown.getActualStartupAt()).isNotNull();
     }
 
     @Test
@@ -289,7 +294,7 @@ class PlannedShutdownLifecycleServiceTest {
     }
 
     @Test
-    void taskSevenTransitionsAndOperationSpecificBlockersFailClosed() {
+    void taskSevenTransitionsConsumeCurrentEvidenceAndCreateOneSnapshot() {
         shutdown.setStatus(PlannedShutdownStatus.REPAIR_IN_PROGRESS);
         when(workOrderRepository.existsActiveByPlannedShutdownId(id)).thenReturn(true);
         assertThatThrownBy(() -> service.startTesting(id, command()))
@@ -297,14 +302,26 @@ class PlannedShutdownLifecycleServiceTest {
 
         when(workOrderRepository.existsActiveByPlannedShutdownId(id)).thenReturn(false);
         shutdown.setStatus(PlannedShutdownStatus.TESTING);
-        assertThatThrownBy(() -> service.startStartup(id, command()))
-                .hasMessageContaining("STARTUP_TEST_EVIDENCE_UNAVAILABLE");
+        assertThat(service.startStartup(id, command()).status()).isEqualTo(PlannedShutdownStatus.STARTUP);
+        assertThat(service.complete(id, command()).status()).isEqualTo(PlannedShutdownStatus.COMPLETED);
+        assertThat(service.close(id, command()).status()).isEqualTo(PlannedShutdownStatus.CLOSED);
+        verify(evidenceService, times(3)).requireStartupReady(id);
+        verify(evidenceService, times(2)).productionReturn(id, 3L, 2L);
+        verify(reportService).createSnapshot(shutdown, actor);
+        assertThatThrownBy(() -> service.close(id, command())).hasMessageContaining("TRANSITION_NOT_ALLOWED");
+    }
+
+    @Test
+    void currentStartupAndProductionEvidenceFailClosed() {
+        shutdown.setStatus(PlannedShutdownStatus.TESTING);
+        doThrow(RestException.conflict("STARTUP_TEST_FAILED")).when(evidenceService).requireStartupReady(id);
+        assertThatThrownBy(() -> service.startStartup(id, command())).hasMessageContaining("STARTUP_TEST_FAILED");
+
+        reset(evidenceService);
         shutdown.setStatus(PlannedShutdownStatus.STARTUP);
-        assertThatThrownBy(() -> service.complete(id, command()))
-                .hasMessageContaining("PRODUCTION_RETURN_EVIDENCE_UNAVAILABLE");
-        shutdown.setStatus(PlannedShutdownStatus.COMPLETED);
-        assertThatThrownBy(() -> service.close(id, command()))
-                .hasMessageContaining("CLOSURE_SNAPSHOT_UNAVAILABLE");
+        when(evidenceService.productionReturn(id, 3L, 2L))
+                .thenThrow(RestException.conflict("PRODUCTION_RETURN_MISSING"));
+        assertThatThrownBy(() -> service.complete(id, command())).hasMessageContaining("PRODUCTION_RETURN_MISSING");
     }
 
     @Test
@@ -327,6 +344,41 @@ class PlannedShutdownLifecycleServiceTest {
     }
 
     @Test
+    void completionFailsClosedForDefinedIsolationThatWasNeverAppliedOrReleased() {
+        PlannedShutdownIsolationPoint point = isolationPoint(1);
+        point.setAppliedAt(null);
+        point.setVerifiedAt(null);
+        shutdown.setStatus(PlannedShutdownStatus.STARTUP);
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(point));
+
+        assertThatThrownBy(() -> service.complete(id, command()))
+                .hasMessageContaining("COMPLETION_ISOLATION_UNRELEASED");
+        verify(evidenceService, never()).productionReturn(any(), any(), any());
+    }
+
+    @Test
+    void isolationReleaseFollowsConfiguredOrder() {
+        shutdown.setStatus(PlannedShutdownStatus.STARTUP);
+        PlannedShutdownIsolationPoint first = isolationPoint(1);
+        PlannedShutdownIsolationPoint second = isolationPoint(2);
+        when(readinessLifecyclePolicy.canReleaseIsolation(PlannedShutdownStatus.STARTUP)).thenReturn(true);
+        when(isolationPointRepository.findByIdAndPlannedShutdownIdAndIsDeletedFalse(second.getId(), id))
+                .thenReturn(Optional.of(second));
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(first, second));
+
+        assertThatThrownBy(() -> service.releaseIsolation(id, second.getId(),
+                new com.toir.dto.plannedshutdown.PlannedShutdownIsolationActionRequest(7L)))
+                .hasMessageContaining("ISOLATION_RELEASE_ORDER_VIOLATION");
+
+        first.setReleasedAt(Instant.now());
+        assertThat(service.releaseIsolation(id, second.getId(),
+                new com.toir.dto.plannedshutdown.PlannedShutdownIsolationActionRequest(7L)).points())
+                .anyMatch(point -> point.id().equals(second.getId()) && point.releasedAt() != null);
+    }
+
+    @Test
     void repairStartConsumesCurrentSafeAssessment() {
         shutdown.setStatus(PlannedShutdownStatus.SAFE_STATE);
         when(readinessPolicy.evaluateSafeState(any())).thenReturn(
@@ -339,6 +391,20 @@ class PlannedShutdownLifecycleServiceTest {
 
     private PlannedShutdownTransitionRequest command() {
         return new PlannedShutdownTransitionRequest(7L, "reason", UUID.randomUUID().toString());
+    }
+
+    private PlannedShutdownIsolationPoint isolationPoint(int order) {
+        PlannedShutdownIsolationPoint point = new PlannedShutdownIsolationPoint();
+        point.setId(UUID.randomUUID());
+        point.setPlannedShutdownId(id);
+        point.setEquipmentId(UUID.randomUUID());
+        point.setIsolationMethod("LOTO");
+        point.setLockTagIdentifier("TAG-" + order);
+        point.setResponsibleEmployeeId(actor);
+        point.setOrderNumber(order);
+        point.setAppliedAt(Instant.now());
+        point.setVerifiedAt(Instant.now());
+        return point;
     }
 
     private ApprovalRequest approval(UUID requester, UUID productionActor, UUID hseActor) {
