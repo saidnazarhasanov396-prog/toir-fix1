@@ -226,6 +226,7 @@ public class WorkOrderService {
     private final MaintenanceDueEventService maintenanceDueEventService;
     private final WorkOrderSparePartRequirementService workOrderSparePartRequirementService;
     private final SafetyChecklistService safetyChecklistService;
+    private final com.toir.service.plannedshutdown.PlannedShutdownWorkOrderStartPolicy plannedShutdownStartPolicy;
     private final ScopeAccessService scopeAccessService;
     private final WorkOrderNumberService workOrderNumberService;
     private final NotificationService notificationService;
@@ -825,6 +826,8 @@ public class WorkOrderService {
         entity.setBudgetLineId(effectiveBudgetLineId);
         entity.setCycleKey(request.cycleKey());
         entity.setGenerationKey(request.generationKey());
+        entity.setPlannedShutdownId(request.plannedShutdownId());
+        entity.setShutdownWorkItemId(request.shutdownWorkItemId());
         entity.setCounteragentId(request.counteragentId());
         entity.setPerformer(performer);
         entity.setType(request.type());
@@ -978,6 +981,7 @@ public class WorkOrderService {
         }
         assertDefectListGate(entity);
         validatePerformerSkillsForWorkOrder(entity);
+        plannedShutdownStartPolicy.assertCanStart(entity);
         safetyChecklistService.assertCanStart(entity);
         entity.setStatus(WorkOrderStatus.IN_PROGRESS);
         entity.setStartedAt(Instant.now());
@@ -3002,7 +3006,9 @@ public class WorkOrderService {
                 null,
                 entity.getBudgetLineId(),
                 entity.isRequiresShutdown(),
-                entity.isRequiresIsolation());
+                entity.isRequiresIsolation(),
+                entity.getPlannedShutdownId(),
+                entity.getShutdownWorkItemId());
     }
 
     private WorkOrderDto.CounteragentRef counteragentRef(UUID counteragentId) {

@@ -26,6 +26,7 @@ class RbacPlannedShutdownReadinessSecurityTest {
     @Autowired MockMvc mockMvc;
     @MockBean JwtService jwtService;
     @MockBean PlannedShutdownService service;
+    @MockBean com.toir.service.plannedshutdown.PlannedShutdownWorkOrderGenerationService workOrderGenerationService;
 
     @TestConfiguration
     static class SecurityBeans {
@@ -69,6 +70,18 @@ class RbacPlannedShutdownReadinessSecurityTest {
         performRequestApproval().andExpect(status().isOk());
     }
 
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_PREPARE)
+    void preparePermissionCanGenerateShutdownWorkOrders() throws Exception {
+        performGenerate().andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_UPDATE)
+    void updatePermissionCannotGenerateShutdownWorkOrders() throws Exception {
+        performGenerate().andExpect(status().isForbidden());
+    }
+
     private org.springframework.test.web.servlet.ResultActions performComplete() throws Exception {
         return mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/readiness/{itemId}/complete",
                 UUID.randomUUID(), UUID.randomUUID()).contentType("application/json").content("{\"version\":1}"));
@@ -82,5 +95,12 @@ class RbacPlannedShutdownReadinessSecurityTest {
     private org.springframework.test.web.servlet.ResultActions performRequestApproval() throws Exception {
         return mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/request-approval", UUID.randomUUID())
                 .contentType("application/json").content("{\"version\":1,\"reason\":\"ready\"}"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions performGenerate() throws Exception {
+        return mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/work-orders/generate", UUID.randomUUID())
+                .header("Idempotency-Key", "security-generation-1")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{}"));
     }
 }

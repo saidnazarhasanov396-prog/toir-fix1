@@ -230,6 +230,17 @@ class PlannedShutdownLifecycleServiceTest {
     }
 
     @Test
+    void cancellationIsBlockedWhileLinkedWorkOrdersRemainActive() {
+        shutdown.setStatus(PlannedShutdownStatus.PREPARATION);
+        when(workOrderRepository.existsActiveByPlannedShutdownId(id)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.cancel(id,
+                new PlannedShutdownTransitionRequest(7L, "weather", "c-active")))
+                .hasMessageContaining("CANCEL_ACTIVE_WORK_ORDERS");
+        verify(historyRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void approvalFinalizationRequiresCurrentProductionAndHseStepsWithSeparationOfDuty() {
         shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
         shutdown.setApprovalScopeVersion(3L);

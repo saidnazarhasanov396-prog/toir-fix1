@@ -748,6 +748,7 @@ public class PlannedShutdownService {
         if (!transitionPolicy.canCancel(shutdown.getLifecycleStatus())) {
             throw RestException.conflict("CANCEL_NOT_ALLOWED:" + shutdown.getLifecycleStatus());
         }
+        requireNoActiveWorkOrders(id, "CANCEL_ACTIVE_WORK_ORDERS");
         return detail(executeTransition(shutdown, PlannedShutdownStatus.CANCELLED, requireUserActor(),
                 requireReason(request.reason(), "CANCEL_REASON_REQUIRED"), request.correlationKey(), null));
     }
@@ -909,11 +910,14 @@ public class PlannedShutdownService {
             boolean critical = item.getCriticality() != null && !item.getCriticality().isBlank();
             boolean material = !critical;
             boolean assigned = false;
-            if (item.getSourceType() == PlannedShutdownWorkItemSourceType.WORK_ORDER && item.getSourceId() != null) {
-                var source = workOrderRepository.findByIdAndIsDeletedFalse(item.getSourceId()).orElse(null);
-                assigned = source != null && workOrderAssignmentEligibilityService.isCurrentlyEligible(source);
-                material = !critical || (source != null
-                        && !workOrderMaterialReadinessService.getReadiness(source.getId()).blocking());
+            var source = workOrderRepository.findByShutdownWorkItemIdAndIsDeletedFalse(item.getId()).orElse(null);
+            if (source == null && item.getSourceType() == PlannedShutdownWorkItemSourceType.WORK_ORDER
+                    && item.getSourceId() != null) {
+                source = workOrderRepository.findByIdAndIsDeletedFalse(item.getSourceId()).orElse(null);
+            }
+            if (source != null) {
+                assigned = workOrderAssignmentEligibilityService.isCurrentlyEligible(source);
+                material = !critical || !workOrderMaterialReadinessService.getReadiness(source.getId()).blocking();
             }
             return new PlannedShutdownReadinessPolicy.WorkFact(item.getId(), critical,
                     item.isRequiresIsolation(), material, assigned);

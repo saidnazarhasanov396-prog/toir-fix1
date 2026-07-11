@@ -166,6 +166,9 @@ import static org.mockito.Mockito.when;
 class WorkOrderServiceTest {
 
     @Mock
+    com.toir.service.plannedshutdown.PlannedShutdownWorkOrderStartPolicy plannedShutdownStartPolicy;
+
+    @Mock
     WorkOrderRepository repository;
 
     @Mock
@@ -759,6 +762,8 @@ class WorkOrderServiceTest {
 
     @Test
     void createPersistsAndReturnsShutdownAndIsolationRequirements() throws Exception {
+        UUID plannedShutdownId = UUID.randomUUID();
+        UUID shutdownWorkItemId = UUID.randomUUID();
         WorkOrderRequest request = new ObjectMapper().readValue("""
                 {
                   "number": "WO-SAFETY-FLAGS",
@@ -769,9 +774,11 @@ class WorkOrderServiceTest {
                   "workType": "REPAIR",
                   "priority": "MEDIUM",
                   "requiresShutdown": true,
-                  "requiresIsolation": true
+                  "requiresIsolation": true,
+                  "plannedShutdownId": "%s",
+                  "shutdownWorkItemId": "%s"
                 }
-                """.formatted(UUID.randomUUID(), UUID.randomUUID()), WorkOrderRequest.class);
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), plannedShutdownId, shutdownWorkItemId), WorkOrderRequest.class);
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
             WorkOrder workOrder = invocation.getArgument(0);
             ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
@@ -785,8 +792,12 @@ class WorkOrderServiceTest {
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().isRequiresShutdown()).isTrue();
         assertThat(captor.getValue().isRequiresIsolation()).isTrue();
+        assertThat(captor.getValue().getPlannedShutdownId()).isEqualTo(plannedShutdownId);
+        assertThat(captor.getValue().getShutdownWorkItemId()).isEqualTo(shutdownWorkItemId);
         assertThat(result.requiresShutdown()).isTrue();
         assertThat(result.requiresIsolation()).isTrue();
+        assertThat(result.plannedShutdownId()).isEqualTo(plannedShutdownId);
+        assertThat(result.shutdownWorkItemId()).isEqualTo(shutdownWorkItemId);
     }
 
     @Test

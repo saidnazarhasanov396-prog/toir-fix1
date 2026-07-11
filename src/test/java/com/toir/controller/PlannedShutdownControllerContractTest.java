@@ -46,13 +46,16 @@ class PlannedShutdownControllerContractTest {
     private PlannedShutdownService service;
 
     @Mock
+    private com.toir.service.plannedshutdown.PlannedShutdownWorkOrderGenerationService workOrderGenerationService;
+
+    @Mock
     private ApprovalService approvalService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new PlannedShutdownController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new PlannedShutdownController(service, workOrderGenerationService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

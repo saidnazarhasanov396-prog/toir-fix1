@@ -26,6 +26,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
 
     Optional<WorkOrder> findByGenerationKeyAndIsDeletedFalse(String generationKey);
 
+    Optional<WorkOrder> findByShutdownWorkItemIdAndIsDeletedFalse(UUID shutdownWorkItemId);
+
     @Query(value = "SELECT pg_advisory_xact_lock(hashtextextended(:generationKey, 0))", nativeQuery = true)
     void lockGenerationKey(@Param("generationKey") String generationKey);
 

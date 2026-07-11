@@ -3,6 +3,7 @@ import com.toir.dto.plannedshutdown.*;
 import com.toir.exception.RestException;
 import com.toir.enums.PlanStatus;
 import com.toir.service.PlannedShutdownService;
+import com.toir.service.plannedshutdown.PlannedShutdownWorkOrderGenerationService;
 import com.toir.util.PaginationUtils;
 import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 public class PlannedShutdownController {
 
     private final PlannedShutdownService service;
+    private final PlannedShutdownWorkOrderGenerationService workOrderGenerationService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
@@ -124,6 +126,16 @@ public class PlannedShutdownController {
     public ResponseEntity<PlannedShutdownWorkItemScopeResponse> reorderWorkItems(
             @PathVariable UUID id, @Valid @RequestBody PlannedShutdownWorkItemReorderRequest request) {
         return ResponseEntity.ok(service.reorderWorkItems(id, request));
+    }
+
+    @PostMapping("/{id}/work-orders/generate")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_PREPARE')")
+    public ResponseEntity<PlannedShutdownWorkOrderGenerationResponse> generateWorkOrders(
+            @PathVariable UUID id,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody(required = false) PlannedShutdownWorkOrderGenerationRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(workOrderGenerationService.generate(id, request, idempotencyKey));
     }
 
     @GetMapping("/{id}/readiness")
