@@ -492,3 +492,56 @@ Commit: `docs: report TOiR stage 1 verification`
 - [ ] **Step 7: Begin Stage 2 planning automatically**
 
 Invoke `superpowers:writing-plans` for the Planned Shutdown core plan using only the verified Stage 1 interfaces.
+
+---
+
+### Task 7: Close final Stage 1 review gaps
+
+**Files:**
+- Modify: `src/main/java/com/toir/repository/repair/RepairCampaignRepository.java`
+- Modify: `src/main/java/com/toir/service/repair/RepairCampaignService.java`
+- Modify: `src/main/java/com/toir/exception/GlobalExceptionHandler.java`
+- Modify: Repair Campaign request DTOs and validation helpers
+- Test: Repair Campaign concurrency, validation, and exception-handler tests
+- Modify: `toir-front/src/modules/repairs/pages/repair-campaign-detail-page.tsx`
+- Modify: Repair Campaign action and form-contract helpers/tests
+
+**Interfaces:**
+- Produces: campaign-row serialization for generation/status transitions, stable optimistic-lock HTTP 409 responses, permission-aware frontend actions, and `numeric(19,4)`/ISO-4217 request validation.
+- Consumes: the verified Tasks 1-6 Stage 1 contracts.
+
+- [ ] **Step 1: Write failing campaign-generation/status-transition locking tests**
+
+Require generation to load and validate the campaign under a database write lock before acquiring deterministic generation-key locks. Add repository lock-contract coverage and a PostgreSQL concurrency test when PostgreSQL is available; otherwise keep the deterministic service/repository contract test and disclose the live-test limitation.
+
+- [ ] **Step 2: Implement campaign-row serialization**
+
+Add a `PESSIMISTIC_WRITE`/`SELECT ... FOR UPDATE` repository method and use the locked campaign read for the eligibility decision in generation. Keep deterministic equipment ordering and per-generation-key advisory locks.
+
+- [ ] **Step 3: Write failing optimistic-lock HTTP contract tests**
+
+Verify `ObjectOptimisticLockingFailureException` and JPA `OptimisticLockException` produce a stable HTTP 409 response rather than the catch-all 500.
+
+- [ ] **Step 4: Implement optimistic-lock conflict mapping**
+
+Add the narrow global exception handler and preserve existing domain-conflict behavior.
+
+- [ ] **Step 5: Write failing permission-visibility tests**
+
+Cover start, complete, close, cancel, edit, add-stage, attach, and manual-create actions for users with the exact Repair Campaign permission and users with unrelated authorities.
+
+- [ ] **Step 6: Gate every Repair Campaign detail action by exact permission**
+
+Combine lifecycle/status conditions with the corresponding `REPAIR_CAMPAIGN_*` permission, and hide empty action menus.
+
+- [ ] **Step 7: Write failing monetary and currency boundary tests**
+
+Reject more than 15 integer digits or 4 fractional digits for every campaign-owned input money value. Reject invalid/non-uppercase ISO-4217 currency codes and mirror the money limit in frontend validation.
+
+- [ ] **Step 8: Implement exact boundary validation**
+
+Use `@Digits(integer = 15, fraction = 4)` at backend request boundaries, validate and normalize currency against `java.util.Currency`, and keep canonical decimal strings on the frontend.
+
+- [ ] **Step 9: Run corrective verification and re-review**
+
+Run focused backend/frontend tests, the Stage 1 aggregate suites, and the frontend production build. Request independent code review of the corrective commits before beginning Stage 2.
