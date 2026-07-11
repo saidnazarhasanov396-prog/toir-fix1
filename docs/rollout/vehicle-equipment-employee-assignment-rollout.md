@@ -4,7 +4,7 @@
 
 **BLOCKED** — the protected remote runtime must remain blocked until authenticated database and application evidence is attached to every required item below. Source review and local test results are not production evidence.
 
-The existing Vehicle migration `V20260616_4__vehicle_driver_sessions.sql` clears non-null `vehicle_details.assigned_driver_id` values that do not resolve to an active Employee. Do not deploy while the preflight reports any `AMBIGUOUS` or `UNRESOLVED` row.
+The existing Vehicle migration `V20260616_4__vehicle_driver_sessions.sql` first rewrites assignments by joining `assigned_driver_id` to `hr_employees.user_id` without enforcing a unique match. An ambiguous User UUID can therefore be rewritten nondeterministically to one matching Employee, and a direct Employee UUID can be overwritten when the same UUID is also a User ID linked to a different Employee. Only values that still do not resolve to an active Employee after that rewrite are nulled. Do not deploy while the preflight reports any `AMBIGUOUS` or `UNRESOLVED` row.
 
 ## Release identity and Flyway evidence
 

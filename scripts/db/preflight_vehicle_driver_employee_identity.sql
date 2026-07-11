@@ -1,6 +1,8 @@
 -- READ ONLY: classify every active Vehicle driver assignment before Flyway runs.
--- The legacy V20260616_4 migration clears assignments classified as AMBIGUOUS
--- or UNRESOLVED, so deployment must stop until those rows are reviewed.
+-- The legacy V20260616_4 migration can nondeterministically rewrite AMBIGUOUS
+-- User UUIDs to one matching Employee and can overwrite a direct Employee UUID
+-- through a conflicting User mapping. Only values still unresolved afterward
+-- are nulled. Deployment must stop until AMBIGUOUS and UNRESOLVED rows are reviewed.
 WITH driver_identity AS (
     SELECT
         vd.id AS vehicle_details_id,
