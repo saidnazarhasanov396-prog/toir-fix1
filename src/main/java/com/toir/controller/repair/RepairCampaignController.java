@@ -26,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -37,6 +38,7 @@ public class RepairCampaignController {
     private final RepairCampaignService service;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<Page<RepairCampaignDto>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) LocalDate startDate,
@@ -53,33 +55,41 @@ public class RepairCampaignController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<RepairCampaignDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_CREATE')")
     public ResponseEntity<RepairCampaignDto> create(@Valid @RequestBody RepairCampaignRequest r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
     public ResponseEntity<RepairCampaignDto> update(@PathVariable UUID id, @Valid @RequestBody RepairCampaignRequest r) {
         return ResponseEntity.ok(service.update(id, r));
     }
 
     @PostMapping("/{id}/reject")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_APPROVE')")
     public ResponseEntity<RepairCampaignDto> reject(@PathVariable UUID id) {
         throw RestException.conflict("Use /api/v1/approvals/{id}/reject to reject approval requests");
     }
 
     @PostMapping("/{id}/start")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_START')")
     public ResponseEntity<RepairCampaignDto> start(@PathVariable UUID id) { return ResponseEntity.ok(service.start(id)); }
 
     @PostMapping("/{id}/close")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_CLOSE')")
     public ResponseEntity<RepairCampaignDto> close(@PathVariable UUID id) { return ResponseEntity.ok(service.close(id)); }
 
     @PostMapping("/{id}/complete")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_COMPLETE')")
     public ResponseEntity<RepairCampaignDto> complete(@PathVariable UUID id) { return ResponseEntity.ok(service.complete(id)); }
 
     @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_CANCEL')")
     public ResponseEntity<RepairCampaignDto> cancel(
             @PathVariable UUID id,
             @Valid @RequestBody RepairCampaignCancelRequest request
@@ -88,26 +98,31 @@ public class RepairCampaignController {
     }
 
     @GetMapping("/{id}/summary")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<RepairCampaignSummaryDto> summary(@PathVariable UUID id) {
         return ResponseEntity.ok(service.summary(id));
     }
 
     @GetMapping("/{id}/costs")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<RepairCampaignCostSummaryDto> costs(@PathVariable UUID id) {
         return ResponseEntity.ok(service.costs(id));
     }
 
     @GetMapping("/{id}/budget-summary")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<RepairCampaignBudgetSummaryDto> budgetSummary(@PathVariable UUID id) {
         return ResponseEntity.ok(service.budgetSummary(id));
     }
 
     @GetMapping("/{id}/available-budget-lines")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<List<BudgetLineDto>> availableBudgetLines(@PathVariable UUID id) {
         return ResponseEntity.ok(service.availableBudgetLines(id));
     }
 
     @GetMapping("/{id}/work-orders")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<Page<WorkOrderDto>> workOrders(
             @PathVariable UUID id,
             @RequestParam(defaultValue = "0") int page,
@@ -117,11 +132,13 @@ public class RepairCampaignController {
     }
 
     @PostMapping("/{id}/stages")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
     public ResponseEntity<RepairCampaignStageDto> addStage(@PathVariable UUID id, @Valid @RequestBody RepairCampaignStageDto r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addStage(id, r));
     }
 
     @PutMapping("/{id}/stages/{stageId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
     public ResponseEntity<RepairCampaignStageDto> updateStage(
             @PathVariable UUID id,
             @PathVariable UUID stageId,
@@ -131,6 +148,7 @@ public class RepairCampaignController {
     }
 
     @PostMapping("/{id}/stages/{stageId}/complete")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_COMPLETE')")
     public ResponseEntity<RepairCampaignStageDto> completeStage(
             @PathVariable UUID id,
             @PathVariable UUID stageId
@@ -139,11 +157,13 @@ public class RepairCampaignController {
     }
 
     @PostMapping("/stages/{stageId}/complete")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_COMPLETE')")
     public ResponseEntity<RepairCampaignStageDto> completeStage(@PathVariable UUID stageId, @RequestParam double actualCost) {
         return ResponseEntity.ok(service.completeStage(stageId, actualCost));
     }
 
     @PostMapping("/{id}/stages/{stageId}/work-orders")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS')")
     public ResponseEntity<WorkOrderDto> createWorkOrder(
             @PathVariable UUID id,
             @PathVariable UUID stageId,
@@ -153,6 +173,7 @@ public class RepairCampaignController {
     }
 
     @PostMapping("/{id}/stages/{stageId}/work-orders/{workOrderId}/attach")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
     public ResponseEntity<WorkOrderDto> attachWorkOrder(
             @PathVariable UUID id,
             @PathVariable UUID stageId,
@@ -162,6 +183,7 @@ public class RepairCampaignController {
     }
 
     @PostMapping("/{id}/work-orders/{workOrderId}/detach")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
     public ResponseEntity<WorkOrderDto> detachWorkOrder(
             @PathVariable UUID id,
             @PathVariable UUID workOrderId
@@ -170,11 +192,13 @@ public class RepairCampaignController {
     }
 
     @GetMapping("/{id}/equipment-preview")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<List<RepairCampaignEquipmentPreviewItemDto>> equipmentPreview(@PathVariable UUID id) {
         return ResponseEntity.ok(service.equipmentPreview(id));
     }
 
     @PostMapping("/{id}/generate-work-orders")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS')")
     public ResponseEntity<List<WorkOrderDto>> generateWorkOrders(
             @PathVariable UUID id,
             @RequestBody(required = false) RepairCampaignGenerateWorkOrdersRequest request

@@ -31,8 +31,8 @@ public final class ApprovalDomainPermissions {
             case MAINTENANCE_REGULATION, REGULATION_CHANGE_PROPOSAL ->
                     optional(PermissionConstants.MAINTENANCE_REGULATION_UPDATE);
             case EQUIPMENT_COMMISSIONING -> optional(PermissionConstants.EQUIPMENT_COMMISSIONING_UPDATE);
-            case PLANNED_SHUTDOWN -> optional(PermissionConstants.WORK_ORDER_APPROVE);
-            case REPAIR_CAMPAIGN -> optional(PermissionConstants.WORK_ORDER_APPROVE);
+            case PLANNED_SHUTDOWN -> optional(PermissionConstants.PLANNED_SHUTDOWN_APPROVE);
+            case REPAIR_CAMPAIGN -> optional(PermissionConstants.REPAIR_CAMPAIGN_APPROVE);
             case OTHER -> Optional.empty();
         };
     }

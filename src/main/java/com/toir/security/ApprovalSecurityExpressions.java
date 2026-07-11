@@ -38,7 +38,9 @@ public final class ApprovalSecurityExpressions {
       + " or hasAuthority('DEFECT_LIST_APPROVE')"
       + " or hasAuthority('PROCUREMENT_APPROVE')"
       + " or hasAuthority('ACTUAL_COST_APPROVE')"
-      + " or hasAuthority('BUDGET_APPROVE')";
+      + " or hasAuthority('BUDGET_APPROVE')"
+      + " or hasAuthority('PLANNED_SHUTDOWN_APPROVE')"
+      + " or hasAuthority('REPAIR_CAMPAIGN_APPROVE')";
 
   public static final String CAN_APPROVE = ADMIN
       + " or hasAuthority('APPROVAL_APPROVE')"
@@ -50,6 +52,8 @@ public final class ApprovalSecurityExpressions {
       + " or hasAuthority('PROCUREMENT_APPROVE')"
       + " or hasAuthority('ACTUAL_COST_APPROVE')"
       + " or hasAuthority('BUDGET_APPROVE')"
+      + " or hasAuthority('PLANNED_SHUTDOWN_APPROVE')"
+      + " or hasAuthority('REPAIR_CAMPAIGN_APPROVE')"
       + " or hasAuthority('MAINTENANCE_EVENT_APPROVE')"
       + " or hasAuthority('MAINTENANCE_REGULATION_UPDATE')"
       + " or hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')"
@@ -69,6 +73,8 @@ public final class ApprovalSecurityExpressions {
       + " or hasAuthority('ACTUAL_COST_APPROVE')"
       + " or hasAuthority('ACTUAL_COST_REJECT')"
       + " or hasAuthority('BUDGET_APPROVE')"
+      + " or hasAuthority('PLANNED_SHUTDOWN_APPROVE')"
+      + " or hasAuthority('REPAIR_CAMPAIGN_APPROVE')"
       + " or hasAuthority('MAINTENANCE_EVENT_APPROVE')"
       + " or hasAuthority('MAINTENANCE_REGULATION_UPDATE')"
       + " or hasAuthority('EQUIPMENT_COMMISSIONING_UPDATE')";

@@ -60,6 +60,30 @@ public final class PermissionConstants {
     public static final String WORK_ORDER_COMPLETE = "WORK_ORDER_COMPLETE";
     public static final String WORK_ORDER_CLOSE = "WORK_ORDER_CLOSE";
 
+    public static final String PLANNED_SHUTDOWN_READ = "PLANNED_SHUTDOWN_READ";
+    public static final String PLANNED_SHUTDOWN_CREATE = "PLANNED_SHUTDOWN_CREATE";
+    public static final String PLANNED_SHUTDOWN_UPDATE = "PLANNED_SHUTDOWN_UPDATE";
+    public static final String PLANNED_SHUTDOWN_APPROVE = "PLANNED_SHUTDOWN_APPROVE";
+    public static final String PLANNED_SHUTDOWN_PREPARE = "PLANNED_SHUTDOWN_PREPARE";
+    public static final String PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE = "PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE";
+    public static final String PLANNED_SHUTDOWN_START_REPAIR = "PLANNED_SHUTDOWN_START_REPAIR";
+    public static final String PLANNED_SHUTDOWN_TEST = "PLANNED_SHUTDOWN_TEST";
+    public static final String PLANNED_SHUTDOWN_STARTUP = "PLANNED_SHUTDOWN_STARTUP";
+    public static final String PLANNED_SHUTDOWN_CLOSE = "PLANNED_SHUTDOWN_CLOSE";
+    public static final String PLANNED_SHUTDOWN_CANCEL = "PLANNED_SHUTDOWN_CANCEL";
+    public static final String PLANNED_SHUTDOWN_RESCHEDULE = "PLANNED_SHUTDOWN_RESCHEDULE";
+    public static final String PLANNED_SHUTDOWN_EXTEND = "PLANNED_SHUTDOWN_EXTEND";
+    public static final String REPAIR_CAMPAIGN_READ = "REPAIR_CAMPAIGN_READ";
+    public static final String REPAIR_CAMPAIGN_CREATE = "REPAIR_CAMPAIGN_CREATE";
+    public static final String REPAIR_CAMPAIGN_UPDATE = "REPAIR_CAMPAIGN_UPDATE";
+    public static final String REPAIR_CAMPAIGN_APPROVE = "REPAIR_CAMPAIGN_APPROVE";
+    public static final String REPAIR_CAMPAIGN_START = "REPAIR_CAMPAIGN_START";
+    public static final String REPAIR_CAMPAIGN_SUSPEND = "REPAIR_CAMPAIGN_SUSPEND";
+    public static final String REPAIR_CAMPAIGN_COMPLETE = "REPAIR_CAMPAIGN_COMPLETE";
+    public static final String REPAIR_CAMPAIGN_CLOSE = "REPAIR_CAMPAIGN_CLOSE";
+    public static final String REPAIR_CAMPAIGN_CANCEL = "REPAIR_CAMPAIGN_CANCEL";
+    public static final String REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS = "REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS";
+
     public static final String WAREHOUSE_READ = "WAREHOUSE_READ";
     public static final String WAREHOUSE_CREATE = "WAREHOUSE_CREATE";
     public static final String WAREHOUSE_UPDATE = "WAREHOUSE_UPDATE";
