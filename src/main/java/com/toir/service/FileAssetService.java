@@ -9,6 +9,7 @@ import com.toir.repository.FileAssetRepository;
 import com.toir.service.file_management.FileValidator;
 import com.toir.service.file_management.LocalFileResourceResolver;
 import com.toir.util.AuditBuilderService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ import java.util.UUID;
 import com.toir.security.AuthenticatedUser;
 
 @Service
+@Slf4j
 public class FileAssetService {
 
     private final FileAssetRepository repository;
@@ -94,30 +96,36 @@ public class FileAssetService {
         try {
             file.transferTo(target.toFile());
         } catch (IOException e) {
+            deleteFailedUpload(target);
             throw new IllegalStateException("Failed to store file", e);
         }
-        FileAsset asset = new FileAsset();
-        asset.setFileName(storedName);
-        asset.setOriginalName(validated.originalName());
-        asset.setMimeType(validated.contentType());
-        asset.setSizeBytes(validated.size());
-        asset.setStoragePath(target.toString());
-        asset.setEntityType(entityType);
-        asset.setEntityId(entityId);
-        asset.setUploadedById(uploadedById);
-        FileAsset saved = repository.save(asset);
+        try {
+            FileAsset asset = new FileAsset();
+            asset.setFileName(storedName);
+            asset.setOriginalName(validated.originalName());
+            asset.setMimeType(validated.contentType());
+            asset.setSizeBytes(validated.size());
+            asset.setStoragePath(target.toString());
+            asset.setEntityType(entityType);
+            asset.setEntityId(entityId);
+            asset.setUploadedById(uploadedById);
+            FileAsset saved = repository.save(asset);
 
-        auditBuilderService.log(
-                "file_asset",
-                saved.getId().toString(),
-                AuditAction.CREATE,
-                AuditModule.FILE_ASSET,
-                "Файл загружен",
-                null,
-                saved
-        );
+            auditBuilderService.log(
+                    "file_asset",
+                    saved.getId().toString(),
+                    AuditAction.CREATE,
+                    AuditModule.FILE_ASSET,
+                    "Файл загружен",
+                    null,
+                    saved
+            );
 
-        return FileAssetDto.from(saved);
+            return FileAssetDto.from(saved);
+        } catch (RuntimeException e) {
+            deleteFailedUpload(target);
+            throw e;
+        }
     }
 
     @Transactional(readOnly = true)
@@ -161,6 +169,14 @@ public class FileAssetService {
 
     private Resource load(FileAsset asset) {
         return localFileResourceResolver.load(asset.getStoragePath());
+    }
+
+    private void deleteFailedUpload(Path target) {
+        try {
+            Files.deleteIfExists(target);
+        } catch (IOException cleanupException) {
+            log.warn("Failed to remove local file after unsuccessful upload: {}", target, cleanupException);
+        }
     }
 
     private boolean matchesEntity(FileAsset asset, String entityType, String entityId) {

@@ -258,12 +258,23 @@ public class AttachmentGroupService {
             UUID currentUserId,
             List<UUID> uploadedFileIds
     ) {
-        List<UploadedFile> uploadedFiles = new ArrayList<>(files.size());
         for (MultipartFile file : files) {
             UploadFileResponse uploaded = fileService.upload(file, category, currentUserId);
             uploadedFileIds.add(uploaded.id());
-            uploadedFiles.add(uploadedFileRepository.findByIdAndDeletedFalse(uploaded.id())
-                    .orElseThrow(() -> RestException.notFound("Uploaded file not found: " + uploaded.id())));
+        }
+
+        Map<UUID, UploadedFile> uploadedById = new HashMap<>();
+        uploadedFileRepository.findAllById(uploadedFileIds).stream()
+                .filter(uploadedFile -> !Boolean.TRUE.equals(uploadedFile.getDeleted()))
+                .forEach(uploadedFile -> uploadedById.put(uploadedFile.getId(), uploadedFile));
+
+        List<UploadedFile> uploadedFiles = new ArrayList<>(uploadedFileIds.size());
+        for (UUID uploadedFileId : uploadedFileIds) {
+            UploadedFile uploadedFile = uploadedById.get(uploadedFileId);
+            if (uploadedFile == null) {
+                throw RestException.notFound("Uploaded file not found: " + uploadedFileId);
+            }
+            uploadedFiles.add(uploadedFile);
         }
         return uploadedFiles;
     }

@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -68,6 +69,28 @@ class FileServiceImplTest {
     }
 
     @Test
+    void uploadUsesValidatedMimeTypeForStoredObject() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "report.pdf",
+                "application/octet-stream",
+                "%PDF-1.4\n".getBytes()
+        );
+        when(validator.validate(file)).thenReturn(validated("report.pdf", "pdf", "application/pdf"));
+        when(repository.save(any(UploadedFile.class))).thenAnswer(invocation -> {
+            UploadedFile uploadedFile = invocation.getArgument(0);
+            uploadedFile.setId(UUID.randomUUID());
+            return uploadedFile;
+        });
+
+        service.upload(file, FileCategory.DOCUMENT, ownerId);
+
+        ArgumentCaptor<org.springframework.web.multipart.MultipartFile> storedFile = ArgumentCaptor.captor();
+        verify(s3Service).store(storedFile.capture(), any());
+        assertThat(storedFile.getValue().getContentType()).isEqualTo("application/pdf");
+    }
+
+    @Test
     void uploadDeletesMinioObjectIfDbSaveFails() {
         MockMultipartFile file = file("report.pdf");
         when(validator.validate(file)).thenReturn(validated("report.pdf", "pdf", "application/pdf"));
@@ -79,6 +102,19 @@ class FileServiceImplTest {
         ArgumentCaptor<String> objectName = ArgumentCaptor.captor();
         verify(s3Service).delete(objectName.capture());
         assertThat(objectName.getValue()).startsWith("documents/");
+    }
+
+    @Test
+    void uploadPreservesDbFailureWhenRollbackDeleteAlsoFails() {
+        MockMultipartFile file = file("report.pdf");
+        when(validator.validate(file)).thenReturn(validated("report.pdf", "pdf", "application/pdf"));
+        RuntimeException dbFailure = new RuntimeException("db");
+        when(repository.save(any(UploadedFile.class))).thenThrow(dbFailure);
+        doThrow(new RuntimeException("cleanup"))
+                .when(s3Service).delete(any());
+
+        assertThatThrownBy(() -> service.upload(file, FileCategory.DOCUMENT, ownerId))
+                .isSameAs(dbFailure);
     }
 
     @Test
@@ -124,6 +160,48 @@ class FileServiceImplTest {
         service.delete(uploadedFile.getId(), ownerId);
 
         verify(s3Service).delete(uploadedFile.getObjectName());
+    }
+
+    @Test
+    void deleteDoesNotMutateMetadataWhenStorageDeleteFails() {
+        UploadedFile uploadedFile = uploadedFile(ownerId);
+        when(repository.findByIdAndDeletedFalse(uploadedFile.getId())).thenReturn(Optional.of(uploadedFile));
+        RuntimeException storageFailure = new RuntimeException("storage");
+        doThrow(storageFailure).when(s3Service).delete(uploadedFile.getObjectName());
+
+        assertThatThrownBy(() -> service.delete(uploadedFile.getId(), ownerId))
+                .isSameAs(storageFailure);
+
+        assertThat(uploadedFile.getDeleted()).isFalse();
+        assertThat(uploadedFile.getDeletedAt()).isNull();
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void deletePropagatesMetadataSaveFailureAfterStorageWasDeleted() {
+        UploadedFile uploadedFile = uploadedFile(ownerId);
+        when(repository.findByIdAndDeletedFalse(uploadedFile.getId())).thenReturn(Optional.of(uploadedFile));
+        RuntimeException dbFailure = new RuntimeException("db");
+        when(repository.save(uploadedFile)).thenThrow(dbFailure);
+
+        assertThatThrownBy(() -> service.delete(uploadedFile.getId(), ownerId))
+                .isSameAs(dbFailure);
+
+        verify(s3Service).delete(uploadedFile.getObjectName());
+        assertThat(uploadedFile.getDeleted()).isTrue();
+        assertThat(uploadedFile.getDeletedAt()).isNotNull();
+    }
+
+    @Test
+    void deleteMissingMetadataDoesNotCallStorage() {
+        UUID missingId = UUID.randomUUID();
+        when(repository.findByIdAndDeletedFalse(missingId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.delete(missingId, ownerId))
+                .isInstanceOf(RestException.class)
+                .hasMessage("File not found");
+
+        verify(s3Service, never()).delete(any());
     }
 
     @Test

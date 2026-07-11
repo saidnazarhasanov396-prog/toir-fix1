@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -81,8 +82,10 @@ class AttachmentGroupServiceTest {
         when(targetAccessService.fileCategoryFor(AttachmentTargetType.EQUIPMENT)).thenReturn(FileCategory.EQUIPMENT_DOCUMENT);
         when(fileService.upload(front, FileCategory.EQUIPMENT_DOCUMENT, userId)).thenReturn(upload(firstFileId, "front.pdf"));
         when(fileService.upload(back, FileCategory.EQUIPMENT_DOCUMENT, userId)).thenReturn(upload(secondFileId, "back.pdf"));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(firstFileId)).thenReturn(Optional.of(uploadedFile(firstFileId, "front.pdf")));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(secondFileId)).thenReturn(Optional.of(uploadedFile(secondFileId, "back.pdf")));
+        when(uploadedFileRepository.findAllById(List.of(firstFileId, secondFileId))).thenReturn(List.of(
+                uploadedFile(firstFileId, "front.pdf"),
+                uploadedFile(secondFileId, "back.pdf")
+        ));
         when(groupRepository.saveAndFlush(any(AttachmentGroup.class))).thenAnswer(invocation -> {
             AttachmentGroup group = invocation.getArgument(0);
             group.setId(UUID.randomUUID());
@@ -117,6 +120,48 @@ class AttachmentGroupServiceTest {
     }
 
     @Test
+    void createGroupLoadsUploadedMetadataInOneBatchAndPreservesUploadOrder() {
+        UUID targetId = UUID.randomUUID();
+        UUID firstFileId = UUID.randomUUID();
+        UUID secondFileId = UUID.randomUUID();
+        MockMultipartFile front = file("front.pdf", "application/pdf");
+        MockMultipartFile back = file("back.pdf", "application/pdf");
+        UploadedFile first = uploadedFile(firstFileId, "front.pdf");
+        UploadedFile second = uploadedFile(secondFileId, "back.pdf");
+        when(targetAccessService.assertCanAccess(AttachmentTargetType.EQUIPMENT, targetId))
+                .thenReturn(AttachmentTargetType.EQUIPMENT);
+        when(targetAccessService.fileCategoryFor(AttachmentTargetType.EQUIPMENT))
+                .thenReturn(FileCategory.EQUIPMENT_DOCUMENT);
+        when(fileService.upload(front, FileCategory.EQUIPMENT_DOCUMENT, userId))
+                .thenReturn(upload(firstFileId, "front.pdf"));
+        when(fileService.upload(back, FileCategory.EQUIPMENT_DOCUMENT, userId))
+                .thenReturn(upload(secondFileId, "back.pdf"));
+        when(uploadedFileRepository.findAllById(List.of(firstFileId, secondFileId)))
+                .thenReturn(List.of(second, first));
+        when(groupRepository.saveAndFlush(any(AttachmentGroup.class))).thenAnswer(invocation -> {
+            AttachmentGroup group = invocation.getArgument(0);
+            group.setId(UUID.randomUUID());
+            group.setCreatedAt(LocalDateTime.now());
+            return group;
+        });
+
+        AttachmentGroupDto result = service.createGroup(
+                "Passport",
+                null,
+                "EQUIPMENT",
+                targetId,
+                List.of(front, back),
+                null,
+                user
+        );
+
+        assertThat(result.files()).extracting(AttachmentGroupDto.FileItem::fileId)
+                .containsExactly(firstFileId, secondFileId);
+        verify(uploadedFileRepository).findAllById(List.of(firstFileId, secondFileId));
+        verify(uploadedFileRepository, never()).findByIdAndDeletedFalse(any());
+    }
+
+    @Test
     void createGroupRejectsEmptyFilesBeforeUpload() {
         UUID targetId = UUID.randomUUID();
         when(targetAccessService.assertCanAccess(AttachmentTargetType.EQUIPMENT, targetId)).thenReturn(AttachmentTargetType.EQUIPMENT);
@@ -137,6 +182,60 @@ class AttachmentGroupServiceTest {
     }
 
     @Test
+    void createGroupCleansSuccessfulUploadsWhenLaterUploadFails() {
+        UUID targetId = UUID.randomUUID();
+        UUID firstFileId = UUID.randomUUID();
+        MockMultipartFile front = file("front.pdf", "application/pdf");
+        MockMultipartFile back = file("back.pdf", "application/pdf");
+        when(targetAccessService.assertCanAccess(AttachmentTargetType.EQUIPMENT, targetId))
+                .thenReturn(AttachmentTargetType.EQUIPMENT);
+        when(targetAccessService.fileCategoryFor(AttachmentTargetType.EQUIPMENT))
+                .thenReturn(FileCategory.EQUIPMENT_DOCUMENT);
+        when(fileService.upload(front, FileCategory.EQUIPMENT_DOCUMENT, userId))
+                .thenReturn(upload(firstFileId, "front.pdf"));
+        RuntimeException secondUploadFailure = new RuntimeException("second upload failed");
+        when(fileService.upload(back, FileCategory.EQUIPMENT_DOCUMENT, userId))
+                .thenThrow(secondUploadFailure);
+
+        assertThatThrownBy(() -> service.createGroup(
+                "Passport", null, "EQUIPMENT", targetId, List.of(front, back), null, user))
+                .isSameAs(secondUploadFailure);
+
+        verify(fileService).delete(firstFileId, userId);
+        verify(uploadedFileRepository, never()).findAllById(any());
+    }
+
+    @Test
+    void createGroupContinuesCleanupAndPreservesLinkingFailure() {
+        UUID targetId = UUID.randomUUID();
+        UUID firstFileId = UUID.randomUUID();
+        UUID secondFileId = UUID.randomUUID();
+        MockMultipartFile front = file("front.pdf", "application/pdf");
+        MockMultipartFile back = file("back.pdf", "application/pdf");
+        when(targetAccessService.assertCanAccess(AttachmentTargetType.EQUIPMENT, targetId))
+                .thenReturn(AttachmentTargetType.EQUIPMENT);
+        when(targetAccessService.fileCategoryFor(AttachmentTargetType.EQUIPMENT))
+                .thenReturn(FileCategory.EQUIPMENT_DOCUMENT);
+        when(fileService.upload(front, FileCategory.EQUIPMENT_DOCUMENT, userId))
+                .thenReturn(upload(firstFileId, "front.pdf"));
+        when(fileService.upload(back, FileCategory.EQUIPMENT_DOCUMENT, userId))
+                .thenReturn(upload(secondFileId, "back.pdf"));
+        when(uploadedFileRepository.findAllById(List.of(firstFileId, secondFileId))).thenReturn(List.of(
+                uploadedFile(firstFileId, "front.pdf"), uploadedFile(secondFileId, "back.pdf")));
+        RuntimeException linkingFailure = new RuntimeException("group save failed");
+        when(groupRepository.saveAndFlush(any(AttachmentGroup.class))).thenThrow(linkingFailure);
+        doThrow(new RuntimeException("first cleanup failed"))
+                .when(fileService).delete(firstFileId, userId);
+
+        assertThatThrownBy(() -> service.createGroup(
+                "Passport", null, "EQUIPMENT", targetId, List.of(front, back), null, user))
+                .isSameAs(linkingFailure);
+
+        verify(fileService).delete(firstFileId, userId);
+        verify(fileService).delete(secondFileId, userId);
+    }
+
+    @Test
     void addFilesAppendsToExistingGroup() {
         UUID groupId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
@@ -149,7 +248,8 @@ class AttachmentGroupServiceTest {
         when(targetAccessService.assertCanAccess(AttachmentTargetType.WORK_ORDER, targetId)).thenReturn(AttachmentTargetType.WORK_ORDER);
         when(targetAccessService.fileCategoryFor(AttachmentTargetType.WORK_ORDER)).thenReturn(FileCategory.WORK_ORDER_DOCUMENT);
         when(fileService.upload(evidence, FileCategory.WORK_ORDER_DOCUMENT, userId)).thenReturn(upload(addedFileId, "evidence.pdf"));
-        when(uploadedFileRepository.findByIdAndDeletedFalse(addedFileId)).thenReturn(Optional.of(uploadedFile(addedFileId, "evidence.pdf")));
+        when(uploadedFileRepository.findAllById(List.of(addedFileId)))
+                .thenReturn(List.of(uploadedFile(addedFileId, "evidence.pdf")));
         when(groupRepository.saveAndFlush(group)).thenReturn(group);
 
         AttachmentGroupDto result = service.addFiles(groupId, List.of(evidence), List.of("evidence"), user);
