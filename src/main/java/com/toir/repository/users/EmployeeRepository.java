@@ -24,6 +24,9 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID>, JpaSp
     @Query(value = "SELECT * FROM hr_employees WHERE user_id = cast(:userId as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<Employee> findByUserIdAndIsDeletedFalse(@Param("userId") UUID userId);
 
+    @Query(value = "SELECT * FROM hr_employees WHERE user_id = cast(:userId as uuid) AND is_deleted = false ORDER BY id", nativeQuery = true)
+    List<Employee> findAllByUserIdAndIsDeletedFalse(@Param("userId") UUID userId);
+
     @Query(value = "SELECT * FROM hr_employees WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Employee> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
