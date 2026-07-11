@@ -609,9 +609,13 @@ class WorkOrderServiceTest {
         assertThat(captor.getValue().getWorkType()).isEqualTo(WorkType.REPAIR);
         assertThat(captor.getValue().getRepairRequestId()).isNull();
         assertThat(captor.getValue().getDefectId()).isNull();
+        assertThat(captor.getValue().isRequiresShutdown()).isFalse();
+        assertThat(captor.getValue().isRequiresIsolation()).isFalse();
         assertThat(result.workType()).isEqualTo(WorkType.REPAIR);
         assertThat(result.repairRequestId()).isNull();
         assertThat(result.defectId()).isNull();
+        assertThat(result.requiresShutdown()).isFalse();
+        assertThat(result.requiresIsolation()).isFalse();
         verify(workOrderSparePartRequirementService).syncFromWorkOrderContext(captor.getValue());
     }
 
@@ -751,6 +755,38 @@ class WorkOrderServiceTest {
         assertThat(captor.getValue().getStoppageActRequired()).isTrue();
         assertThat(result.repairActRequired()).isTrue();
         assertThat(result.stoppageActRequired()).isTrue();
+    }
+
+    @Test
+    void createPersistsAndReturnsShutdownAndIsolationRequirements() throws Exception {
+        WorkOrderRequest request = new ObjectMapper().readValue("""
+                {
+                  "number": "WO-SAFETY-FLAGS",
+                  "title": "Shutdown and isolate",
+                  "equipmentId": "%s",
+                  "departmentId": "%s",
+                  "type": "PLANNED",
+                  "workType": "REPAIR",
+                  "priority": "MEDIUM",
+                  "requiresShutdown": true,
+                  "requiresIsolation": true
+                }
+                """.formatted(UUID.randomUUID(), UUID.randomUUID()), WorkOrderRequest.class);
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            return workOrder;
+        });
+        mockSuccessfulCreateDependencies(request);
+
+        WorkOrderDto result = service.create(request);
+
+        ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().isRequiresShutdown()).isTrue();
+        assertThat(captor.getValue().isRequiresIsolation()).isTrue();
+        assertThat(result.requiresShutdown()).isTrue();
+        assertThat(result.requiresIsolation()).isTrue();
     }
 
     @Test
