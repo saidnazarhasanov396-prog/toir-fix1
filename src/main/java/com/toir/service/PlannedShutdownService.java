@@ -44,6 +44,7 @@ import com.toir.service.plannedshutdown.PlannedShutdownReadinessPolicy;
 import com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy;
 import com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy;
 import com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher;
+import com.toir.service.repair.CanonicalWorkSourceResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,6 +72,7 @@ public class PlannedShutdownService {
     private final DefectRepository defectRepository;
     private final PprTaskRepository pprTaskRepository;
     private final WorkOrderRepository workOrderRepository;
+    private final CanonicalWorkSourceResolver canonicalWorkSourceResolver;
     private final WorkOrderService workOrderService;
     private final WorkOrderMaterialReadinessService workOrderMaterialReadinessService;
     private final WorkOrderAssignmentEligibilityService workOrderAssignmentEligibilityService;
@@ -1410,6 +1412,12 @@ public class PlannedShutdownService {
             case PPR -> pprTaskRepository.findByIdAndIsDeletedFalse(request.sourceId())
                     .orElseThrow(() -> RestException.notFound("PPR task not found: " + request.sourceId()))
                     .getEquipmentId();
+            case REPAIR_REQUEST -> canonicalWorkSourceResolver.resolve(
+                    com.toir.enums.RepairCampaignWorkItemSourceType.REPAIR_REQUEST,
+                    request.sourceId(), request.equipmentId(), Set.of()).equipmentId();
+            case INSPECTION_ROUND -> canonicalWorkSourceResolver.resolve(
+                    com.toir.enums.RepairCampaignWorkItemSourceType.INSPECTION_ROUND,
+                    request.sourceId(), request.equipmentId(), Set.of()).equipmentId();
             case WORK_ORDER -> workOrderRepository.findByIdAndIsDeletedFalse(request.sourceId())
                     .orElseThrow(() -> RestException.notFound("Work Order not found: " + request.sourceId()))
                     .getEquipmentId();

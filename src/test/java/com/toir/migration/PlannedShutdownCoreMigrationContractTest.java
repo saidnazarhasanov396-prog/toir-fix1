@@ -145,7 +145,7 @@ class PlannedShutdownCoreMigrationContractTest {
                 "STARTUP", "COMPLETED", "CLOSED", "CANCELLED", "RESCHEDULED", "EMERGENCY_EXTENDED");
         assertEnumValues("com.toir.enums.PlannedShutdownAssetDisposition", "STOPPED", "RESERVE", "RUNNING");
         assertEnumValues("com.toir.enums.PlannedShutdownWorkItemSourceType",
-                "MANUAL", "DEFECT", "PPR", "WORK_ORDER", "REPAIR_CAMPAIGN");
+                "MANUAL", "DEFECT", "PPR", "REPAIR_REQUEST", "INSPECTION_ROUND", "WORK_ORDER", "REPAIR_CAMPAIGN");
         assertEnumValues("com.toir.enums.PlannedShutdownReadinessSeverity", "CRITICAL", "WARNING");
         assertEnumValues("com.toir.enums.PlannedShutdownItemStatus",
                 "PENDING", "IN_PROGRESS", "PASSED", "FAILED", "WAIVED");

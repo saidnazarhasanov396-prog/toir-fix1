@@ -17,6 +17,7 @@ import com.toir.enums.RepairCampaignStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.service.PlannedShutdownService;
 import com.toir.service.repair.RepairCampaignService;
+import com.toir.service.repair.RepairCampaignWorkItemService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -73,6 +74,9 @@ class RbacToirBusinessFlowSecurityTest {
 
     @MockBean
     RepairCampaignService repairCampaignService;
+
+    @MockBean
+    RepairCampaignWorkItemService repairCampaignWorkItemService;
 
     @TestConfiguration
     static class SecurityBeans {

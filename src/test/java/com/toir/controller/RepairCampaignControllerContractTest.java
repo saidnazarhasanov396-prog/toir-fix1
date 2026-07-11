@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
@@ -44,8 +45,29 @@ import static org.mockito.Mockito.never;
 @ExtendWith(MockitoExtension.class)
 class RepairCampaignControllerContractTest {
 
+    @Test
+    void workItemEndpointsDeclareReadAndMutationPbac() {
+        java.util.Map<String, String> expected = java.util.Map.of(
+                "listWorkItems", "REPAIR_CAMPAIGN_READ",
+                "addWorkItem", "REPAIR_CAMPAIGN_UPDATE",
+                "updateWorkItem", "REPAIR_CAMPAIGN_UPDATE",
+                "removeWorkItem", "REPAIR_CAMPAIGN_UPDATE",
+                "reorderWorkItems", "REPAIR_CAMPAIGN_UPDATE");
+        for (var method : RepairCampaignController.class.getDeclaredMethods()) {
+            if (!expected.containsKey(method.getName())) continue;
+            PreAuthorize annotation = method.getAnnotation(PreAuthorize.class);
+            assertThat(annotation).as(method.getName()).isNotNull();
+            assertThat(annotation.value()).contains(expected.get(method.getName()));
+        }
+        assertThat(java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods())
+                .map(java.lang.reflect.Method::getName).filter(expected::containsKey)).hasSize(expected.size());
+    }
+
     @Mock
     private RepairCampaignService service;
+
+    @Mock
+    private com.toir.service.repair.RepairCampaignWorkItemService workItemService;
 
     @Mock
     private ApprovalService approvalService;
@@ -58,7 +80,7 @@ class RepairCampaignControllerContractTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();

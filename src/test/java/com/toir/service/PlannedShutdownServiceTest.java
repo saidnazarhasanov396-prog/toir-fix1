@@ -25,6 +25,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.service.plannedshutdown.PlannedShutdownWorkItemPolicy;
 import com.toir.service.plannedshutdown.PlannedShutdownReadinessPolicy;
+import com.toir.service.repair.CanonicalWorkSourceResolver;
 import com.toir.security.ScopeAccessService;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.util.AuditBuilderService;
@@ -62,6 +63,7 @@ class PlannedShutdownServiceTest {
     @Mock private DefectRepository defectRepository;
     @Mock private PprTaskRepository pprTaskRepository;
     @Mock private WorkOrderRepository workOrderRepository;
+    @Mock private CanonicalWorkSourceResolver canonicalWorkSourceResolver;
     @Mock private WorkOrderService workOrderService;
     @Mock private PlannedShutdownWorkItemPolicy workItemPolicy;
     @Mock private PlannedShutdownReadinessItemRepository readinessItemRepository;

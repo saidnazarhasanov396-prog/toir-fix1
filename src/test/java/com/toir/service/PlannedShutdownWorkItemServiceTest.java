@@ -9,6 +9,7 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.plannedshutdown.PlannedShutdownAsset;
 import com.toir.entity.plannedshutdown.PlannedShutdownWorkItem;
 import com.toir.enums.*;
+import com.toir.exception.RestException;
 import com.toir.repository.*;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.department.DepartmentRepository;
@@ -53,6 +54,7 @@ class PlannedShutdownWorkItemServiceTest {
     @Mock DefectRepository defectRepository;
     @Mock PprTaskRepository pprTaskRepository;
     @Mock WorkOrderRepository workOrderRepository;
+    @Mock com.toir.service.repair.CanonicalWorkSourceResolver canonicalWorkSourceResolver;
     @Mock WorkOrderService workOrderService;
     @Mock WorkOrderMaterialReadinessService materialReadinessService;
     @Mock WorkOrderAssignmentEligibilityService assignmentEligibilityService;
@@ -75,7 +77,7 @@ class PlannedShutdownWorkItemServiceTest {
                 readinessItemRepository, isolationPointRepository,
                 statusHistoryRepository, approvalRequestRepository,
                 departmentRepository, employeeRepository, equipmentRepository, defectRepository,
-                pprTaskRepository, workOrderRepository, workOrderService, materialReadinessService, assignmentEligibilityService,
+                pprTaskRepository, workOrderRepository, canonicalWorkSourceResolver, workOrderService, materialReadinessService, assignmentEligibilityService,
                 safetyPermitRepository, new PlannedShutdownWorkItemPolicy(), new PlannedShutdownReadinessPolicy(),
                 new com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy(),
                 new com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy(),
@@ -188,6 +190,41 @@ class PlannedShutdownWorkItemServiceTest {
         when(workOrderRepository.findByIdAndIsDeletedFalse(sourceId)).thenReturn(Optional.of(matching));
         assertThat(service.addWorkItem(shutdownId,
                 request(4L, PlannedShutdownWorkItemSourceType.WORK_ORDER, sourceId, 0)).scopeVersion()).isEqualTo(3L);
+    }
+
+    @Test
+    void repairRequestAndInspectionRoundUseTheCanonicalResolver() {
+        for (PlannedShutdownWorkItemSourceType shutdownType : List.of(
+                PlannedShutdownWorkItemSourceType.REPAIR_REQUEST,
+                PlannedShutdownWorkItemSourceType.INSPECTION_ROUND)) {
+            UUID sourceId = UUID.randomUUID();
+            com.toir.enums.RepairCampaignWorkItemSourceType canonicalType = shutdownType
+                    == PlannedShutdownWorkItemSourceType.REPAIR_REQUEST
+                    ? com.toir.enums.RepairCampaignWorkItemSourceType.REPAIR_REQUEST
+                    : com.toir.enums.RepairCampaignWorkItemSourceType.INSPECTION_ROUND;
+            when(canonicalWorkSourceResolver.resolve(canonicalType, sourceId, equipmentId, java.util.Set.of()))
+                    .thenReturn(new com.toir.service.repair.CanonicalWorkSourceResolver.CanonicalWorkSource(
+                            sourceId, equipmentId, "canonical"));
+
+            assertThat(service.addWorkItem(shutdownId, request(4L, shutdownType, sourceId, 0)).scopeVersion())
+                    .isEqualTo(3L);
+            verify(canonicalWorkSourceResolver).resolve(canonicalType, sourceId, equipmentId, java.util.Set.of());
+            shutdown.setScopeVersion(2L);
+        }
+    }
+
+    @Test
+    void repairRequestAndInspectionRoundPropagateCanonicalResolverRejections() {
+        UUID sourceId = UUID.randomUUID();
+        when(canonicalWorkSourceResolver.resolve(
+                com.toir.enums.RepairCampaignWorkItemSourceType.REPAIR_REQUEST,
+                sourceId, equipmentId, java.util.Set.of()))
+                .thenThrow(RestException.notFound("Repair request not found: " + sourceId));
+
+        assertThatThrownBy(() -> service.addWorkItem(shutdownId,
+                request(4L, PlannedShutdownWorkItemSourceType.REPAIR_REQUEST, sourceId, 0)))
+                .isInstanceOf(RestException.class).hasMessageContaining("not found");
+        verify(itemRepository, never()).saveAndFlush(any());
     }
 
     @Test

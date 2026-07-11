@@ -9,11 +9,14 @@ import com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
 import com.toir.dto.repaircampaign.RepairCampaignSummaryDto;
+import com.toir.dto.repaircampaign.RepairCampaignWorkItemRequest;
+import com.toir.dto.repaircampaign.RepairCampaignWorkItemResponse;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.RestException;
 import com.toir.service.repair.RepairCampaignService;
+import com.toir.service.repair.RepairCampaignWorkItemService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -37,6 +40,10 @@ import java.math.BigDecimal;
 public class RepairCampaignController {
 
     private final RepairCampaignService service;
+    private final RepairCampaignWorkItemService workItemService;
+
+    public record WorkItemOrderRequest(@jakarta.validation.constraints.NotNull Long version,
+                                       @jakarta.validation.constraints.NotNull List<UUID> itemIds) { }
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
@@ -72,6 +79,42 @@ public class RepairCampaignController {
             throw RestException.badRequest("Repair campaign version is required for update");
         }
         return ResponseEntity.ok(service.update(id, r));
+    }
+
+    @GetMapping("/{id}/work-items")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
+    public ResponseEntity<List<RepairCampaignWorkItemResponse>> listWorkItems(@PathVariable UUID id) {
+        return ResponseEntity.ok(workItemService.list(id));
+    }
+
+    @PostMapping("/{id}/work-items")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<RepairCampaignWorkItemResponse> addWorkItem(
+            @PathVariable UUID id, @Valid @RequestBody RepairCampaignWorkItemRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(workItemService.add(id, request));
+    }
+
+    @PutMapping("/{id}/work-items/{itemId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<RepairCampaignWorkItemResponse> updateWorkItem(
+            @PathVariable UUID id, @PathVariable UUID itemId,
+            @Valid @RequestBody RepairCampaignWorkItemRequest request) {
+        return ResponseEntity.ok(workItemService.update(id, itemId, request));
+    }
+
+    @DeleteMapping("/{id}/work-items/{itemId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<Void> removeWorkItem(
+            @PathVariable UUID id, @PathVariable UUID itemId, @RequestParam Long version) {
+        workItemService.remove(id, itemId, version);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}/work-items/order")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<List<RepairCampaignWorkItemResponse>> reorderWorkItems(
+            @PathVariable UUID id, @Valid @RequestBody WorkItemOrderRequest request) {
+        return ResponseEntity.ok(workItemService.reorder(id, request.itemIds(), request.version()));
     }
 
     @PostMapping("/{id}/reject")

@@ -53,6 +53,7 @@ class PlannedShutdownLifecycleServiceTest {
     @Mock DefectRepository defectRepository;
     @Mock PprTaskRepository pprTaskRepository;
     @Mock WorkOrderRepository workOrderRepository;
+    @Mock com.toir.service.repair.CanonicalWorkSourceResolver canonicalWorkSourceResolver;
     @Mock WorkOrderService workOrderService;
     @Mock WorkOrderMaterialReadinessService materialReadinessService;
     @Mock WorkOrderAssignmentEligibilityService assignmentEligibilityService;
@@ -77,7 +78,7 @@ class PlannedShutdownLifecycleServiceTest {
         service = new PlannedShutdownService(repository, assetRepository, workItemRepository,
                 readinessItemRepository, isolationPointRepository, historyRepository, approvalRequestRepository,
                 departmentRepository, employeeRepository, equipmentRepository, defectRepository, pprTaskRepository,
-                workOrderRepository, workOrderService, materialReadinessService, assignmentEligibilityService, safetyPermitRepository,
+                workOrderRepository, canonicalWorkSourceResolver, workOrderService, materialReadinessService, assignmentEligibilityService, safetyPermitRepository,
                 workItemPolicy, readinessPolicy, readinessLifecyclePolicy, transitionPolicy, approvalScopeHasher,
                 evidenceService, reportService, scopeAccessService, audit);
         id = UUID.randomUUID();
