@@ -20,6 +20,7 @@ import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignScopeType;
 import com.toir.enums.RepairCampaignPriority;
 import com.toir.enums.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignStageStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
@@ -44,6 +45,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -123,10 +125,8 @@ class RepairCampaignServiceTest {
 
         assertThatThrownBy(() -> service.create(taskOneRequest(
                 campaignDepartmentId, employeeId, LocalDate.of(2026, 2, 1))))
-                .isInstanceOfSatisfying(RestException.class, ex -> {
-                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("campaign department");
-                });
+                .isInstanceOfSatisfying(AccessDeniedException.class,
+                        ex -> assertThat(ex.getMessage()).isEqualTo("Access denied by repair campaign scope"));
 
         verify(repository, never()).save(any());
     }
@@ -197,6 +197,70 @@ class RepairCampaignServiceTest {
                 });
 
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateRejectsMissingOptimisticVersion() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setVersion(4L);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+
+        assertThatThrownBy(() -> service.update(campaignId,
+                taskOneRequest(null, null, LocalDate.of(2026, 2, 1), null)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("version is required");
+                });
+    }
+
+    @Test
+    void updateReturnsVersionAdvancedByFlushExactlyOnce() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setVersion(3L);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.saveAndFlush(campaign)).thenAnswer(invocation -> {
+            campaign.setVersion(4L);
+            return campaign;
+        });
+
+        RepairCampaignDto result = service.update(campaignId,
+                taskOneRequest(null, null, LocalDate.of(2026, 2, 1), 3L));
+
+        assertThat(result.version()).isEqualTo(4L);
+        verify(repository).saveAndFlush(campaign);
+        verify(repository, never()).save(campaign);
+    }
+
+    @Test
+    void addStageCannotAcceptAggregateOnlyStatus() {
+        assertThatThrownBy(() -> new RepairCampaignStageDto(
+                null, 1, "Invalid", LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 2),
+                BigDecimal.ONE, BigDecimal.ZERO, RepairCampaignStatus.SUSPENDED, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Aggregate-only status");
+    }
+
+    @Test
+    void addStageKeepsServerOwnedDedicatedDraftStatus() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(stageRepository.save(any())).thenAnswer(invocation -> {
+            RepairCampaignStage stage = invocation.getArgument(0);
+            stage.setId(UUID.randomUUID());
+            return stage;
+        });
+        when(repository.save(campaign)).thenReturn(campaign);
+
+        RepairCampaignStageDto result = service.addStage(campaignId, new RepairCampaignStageDto(
+                null, 1, "Valid", LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 2),
+                BigDecimal.ONE, BigDecimal.ZERO, RepairCampaignStageStatus.APPROVED, null,
+                0, 0, BigDecimal.ZERO, BigDecimal.ZERO, null,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+
+        assertThat(result.status()).isEqualTo(RepairCampaignStageStatus.DRAFT);
     }
 
     @Test
@@ -740,7 +804,7 @@ class RepairCampaignServiceTest {
                 LocalDate.of(2026, 1, 10),
                 BigDecimal.valueOf(700),
                 BigDecimal.ZERO,
-                RepairCampaignStatus.DRAFT,
+                RepairCampaignStageStatus.DRAFT,
                 null,
                 0,
                 0,
@@ -774,7 +838,7 @@ class RepairCampaignServiceTest {
                 LocalDate.of(2026, 1, 10),
                 BigDecimal.valueOf(700),
                 BigDecimal.ZERO,
-                RepairCampaignStatus.DRAFT,
+                RepairCampaignStageStatus.DRAFT,
                 null,
                 0,
                 0,
@@ -887,6 +951,15 @@ class RepairCampaignServiceTest {
             UUID responsibleEmployeeId,
             LocalDate endDate
     ) {
+        return taskOneRequest(departmentId, responsibleEmployeeId, endDate, 3L);
+    }
+
+    private RepairCampaignRequest taskOneRequest(
+            UUID departmentId,
+            UUID responsibleEmployeeId,
+            LocalDate endDate,
+            Long version
+    ) {
         return new RepairCampaignRequest(
                 null,
                 "Task 1 campaign",
@@ -905,7 +978,7 @@ class RepairCampaignServiceTest {
                 responsibleEmployeeId,
                 RepairCampaignPriority.HIGH,
                 "Restore design capacity",
-                3L
+                version
         );
     }
 

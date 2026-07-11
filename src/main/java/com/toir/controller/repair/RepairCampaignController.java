@@ -68,6 +68,9 @@ public class RepairCampaignController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
     public ResponseEntity<RepairCampaignDto> update(@PathVariable UUID id, @Valid @RequestBody RepairCampaignRequest r) {
+        if (r.version() == null) {
+            throw RestException.badRequest("Repair campaign version is required for update");
+        }
         return ResponseEntity.ok(service.update(id, r));
     }
 

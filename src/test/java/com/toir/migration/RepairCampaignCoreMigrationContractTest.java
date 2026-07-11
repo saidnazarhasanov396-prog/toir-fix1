@@ -67,6 +67,8 @@ class RepairCampaignCoreMigrationContractTest {
                 "DRAFT", "SCOPE_FORMATION", "RESOURCE_CHECK", "PENDING_APPROVAL", "APPROVED",
                 "PREPARATION", "IN_PROGRESS", "SUSPENDED", "COMPLETED", "CLOSING", "CLOSED", "CANCELLED");
         assertEnumValues("com.toir.enums.RepairCampaignPriority", "LOW", "MEDIUM", "HIGH", "CRITICAL");
+        assertEnumValues("com.toir.enums.RepairCampaignStageStatus",
+                "DRAFT", "APPROVED", "IN_PROGRESS", "COMPLETED", "CLOSED", "CANCELLED");
 
         Class<?> aggregate = Class.forName("com.toir.entity.repair.RepairCampaign");
         assertThat(aggregate.getDeclaredField("version").getAnnotation(Version.class)).isNotNull();
@@ -87,6 +89,20 @@ class RepairCampaignCoreMigrationContractTest {
                 "scopeVersion", "windowVersion", "correlationKey", "occurredAt")) {
             assertThat(history.getDeclaredField(fieldName)).isNotNull();
         }
+
+        Field stageStatus = Class.forName("com.toir.entity.repair.RepairCampaignStage")
+                .getDeclaredField("status");
+        assertThat(stageStatus.getType().getName()).isEqualTo("com.toir.enums.RepairCampaignStageStatus");
+        Field stageDtoStatus = Class.forName("com.toir.dto.repaircampaign.RepairCampaignStageDto")
+                .getDeclaredField("status");
+        assertThat(stageDtoStatus.getType().getName()).isEqualTo("com.toir.enums.RepairCampaignStageStatus");
+
+        String baseline = Files.readString(Path.of("src/main/resources/db/migration/B20260523_7__schema_baseline.sql"));
+        String stageConstraint = baseline.substring(
+                baseline.indexOf("CONSTRAINT repair_campaign_stages_status_check"),
+                baseline.indexOf(";", baseline.indexOf("CONSTRAINT repair_campaign_stages_status_check")));
+        assertThat(stageConstraint).contains("DRAFT", "APPROVED", "IN_PROGRESS", "COMPLETED", "CLOSED", "CANCELLED")
+                .doesNotContain("SCOPE_FORMATION", "RESOURCE_CHECK", "PENDING_APPROVAL", "PREPARATION", "SUSPENDED", "CLOSING");
     }
 
     private static void assertEnumValues(String className, String... expected) throws Exception {

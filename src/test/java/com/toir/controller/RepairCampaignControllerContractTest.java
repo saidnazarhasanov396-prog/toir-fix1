@@ -20,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
@@ -35,8 +36,10 @@ import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class RepairCampaignControllerContractTest {
@@ -196,6 +199,51 @@ class RepairCampaignControllerContractTest {
         mockMvc.perform(post("/api/v1/repair-campaigns")
                         .contentType("application/json")
                         .content(excessiveScale))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updateRequiresVersionButCreateRemainsCompatibleWithoutIt() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+        String payload = """
+                {"name":"Versioned","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"100.0000","currencyCode":"UZS"}
+                """;
+
+        mockMvc.perform(put("/api/v1/repair-campaigns/{id}", campaignId)
+                        .contentType("application/json").content(payload))
+                .andExpect(status().isBadRequest());
+        verify(service, never()).update(eq(campaignId), any());
+
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json").content(payload))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void foreignOwnerFailureIsGenericForbidden() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+        when(service.update(eq(campaignId), any()))
+                .thenThrow(new AccessDeniedException("Access denied by repair campaign scope"));
+
+        mockMvc.perform(put("/api/v1/repair-campaigns/{id}", campaignId)
+                        .contentType("application/json")
+                        .content("""
+                                {"version":1,"name":"Forbidden","startDate":"2026-01-01",
+                                 "endDate":"2026-02-01","totalBudget":"100.0000","currencyCode":"UZS"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied"));
+    }
+
+    @Test
+    void aggregateOnlyStageStatusIsRejectedAtJsonBoundary() throws Exception {
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/stages", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content("""
+                                {"sequence":1,"name":"Invalid","startDate":"2026-01-01",
+                                 "endDate":"2026-01-02","plannedCost":"1.0000","status":"SUSPENDED"}
+                                """))
                 .andExpect(status().isBadRequest());
     }
 

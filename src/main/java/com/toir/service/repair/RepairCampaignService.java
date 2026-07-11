@@ -33,6 +33,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.RepairCampaignDepartmentRole;
 import com.toir.enums.RepairCampaignScopeType;
 import com.toir.enums.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignStageStatus;
 import com.toir.enums.RepairAcceptanceStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -55,6 +56,7 @@ import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -192,7 +194,7 @@ public class RepairCampaignService {
         c.setNotes(r.notes());
         replaceParticipantDepartments(c, r.participantDepartments());
 
-        RepairCampaign saved = repository.save(c);
+        RepairCampaign saved = repository.saveAndFlush(c);
         logCampaign(saved, AuditAction.UPDATE, "Ремонтная кампания обновлена", before, saved);
         return toDto(saved);
     }
@@ -246,8 +248,8 @@ public class RepairCampaignService {
             throw RestException.badRequest("Only APPROVED/IN_PROGRESS campaigns can be completed");
         }
         List<RepairCampaignStage> stages = safeList(c.getStages());
-        if (stages.stream().filter(stage -> stage.getStatus() != RepairCampaignStatus.CANCELLED)
-                .anyMatch(stage -> stage.getStatus() != RepairCampaignStatus.COMPLETED)) {
+        if (stages.stream().filter(stage -> stage.getStatus() != RepairCampaignStageStatus.CANCELLED)
+                .anyMatch(stage -> stage.getStatus() != RepairCampaignStageStatus.COMPLETED)) {
             throw RestException.badRequest("Cannot complete campaign while mandatory stages are not completed");
         }
         List<WorkOrder> workOrders = campaignWorkOrders(c.getId());
@@ -358,7 +360,7 @@ public class RepairCampaignService {
         RepairCampaignStage before = snapshot(stage);
         CampaignCostTotals totals = costTotals(workOrders);
         stage.setActualCost(totals.approvedActual());
-        stage.setStatus(RepairCampaignStatus.COMPLETED);
+        stage.setStatus(RepairCampaignStageStatus.COMPLETED);
         RepairCampaignStage saved = stageRepository.save(stage);
         recalcTotals(campaign);
         repository.save(campaign);
@@ -535,7 +537,7 @@ public class RepairCampaignService {
         CampaignCostTotals totals = costTotals(workOrders);
         int stageCount = safeList(campaign.getStages()).size();
         int completedStageCount = (int) safeList(campaign.getStages()).stream()
-                .filter(stage -> stage.getStatus() == RepairCampaignStatus.COMPLETED)
+                .filter(stage -> stage.getStatus() == RepairCampaignStageStatus.COMPLETED)
                 .count();
         Map<WorkOrderStatus, Long> byStatus = new EnumMap<>(WorkOrderStatus.class);
         workOrders.stream()
@@ -727,12 +729,15 @@ public class RepairCampaignService {
             throw RestException.badRequest("Responsible employee must be active");
         }
         if (!departmentId.equals(employee.getDepartmentId())) {
-            throw RestException.badRequest("Responsible employee must belong to the campaign department");
+            throw new AccessDeniedException("Access denied by repair campaign scope");
         }
     }
 
     private void validateExpectedVersion(RepairCampaign campaign, Long expectedVersion) {
-        if (expectedVersion != null && !Objects.equals(campaign.getVersion(), expectedVersion)) {
+        if (expectedVersion == null) {
+            throw RestException.badRequest("Repair campaign version is required for update");
+        }
+        if (!Objects.equals(campaign.getVersion(), expectedVersion)) {
             throw RestException.conflict(
                     "Repair campaign version conflict: expected=" + expectedVersion
                             + ", actual=" + campaign.getVersion());

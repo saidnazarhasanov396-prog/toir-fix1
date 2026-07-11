@@ -1,6 +1,6 @@
 package com.toir.entity.repair;
 import com.toir.entity.BaseEntity;
-import com.toir.enums.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignStageStatus;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -50,7 +50,8 @@ public class RepairCampaignStage extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private RepairCampaignStatus status = RepairCampaignStatus.DRAFT;
+    @Builder.Default
+    private RepairCampaignStageStatus status = RepairCampaignStageStatus.DRAFT;
 
     @Column(columnDefinition = "text")
     private String notes;

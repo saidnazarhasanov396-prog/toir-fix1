@@ -30,6 +30,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -239,8 +240,20 @@ class RbacToirBusinessFlowSecurityTest {
 
         mockMvc.perform(put("/api/v1/repair-campaigns/{id}", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(campaignPayload()))
+                        .content(campaignUpdatePayload()))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.REPAIR_CAMPAIGN_UPDATE)
+    void campaignUpdaterStillReceivesForbiddenForForeignOwnerScope() throws Exception {
+        when(repairCampaignService.update(any(), any()))
+                .thenThrow(new AccessDeniedException("Access denied by repair campaign scope"));
+
+        mockMvc.perform(put("/api/v1/repair-campaigns/{id}", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(campaignUpdatePayload()))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -302,6 +315,12 @@ class RbacToirBusinessFlowSecurityTest {
     private static String campaignPayload() {
         return """
                 {"name":"Annual repair","departmentId":"%s","startDate":"2026-08-01","endDate":"2026-08-10","totalBudget":"1000","currencyCode":"UZS"}
+                """.formatted(UUID.randomUUID());
+    }
+
+    private static String campaignUpdatePayload() {
+        return """
+                {"version":1,"name":"Annual repair","departmentId":"%s","startDate":"2026-08-01","endDate":"2026-08-10","totalBudget":"1000","currencyCode":"UZS"}
                 """.formatted(UUID.randomUUID());
     }
 
