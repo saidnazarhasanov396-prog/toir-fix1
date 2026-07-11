@@ -88,8 +88,9 @@ class PlannedShutdownControllerContractTest {
                         .content("""
                                 {"name":"Annual","shutdownType":"PLANNED","departmentId":"%s",\
                                 "responsibleEmployeeId":"%s","startAt":"2026-08-01T00:00:00Z",\
-                                "endAt":"2026-08-02T00:00:00Z","reason":"Maintenance"}
-                                """.formatted(departmentId, employeeId)))
+                                "endAt":"2026-08-02T00:00:00Z","reason":"Maintenance",\
+                                "assets":[{"equipmentId":"%s","disposition":"STOPPED","orderNumber":0}]}
+                                """.formatted(departmentId, employeeId, UUID.randomUUID())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("SCOPE_FORMATION"))
                 .andExpect(jsonPath("$.version").value(3))

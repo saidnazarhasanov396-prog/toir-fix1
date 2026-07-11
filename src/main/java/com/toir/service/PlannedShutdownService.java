@@ -21,6 +21,7 @@ import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.*;
 import java.util.function.Function;
@@ -38,6 +39,7 @@ public class PlannedShutdownService {
     private final AuditBuilderService auditBuilderService;
 
     private static final Pattern CODE_PATTERN = Pattern.compile("[A-Z0-9-]{3,64}");
+    private static final String ACTIVE_CODE_CONSTRAINT = "uq_planned_shutdowns_active_code";
     private static final Set<PlannedShutdownStatus> SCOPE_MUTABLE_STATUSES = EnumSet.of(
             PlannedShutdownStatus.DRAFT, PlannedShutdownStatus.SCOPE_FORMATION);
 
@@ -55,6 +57,8 @@ public class PlannedShutdownService {
         validateWindow(r.startAt(), r.endAt());
         validateOwnership(r.departmentId(), r.responsibleEmployeeId());
         String code = normalizeOrGenerateCode(r.code());
+        validateRequestedScope(r.assets());
+        validateEquipmentScope(r.departmentId(), r.assets());
         PlannedShutdown s = new PlannedShutdown();
         s.setCode(code);
         s.setName(r.name());
@@ -72,7 +76,23 @@ public class PlannedShutdownService {
         s.setRiskScore(r.riskScore());
         s.setStatus(PlannedShutdownStatus.DRAFT);
         s.setScopeVersion(0L);
-        PlannedShutdown saved = repository.saveAndFlush(s);
+        PlannedShutdown saved = saveRoot(s, code);
+        UUID shutdownId = saved.getId();
+
+        List<PlannedShutdownAsset> initialAssets = r.assets().stream().map(item -> {
+            PlannedShutdownAsset asset = new PlannedShutdownAsset();
+            asset.setPlannedShutdownId(shutdownId);
+            asset.setEquipmentId(item.equipmentId());
+            asset.setDisposition(item.disposition());
+            asset.setInclusionReason(item.inclusionReason());
+            asset.setOrderNumber(item.orderNumber());
+            return asset;
+        }).toList();
+        assetRepository.saveAllAndFlush(initialAssets);
+        saved.setScopeVersion(1L);
+        saved = saveRoot(saved, code);
+        List<PlannedShutdownAssetResponse> assetResponses = initialAssets.stream()
+                .map(PlannedShutdownAssetResponse::from).toList();
 
         auditBuilderService.log(
                 "planned_shutdown",
@@ -84,7 +104,12 @@ public class PlannedShutdownService {
                 saved
         );
 
-        return PlannedShutdownDetailResponse.from(saved, List.of());
+        auditBuilderService.log(
+                "planned_shutdown_scope", saved.getId().toString(), AuditAction.CREATE,
+                AuditModule.PLANNED_SHUTDOWN, "Граница плановой остановки создана",
+                new ScopeAuditSnapshot(0L, List.of()), new ScopeAuditSnapshot(1L, assetResponses));
+
+        return PlannedShutdownDetailResponse.from(saved, assetResponses);
     }
 
     @Transactional(readOnly = true)
@@ -119,7 +144,7 @@ public class PlannedShutdownService {
         shutdown.setNotes(r.notes());
         shutdown.setRiskLevel(normalizeNullable(r.riskLevel()));
         shutdown.setRiskScore(r.riskScore());
-        PlannedShutdown saved = repository.saveAndFlush(shutdown);
+        PlannedShutdown saved = saveRoot(shutdown, code);
         auditBuilderService.log("planned_shutdown", id.toString(), AuditAction.UPDATE,
                 AuditModule.PLANNED_SHUTDOWN, "Плановая остановка обновлена", before,
                 PlannedShutdownAuditSnapshot.from(saved));
@@ -142,16 +167,7 @@ public class PlannedShutdownService {
         }
         validateRequestedScope(request.assets());
 
-        Set<UUID> equipmentIds = new LinkedHashSet<>();
-        request.assets().forEach(item -> equipmentIds.add(item.equipmentId()));
-        Map<UUID, Equipment> equipment = equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds).stream()
-                .collect(java.util.stream.Collectors.toMap(Equipment::getId, Function.identity()));
-        if (equipment.size() != equipmentIds.size()) {
-            throw RestException.badRequest("One or more scope equipment records were not found");
-        }
-        for (Equipment item : equipment.values()) {
-            requireEquipmentDepartment(item, shutdown.getDepartmentId());
-        }
+        validateEquipmentScope(shutdown.getDepartmentId(), request.assets());
 
         List<PlannedShutdownAsset> existing = assetRepository
                 .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id);
@@ -260,6 +276,17 @@ public class PlannedShutdownService {
         equipment.forEach(item -> requireEquipmentDepartment(item, departmentId));
     }
 
+    private void validateEquipmentScope(UUID departmentId, List<PlannedShutdownAssetRequest> assets) {
+        Set<UUID> equipmentIds = assets.stream().map(PlannedShutdownAssetRequest::equipmentId)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        Map<UUID, Equipment> equipment = equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds).stream()
+                .collect(java.util.stream.Collectors.toMap(Equipment::getId, Function.identity()));
+        if (equipment.size() != equipmentIds.size()) {
+            throw RestException.badRequest("One or more scope equipment records were not found");
+        }
+        equipment.values().forEach(item -> requireEquipmentDepartment(item, departmentId));
+    }
+
     private static void requireEquipmentDepartment(Equipment equipment, UUID departmentId) {
         UUID owner = equipment.getResponsibleDepartmentId() != null
                 ? equipment.getResponsibleDepartmentId() : equipment.getDepartmentId();
@@ -329,6 +356,33 @@ public class PlannedShutdownService {
             throw RestException.conflict("Planned shutdown was changed; expected version " + expected
                     + " but found " + shutdown.getVersion());
         }
+    }
+
+    private PlannedShutdown saveRoot(PlannedShutdown shutdown, String code) {
+        try {
+            return repository.saveAndFlush(shutdown);
+        } catch (DataIntegrityViolationException ex) {
+            if (isActiveCodeConstraint(ex)) {
+                throw RestException.conflict("Planned shutdown code already exists: " + code);
+            }
+            throw ex;
+        }
+    }
+
+    static boolean isActiveCodeConstraint(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof org.hibernate.exception.ConstraintViolationException violation
+                    && ACTIVE_CODE_CONSTRAINT.equalsIgnoreCase(violation.getConstraintName())) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null && message.toLowerCase(Locale.ROOT).contains(ACTIVE_CODE_CONSTRAINT)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private record PlannedShutdownAuditSnapshot(String code, String name, String type, UUID departmentId,

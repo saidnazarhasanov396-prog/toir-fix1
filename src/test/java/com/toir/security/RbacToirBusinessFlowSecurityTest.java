@@ -7,6 +7,7 @@ import com.toir.dto.plannedshutdown.PlannedShutdownCreateRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownDetailResponse;
 import com.toir.dto.plannedshutdown.PlannedShutdownUpdateRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownAssetReplaceRequest;
+import com.toir.dto.plannedshutdown.PlannedShutdownAssetScopeResponse;
 import com.toir.enums.PlannedShutdownStatus;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.enums.PlanStatus;
@@ -140,6 +141,41 @@ class RbacToirBusinessFlowSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.USER_READ)
+    void unrelatedUserCannotReadOrUpdatePlannedShutdownDetailAndScope() throws Exception {
+        UUID id = UUID.randomUUID();
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}", id)).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/assets", id)).andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/planned-shutdowns/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                .content(plannedShutdownUpdatePayload())).andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/planned-shutdowns/{id}/assets", id).contentType(MediaType.APPLICATION_JSON)
+                .content(plannedShutdownAssetsPayload())).andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_READ)
+    void plannedShutdownReaderCanReadDetailAndScope() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(plannedShutdownService.get(id)).thenReturn(plannedShutdownDetail());
+        when(plannedShutdownService.getAssets(id)).thenReturn(new PlannedShutdownAssetScopeResponse(id, 1L, 1L, List.of()));
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}", id)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/assets", id)).andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_UPDATE)
+    void plannedShutdownUpdaterCanUpdateDetailAndScope() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(plannedShutdownService.update(any(), any())).thenReturn(plannedShutdownDetail());
+        when(plannedShutdownService.replaceAssets(any(), any()))
+                .thenReturn(new PlannedShutdownAssetScopeResponse(id, 2L, 2L, List.of()));
+        mockMvc.perform(put("/api/v1/planned-shutdowns/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                .content(plannedShutdownUpdatePayload())).andExpect(status().isOk());
+        mockMvc.perform(put("/api/v1/planned-shutdowns/{id}/assets", id).contentType(MediaType.APPLICATION_JSON)
+                .content(plannedShutdownAssetsPayload())).andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.USER_READ)
     void unrelatedUserCannotCreateUpdateGenerateOrCancelCampaign() throws Exception {
         UUID id = UUID.randomUUID();
         mockMvc.perform(post("/api/v1/repair-campaigns")
@@ -226,8 +262,20 @@ class RbacToirBusinessFlowSecurityTest {
 
     private static String plannedShutdownPayload() {
         return """
-                {"name":"Annual shutdown","shutdownType":"PLANNED","departmentId":"%s","responsibleEmployeeId":"%s","startAt":"2026-08-01T00:00:00Z","endAt":"2026-08-02T00:00:00Z","reason":"Maintenance"}
+                {"name":"Annual shutdown","shutdownType":"PLANNED","departmentId":"%s","responsibleEmployeeId":"%s","startAt":"2026-08-01T00:00:00Z","endAt":"2026-08-02T00:00:00Z","reason":"Maintenance","assets":[{"equipmentId":"%s","disposition":"STOPPED","orderNumber":0}]}
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+    }
+
+    private static String plannedShutdownUpdatePayload() {
+        return """
+                {"version":1,"code":"PS-1","name":"Annual shutdown","shutdownType":"PLANNED","departmentId":"%s","responsibleEmployeeId":"%s","startAt":"2026-08-01T00:00:00Z","endAt":"2026-08-02T00:00:00Z","reason":"Maintenance"}
                 """.formatted(UUID.randomUUID(), UUID.randomUUID());
+    }
+
+    private static String plannedShutdownAssetsPayload() {
+        return """
+                {"version":1,"assets":[{"equipmentId":"%s","disposition":"STOPPED","orderNumber":0}]}
+                """.formatted(UUID.randomUUID());
     }
 
     private static PlannedShutdownDto plannedShutdownDto() {

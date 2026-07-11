@@ -20,6 +20,7 @@ import com.toir.repository.plannedshutdown.PlannedShutdownAssetRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.util.AuditBuilderService;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -77,20 +78,26 @@ class PlannedShutdownServiceTest {
     void createValidatesOwnerWindowAndGeneratesUniqueCode() {
         UUID departmentId = UUID.randomUUID();
         UUID employeeId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
         Department department = new Department(); department.setId(departmentId);
         Employee employee = new Employee(); employee.setId(employeeId); employee.setDepartmentId(departmentId); employee.setActive(true);
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(java.util.Optional.of(department));
         when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(java.util.Optional.of(employee));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(equipment(equipmentId, departmentId)));
         when(repository.existsByCodeAndIsDeletedFalse(any())).thenReturn(false);
-        when(repository.saveAndFlush(any())).thenAnswer(invocation -> { PlannedShutdown s = invocation.getArgument(0); s.setId(UUID.randomUUID()); s.setVersion(0L); return s; });
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> { PlannedShutdown s = invocation.getArgument(0); if (s.getId() == null) s.setId(UUID.randomUUID()); s.setVersion(s.getScopeVersion()); return s; });
+        when(assetRepository.saveAllAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.create(new PlannedShutdownCreateRequest(null, "Annual", "PLANNED", departmentId,
                 employeeId, Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"),
-                "Maintenance", "Safe overhaul", null, "HIGH", new java.math.BigDecimal("7.5")));
+                "Maintenance", "Safe overhaul", null, "HIGH", new java.math.BigDecimal("7.5"), List.of(
+                new PlannedShutdownAssetRequest(equipmentId, PlannedShutdownAssetDisposition.STOPPED, "main", 0))));
 
         assertThat(result.code()).startsWith("PS-");
         assertThat(result.status()).isEqualTo(PlannedShutdownStatus.DRAFT);
-        assertThat(result.version()).isZero();
+        assertThat(result.version()).isEqualTo(1L);
+        assertThat(result.scopeVersion()).isEqualTo(1L);
+        assertThat(result.assets()).extracting(a -> a.equipmentId()).containsExactly(equipmentId);
         verify(repository).existsByCodeAndIsDeletedFalse(result.code());
     }
 
@@ -115,7 +122,7 @@ class PlannedShutdownServiceTest {
         UUID departmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();
         assertThatThrownBy(() -> service.create(new PlannedShutdownCreateRequest("PS-X", "Annual", "PLANNED",
                 departmentId, employeeId, Instant.parse("2026-08-02T00:00:00Z"),
-                Instant.parse("2026-08-01T00:00:00Z"), "Maintenance", null, null, null, null)))
+                Instant.parse("2026-08-01T00:00:00Z"), "Maintenance", null, null, null, null, List.of())))
                 .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getMessage()).contains("after start"));
 
         Department department = new Department(); department.setId(departmentId);
@@ -125,6 +132,76 @@ class PlannedShutdownServiceTest {
         when(repository.existsByCodeAndIsDeletedFalse("PS-CUSTOM")).thenReturn(true);
         assertThatThrownBy(() -> service.create(request(departmentId, employeeId)))
                 .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    void saveClassifiesOnlyTheNamedActiveCodeConstraintAsConflict() {
+        UUID departmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID(); UUID equipmentId = UUID.randomUUID();
+        Department department = new Department(); department.setId(departmentId);
+        Employee employee = new Employee(); employee.setId(employeeId); employee.setDepartmentId(departmentId); employee.setActive(true);
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(java.util.Optional.of(department));
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(java.util.Optional.of(employee));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(equipment(equipmentId, departmentId)));
+        when(repository.existsByCodeAndIsDeletedFalse("PS-RACE")).thenReturn(false);
+        when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("insert failed",
+                new RuntimeException("duplicate key violates constraint uq_planned_shutdowns_active_code")));
+
+        assertThatThrownBy(() -> service.create(createRequest("PS-RACE", departmentId, employeeId, equipmentId)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).isEqualTo("Planned shutdown code already exists: PS-RACE");
+                });
+    }
+
+    @Test
+    void saveDoesNotMaskUnrelatedIntegrityFailures() {
+        UUID departmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID(); UUID equipmentId = UUID.randomUUID();
+        Department department = new Department(); department.setId(departmentId);
+        Employee employee = new Employee(); employee.setId(employeeId); employee.setDepartmentId(departmentId); employee.setActive(true);
+        DataIntegrityViolationException failure = new DataIntegrityViolationException("violates chk_planned_shutdown_window");
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(java.util.Optional.of(department));
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(java.util.Optional.of(employee));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(equipment(equipmentId, departmentId)));
+        when(repository.existsByCodeAndIsDeletedFalse("PS-OTHER")).thenReturn(false);
+        when(repository.saveAndFlush(any())).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.create(createRequest("PS-OTHER", departmentId, employeeId, equipmentId)))
+                .isSameAs(failure);
+    }
+
+    @Test
+    void updateClassifiesNamedActiveCodeConstraintAsConflict() {
+        UUID id = UUID.randomUUID(); UUID departmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, departmentId, 2L, PlannedShutdownStatus.DRAFT);
+        Department department = new Department(); department.setId(departmentId);
+        Employee employee = new Employee(); employee.setId(employeeId); employee.setDepartmentId(departmentId); employee.setActive(true);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(java.util.Optional.of(department));
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(java.util.Optional.of(employee));
+        when(repository.existsByCodeAndIdNotAndIsDeletedFalse("PS-CHANGED", id)).thenReturn(false);
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(repository.saveAndFlush(shutdown)).thenThrow(new DataIntegrityViolationException(
+                "constraint uq_planned_shutdowns_active_code"));
+
+        assertThatThrownBy(() -> service.update(id, new PlannedShutdownUpdateRequest(2L, "PS-CHANGED", "Annual",
+                "PLANNED", departmentId, employeeId, shutdown.getStartAt(), shutdown.getEndAt(), "Maintenance",
+                null, null, null, null)))
+                .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    void createRejectsMissingAndInactiveResponsibleEmployees() {
+        UUID departmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();
+        Department department = new Department(); department.setId(departmentId);
+        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(java.util.Optional.of(department));
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(java.util.Optional.empty());
+        assertThatThrownBy(() -> service.create(request(departmentId, employeeId)))
+                .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getMessage()).contains("not found"));
+
+        Employee inactive = new Employee(); inactive.setId(employeeId); inactive.setDepartmentId(departmentId); inactive.setActive(false);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(java.util.Optional.of(inactive));
+        assertThatThrownBy(() -> service.create(request(departmentId, employeeId)))
+                .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getMessage()).contains("active"));
     }
 
     @Test
@@ -221,6 +298,12 @@ class PlannedShutdownServiceTest {
                 new PlannedShutdownAssetRequest(equipmentId, PlannedShutdownAssetDisposition.RUNNING, null, 1)))))
                 .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getMessage()).contains("Duplicate"));
 
+        UUID secondEquipmentId = UUID.randomUUID();
+        assertThatThrownBy(() -> service.replaceAssets(id, new PlannedShutdownAssetReplaceRequest(2L, List.of(
+                new PlannedShutdownAssetRequest(equipmentId, PlannedShutdownAssetDisposition.STOPPED, null, 0),
+                new PlannedShutdownAssetRequest(secondEquipmentId, PlannedShutdownAssetDisposition.RESERVE, null, 0)))))
+                .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getMessage()).contains("order"));
+
         assertThatThrownBy(() -> service.replaceAssets(id, new PlannedShutdownAssetReplaceRequest(2L, List.of(
                 new PlannedShutdownAssetRequest(equipmentId, PlannedShutdownAssetDisposition.RUNNING, null, 0)))))
                 .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getMessage()).contains("STOPPED or RESERVE"));
@@ -228,6 +311,37 @@ class PlannedShutdownServiceTest {
         when(equipmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(equipment(equipmentId, UUID.randomUUID())));
         assertThatThrownBy(() -> service.replaceAssets(id, new PlannedShutdownAssetReplaceRequest(2L, List.of(
                 new PlannedShutdownAssetRequest(equipmentId, PlannedShutdownAssetDisposition.STOPPED, null, 0)))))
+                .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getMessage()).contains("department"));
+    }
+
+    @Test
+    void replaceScopeRejectsMissingEquipment() {
+        UUID id = UUID.randomUUID(); UUID equipmentId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 2L, PlannedShutdownStatus.DRAFT);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+        assertThatThrownBy(() -> service.replaceAssets(id, new PlannedShutdownAssetReplaceRequest(2L, List.of(
+                new PlannedShutdownAssetRequest(equipmentId, PlannedShutdownAssetDisposition.STOPPED, null, 0)))))
+                .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getMessage()).contains("not found"));
+    }
+
+    @Test
+    void updateRejectsDepartmentChangeThatConflictsWithExistingScope() {
+        UUID id = UUID.randomUUID(); UUID oldDepartmentId = UUID.randomUUID(); UUID newDepartmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID(); UUID equipmentId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, oldDepartmentId, 2L, PlannedShutdownStatus.DRAFT);
+        Department department = new Department(); department.setId(newDepartmentId);
+        Employee employee = new Employee(); employee.setId(employeeId); employee.setDepartmentId(newDepartmentId); employee.setActive(true);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(departmentRepository.findByIdAndIsDeletedFalse(newDepartmentId)).thenReturn(java.util.Optional.of(department));
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(java.util.Optional.of(employee));
+        when(repository.existsByCodeAndIdNotAndIsDeletedFalse("PS-TEST", id)).thenReturn(false);
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(asset(id, equipmentId, PlannedShutdownAssetDisposition.STOPPED, 0)));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of(equipment(equipmentId, oldDepartmentId)));
+
+        assertThatThrownBy(() -> service.update(id, new PlannedShutdownUpdateRequest(2L, "PS-TEST", "Annual", "PLANNED",
+                newDepartmentId, employeeId, shutdown.getStartAt(), shutdown.getEndAt(), "Maintenance", null, null, null, null)))
                 .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getMessage()).contains("department"));
     }
 
@@ -243,7 +357,16 @@ class PlannedShutdownServiceTest {
     private static PlannedShutdownCreateRequest request(UUID departmentId, UUID employeeId) {
         return new PlannedShutdownCreateRequest("PS-CUSTOM", "Annual", "PLANNED", departmentId, employeeId,
                 Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"),
-                "Maintenance", null, null, null, null);
+                "Maintenance", null, null, null, null, List.of(
+                new PlannedShutdownAssetRequest(UUID.randomUUID(), PlannedShutdownAssetDisposition.STOPPED, null, 0)));
+    }
+
+    private static PlannedShutdownCreateRequest createRequest(String code, UUID departmentId, UUID employeeId,
+            UUID equipmentId) {
+        return new PlannedShutdownCreateRequest(code, "Annual", "PLANNED", departmentId, employeeId,
+                Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"),
+                "Maintenance", null, null, null, null, List.of(
+                new PlannedShutdownAssetRequest(equipmentId, PlannedShutdownAssetDisposition.STOPPED, null, 0)));
     }
 
     private static PlannedShutdown shutdown(UUID id, UUID departmentId, long version, PlannedShutdownStatus status) {

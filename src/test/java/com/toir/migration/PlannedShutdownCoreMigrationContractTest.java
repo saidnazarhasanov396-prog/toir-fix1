@@ -171,6 +171,13 @@ class PlannedShutdownCoreMigrationContractTest {
                 .contains("check (scope_version >= 0)");
     }
 
+    @Test
+    void activeCodeConstraintKeepsTheStableNameUsedByConflictClassification() throws Exception {
+        String sql = Files.readString(MIGRATION).toLowerCase().replaceAll("\\s+", " ");
+        assertThat(sql).contains(
+                "create unique index uq_planned_shutdowns_active_code on planned_shutdowns (code) where is_deleted = false");
+    }
+
     private static void assertEnumValues(String className, String... expected) throws Exception {
         Class<?> enumType = Class.forName(className);
         assertThat(enumType.isEnum()).isTrue();

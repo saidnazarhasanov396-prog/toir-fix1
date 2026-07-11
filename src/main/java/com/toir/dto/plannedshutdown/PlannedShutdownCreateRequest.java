@@ -6,10 +6,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
 
 public record PlannedShutdownCreateRequest(
         @Pattern(regexp = "[A-Za-z0-9-]{3,64}") String code,
@@ -23,5 +25,6 @@ public record PlannedShutdownCreateRequest(
         String objective,
         String notes,
         @Size(max = 32) String riskLevel,
-        @DecimalMin("0") @Digits(integer = 5, fraction = 4) BigDecimal riskScore
+        @DecimalMin("0") @Digits(integer = 5, fraction = 4) BigDecimal riskScore,
+        @NotNull @Size(min = 1) List<@Valid PlannedShutdownAssetRequest> assets
 ) {}
