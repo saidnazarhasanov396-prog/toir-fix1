@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
@@ -472,6 +473,24 @@ class RepairCampaignServiceTest {
         assertThat(result.maintenanceBudgetId()).isEqualTo(budgetId);
         assertThat(result.budgetPlanned()).isEqualByComparingTo("10000");
         assertThat(result.budgetRemaining()).isEqualByComparingTo("10000");
+    }
+
+    @Test
+    void budgetSummaryRoundsFinanceOwnedDoublesToFourDecimalStrings() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+        UUID budgetId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, budgetId);
+        MaintenanceBudget budget = budget(
+                budgetId, 2026, UUID.randomUUID(), BudgetStatus.APPROVED, 1.23456, 0.00005);
+        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(maintenanceBudgetRepository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(budget));
+
+        com.toir.dto.repaircampaign.RepairCampaignBudgetSummaryDto result = service.budgetSummary(campaignId);
+
+        assertThat(result.linkedBudgetPlanned()).isEqualByComparingTo("1.2346");
+        assertThat(new ObjectMapper().writeValueAsString(result))
+                .contains("\"linkedBudgetPlanned\":\"1.2346\"")
+                .contains("\"linkedBudgetActual\":\"0.0001\"");
     }
 
     @Test

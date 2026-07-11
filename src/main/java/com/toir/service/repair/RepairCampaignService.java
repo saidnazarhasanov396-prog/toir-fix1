@@ -1207,7 +1207,7 @@ public class RepairCampaignService {
     }
 
     private static BigDecimal decimal(double value) {
-        return BigDecimal.valueOf(value);
+        return BigDecimal.valueOf(value).setScale(4, RoundingMode.HALF_UP);
     }
 
     private record CampaignCostTotals(BigDecimal approvedActual, BigDecimal pendingActual, BigDecimal rejectedActual) {

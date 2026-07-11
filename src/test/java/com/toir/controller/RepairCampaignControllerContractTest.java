@@ -162,6 +162,61 @@ class RepairCampaignControllerContractTest {
     }
 
     @Test
+    void explicitNullCampaignMoneyIsRejected() throws Exception {
+        String nullTotalBudget = """
+                {"name":"Null budget","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":null,"currencyCode":"UZS"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(nullTotalBudget))
+                .andExpect(status().isBadRequest());
+
+        String nullParticipantBudget = """
+                {"name":"Null participant budget","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"100","currencyCode":"UZS","participantDepartments":[
+                   {"departmentId":"%s","role":"PARTICIPANT","plannedBudget":null}
+                 ]}
+                """.formatted(UUID.randomUUID());
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(nullParticipantBudget))
+                .andExpect(status().isBadRequest());
+
+        String nullStagePlannedCost = """
+                {"sequence":1,"name":"Null stage budget","startDate":"2026-01-01",
+                 "endDate":"2026-01-02","plannedCost":null}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/stages", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content(nullStagePlannedCost))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void omittedCampaignMoneyKeepsExistingZeroDefaults() throws Exception {
+        String omittedTotalBudget = """
+                {"name":"Default budget","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "currencyCode":"UZS","participantDepartments":[
+                   {"departmentId":"%s","role":"PARTICIPANT"}
+                 ]}
+                """.formatted(UUID.randomUUID());
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(omittedTotalBudget))
+                .andExpect(status().isCreated());
+
+        String omittedStagePlannedCost = """
+                {"sequence":1,"name":"Default stage budget","startDate":"2026-01-01",
+                 "endDate":"2026-01-02"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/stages", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content(omittedStagePlannedCost))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void budgetSummaryReturnsBudgetIntegrationShape() throws Exception {
         UUID campaignId = UUID.randomUUID();
         UUID budgetId = UUID.randomUUID();

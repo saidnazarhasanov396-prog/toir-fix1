@@ -31,4 +31,14 @@ public class MoneyDecimalStringDeserializer extends JsonDeserializer<BigDecimal>
         }
         return decimal;
     }
+
+    @Override
+    public BigDecimal getNullValue(DeserializationContext context) throws JsonMappingException {
+        throw JsonMappingException.from(context.getParser(), "Money value must not be null");
+    }
+
+    @Override
+    public BigDecimal getAbsentValue(DeserializationContext context) {
+        return BigDecimal.ZERO;
+    }
 }
