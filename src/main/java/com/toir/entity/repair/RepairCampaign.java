@@ -24,6 +24,10 @@ import java.util.UUID;
 @Builder
 public class RepairCampaign extends BaseEntity {
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Column(nullable = false, unique = true)
     private String code;
 
@@ -59,6 +63,10 @@ public class RepairCampaign extends BaseEntity {
 
     @Column(name = "total_actual", nullable = false)
     private double totalActual;
+
+    @Column(name = "currency_code", nullable = false, length = 3)
+    @Builder.Default
+    private String currencyCode = "UZS";
 
     @Column(columnDefinition = "text")
     private String scope;
