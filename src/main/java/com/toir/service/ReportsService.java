@@ -8,6 +8,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ActualCost;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.Employee;
 import com.toir.entity.users.UserCertification;
 import com.toir.repository.CalibrationRecordRepository;
 import com.toir.repository.DowntimeEventRepository;
@@ -16,6 +17,7 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
@@ -25,6 +27,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -46,6 +50,7 @@ public class ReportsService {
     private final UserRepository userRepository;
     private final RcmService rcmService;
     private final ScopeAccessService scopeAccessService;
+    private final EmployeeRepository employeeRepository;
 
     @Transactional(readOnly = true)
     public CsvFile rcmRiskCsv() {
@@ -137,10 +142,19 @@ public class ReportsService {
         List<Equipment> items = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(equipment -> departmentId == null || departmentId.equals(equipment.getDepartmentId()))
                 .toList();
+        var responsibleIds = items.stream()
+                .map(Equipment::getResponsibleId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<UUID, Employee> responsibleEmployees = responsibleIds.isEmpty()
+                ? Collections.emptyMap()
+                : employeeRepository.findAllByIdInAndIsDeletedFalse(responsibleIds).stream()
+                        .collect(Collectors.toMap(Employee::getId, Function.identity()));
         String csv = CsvWriter.build(
                 List.of("id", "code", "name", "inventoryNumber", "serialNumber", "model",
                         "equipmentTypeId", "departmentId", "locationId", "criticalityClassId",
-                        "responsibleId", "status", "commissionedAt", "manufacturer"),
+                        "responsibleId", "responsibleEmployeeCode", "responsibleEmployeeName",
+                        "status", "commissionedAt", "manufacturer"),
                 items,
                 List.of(
                         Equipment::getId,
@@ -154,11 +168,26 @@ public class ReportsService {
                         Equipment::getLocationId,
                         Equipment::getCriticalityClassId,
                         Equipment::getResponsibleId,
+                        equipment -> employeeCode(responsibleEmployees.get(equipment.getResponsibleId())),
+                        equipment -> employeeName(responsibleEmployees.get(equipment.getResponsibleId())),
                         Equipment::getStatus,
                         Equipment::getCommissionedAt,
                         Equipment::getManufacturer
                 ));
         return new CsvFile("equipment.csv", csv);
+    }
+
+    private static String employeeCode(Employee employee) {
+        return employee == null ? null : employee.getPersonnelNumber();
+    }
+
+    private static String employeeName(Employee employee) {
+        if (employee == null) {
+            return null;
+        }
+        return java.util.stream.Stream.of(employee.getLastName(), employee.getFirstName(), employee.getMiddleName())
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.joining(" "));
     }
 
     @Transactional(readOnly = true)

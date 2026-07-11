@@ -82,6 +82,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -961,6 +962,16 @@ public class EquipmentService {
         Map<UUID, Employee> employeeMap = responsibleIds.isEmpty()
                 ? Collections.emptyMap()
                 : byId(employeeRepository.findAllByIdInAndIsDeletedFalse(responsibleIds), Employee::getId);
+        items.stream()
+                .filter(equipment -> equipment.getResponsibleId() != null)
+                .filter(equipment -> !employeeMap.containsKey(equipment.getResponsibleId()))
+                .findFirst()
+                .ifPresent(equipment -> {
+                    throw new DataIntegrityViolationException(
+                            "Equipment %s references unresolved responsible Employee %s"
+                                    .formatted(equipment.getId(), equipment.getResponsibleId())
+                    );
+                });
         Map<UUID, Location> locMap = byId(locationRepository.findAllByIdInAndIsDeletedFalse(locIds), Location::getId);
         Set<UUID> unresolvedLocIds = locIds.stream()
                 .filter(id -> !locMap.containsKey(id))

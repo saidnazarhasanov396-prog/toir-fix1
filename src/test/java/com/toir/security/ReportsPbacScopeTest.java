@@ -10,6 +10,7 @@ import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.RcmService;
@@ -39,6 +40,7 @@ class ReportsPbacScopeTest {
     CalibrationRecordRepository calibrationRecordRepository;
     UserCertificationRepository userCertificationRepository;
     UserRepository userRepository;
+    EmployeeRepository employeeRepository;
     RcmService rcmService;
     ScopeAccessService scopeAccessService;
     ReportsService service;
@@ -54,6 +56,7 @@ class ReportsPbacScopeTest {
         calibrationRecordRepository = mock(CalibrationRecordRepository.class);
         userCertificationRepository = mock(UserCertificationRepository.class);
         userRepository = mock(UserRepository.class);
+        employeeRepository = mock(EmployeeRepository.class);
         rcmService = mock(RcmService.class);
         scopeAccessService = mock(ScopeAccessService.class);
         service = new ReportsService(
@@ -67,7 +70,8 @@ class ReportsPbacScopeTest {
                 userCertificationRepository,
                 userRepository,
                 rcmService,
-                scopeAccessService
+                scopeAccessService,
+                employeeRepository
         );
     }
 
