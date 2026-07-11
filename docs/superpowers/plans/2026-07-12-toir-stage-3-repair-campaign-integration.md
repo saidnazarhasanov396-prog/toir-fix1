@@ -106,12 +106,12 @@ git commit -m "feat: add repair campaign core lifecycle schema"
 - Create: `src/main/java/com/toir/service/repair/CanonicalWorkSourceResolver.java`
 - Create: `src/main/java/com/toir/service/repair/RepairCampaignWorkItemService.java`
 - Modify: `src/main/java/com/toir/enums/PlannedShutdownWorkItemSourceType.java`
-- Modify: `src/main/java/com/toir/service/PlannedShutdownWorkItemService.java`
+- Modify: `src/main/java/com/toir/service/PlannedShutdownService.java`
 - Modify: `src/main/java/com/toir/controller/repair/RepairCampaignController.java`
 - Test: `src/test/java/com/toir/migration/RepairCampaignWorkSourceMigrationContractTest.java`
 - Test: `src/test/java/com/toir/service/repair/CanonicalWorkSourceResolverTest.java`
 - Test: `src/test/java/com/toir/service/repair/RepairCampaignWorkItemServiceTest.java`
-- Test: `src/test/java/com/toir/service/PlannedShutdownWorkItemServiceTest.java`
+- Test: `src/test/java/com/toir/service/PlannedShutdownServiceTest.java`
 
 **Interfaces:**
 - `RepairCampaignWorkItemSourceType`: `MANUAL, DEFECT, PPR, REPAIR_REQUEST, INSPECTION_ROUND, WORK_ORDER`.
@@ -143,7 +143,7 @@ void activeSourceIdentityAndOrderAreUniqueAndFrozenAfterApproval() {
 
 - [ ] **Step 2: Run RED**
 
-Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=RepairCampaignWorkSourceMigrationContractTest,CanonicalWorkSourceResolverTest,RepairCampaignWorkItemServiceTest,PlannedShutdownWorkItemServiceTest test`
+Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=RepairCampaignWorkSourceMigrationContractTest,CanonicalWorkSourceResolverTest,RepairCampaignWorkItemServiceTest,PlannedShutdownServiceTest test`
 
 Expected: FAIL because work-item schema/resolver/endpoints and new Planned Shutdown sources are absent.
 
@@ -158,7 +158,7 @@ Run the Step 2 command; expected PASS with zero skipped tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/resources/db/migration/V20260712_2__repair_campaign_work_sources.sql src/main/java/com/toir/enums/RepairCampaignWorkItemSourceType.java src/main/java/com/toir/enums/RepairCampaignWorkItemStatus.java src/main/java/com/toir/entity/repair/RepairCampaignWorkItem.java src/main/java/com/toir/repository/repair/RepairCampaignWorkItemRepository.java src/main/java/com/toir/dto/repaircampaign/RepairCampaignWorkItemRequest.java src/main/java/com/toir/dto/repaircampaign/RepairCampaignWorkItemResponse.java src/main/java/com/toir/service/repair/CanonicalWorkSourceResolver.java src/main/java/com/toir/service/repair/RepairCampaignWorkItemService.java src/main/java/com/toir/enums/PlannedShutdownWorkItemSourceType.java src/main/java/com/toir/service/PlannedShutdownWorkItemService.java src/main/java/com/toir/controller/repair/RepairCampaignController.java src/test/java/com/toir/migration/RepairCampaignWorkSourceMigrationContractTest.java src/test/java/com/toir/service/repair/CanonicalWorkSourceResolverTest.java src/test/java/com/toir/service/repair/RepairCampaignWorkItemServiceTest.java src/test/java/com/toir/service/PlannedShutdownWorkItemServiceTest.java
+git add src/main/resources/db/migration/V20260712_2__repair_campaign_work_sources.sql src/main/java/com/toir/enums/RepairCampaignWorkItemSourceType.java src/main/java/com/toir/enums/RepairCampaignWorkItemStatus.java src/main/java/com/toir/entity/repair/RepairCampaignWorkItem.java src/main/java/com/toir/repository/repair/RepairCampaignWorkItemRepository.java src/main/java/com/toir/dto/repaircampaign/RepairCampaignWorkItemRequest.java src/main/java/com/toir/dto/repaircampaign/RepairCampaignWorkItemResponse.java src/main/java/com/toir/service/repair/CanonicalWorkSourceResolver.java src/main/java/com/toir/service/repair/RepairCampaignWorkItemService.java src/main/java/com/toir/enums/PlannedShutdownWorkItemSourceType.java src/main/java/com/toir/service/PlannedShutdownService.java src/main/java/com/toir/controller/repair/RepairCampaignController.java src/test/java/com/toir/migration/RepairCampaignWorkSourceMigrationContractTest.java src/test/java/com/toir/service/repair/CanonicalWorkSourceResolverTest.java src/test/java/com/toir/service/repair/RepairCampaignWorkItemServiceTest.java src/test/java/com/toir/service/PlannedShutdownServiceTest.java
 git commit -m "feat: add canonical repair campaign work items"
 ```
 
@@ -275,6 +275,9 @@ git commit -m "feat: add canonical repair campaign work items"
 - Create: `src/main/resources/db/migration/V20260712_6__repair_campaign_approval_route.sql`
 - Create: `src/main/java/com/toir/service/repair/RepairCampaignApprovalScopeHasher.java`
 - Create: `src/main/java/com/toir/service/repair/RepairCampaignApprovalPolicy.java`
+- Create: `src/main/java/com/toir/enums/RepairCampaignMutationType.java`
+- Create: `src/main/java/com/toir/dto/repaircampaign/CampaignMutationImpact.java`
+- Create: `src/main/java/com/toir/service/repair/RepairCampaignMutationImpactService.java`
 - Modify: `src/main/java/com/toir/security/PermissionConstants.java`
 - Modify: `src/main/java/com/toir/security/RolePermissionDefaults.java`
 - Modify: `src/main/java/com/toir/security/ApprovalDomainPermissions.java`
@@ -284,19 +287,38 @@ git commit -m "feat: add canonical repair campaign work items"
 - Modify: `src/main/java/com/toir/controller/repair/RepairCampaignController.java`
 - Test: `src/test/java/com/toir/migration/RepairCampaignApprovalMigrationContractTest.java`
 - Test: `src/test/java/com/toir/service/repair/RepairCampaignApprovalScopeHasherTest.java`
+- Test: `src/test/java/com/toir/service/repair/RepairCampaignMutationImpactServiceTest.java`
 - Test: `src/test/java/com/toir/service/RepairCampaignServiceTest.java`
 - Test: `src/test/java/com/toir/security/ApprovalPbacScopeTest.java`
 - Test: `src/test/java/com/toir/security/RbacToirBusinessFlowSecurityTest.java`
 - Test: `src/test/java/com/toir/security/ToirBusinessFlowRolePermissionsTest.java`
 
 **Interfaces:**
-- New permission: `REPAIR_CAMPAIGN_REQUEST_APPROVAL`; existing operation permissions remain exact.
+- Add exact permissions: `REPAIR_CAMPAIGN_MANAGE_WORK`, `REPAIR_CAMPAIGN_MANAGE_SCOPE`, `REPAIR_CAMPAIGN_MANAGE_SHUTDOWN_LINKS`, `REPAIR_CAMPAIGN_MANAGE_RESOURCES`, `REPAIR_CAMPAIGN_MANAGE_MATERIALS`, `REPAIR_CAMPAIGN_MANAGE_DEPENDENCIES`, `REPAIR_CAMPAIGN_MANAGE_FINANCE`, `REPAIR_CAMPAIGN_REQUEST_APPROVAL`, `REPAIR_CAMPAIGN_RESUME`, `REPAIR_CAMPAIGN_BEGIN_CLOSING`, `REPAIR_CAMPAIGN_ARCHIVE`, `REPAIR_CAMPAIGN_CONFIRM_DEFECT`, `REPAIR_CAMPAIGN_APPROVE_FX`, `REPAIR_CAMPAIGN_APPROVE_BUDGET_OVERRUN`, `REPAIR_CAMPAIGN_APPROVE_CLOSURE`, `REPAIR_CAMPAIGN_OUTBOX_READ`, and `REPAIR_CAMPAIGN_OUTBOX_RETRY`. Existing create/read/start/suspend/complete/close/cancel/generate permissions remain operation-specific.
+- V6 seeds `SYSTEM_ADMIN` and wildcard semantics with the full set; `TECHNICAL_DIRECTOR` and `CHIEF_MECHANIC` receive all campaign lifecycle/manage/approval permissions except outbox operations; `MAINTENANCE_MANAGER` receives read/create/manage work/scope/links/resources/materials/dependencies/request-approval/generate only; `WAREHOUSE_MANAGER` receives read/manage-materials; `FINANCE_MANAGER` receives read/manage-finance/approve-FX/approve-budget-overrun, with requester/approver SoD still enforced; outbox read/retry is seeded only to `SYSTEM_ADMIN`.
 - Template `REPAIR_CAMPAIGN_APPROVAL` has ordered role steps for chief mechanic, production, warehouse, procurement, finance, HSE, and chief engineer.
 - Hash input includes metadata, dates, work/order, dependencies, resources, materials, shutdown links/window versions, budget/currency, and `scopeVersion`.
 - Requester cannot approve any step; one actor cannot approve two discipline steps; department PBAC applies to read/decide/delegate.
+- `RepairCampaignMutationType` is `METADATA, DATES, WORK_ITEMS, SHUTDOWN_LINKS, DEPENDENCIES, RESOURCES, MATERIALS, BUDGET, FX`. `GET /repair-campaigns/{id}/mutation-impact?mutationType=...&version=...&scopeVersion=...` returns `CampaignMutationImpact(boolean invalidatesApproval, RepairCampaignStatus currentStatus, long currentScopeVersion, long currentVersion, RepairCampaignStatus nextStatus, String reason, List<RepairCampaignBlocker> blockers)` and requires the permission of the mutation being previewed.
+- Every mutating endpoint calls the same impact service before persistence; the frontend preview cannot diverge from the committed next status/reason.
 
-- [ ] Write RED tests for stale hash/version, self approval, repeated actor, substring role, cross-department decision, bypass permission, and post-approval mutation.
-- [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=RepairCampaignApprovalMigrationContractTest,RepairCampaignApprovalScopeHasherTest,RepairCampaignServiceTest,ApprovalPbacScopeTest,RbacToirBusinessFlowSecurityTest,ToirBusinessFlowRolePermissionsTest test`; expect FAIL.
+| Endpoint/action | Required authority |
+|---|---|
+| work-item create/update/remove/reorder | `REPAIR_CAMPAIGN_MANAGE_WORK` |
+| campaign metadata/scope update | `REPAIR_CAMPAIGN_MANAGE_SCOPE` |
+| shutdown/campaign/window link or unlink | `REPAIR_CAMPAIGN_MANAGE_SHUTDOWN_LINKS` |
+| resource assignment mutation | `REPAIR_CAMPAIGN_MANAGE_RESOURCES` |
+| material requirement mutation | `REPAIR_CAMPAIGN_MANAGE_MATERIALS` |
+| dependency mutation | `REPAIR_CAMPAIGN_MANAGE_DEPENDENCIES` |
+| FX draft / financial plan mutation | `REPAIR_CAMPAIGN_MANAGE_FINANCE` |
+| request approval | `REPAIR_CAMPAIGN_REQUEST_APPROVAL` |
+| resume / begin closing / archive | `REPAIR_CAMPAIGN_RESUME` / `REPAIR_CAMPAIGN_BEGIN_CLOSING` / `REPAIR_CAMPAIGN_ARCHIVE` |
+| defect proposal confirmation | `REPAIR_CAMPAIGN_CONFIRM_DEFECT` |
+| FX / budget-overrun / final closure approval decision | `REPAIR_CAMPAIGN_APPROVE_FX` / `REPAIR_CAMPAIGN_APPROVE_BUDGET_OVERRUN` / `REPAIR_CAMPAIGN_APPROVE_CLOSURE` |
+| outbox dead-letter read / retry | `REPAIR_CAMPAIGN_OUTBOX_READ` / `REPAIR_CAMPAIGN_OUTBOX_RETRY` |
+
+- [ ] Write RED tests for stale hash/version, self approval, repeated actor, substring role, cross-department decision, bypass permission, post-approval mutation, every mutation impact type, stale preview version, exact controller permission expression, and conservative role seeds.
+- [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=RepairCampaignApprovalMigrationContractTest,RepairCampaignApprovalScopeHasherTest,RepairCampaignMutationImpactServiceTest,RepairCampaignServiceTest,RepairCampaignControllerContractTest,ApprovalPbacScopeTest,RbacToirBusinessFlowSecurityTest,ToirBusinessFlowRolePermissionsTest test`; expect FAIL.
 - [ ] Implement snapshot/reapproval and exact route seeds. Source/scope/window/link mutation clears the hash, retires the stale pending request, and returns to `SCOPE_FORMATION`; dependency/resource/material/budget-plan mutation returns to `RESOURCE_CHECK`. No invalidation path returns to `PENDING_APPROVAL`: only a successful explicit request-approval command creates a current request and enters that status. Non-invalidating operational evidence may remain in `PREPARATION` only after a fresh approval.
 - [ ] Rerun and expect PASS.
 - [ ] Commit with `feat: harden repair campaign approval scope`.
@@ -345,23 +367,40 @@ git commit -m "feat: add canonical repair campaign work items"
 - Create: `src/main/java/com/toir/dto/integration/IntegrationOutboxEventDto.java`
 - Create: `src/main/java/com/toir/service/repair/RepairCampaignOutboxService.java`
 - Create: `src/main/java/com/toir/service/repair/RepairCampaignIntegrationProjector.java`
+- Create: `src/main/java/com/toir/config/RepairCampaignOutboxProperties.java`
+- Create: `src/main/java/com/toir/service/repair/RepairCampaignOutboxDispatcher.java`
+- Create: `src/main/java/com/toir/service/repair/RepairCampaignOutboxScheduler.java`
+- Create: `src/main/java/com/toir/controller/repair/RepairCampaignOutboxAdminController.java`
 - Modify: `src/main/java/com/toir/service/PlannedShutdownService.java`
 - Modify: `src/main/java/com/toir/service/repair/RepairCampaignShutdownLinkService.java`
 - Modify: `src/main/java/com/toir/service/repair/RepairCampaignService.java`
 - Test: `src/test/java/com/toir/migration/IntegrationOutboxMigrationContractTest.java`
 - Test: `src/test/java/com/toir/service/repair/RepairCampaignOutboxServiceTest.java`
 - Test: `src/test/java/com/toir/service/repair/RepairCampaignIntegrationProjectorTest.java`
+- Test: `src/test/java/com/toir/service/repair/RepairCampaignOutboxDispatcherIntegrationTest.java`
+- Test: `src/test/java/com/toir/controller/RepairCampaignOutboxAdminControllerContractTest.java`
 - Test: `src/test/java/com/toir/service/PlannedShutdownLifecycleServiceTest.java`
 
 **Interfaces:**
-- Event types: `SHUTDOWN_RESCHEDULED`, `SHUTDOWN_EXTENDED`, `SHUTDOWN_CANCELLED`, `CAMPAIGN_SUSPENDED`, `CAMPAIGN_CANCELLED`, `CAMPAIGN_SCOPE_CHANGED`.
+- Event types: `SHUTDOWN_RESCHEDULED`, `SHUTDOWN_EXTENDED`, `SHUTDOWN_CANCELLED`, `CAMPAIGN_SUSPENDED`, `CAMPAIGN_CANCELLED`, `CAMPAIGN_RESUMED`, `CAMPAIGN_SCOPE_CHANGED`.
 - Unique processing identity: `(aggregate_type, aggregate_id, aggregate_version, event_type)`.
-- Consumer claims ordered rows with `FOR UPDATE SKIP LOCKED`; retry increments attempts and preserves source transaction.
-- Shutdown reschedule/extension marks affected future campaign items `REPLAN_REQUIRED` and suspends campaign; cancellation suspends active campaign and blocks unstarted linked WOs. It never rewrites actual timestamps or changes shutdown status from a campaign event.
+- Statuses are `PENDING, PROCESSING, PUBLISHED, DEAD_LETTER`; rows persist `attempts`, `next_attempt_at`, `locked_at`, `locked_by`, and `last_error`. The repository claims at most `batchSize` due rows ordered by `(next_attempt_at, created_at, id)` with `FOR UPDATE SKIP LOCKED`.
+- V7 also adds nullable `work_orders.integration_block_code` and `work_orders.integration_previous_status`; only the projector/service matrix writes or clears them, and terminal Work Orders never receive either value.
+- Configuration is `toir.integration.outbox.enabled=true`, `fixed-delay-ms=5000`, `batch-size=50`, `max-attempts=10`, `base-backoff-seconds=30`, and `max-backoff-seconds=3600`. Backoff is bounded exponential; attempt 10 transitions to `DEAD_LETTER`. A stale `PROCESSING` lease is reclaimable only after the configured max backoff.
+- `RepairCampaignOutboxScheduler` invokes one bounded dispatcher batch per tick; it contains no unbounded loop. Admin endpoints `GET /repair-campaigns/outbox/dead-letters` and `POST /repair-campaigns/outbox/{eventId}/retry` use the exact outbox authorities and audit every retry.
+- Every projector update uses Work Order/Campaign services so status history and audit remain authoritative. No event changes Planned Shutdown status, Planned Shutdown history, or any actual timestamp.
 
-- [ ] Write RED commit/rollback, duplicate-delivery, retry, out-of-order version, cancel/reschedule, partial-completion, and historical-actual preservation tests.
-- [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=IntegrationOutboxMigrationContractTest,RepairCampaignOutboxServiceTest,RepairCampaignIntegrationProjectorTest,PlannedShutdownLifecycleServiceTest test`; expect FAIL.
-- [ ] Implement same-transaction outbox writes and idempotent projector behavior; expose an explicit retry command for tests, not an unbounded scheduler loop.
+| Incoming event | Unstarted Work Orders (`DRAFT/PLANNED/APPROVED`) | Active Work Orders (`IN_PROGRESS`) | Terminal Work Orders | Campaign effect |
+|---|---|---|---|---|
+| `SHUTDOWN_RESCHEDULED` / `SHUTDOWN_EXTENDED` | status unchanged; set `integrationBlockCode=REPLAN_REQUIRED` | remain `IN_PROGRESS`; record `ACTIVE_WORK_WINDOW_CHANGED` blocker/event | unchanged | set `SUSPENDED`, work-item window `REPLAN_REQUIRED`; historical actuals unchanged |
+| `SHUTDOWN_CANCELLED` | status unchanged; set `integrationBlockCode=SHUTDOWN_CANCELLED` | transition to `SUSPENDED` through Work Order service and record prior status | unchanged | set `SUSPENDED`; Planned Shutdown remains source of cancellation |
+| `CAMPAIGN_SUSPENDED` | status unchanged; set `integrationBlockCode=CAMPAIGN_SUSPENDED` | transition to `SUSPENDED` through Work Order service | unchanged | campaign already `SUSPENDED`; Planned Shutdown unchanged |
+| `CAMPAIGN_CANCELLED` | transition to `CANCELLED` only when no execution evidence exists | transition to `SUSPENDED`, never blind-cancel | unchanged | campaign remains `CANCELLED`; Planned Shutdown unchanged |
+| `CAMPAIGN_RESUMED` | clear campaign block only after current Campaign and Shutdown policies pass | remain `SUSPENDED` until explicit authorized Work Order resume revalidates policies | unchanged | restore `suspendedFromStatus`; no Planned Shutdown mutation |
+
+- [ ] Write RED commit/rollback, duplicate-delivery, SKIP LOCKED two-dispatcher, batch bound, retry/backoff/dead-letter, stale lease, out-of-order version, every matrix row, partial-completion, admin PBAC, and historical-actual preservation tests.
+- [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=IntegrationOutboxMigrationContractTest,RepairCampaignOutboxServiceTest,RepairCampaignIntegrationProjectorTest,RepairCampaignOutboxDispatcherIntegrationTest,RepairCampaignOutboxAdminControllerContractTest,PlannedShutdownLifecycleServiceTest test`; expect FAIL.
+- [ ] Implement same-transaction outbox writes, bounded scheduled dispatch, idempotent projector behavior, and audited dead-letter retry.
 - [ ] Rerun and expect PASS.
 - [ ] Commit with `feat: propagate shutdown campaign integration events`.
 
@@ -443,6 +482,10 @@ git commit -m "feat: add canonical repair campaign work items"
 - Create: `src/main/java/com/toir/dto/repaircampaign/RepairCampaignFxSnapshotResponse.java`
 - Create: `src/main/java/com/toir/service/repair/RepairCampaignFxSnapshotService.java`
 - Create: `src/main/java/com/toir/service/repair/RepairCampaignFinancialPolicy.java`
+- Create: `src/main/java/com/toir/dto/repaircampaign/RepairCampaignFinancialApprovalPayload.java`
+- Create: `src/main/java/com/toir/service/approval/RepairCampaignFinancialApprovalHandler.java`
+- Modify: `src/main/java/com/toir/enums/ApprovalActionType.java`
+- Modify: `src/main/java/com/toir/service/approval/ApprovalHandlerRegistryVerifier.java`
 - Modify: `src/main/java/com/toir/entity/projects/ActualCost.java`
 - Modify: `src/main/java/com/toir/dto/actualcost/ActualCostDto.java`
 - Modify: `src/main/java/com/toir/service/ActualCostService.java`
@@ -459,14 +502,20 @@ git commit -m "feat: add canonical repair campaign work items"
 - Test: `src/test/java/com/toir/service/repair/RepairCampaignFinancialPolicyTest.java`
 - Test: `src/test/java/com/toir/service/RepairCampaignServiceTest.java`
 - Test: `src/test/java/com/toir/security/ApprovalPbacScopeTest.java`
+- Test: `src/test/java/com/toir/service/approval/ApprovalActionHandlerTest.java`
 
 **Interfaces:**
+- Add typed `ApprovalActionType.APPROVE_CAMPAIGN_FX` and `APPROVE_BUDGET_OVERRUN`. `ApprovalHandlerRegistryVerifier` requires exactly one handler for each financial `(REPAIR_CAMPAIGN, typed action)` pair and keeps lifecycle `APPROVE/REJECT` handling separate. Task 12 adds the closure action only when its handler and payload exist in the same commit.
 - Actual Cost `amount` becomes `BigDecimal numeric(19,4)` with ISO `currencyCode`. A legacy row inherits currency only when its Work Order resolves to exactly one campaign with a non-null currency; unlinked or ambiguous rows remain nullable, are excluded from campaign totals, and block campaign closure with `ACTUAL_COST_CURRENCY_REMEDIATION_REQUIRED`. New writes require currency.
 - Cross-currency campaign aggregation requires an immutable approved FX snapshot containing currencies, rate, source, approval request, actor, and timestamp.
-- Overrun (`approvedActual > approvedBudget`) creates/reuses a `REPAIR_CAMPAIGN` approval with requested action `APPROVE_BUDGET_OVERRUN`; unresolved overrun blocks `CLOSING` and `CLOSED`.
+- V10 seeds separate `REPAIR_CAMPAIGN_FX_APPROVAL` and `REPAIR_CAMPAIGN_BUDGET_OVERRUN_APPROVAL` templates. FX approval payload is `(campaignId, campaignVersion, scopeVersion, budgetId, budgetVersion, fxDraftId, fromCurrency, toCurrency, rate, factsHash)`. Overrun payload is `(campaignId, campaignVersion, scopeVersion, budgetId, budgetVersion, currencyCode, approvedBudget, approvedActual, distinctActualCostIds, distinctBudgetLineIds, factsHash)`.
+- `RepairCampaignFinancialApprovalHandler` supports only `APPROVE_CAMPAIGN_FX` and `APPROVE_BUDGET_OVERRUN`. It marks the exact FX draft or overrun fact approved after recomputing payload hash; it never calls campaign lifecycle approval/finalization or changes campaign status.
+- Any campaign scope/version, budget version, FX draft, Actual Cost ID set, Budget Line ID set, amount, or currency change makes the approval stale and blocks use. Scope-invalidating mutations retire pending financial approvals through the Task 6 invalidation path.
+- Overrun (`approvedActual > approvedBudget`) creates/reuses only the typed overrun approval; unresolved/stale overrun blocks `CLOSING` and final closure approval.
+- Before summing, campaign aggregation constructs `LinkedHashMap<UUID, ActualCost>` and `LinkedHashMap<UUID, BudgetLine>` across direct campaign Work Orders, Campaign-to-Shutdown windows, and shared canonical Work Orders. Totals are computed once per distinct primary key.
 
-- [ ] Write RED binary-rounding, excessive scale, null currency, mismatch without FX, unapproved FX, snapshot mutation, concurrent cost post, overrun bypass, and stale overrun approval tests.
-- [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=RepairCampaignFinancialMigrationContractTest,RepairCampaignFinancialMigrationPostgresTest,ActualCostServiceTest,ActualCostControllerContractTest,RepairCampaignFinancialPolicyTest,RepairCampaignServiceTest,ApprovalPbacScopeTest test`; expect FAIL.
+- [ ] Write RED binary-rounding, excessive scale, null currency, mismatch without FX, unapproved FX, snapshot mutation, concurrent cost post, overrun bypass, stale FX/overrun approval, registry ambiguity/missing handler, financial-handler lifecycle non-transition, and multi-path duplicate Actual Cost/Budget Line fixtures with mixed currencies.
+- [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=RepairCampaignFinancialMigrationContractTest,RepairCampaignFinancialMigrationPostgresTest,ActualCostServiceTest,ActualCostControllerContractTest,RepairCampaignFinancialPolicyTest,RepairCampaignServiceTest,ApprovalPbacScopeTest,ApprovalActionHandlerTest test`; expect FAIL.
 - [ ] Implement decimal-string boundaries, immutable FX trigger, ledger-derived totals, and versioned overrun approval.
 - [ ] Rerun and expect PASS.
 - [ ] Commit with `feat: enforce campaign financial integrity`.
@@ -478,76 +527,67 @@ git commit -m "feat: add canonical repair campaign work items"
 **Files:**
 - Create: `src/main/resources/db/migration/V20260712_11__repair_campaign_closure_snapshot.sql`
 - Create: `src/main/java/com/toir/entity/repair/RepairCampaignClosureSnapshot.java`
+- Create: `src/main/java/com/toir/entity/repair/RepairCampaignClosureDraft.java`
 - Create: `src/main/java/com/toir/repository/repair/RepairCampaignClosureSnapshotRepository.java`
+- Create: `src/main/java/com/toir/repository/repair/RepairCampaignClosureDraftRepository.java`
 - Create: `src/main/java/com/toir/dto/repaircampaign/RepairCampaignClosureReport.java`
+- Create: `src/main/java/com/toir/dto/repaircampaign/RepairCampaignClosureDraftRequest.java`
+- Create: `src/main/java/com/toir/dto/repaircampaign/RepairCampaignClosureDraftResponse.java`
+- Create: `src/main/java/com/toir/dto/repaircampaign/RepairCampaignClosureApprovalPayload.java`
 - Create: `src/main/java/com/toir/service/repair/RepairCampaignClosureService.java`
 - Create: `src/main/java/com/toir/service/repair/RepairCampaignProgressPolicy.java`
+- Create: `src/main/java/com/toir/service/approval/RepairCampaignClosureApprovalHandler.java`
+- Modify: `src/main/java/com/toir/enums/ApprovalActionType.java`
+- Modify: `src/main/java/com/toir/service/approval/ApprovalHandlerRegistryVerifier.java`
 - Modify: `src/main/java/com/toir/service/repair/RepairCampaignService.java`
 - Modify: `src/main/java/com/toir/controller/repair/RepairCampaignController.java`
 - Test: `src/test/java/com/toir/migration/RepairCampaignClosureMigrationContractTest.java`
 - Test: `src/test/java/com/toir/service/repair/RepairCampaignProgressPolicyTest.java`
 - Test: `src/test/java/com/toir/service/repair/RepairCampaignClosureServiceTest.java`
 - Test: `src/test/java/com/toir/service/repair/RepairCampaignReconciliationTest.java`
+- Test: `src/test/java/com/toir/service/approval/ApprovalActionHandlerTest.java`
 
 **Interfaces:**
 - Progress is derived by work-item weights (`critical=4, high=3, medium=2, low=1`) and canonical status; no writable percentage.
 - Summary exposes total/completed/in-progress/overdue/cancelled/blocked and numerator/denominator.
-- Immutable snapshot contains canonical campaign/work-item/window/WO/reservation/cost/defect-proposal IDs, campaign scope/version, planned/actual dates, and shutdown downtime references. It never copies downtime.
-- Deduplication is by primary key; snapshot has absolute one-per-campaign uniqueness and UPDATE/DELETE rejection trigger.
+- While status is `CLOSING`, a versioned mutable closure draft stores `closureNarrative`, required `deviationReasons`, `residualWorkEvidence`, canonical `attachmentFileIds`, canonical `completionActIds`, and `lessonsLearnedSummary`. The draft is not the final report and cannot be read as approved evidence.
+- V11 adds `ApprovalActionType.APPROVE_CAMPAIGN_CLOSURE`, registers exactly one closure handler, and seeds `REPAIR_CAMPAIGN_CLOSURE_APPROVAL` in the same task. Request payload is `(campaignId, campaignVersion, scopeVersion, closureDraftId, closureDraftVersion, distinctWorkItemIds, distinctShutdownIds, distinctWorkOrderIds, distinctReservationIds, distinctActualCostIds, distinctBudgetLineIds, distinctDefectProposalIds, attachmentFileIds, completionActIds, factsHash)` and action `APPROVE_CAMPAIGN_CLOSURE`.
+- `RepairCampaignClosureApprovalHandler` locks the campaign/draft, recomputes every canonical fact and hash, rejects stale scope/version/cost/evidence, records final Approval Request ID plus ordered approval-step signatures `(stepId, roleCode, actorId, decidedAt, comment)`, creates exactly one immutable snapshot, and then invokes the allowed `CLOSING -> CLOSED` lifecycle transition. Unlike financial handlers, this typed final action is the only approval handler allowed to close the campaign.
+- Immutable snapshot contains canonical campaign/work-item/window/WO/reservation/cost/budget/defect-proposal/file/attachment/completion-act IDs, closure narrative, deviations, residual evidence, lessons summary, campaign scope/version, planned/actual dates, final approval identity/signatures, and shutdown downtime references. It never copies downtime.
+- Blockers include `CLOSURE_NARRATIVE_MISSING`, `DEVIATION_REASON_MISSING`, `RESIDUAL_EVIDENCE_MISSING`, `CLOSURE_ATTACHMENT_MISSING`, `COMPLETION_ACT_MISSING`, `CLOSURE_APPROVAL_MISSING`, `CLOSURE_APPROVAL_STALE`, plus existing unresolved work/defect/cost/currency blockers.
+- Deduplication is by canonical primary key before hashing; snapshot has absolute one-per-campaign uniqueness and UPDATE/DELETE rejection trigger.
 
-- [ ] Write RED manual-progress, duplicate fact, downtime-copy, unresolved work/defect/cost, repeated snapshot, mutation, and hash-corruption tests.
-- [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=RepairCampaignClosureMigrationContractTest,RepairCampaignProgressPolicyTest,RepairCampaignClosureServiceTest,RepairCampaignReconciliationTest test`; expect FAIL.
-- [ ] Implement minimal canonical snapshot and hash verification. Defer polished report projections and analytics to Stage 4.
+- [ ] Write RED manual-progress, duplicate multi-path fact, downtime-copy, missing narrative/deviation/residual/attachment/act, unresolved work/defect/cost, stale final approval, incomplete signature, repeated snapshot, mutation, hash corruption, and exact `CLOSING -> CLOSED` handler tests.
+- [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=RepairCampaignClosureMigrationContractTest,RepairCampaignProgressPolicyTest,RepairCampaignClosureServiceTest,RepairCampaignReconciliationTest,ApprovalActionHandlerTest test`; expect FAIL.
+- [ ] Implement the versioned draft, typed closure approval, immutable canonical snapshot, signature capture, lifecycle finalization, and hash verification. Defer polished report projections and analytics to Stage 4.
 - [ ] Rerun and expect PASS.
 - [ ] Commit with `feat: close and reconcile repair campaigns`.
 
 ---
 
-### Task 13: Typed frontend operational integration
+### Task 13: Frontend companion orchestration checkpoint
 
 **Files:**
-Paths prefixed with `toir-front/` are relative to the shared workspace root `/Users/tenzorsoft/Desktop/Work/toir`, not the backend repository root.
-
-- Modify: `toir-front/src/types/api.ts`
-- Modify: `toir-front/src/lib/api.ts`
-- Modify: `toir-front/src/lib/permissions.ts`
-- Modify: `toir-front/src/modules/repairs/libs/repair-campaigns/types.ts`
-- Modify: `toir-front/src/modules/repairs/libs/repair-campaigns/repair-campaign-access.ts`
-- Modify: `toir-front/src/modules/repairs/pages/repair-campaign-detail-page.tsx`
-- Create: `toir-front/src/modules/repairs/components/repair-campaign-detail/campaign-work-items-panel.tsx`
-- Create: `toir-front/src/modules/repairs/components/repair-campaign-detail/campaign-shutdown-links-panel.tsx`
-- Create: `toir-front/src/modules/repairs/components/repair-campaign-detail/campaign-materials-panel.tsx`
-- Create: `toir-front/src/modules/repairs/components/repair-campaign-detail/campaign-resources-panel.tsx`
-- Create: `toir-front/src/modules/repairs/components/repair-campaign-detail/campaign-dependencies-panel.tsx`
-- Create: `toir-front/src/modules/repairs/components/repair-campaign-detail/campaign-approval-panel.tsx`
-- Create: `toir-front/src/modules/repairs/components/repair-campaign-detail/campaign-defect-proposals-panel.tsx`
-- Create: `toir-front/src/modules/repairs/components/repair-campaign-detail/campaign-closure-evidence-panel.tsx`
-- Modify: `toir-front/src/i18n/locales/en.json`
-- Modify: `toir-front/src/i18n/locales/ru.json`
-- Modify: `toir-front/src/i18n/locales/uz.json`
-- Test: `toir-front/src/modules/repairs/libs/repair-campaigns/tests/repair-campaign-integration-contract.test.ts`
-- Test: `toir-front/src/modules/repairs/components/repair-campaign-detail/campaign-work-items-panel.test.tsx`
-- Test: `toir-front/src/modules/repairs/components/repair-campaign-detail/campaign-materials-panel.test.tsx`
-- Test: `toir-front/src/app/routes-rbac.test.ts`
+- Read and execute: `../toir-front/docs/superpowers/plans/2026-07-12-toir-stage-3-repair-campaign-integration.md`
 
 **Interfaces:**
-- Decimal values remain strings, versions remain numbers, timestamps remain ISO strings, blockers remain typed.
-- UI surfaces backend-derived assessment and reapproval outcome; it never computes start/approval/financial authority locally.
-- Every action requires exact permission plus backend capability; empty action groups render nothing.
+- The frontend companion's Tasks 1-7 are the sole source of frontend files, RED/GREEN commands, and frontend commit boundaries. This backend task does not duplicate or replace those commits.
+- Record the frontend pre-task and post-task HEADs in the Stage 3 progress ledger for Task 14 evidence.
 
-- [ ] Write RED payload, permission/status, blocker rendering, idempotency retry, 409 reload, and approval-invalidation tests.
-- [ ] Run: `yarn test src/modules/repairs/libs/repair-campaigns/tests src/modules/repairs/components/repair-campaign-detail src/app/routes-rbac.test.ts`; expect FAIL.
-- [ ] Implement the typed contracts and operational controls described in the frontend companion plan.
-- [ ] Run focused tests, scoped ESLint, `yarn i18n:check`, `yarn tsc --noEmit`, and `yarn build`; expect PASS except already documented unrelated global-baseline failures.
-- [ ] Commit frontend files with `feat: integrate repair campaign operations`.
+- [ ] Confirm backend Tasks 1-12 are committed and the backend worktree contains no uncommitted implementation files.
+- [ ] Change working directory exactly: `cd /Users/tenzorsoft/Desktop/Work/toir/toir-front`.
+- [ ] Read the companion plan completely and execute Tasks 1 through 7 one at a time, including each task's RED test, GREEN gate, and frontend-only commit.
+- [ ] Run the companion's focused regression command, scoped ESLint, `yarn i18n:check`, `yarn tsc --noEmit`, and `yarn build` from the frontend repository root.
+- [ ] Capture `git rev-parse HEAD`, `git status --short --branch`, and `git log --oneline` for frontend evidence; do not stage or commit frontend files from the backend repository.
+- [ ] Return exactly with `cd /Users/tenzorsoft/Desktop/Work/toir/toir-backend`; continue to Task 14 without creating a backend checkpoint commit.
 
 ---
 
 ### Task 14: Isolated Stage 3 verification, evidence, and independent review
 
 **Files:**
-- Create: `toir-backend/docs/audits/2026-07-12-toir-stage-3-verification.md`
-- Create: `toir-front/docs/audits/2026-07-12-toir-stage-3-verification.md`
+- Create in backend repository: `docs/audits/2026-07-12-toir-stage-3-verification.md`
+- Create in frontend repository: `../toir-front/docs/audits/2026-07-12-toir-stage-3-verification.md`
 
 **Interfaces:**
 - Evidence maps RC-01..RC-15, X-01..X-10, security/audit/archive requirements, every negative scenario, and all retained deferrals to named tests/results.
