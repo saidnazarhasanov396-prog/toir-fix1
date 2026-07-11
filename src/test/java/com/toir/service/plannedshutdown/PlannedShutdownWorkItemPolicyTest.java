@@ -7,6 +7,7 @@ import com.toir.enums.PriorityLevel;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -39,10 +40,31 @@ class PlannedShutdownWorkItemPolicyTest {
         assertThatThrownBy(() -> policy.requireIdentityMutable(PlannedShutdownStatus.APPROVED,
                 PlannedShutdownWorkItemSourceType.DEFECT, oldId,
                 PlannedShutdownWorkItemSourceType.WORK_ORDER, UUID.randomUUID()))
-                .hasMessageContaining("immutable after approval");
+                .hasMessageContaining("immutable once approval has begun");
+        assertThatThrownBy(() -> policy.requireIdentityMutable(PlannedShutdownStatus.PENDING_APPROVAL,
+                PlannedShutdownWorkItemSourceType.DEFECT, oldId,
+                PlannedShutdownWorkItemSourceType.WORK_ORDER, UUID.randomUUID()))
+                .hasMessageContaining("immutable once approval has begun");
         assertThatCode(() -> policy.requireIdentityMutable(PlannedShutdownStatus.SCOPE_FORMATION,
                 PlannedShutdownWorkItemSourceType.DEFECT, oldId,
                 PlannedShutdownWorkItemSourceType.WORK_ORDER, UUID.randomUUID())).doesNotThrowAnyException();
+    }
+
+    @Test
+    void canonicalScopeFreezesWhenApprovalBegins() {
+        assertThatCode(() -> policy.requireScopeMutable(PlannedShutdownStatus.READINESS_CHECK))
+                .doesNotThrowAnyException();
+        for (PlannedShutdownStatus status : List.of(
+                PlannedShutdownStatus.PENDING_APPROVAL, PlannedShutdownStatus.APPROVED,
+                PlannedShutdownStatus.PREPARATION, PlannedShutdownStatus.SHUTDOWN_STARTED,
+                PlannedShutdownStatus.SAFE_STATE, PlannedShutdownStatus.REPAIR_IN_PROGRESS,
+                PlannedShutdownStatus.TESTING, PlannedShutdownStatus.STARTUP,
+                PlannedShutdownStatus.COMPLETED, PlannedShutdownStatus.CLOSED,
+                PlannedShutdownStatus.CANCELLED, PlannedShutdownStatus.RESCHEDULED,
+                PlannedShutdownStatus.EMERGENCY_EXTENDED)) {
+            assertThatThrownBy(() -> policy.requireScopeMutable(status))
+                    .as(status.name()).hasMessageContaining("immutable once approval has begun");
+        }
     }
 
     @Test

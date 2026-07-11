@@ -8,9 +8,16 @@ import org.springframework.stereotype.Component;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.EnumSet;
+import java.util.Set;
 
 @Component
 public class PlannedShutdownWorkItemPolicy {
+    private static final Set<PlannedShutdownStatus> SCOPE_MUTABLE_STATUSES = EnumSet.of(
+            PlannedShutdownStatus.DRAFT,
+            PlannedShutdownStatus.SCOPE_FORMATION,
+            PlannedShutdownStatus.READINESS_CHECK);
+
     public void validate(PlannedShutdownWorkItemRequest request) {
         if (request.sourceType() == null || request.equipmentId() == null || request.priority() == null
                 || request.requiresShutdown() == null || request.requiresIsolation() == null) {
@@ -41,9 +48,15 @@ public class PlannedShutdownWorkItemPolicy {
     public void requireIdentityMutable(PlannedShutdownStatus status,
             PlannedShutdownWorkItemSourceType oldType, UUID oldId,
             PlannedShutdownWorkItemSourceType newType, UUID newId) {
-        if (status.ordinal() >= PlannedShutdownStatus.APPROVED.ordinal()
+        if (!SCOPE_MUTABLE_STATUSES.contains(status)
                 && (oldType != newType || !Objects.equals(oldId, newId))) {
-            throw RestException.conflict("Work item source identity is immutable after approval");
+            throw RestException.conflict("Work item source identity is immutable once approval has begun");
+        }
+    }
+
+    public void requireScopeMutable(PlannedShutdownStatus status) {
+        if (!SCOPE_MUTABLE_STATUSES.contains(status)) {
+            throw RestException.conflict("Shutdown work-item scope is immutable once approval has begun");
         }
     }
 }

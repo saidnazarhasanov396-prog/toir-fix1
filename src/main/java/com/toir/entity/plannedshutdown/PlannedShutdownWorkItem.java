@@ -25,7 +25,7 @@ public class PlannedShutdownWorkItem extends BaseEntity {
     @Column(name = "source_id")
     private UUID sourceId;
 
-    @Column(name = "equipment_id")
+    @Column(name = "equipment_id", nullable = false)
     private UUID equipmentId;
 
     @Column(nullable = false, length = 500)

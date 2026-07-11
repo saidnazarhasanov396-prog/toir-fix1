@@ -230,6 +230,7 @@ public class PlannedShutdownService {
     public PlannedShutdownWorkItemScopeResponse addWorkItem(UUID id, PlannedShutdownWorkItemRequest request) {
         PlannedShutdown shutdown = findLocked(id);
         requireVersion(shutdown, request.version());
+        workItemPolicy.requireScopeMutable(shutdown.getLifecycleStatus());
         workItemPolicy.validate(request);
         requireScopedSource(id, request);
         requireCanonicalAvailable(id, null, request);
@@ -269,6 +270,7 @@ public class PlannedShutdownService {
     public PlannedShutdownWorkItemScopeResponse removeWorkItem(UUID id, UUID itemId, Long version) {
         PlannedShutdown shutdown = findLocked(id);
         requireVersion(shutdown, version);
+        workItemPolicy.requireScopeMutable(shutdown.getLifecycleStatus());
         PlannedShutdownWorkItem item = findWorkItem(id, itemId);
         if (workOrderRepository.existsActiveByShutdownWorkItemId(itemId)) {
             throw RestException.conflict("Work item has an active linked Work Order");
@@ -288,8 +290,11 @@ public class PlannedShutdownService {
             UUID id, PlannedShutdownWorkItemReorderRequest request) {
         PlannedShutdown shutdown = findLocked(id);
         requireVersion(shutdown, request.version());
+        workItemPolicy.requireScopeMutable(shutdown.getLifecycleStatus());
         List<PlannedShutdownWorkItem> items = workItemRepository
                 .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id);
+        PlannedShutdownWorkItemAuditSnapshot before = new PlannedShutdownWorkItemAuditSnapshot(
+                shutdown.getScopeVersion(), items.stream().map(PlannedShutdownWorkItemResponse::from).toList());
         if (request.itemIds().size() != items.size() || new HashSet<>(request.itemIds()).size() != items.size()) {
             throw RestException.badRequest("Reorder must contain every active work item exactly once");
         }
@@ -307,9 +312,11 @@ public class PlannedShutdownService {
         for (int i = 0; i < request.itemIds().size(); i++) byId.get(request.itemIds().get(i)).setOrderNumber(i);
         workItemRepository.saveAllAndFlush(items);
         PlannedShutdown saved = incrementScope(shutdown);
+        List<PlannedShutdownWorkItemResponse> afterItems = request.itemIds().stream()
+                .map(byId::get).map(PlannedShutdownWorkItemResponse::from).toList();
         auditBuilderService.log("planned_shutdown_work_items", id.toString(), AuditAction.UPDATE,
-                AuditModule.PLANNED_SHUTDOWN, "Порядок работ плановой остановки изменён", null,
-                request.itemIds());
+                AuditModule.PLANNED_SHUTDOWN, "Порядок работ плановой остановки изменён", before,
+                new PlannedShutdownWorkItemAuditSnapshot(saved.getScopeVersion(), afterItems));
         return workItemScope(saved);
     }
 
@@ -434,20 +441,29 @@ public class PlannedShutdownService {
         try {
             return workItemRepository.saveAndFlush(item);
         } catch (DataIntegrityViolationException ex) {
-            String message = String.valueOf(ex.getMessage()).toLowerCase(Locale.ROOT);
-            Throwable cause = ex.getCause();
-            while (cause != null) {
-                message += " " + String.valueOf(cause.getMessage()).toLowerCase(Locale.ROOT);
-                cause = cause.getCause();
-            }
-            if (message.contains("uq_planned_shutdown_work_items_active_source")) {
+            String constraint = workItemConstraint(ex);
+            if (constraint.contains("uq_planned_shutdown_work_items_active_source")) {
                 throw RestException.conflict("Source is already linked to this shutdown");
             }
-            if (message.contains("uq_planned_shutdown_work_items_active_order")) {
+            if (constraint.contains("uq_planned_shutdown_work_items_active_order")) {
                 throw RestException.conflict("Work item order number is already in use");
             }
             throw ex;
         }
+    }
+
+    static String workItemConstraint(Throwable error) {
+        StringBuilder evidence = new StringBuilder();
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof org.hibernate.exception.ConstraintViolationException violation
+                    && violation.getConstraintName() != null) {
+                evidence.append(' ').append(violation.getConstraintName());
+            }
+            if (current.getMessage() != null) evidence.append(' ').append(current.getMessage());
+            current = current.getCause();
+        }
+        return evidence.toString().toLowerCase(Locale.ROOT);
     }
 
     private void validateOwnership(UUID departmentId, UUID employeeId) {

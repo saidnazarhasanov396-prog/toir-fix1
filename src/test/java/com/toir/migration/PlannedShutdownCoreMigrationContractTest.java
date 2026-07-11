@@ -18,6 +18,8 @@ class PlannedShutdownCoreMigrationContractTest {
             "src/main/resources/db/migration/V20260711_4__planned_shutdown_core.sql");
     private static final Path SCOPE_VERSION_MIGRATION = Path.of(
             "src/main/resources/db/migration/V20260711_5__planned_shutdown_scope_version.sql");
+    private static final Path WORK_ITEM_EQUIPMENT_MIGRATION = Path.of(
+            "src/main/resources/db/migration/V20260711_6__planned_shutdown_work_item_equipment_required.sql");
 
     @Test
     void migrationCreatesTheCompleteShutdownAggregateWithExplicitForeignKeys() throws Exception {
@@ -176,6 +178,19 @@ class PlannedShutdownCoreMigrationContractTest {
         String sql = Files.readString(MIGRATION).toLowerCase().replaceAll("\\s+", " ");
         assertThat(sql).contains(
                 "create unique index uq_planned_shutdowns_active_code on planned_shutdowns (code) where is_deleted = false");
+    }
+
+    @Test
+    void workItemEquipmentBecomesRequiredWithAFailSafePrecondition() throws Exception {
+        assertThat(WORK_ITEM_EQUIPMENT_MIGRATION).exists();
+        String sql = Files.readString(WORK_ITEM_EQUIPMENT_MIGRATION).toLowerCase().replaceAll("\\s+", " ");
+        assertThat(sql)
+                .contains("where equipment_id is null and is_deleted = false")
+                .contains("raise exception")
+                .contains("alter column equipment_id set not null");
+        Field equipmentId = Class.forName("com.toir.entity.plannedshutdown.PlannedShutdownWorkItem")
+                .getDeclaredField("equipmentId");
+        assertThat(equipmentId.getAnnotation(Column.class).nullable()).isFalse();
     }
 
     private static void assertEnumValues(String className, String... expected) throws Exception {
