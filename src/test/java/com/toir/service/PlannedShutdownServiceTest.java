@@ -65,10 +65,15 @@ class PlannedShutdownServiceTest {
     @Mock private PlannedShutdownWorkItemPolicy workItemPolicy;
     @Mock private PlannedShutdownReadinessItemRepository readinessItemRepository;
     @Mock private PlannedShutdownIsolationPointRepository isolationPointRepository;
+    @Mock private com.toir.repository.plannedshutdown.PlannedShutdownStatusHistoryRepository statusHistoryRepository;
+    @Mock private com.toir.repository.ApprovalRequestRepository approvalRequestRepository;
     @Mock private PlannedShutdownReadinessPolicy readinessPolicy;
     @Mock private WorkOrderAssignmentEligibilityService workOrderAssignmentEligibilityService;
+    @Mock private WorkOrderMaterialReadinessService workOrderMaterialReadinessService;
     @Spy private com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy readinessLifecyclePolicy =
             new com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy();
+    @Spy private com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy transitionPolicy =
+            new com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy();
     @Mock private SafetyPermitRepository safetyPermitRepository;
     @Mock private ScopeAccessService scopeAccessService;
     @Mock private AuditBuilderService auditBuilderService;

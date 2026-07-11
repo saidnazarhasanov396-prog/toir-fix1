@@ -5,6 +5,7 @@ import com.toir.enums.PlannedShutdownStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,4 +36,11 @@ public record PlannedShutdownDetailResponse(
     public static PlannedShutdownDetailResponse from(PlannedShutdown s, List<PlannedShutdownAssetResponse> assets) {
         return from(s, assets, List.of());
     }
+
+    private static Long seconds(Instant start, Instant end) {
+        return start == null || end == null ? null : Duration.between(start, end).getSeconds();
+    }
+
+    public Long plannedDowntimeSeconds() { return seconds(plannedStartAt, plannedEndAt); }
+    public Long actualDowntimeSeconds() { return seconds(actualShutdownAt, actualCompletedAt); }
 }

@@ -198,6 +198,30 @@ class PlannedShutdownControllerContractTest {
                         .contentType("application/json").content(action)).andExpect(status().isOk());
     }
 
+    @Test
+    void lifecycleEndpointsUseVersionedTypedCommands() throws Exception {
+        UUID id = UUID.randomUUID(); UUID departmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();
+        var response = detail(id, departmentId, employeeId, PlannedShutdownStatus.PREPARATION);
+        when(service.prepare(eq(id), any())).thenReturn(response);
+        when(service.reschedule(eq(id), any())).thenReturn(response);
+        when(service.extend(eq(id), any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/prepare", id)
+                        .contentType("application/json")
+                        .content("{\"version\":3,\"reason\":\"ready\",\"correlationKey\":\"p-1\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PREPARATION"));
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/reschedule", id)
+                        .contentType("application/json")
+                        .content("{\"version\":3,\"newStartAt\":\"2026-08-03T00:00:00Z\","
+                                + "\"newEndAt\":\"2026-08-04T00:00:00Z\",\"reason\":\"conflict\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/extend", id)
+                        .contentType("application/json")
+                        .content("{\"version\":3,\"newEndAt\":\"2026-08-05T00:00:00Z\","
+                                + "\"reason\":\"emergency\"}"))
+                .andExpect(status().isOk());
+    }
+
     private static PlannedShutdownDetailResponse detail(UUID id, UUID departmentId, UUID employeeId,
             PlannedShutdownStatus status) {
         return new PlannedShutdownDetailResponse(id, 3L, "PS-1", "Annual", "PLANNED", departmentId, employeeId,

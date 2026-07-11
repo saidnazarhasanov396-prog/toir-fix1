@@ -26,7 +26,7 @@ public class PlannedShutdownApprovalHandler implements ApprovalActionHandler {
         if (request.getActionType() == ApprovalActionType.REJECT) {
             return "{\"status\":\"REJECTED\"}";
         }
-        plannedShutdownService.finalizeApprovalFromApprovalRequest(targetId(request));
+        plannedShutdownService.finalizeApprovalFromApprovalRequest(targetId(request), request);
         return "{\"status\":\"APPROVED\"}";
     }
 

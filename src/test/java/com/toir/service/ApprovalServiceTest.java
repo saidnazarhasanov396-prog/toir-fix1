@@ -29,6 +29,7 @@ import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
@@ -414,6 +415,38 @@ class ApprovalServiceTest {
         assertThat(result.steps().getFirst().approverRole()).isEqualTo("MAINTENANCE_MANAGER");
         verify(maintenanceRegulationService).validateCanApprove(targetId);
         verify(approvalScopeService).assertCanCreateApproval(any(CreateApprovalRequest.class));
+    }
+
+    @Test
+    void plannedShutdownApprovalCapturesCurrentScopeVersionInCanonicalRequest() {
+        UUID targetId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
+        stubTargetMetadata(ApprovalTargetType.PLANNED_SHUTDOWN, null, "Annual shutdown");
+        when(jdbcTemplate.queryForObject(
+                "select scope_version from planned_shutdowns where id = ? and is_deleted = false",
+                Long.class, targetId)).thenReturn(8L);
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(List.of(
+                new CreateApprovalRequest.StepInput(null, "PRODUCTION_MANAGER"),
+                new CreateApprovalRequest.StepInput(null, "HSE_MANAGER")));
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        service.requestApproval(new ApprovalStartRequest(ApprovalTargetType.PLANNED_SHUTDOWN, targetId,
+                ApprovalActionType.APPROVE, "Current scope"));
+
+        ArgumentCaptor<ApprovalRequest> request = ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).saveAndFlush(request.capture());
+        assertThat(request.getValue().getPayloadJson()).isEqualTo("{\"scopeVersion\":8}");
+        assertThat(request.getValue().getSteps()).extracting(ApprovalStep::getApproverRole)
+                .containsExactly("PRODUCTION_MANAGER", "HSE_MANAGER");
     }
 
     @Test

@@ -234,6 +234,89 @@ public class PlannedShutdownController {
         return ResponseEntity.ok(service.assessSafeState(id, null));
     }
 
+    @GetMapping("/{id}/history")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<List<PlannedShutdownStatusHistoryResponse>> history(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.history(id));
+    }
+
+    @PostMapping("/{id}/prepare")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_PREPARE')")
+    public ResponseEntity<PlannedShutdownDetailResponse> prepare(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.prepare(id, request));
+    }
+
+    @PostMapping("/{id}/start-shutdown")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_PREPARE')")
+    public ResponseEntity<PlannedShutdownDetailResponse> startShutdown(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.startShutdown(id, request));
+    }
+
+    @PostMapping("/{id}/confirm-safe-state")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE')")
+    public ResponseEntity<PlannedShutdownDetailResponse> confirmSafeState(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.confirmSafeState(id, request));
+    }
+
+    @PostMapping("/{id}/start-repair")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_START_REPAIR')")
+    public ResponseEntity<PlannedShutdownDetailResponse> startRepair(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.startRepair(id, request));
+    }
+
+    @PostMapping("/{id}/start-testing")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_TEST')")
+    public ResponseEntity<PlannedShutdownDetailResponse> startTesting(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.startTesting(id, request));
+    }
+
+    @PostMapping("/{id}/start-startup")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_STARTUP')")
+    public ResponseEntity<PlannedShutdownDetailResponse> startStartup(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.startStartup(id, request));
+    }
+
+    @PostMapping("/{id}/complete")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_STARTUP')")
+    public ResponseEntity<PlannedShutdownDetailResponse> complete(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.complete(id, request));
+    }
+
+    @PostMapping("/{id}/close")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_CLOSE')")
+    public ResponseEntity<PlannedShutdownDetailResponse> close(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.close(id, request));
+    }
+
+    @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_CANCEL')")
+    public ResponseEntity<PlannedShutdownDetailResponse> cancel(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownTransitionRequest request) {
+        return ResponseEntity.ok(service.cancel(id, request));
+    }
+
+    @PostMapping("/{id}/reschedule")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_RESCHEDULE')")
+    public ResponseEntity<PlannedShutdownDetailResponse> reschedule(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownRescheduleRequest request) {
+        return ResponseEntity.ok(service.reschedule(id, request));
+    }
+
+    @PostMapping("/{id}/extend")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_EXTEND')")
+    public ResponseEntity<PlannedShutdownDetailResponse> extend(@PathVariable UUID id,
+            @Valid @RequestBody PlannedShutdownExtensionRequest request) {
+        return ResponseEntity.ok(service.extend(id, request));
+    }
+
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_APPROVE')")
     public ResponseEntity<PlannedShutdownDto> reject(@PathVariable UUID id) {

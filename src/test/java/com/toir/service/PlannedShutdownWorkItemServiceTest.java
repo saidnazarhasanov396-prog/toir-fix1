@@ -58,6 +58,8 @@ class PlannedShutdownWorkItemServiceTest {
     @Mock SafetyPermitRepository safetyPermitRepository;
     @Mock PlannedShutdownReadinessItemRepository readinessItemRepository;
     @Mock PlannedShutdownIsolationPointRepository isolationPointRepository;
+    @Mock com.toir.repository.plannedshutdown.PlannedShutdownStatusHistoryRepository statusHistoryRepository;
+    @Mock ApprovalRequestRepository approvalRequestRepository;
     @Mock ScopeAccessService scopeAccessService;
     @Mock AuditBuilderService audit;
     PlannedShutdownService service;
@@ -70,10 +72,12 @@ class PlannedShutdownWorkItemServiceTest {
     void setUp() {
         service = new PlannedShutdownService(shutdownRepository, assetRepository, itemRepository,
                 readinessItemRepository, isolationPointRepository,
+                statusHistoryRepository, approvalRequestRepository,
                 departmentRepository, employeeRepository, equipmentRepository, defectRepository,
                 pprTaskRepository, workOrderRepository, materialReadinessService, assignmentEligibilityService,
                 safetyPermitRepository, new PlannedShutdownWorkItemPolicy(), new PlannedShutdownReadinessPolicy(),
                 new com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy(),
+                new com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy(),
                 scopeAccessService, audit);
         shutdownId = UUID.randomUUID();
         equipmentId = UUID.randomUUID();

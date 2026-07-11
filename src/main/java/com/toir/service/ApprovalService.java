@@ -1081,6 +1081,15 @@ public class ApprovalService implements ApprovalOrchestrator {
         request.setStatus(ApprovalStatus.PENDING);
         request.setCurrentStep(1);
         request.setActionType(actionType);
+        if (targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
+            Long scopeVersion = jdbcTemplate.queryForObject(
+                    "select scope_version from planned_shutdowns where id = ? and is_deleted = false",
+                    Long.class, targetId);
+            if (scopeVersion == null) {
+                throw RestException.conflict("Planned shutdown approval scope is unavailable");
+            }
+            request.setPayloadJson("{\"scopeVersion\":" + scopeVersion + "}");
+        }
         if (request.getExpiresAt() == null) {
             request.setExpiresAt(Instant.now().plus(slaPolicyService.slaFor(request)));
         }
