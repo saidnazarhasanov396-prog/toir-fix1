@@ -95,6 +95,9 @@ public class PlannedShutdown extends BaseEntity {
     @Column(name = "approval_scope_version")
     private Long approvalScopeVersion;
 
+    @Column(name = "scope_version", nullable = false)
+    private Long scopeVersion = 0L;
+
     @Column(name = "approval_scope_hash", length = 128)
     private String approvalScopeHash;
 

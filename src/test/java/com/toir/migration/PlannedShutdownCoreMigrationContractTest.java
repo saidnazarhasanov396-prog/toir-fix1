@@ -16,6 +16,8 @@ class PlannedShutdownCoreMigrationContractTest {
 
     private static final Path MIGRATION = Path.of(
             "src/main/resources/db/migration/V20260711_4__planned_shutdown_core.sql");
+    private static final Path SCOPE_VERSION_MIGRATION = Path.of(
+            "src/main/resources/db/migration/V20260711_5__planned_shutdown_scope_version.sql");
 
     @Test
     void migrationCreatesTheCompleteShutdownAggregateWithExplicitForeignKeys() throws Exception {
@@ -151,13 +153,22 @@ class PlannedShutdownCoreMigrationContractTest {
 
         for (String fieldName : List.of(
                 "code", "shutdownType", "responsibleEmployeeId", "objective", "notes", "riskLevel",
-                "riskScore", "approvalScopeVersion", "approvalScopeHash", "plannedStartAt", "plannedEndAt",
+                "riskScore", "scopeVersion", "approvalScopeVersion", "approvalScopeHash", "plannedStartAt", "plannedEndAt",
                 "approvedStartAt", "approvedEndAt", "effectiveExtensionEndAt", "actualShutdownAt",
                 "actualSafeStateAt", "actualRepairStartAt", "actualTestingStartAt", "actualStartupAt",
                 "actualCompletedAt", "rescheduleReason", "extensionReason", "closureVersion")) {
             Field field = aggregate.getDeclaredField(fieldName);
             assertThat(field.getAnnotation(Column.class)).as(fieldName).isNotNull();
         }
+    }
+
+    @Test
+    void scopeVersionIsAddedForwardOnlyAndCannotBecomeNegative() throws Exception {
+        assertThat(SCOPE_VERSION_MIGRATION).exists();
+        String sql = Files.readString(SCOPE_VERSION_MIGRATION).toLowerCase().replaceAll("\\s+", " ");
+        assertThat(sql)
+                .contains("add column scope_version bigint not null default 0")
+                .contains("check (scope_version >= 0)");
     }
 
     private static void assertEnumValues(String className, String... expected) throws Exception {

@@ -3,6 +3,11 @@ package com.toir.security;
 import com.toir.controller.PlannedShutdownController;
 import com.toir.controller.repair.RepairCampaignController;
 import com.toir.dto.plannedshutdown.PlannedShutdownDto;
+import com.toir.dto.plannedshutdown.PlannedShutdownCreateRequest;
+import com.toir.dto.plannedshutdown.PlannedShutdownDetailResponse;
+import com.toir.dto.plannedshutdown.PlannedShutdownUpdateRequest;
+import com.toir.dto.plannedshutdown.PlannedShutdownAssetReplaceRequest;
+import com.toir.enums.PlannedShutdownStatus;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.RepairCampaignStatus;
@@ -125,7 +130,7 @@ class RbacToirBusinessFlowSecurityTest {
     @Test
     @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_CREATE)
     void plannedShutdownCreatorCanCreate() throws Exception {
-        when(plannedShutdownService.create(any())).thenReturn(plannedShutdownDto());
+        when(plannedShutdownService.create(any())).thenReturn(plannedShutdownDetail());
 
         mockMvc.perform(post("/api/v1/planned-shutdowns")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -221,14 +226,23 @@ class RbacToirBusinessFlowSecurityTest {
 
     private static String plannedShutdownPayload() {
         return """
-                {"name":"Annual shutdown","departmentId":"%s","startAt":"2026-08-01T00:00:00Z","endAt":"2026-08-02T00:00:00Z","reason":"Maintenance"}
-                """.formatted(UUID.randomUUID());
+                {"name":"Annual shutdown","shutdownType":"PLANNED","departmentId":"%s","responsibleEmployeeId":"%s","startAt":"2026-08-01T00:00:00Z","endAt":"2026-08-02T00:00:00Z","reason":"Maintenance"}
+                """.formatted(UUID.randomUUID(), UUID.randomUUID());
     }
 
     private static PlannedShutdownDto plannedShutdownDto() {
         return new PlannedShutdownDto(UUID.randomUUID(), "Annual shutdown", UUID.randomUUID(),
                 Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"),
                 "Maintenance", PlanStatus.DRAFT);
+    }
+
+    private static PlannedShutdownDetailResponse plannedShutdownDetail() {
+        return new PlannedShutdownDetailResponse(UUID.randomUUID(), 0L, "PS-1", "Annual shutdown", "PLANNED",
+                UUID.randomUUID(), UUID.randomUUID(), Instant.parse("2026-08-01T00:00:00Z"),
+                Instant.parse("2026-08-02T00:00:00Z"), "Maintenance", null, null, null, null,
+                PlannedShutdownStatus.DRAFT, 0L, null, null,
+                null, null, null, null, null, null, null, null, null,
+                null, null, 0L, null, null, List.of());
     }
 
     private static String campaignPayload() {
@@ -250,7 +264,15 @@ class RbacToirBusinessFlowSecurityTest {
                         new Class<?>[]{UUID.class, PlanStatus.class, String.class, int.class, int.class, String.class, String.class},
                         PermissionConstants.PLANNED_SHUTDOWN_READ),
                 Arguments.of(PlannedShutdownController.class, "create",
-                        new Class<?>[]{PlannedShutdownDto.class}, PermissionConstants.PLANNED_SHUTDOWN_CREATE),
+                        new Class<?>[]{PlannedShutdownCreateRequest.class}, PermissionConstants.PLANNED_SHUTDOWN_CREATE),
+                Arguments.of(PlannedShutdownController.class, "get",
+                        new Class<?>[]{UUID.class}, PermissionConstants.PLANNED_SHUTDOWN_READ),
+                Arguments.of(PlannedShutdownController.class, "update",
+                        new Class<?>[]{UUID.class, PlannedShutdownUpdateRequest.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
+                Arguments.of(PlannedShutdownController.class, "getAssets",
+                        new Class<?>[]{UUID.class}, PermissionConstants.PLANNED_SHUTDOWN_READ),
+                Arguments.of(PlannedShutdownController.class, "replaceAssets",
+                        new Class<?>[]{UUID.class, PlannedShutdownAssetReplaceRequest.class}, PermissionConstants.PLANNED_SHUTDOWN_UPDATE),
                 Arguments.of(RepairCampaignController.class, "get",
                         new Class<?>[]{UUID.class}, PermissionConstants.REPAIR_CAMPAIGN_READ),
                 Arguments.of(RepairCampaignController.class, "create",

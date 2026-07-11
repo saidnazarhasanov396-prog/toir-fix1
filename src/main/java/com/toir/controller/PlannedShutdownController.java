@@ -1,5 +1,5 @@
 package com.toir.controller;
-import com.toir.dto.plannedshutdown.PlannedShutdownDto;
+import com.toir.dto.plannedshutdown.*;
 import com.toir.exception.RestException;
 import com.toir.enums.PlanStatus;
 import com.toir.service.PlannedShutdownService;
@@ -61,8 +61,34 @@ public class PlannedShutdownController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_CREATE')")
-    public ResponseEntity<PlannedShutdownDto> create(@Valid @RequestBody PlannedShutdownDto r) {
+    public ResponseEntity<PlannedShutdownDetailResponse> create(@Valid @RequestBody PlannedShutdownCreateRequest r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<PlannedShutdownDetailResponse> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.get(id));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownDetailResponse> update(
+            @PathVariable UUID id, @Valid @RequestBody PlannedShutdownUpdateRequest request) {
+        return ResponseEntity.ok(service.update(id, request));
+    }
+
+    @GetMapping("/{id}/assets")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<PlannedShutdownAssetScopeResponse> getAssets(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.getAssets(id));
+    }
+
+    @PutMapping("/{id}/assets")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownAssetScopeResponse> replaceAssets(
+            @PathVariable UUID id, @Valid @RequestBody PlannedShutdownAssetReplaceRequest request) {
+        return ResponseEntity.ok(service.replaceAssets(id, request));
     }
 
     @PostMapping("/{id}/reject")

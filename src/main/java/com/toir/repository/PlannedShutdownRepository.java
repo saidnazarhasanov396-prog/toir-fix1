@@ -7,6 +7,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -15,6 +17,16 @@ import org.springframework.stereotype.Repository;
 public interface PlannedShutdownRepository extends JpaRepository<PlannedShutdown, UUID> {
     @Query(value = "SELECT * FROM planned_shutdowns WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<PlannedShutdown> findByIdAndIsDeletedFalse(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from PlannedShutdown s where s.id = :id and s.isDeleted = false")
+    Optional<PlannedShutdown> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
+
+    @Query("select count(s) > 0 from PlannedShutdown s where s.code = :code and s.isDeleted = false")
+    boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
+
+    @Query("select count(s) > 0 from PlannedShutdown s where s.code = :code and s.id <> :id and s.isDeleted = false")
+    boolean existsByCodeAndIdNotAndIsDeletedFalse(@Param("code") String code, @Param("id") UUID id);
 
     @Query(value = "SELECT * FROM planned_shutdowns WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<PlannedShutdown> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
