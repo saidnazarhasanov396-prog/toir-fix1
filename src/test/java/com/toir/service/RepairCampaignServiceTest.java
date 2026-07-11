@@ -52,10 +52,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class RepairCampaignServiceTest {
@@ -230,7 +233,7 @@ class RepairCampaignServiceTest {
         equipment.setDepartmentId(UUID.randomUUID());
         when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
-        when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
+        lenient().when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
                 .thenReturn(List.of(equipment));
 
         service.generateWorkOrders(campaignId, generateRequest(stageId), "generation-1");
@@ -240,6 +243,33 @@ class RepairCampaignServiceTest {
         Object generationKey = WorkOrderRequest.class.getMethod("generationKey")
                 .invoke(requestCaptor.getValue());
         assertThat(generationKey).isEqualTo("RC:" + campaignId + ":" + stageId + ":" + equipmentId);
+    }
+
+    @Test
+    void manualCampaignCreatePassesUntouchedPublicRequestAndServerIdentity() {
+        GenerationFixture fixture = generationFixture();
+        WorkOrderRequest publicRequest = publicCampaignRequest(fixture.equipmentId());
+        var expected = workOrderDto(UUID.randomUUID());
+        when(workOrderService.createCampaignLinked(same(publicRequest), eq(fixture.campaignId()), eq(fixture.stageId())))
+                .thenReturn(expected);
+
+        assertThat(service.createWorkOrder(fixture.campaignId(), fixture.stageId(), publicRequest)).isSameAs(expected);
+        verify(workOrderService).createCampaignLinked(same(publicRequest), eq(fixture.campaignId()), eq(fixture.stageId()));
+    }
+
+    @Test
+    void manualCampaignCreatePropagatesCanonicalFieldRejectionWithoutFallbackCreate() {
+        GenerationFixture fixture = generationFixture();
+        WorkOrderRequest poisoned = publicCampaignRequest(fixture.equipmentId())
+                .withGenerationKey("PS:forged")
+                .withSafetyRequirements(false, false)
+                .withPlannedShutdown(UUID.randomUUID(), UUID.randomUUID());
+        when(workOrderService.createCampaignLinked(same(poisoned), eq(fixture.campaignId()), eq(fixture.stageId())))
+                .thenThrow(RestException.badRequest("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED"));
+
+        assertThatThrownBy(() -> service.createWorkOrder(fixture.campaignId(), fixture.stageId(), poisoned))
+                .hasMessageContaining("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED");
+        verify(workOrderService, never()).createGenerated(any());
     }
 
     @Test
@@ -370,9 +400,9 @@ class RepairCampaignServiceTest {
         equipment.setCode("P-1");
         equipment.setName("Pump");
         equipment.setDepartmentId(UUID.randomUUID());
-        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        lenient().when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
-        when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
+        lenient().when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
                 .thenReturn(List.of(equipment));
         return new GenerationFixture(campaignId, stageId, equipmentId, campaign, equipment);
     }
@@ -385,6 +415,13 @@ class RepairCampaignServiceTest {
                 com.toir.enums.PriorityLevel.MEDIUM, null, null, null, null, null, null, null,
                 null, null, null, null, null, List.of(), null, null, 0, 0
         );
+    }
+
+    private WorkOrderRequest publicCampaignRequest(UUID equipmentId) {
+        return new WorkOrderRequest(null, "Campaign work", equipmentId, UUID.randomUUID(),
+                null, null, null, null, com.toir.enums.WorkOrderType.OVERHAUL,
+                com.toir.enums.WorkType.REPAIR, null, null, com.toir.enums.PriorityLevel.MEDIUM,
+                null, null, null, "manual campaign work");
     }
 
     private record GenerationFixture(

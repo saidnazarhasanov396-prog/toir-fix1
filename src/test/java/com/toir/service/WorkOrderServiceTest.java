@@ -169,12 +169,23 @@ class WorkOrderServiceTest {
     com.toir.service.plannedshutdown.PlannedShutdownWorkOrderStartPolicy plannedShutdownStartPolicy;
 
     @Test
-    void publicCreateRejectsServerOwnedCanonicalFieldsBeforeMutation() {
-        WorkOrderRequest poisoned = request(WorkOrderType.PLANNED, null, null, null)
+    void campaignCreateRejectsForgedShutdownIdentityAndKeyBeforeMutation() {
+        WorkOrderRequest poisoned = request(WorkOrderType.OVERHAUL, null, null, null)
                 .withGenerationKey("PS:forged")
+                .withSafetyRequirements(false, false)
                 .withPlannedShutdown(UUID.randomUUID(), UUID.randomUUID());
 
-        assertThatThrownBy(() -> service.createPublic(poisoned, null))
+        assertThatThrownBy(() -> service.createCampaignLinked(poisoned, UUID.randomUUID(), UUID.randomUUID()))
+                .hasMessageContaining("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED");
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void campaignCreateRejectsClientSuppliedCampaignIdentityInsteadOfOverwritingIt() {
+        WorkOrderRequest poisoned = request(WorkOrderType.OVERHAUL, null, null, null)
+                .withRepairCampaign(UUID.randomUUID(), UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.createCampaignLinked(poisoned, UUID.randomUUID(), UUID.randomUUID()))
                 .hasMessageContaining("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED");
         verifyNoInteractions(repository);
     }

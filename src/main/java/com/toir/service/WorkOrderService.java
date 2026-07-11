@@ -797,11 +797,17 @@ public class WorkOrderService {
     }
 
     @Transactional
-    public WorkOrderDto createCampaignLinked(WorkOrderRequest request) {
-        if (request.repairCampaignId() == null || request.repairCampaignStageId() == null) {
+    public WorkOrderDto createCampaignLinked(WorkOrderRequest publicRequest, UUID campaignId, UUID stageId) {
+        assertNoServerOwnedCreateFields(publicRequest);
+        if (campaignId == null || stageId == null) {
             throw RestException.badRequest("Campaign-linked work order requires campaign and stage");
         }
-        return createInternal(request, null);
+        if (publicRequest.requiresShutdown() || publicRequest.requiresIsolation()) {
+            throw RestException.badRequest("CAMPAIGN_WORK_ORDER_SAFETY_FLAGS_ARE_SERVER_OWNED");
+        }
+        WorkOrderRequest canonical = publicRequest.withSafetyRequirements(false, false)
+                .withRepairCampaign(campaignId, stageId);
+        return createInternal(canonical, null);
     }
 
     private void assertNoServerOwnedCreateFields(WorkOrderRequest request) {

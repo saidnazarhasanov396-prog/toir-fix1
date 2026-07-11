@@ -370,7 +370,7 @@ public class RepairCampaignService {
     @Transactional
     public WorkOrderDto createWorkOrder(UUID campaignId, UUID stageId, WorkOrderRequest request) {
         getStageForCampaign(campaignId, stageId);
-        return workOrderService.createCampaignLinked(request.withRepairCampaign(campaignId, stageId));
+        return workOrderService.createCampaignLinked(request, campaignId, stageId);
     }
 
     @Transactional

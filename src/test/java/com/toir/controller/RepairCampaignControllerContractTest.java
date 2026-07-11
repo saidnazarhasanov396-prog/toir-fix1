@@ -10,6 +10,7 @@ import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.exception.RestException;
 import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairCampaignService;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -78,6 +81,41 @@ class RepairCampaignControllerContractTest {
         assertThat(mockingDetails(service).getInvocations())
                 .anySatisfy(invocation -> assertThat(invocation.getArguments())
                         .containsExactly(campaignId, invocation.getArgument(1), "generation-1"));
+    }
+
+    @Test
+    void manualCreatePreservesMaliciousCanonicalFieldsForServiceRejection() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        UUID shutdownId = UUID.randomUUID();
+        UUID workItemId = UUID.randomUUID();
+        UUID forgedCampaignId = UUID.randomUUID();
+        UUID forgedStageId = UUID.randomUUID();
+        when(service.createWorkOrder(eq(campaignId), eq(stageId), any())).thenAnswer(invocation -> {
+            com.toir.dto.workorder.WorkOrderRequest request = invocation.getArgument(2);
+            assertThat(request.generationKey()).isEqualTo("PS:forged");
+            assertThat(request.plannedShutdownId()).isEqualTo(shutdownId);
+            assertThat(request.shutdownWorkItemId()).isEqualTo(workItemId);
+            assertThat(request.repairCampaignId()).isEqualTo(forgedCampaignId);
+            assertThat(request.repairCampaignStageId()).isEqualTo(forgedStageId);
+            assertThat(request.requiresShutdown()).isFalse();
+            assertThat(request.requiresIsolation()).isFalse();
+            throw RestException.badRequest("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED");
+        });
+
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/stages/{stageId}/work-orders", campaignId, stageId)
+                        .contentType("application/json")
+                        .content("""
+                                {"title":"Forged","equipmentId":"%s","departmentId":"%s",
+                                 "type":"OVERHAUL","workType":"REPAIR","generationKey":"PS:forged",
+                                 "plannedShutdownId":"%s","shutdownWorkItemId":"%s",
+                                 "repairCampaignId":"%s","repairCampaignStageId":"%s",
+                                 "requiresShutdown":false,"requiresIsolation":false}
+                                """.formatted(UUID.randomUUID(), UUID.randomUUID(), shutdownId, workItemId,
+                                        forgedCampaignId, forgedStageId)))
+                .andExpect(status().isBadRequest());
+
+        verify(service).createWorkOrder(eq(campaignId), eq(stageId), any());
     }
 
     @Test
