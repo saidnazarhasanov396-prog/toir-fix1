@@ -15,7 +15,11 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownAssetRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownWorkItemRepository;
+import com.toir.repository.plannedshutdown.PlannedShutdownReadinessItemRepository;
+import com.toir.repository.plannedshutdown.PlannedShutdownIsolationPointRepository;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.security.ScopeAccessService;
+import com.toir.service.plannedshutdown.PlannedShutdownReadinessPolicy;
 import com.toir.service.plannedshutdown.PlannedShutdownWorkItemPolicy;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,6 +53,11 @@ class PlannedShutdownWorkItemServiceTest {
     @Mock DefectRepository defectRepository;
     @Mock PprTaskRepository pprTaskRepository;
     @Mock WorkOrderRepository workOrderRepository;
+    @Mock WorkOrderMaterialReadinessService materialReadinessService;
+    @Mock SafetyPermitRepository safetyPermitRepository;
+    @Mock PlannedShutdownReadinessItemRepository readinessItemRepository;
+    @Mock PlannedShutdownIsolationPointRepository isolationPointRepository;
+    @Mock ScopeAccessService scopeAccessService;
     @Mock AuditBuilderService audit;
     PlannedShutdownService service;
 
@@ -59,8 +68,10 @@ class PlannedShutdownWorkItemServiceTest {
     @BeforeEach
     void setUp() {
         service = new PlannedShutdownService(shutdownRepository, assetRepository, itemRepository,
+                readinessItemRepository, isolationPointRepository,
                 departmentRepository, employeeRepository, equipmentRepository, defectRepository,
-                pprTaskRepository, workOrderRepository, new PlannedShutdownWorkItemPolicy(), audit);
+                pprTaskRepository, workOrderRepository, materialReadinessService, safetyPermitRepository,
+                new PlannedShutdownWorkItemPolicy(), new PlannedShutdownReadinessPolicy(), scopeAccessService, audit);
         shutdownId = UUID.randomUUID();
         equipmentId = UUID.randomUUID();
         shutdown = new PlannedShutdown();

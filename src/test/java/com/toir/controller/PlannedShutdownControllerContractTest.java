@@ -170,6 +170,34 @@ class PlannedShutdownControllerContractTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void readinessAndIsolationActionsExposeTypedEvidenceContracts() throws Exception {
+        UUID id = UUID.randomUUID(); UUID itemId = UUID.randomUUID(); UUID pointId = UUID.randomUUID();
+        var readiness = new com.toir.dto.plannedshutdown.PlannedShutdownReadinessScopeResponse(id, 5L, 3L, List.of());
+        var isolation = new com.toir.dto.plannedshutdown.PlannedShutdownIsolationScopeResponse(id, 5L, 3L, List.of());
+        when(service.listReadiness(id)).thenReturn(readiness);
+        when(service.completeReadinessItem(eq(id), eq(itemId), any())).thenReturn(readiness);
+        when(service.reopenReadinessItem(eq(id), eq(itemId), any())).thenReturn(readiness);
+        when(service.applyIsolation(eq(id), eq(pointId), any())).thenReturn(isolation);
+        when(service.verifyIsolation(eq(id), eq(pointId), any())).thenReturn(isolation);
+        when(service.releaseIsolation(eq(id), eq(pointId), any())).thenReturn(isolation);
+
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/readiness", id))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.scopeVersion").value(3));
+        String readinessBody = "{\"version\":5,\"evidence\":\"photo:1\",\"comment\":\"checked\"}";
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/readiness/{itemId}/complete", id, itemId)
+                        .contentType("application/json").content(readinessBody)).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/readiness/{itemId}/reopen", id, itemId)
+                        .contentType("application/json").content(readinessBody)).andExpect(status().isOk());
+        String action = "{\"version\":5}";
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/isolation/{pointId}/apply", id, pointId)
+                        .contentType("application/json").content(action)).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/isolation/{pointId}/verify", id, pointId)
+                        .contentType("application/json").content(action)).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/isolation/{pointId}/release", id, pointId)
+                        .contentType("application/json").content(action)).andExpect(status().isOk());
+    }
+
     private static PlannedShutdownDetailResponse detail(UUID id, UUID departmentId, UUID employeeId,
             PlannedShutdownStatus status) {
         return new PlannedShutdownDetailResponse(id, 3L, "PS-1", "Annual", "PLANNED", departmentId, employeeId,

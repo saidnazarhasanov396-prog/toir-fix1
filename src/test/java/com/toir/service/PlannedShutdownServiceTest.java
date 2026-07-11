@@ -18,10 +18,15 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownAssetRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownWorkItemRepository;
+import com.toir.repository.plannedshutdown.PlannedShutdownReadinessItemRepository;
+import com.toir.repository.plannedshutdown.PlannedShutdownIsolationPointRepository;
+import com.toir.repository.SafetyPermitRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.service.plannedshutdown.PlannedShutdownWorkItemPolicy;
+import com.toir.service.plannedshutdown.PlannedShutdownReadinessPolicy;
+import com.toir.security.ScopeAccessService;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.util.AuditBuilderService;
 import org.springframework.http.HttpStatus;
@@ -57,10 +62,77 @@ class PlannedShutdownServiceTest {
     @Mock private PprTaskRepository pprTaskRepository;
     @Mock private WorkOrderRepository workOrderRepository;
     @Mock private PlannedShutdownWorkItemPolicy workItemPolicy;
+    @Mock private PlannedShutdownReadinessItemRepository readinessItemRepository;
+    @Mock private PlannedShutdownIsolationPointRepository isolationPointRepository;
+    @Mock private PlannedShutdownReadinessPolicy readinessPolicy;
+    @Mock private SafetyPermitRepository safetyPermitRepository;
+    @Mock private ScopeAccessService scopeAccessService;
     @Mock private AuditBuilderService auditBuilderService;
 
     @InjectMocks
     private PlannedShutdownService service;
+
+    @Test
+    void completeAndReopenReadinessCaptureServerActorAndEvidence() {
+        UUID id = UUID.randomUUID(); UUID itemId = UUID.randomUUID(); UUID actorId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 4L, PlannedShutdownStatus.READINESS_CHECK);
+        var item = new com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem();
+        item.setId(itemId); item.setPlannedShutdownId(id); item.setReadinessKey("HSE-CHECK");
+        item.setTitle("HSE check"); item.setSeverity(com.toir.enums.PlannedShutdownReadinessSeverity.CRITICAL);
+        item.setOrderNumber(0);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(readinessItemRepository.findByIdAndPlannedShutdownIdAndIsDeletedFalse(itemId, id))
+                .thenReturn(java.util.Optional.of(item));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(item));
+
+        var completed = service.completeReadinessItem(id, itemId,
+                new com.toir.dto.plannedshutdown.PlannedShutdownReadinessActionRequest(4L, "photo:1", "checked"));
+
+        assertThat(completed.items().get(0).status()).isEqualTo(com.toir.enums.PlannedShutdownItemStatus.PASSED);
+        assertThat(item.getCompletedById()).isEqualTo(actorId);
+        assertThat(item.getCompletedAt()).isNotNull();
+        assertThat(item.getEvidence()).isEqualTo("photo:1");
+
+        assertThatThrownBy(() -> service.completeReadinessItem(id, itemId,
+                new com.toir.dto.plannedshutdown.PlannedShutdownReadinessActionRequest(4L, "photo:2", "again")))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT));
+
+        service.reopenReadinessItem(id, itemId,
+                new com.toir.dto.plannedshutdown.PlannedShutdownReadinessActionRequest(4L, null, "scope changed"));
+        assertThat(item.getStatus()).isEqualTo(com.toir.enums.PlannedShutdownItemStatus.PENDING);
+        assertThat(item.getCompletedById()).isNull();
+        assertThat(item.getCompletedAt()).isNull();
+        assertThat(item.getEvidence()).isEqualTo("photo:1");
+    }
+
+    @Test
+    void isolationApplyVerifyReleaseRequiresOrderedServerStampedActions() {
+        UUID id = UUID.randomUUID(); UUID pointId = UUID.randomUUID(); UUID actor = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 2L, PlannedShutdownStatus.PREPARATION);
+        var point = new com.toir.entity.plannedshutdown.PlannedShutdownIsolationPoint();
+        point.setId(pointId); point.setPlannedShutdownId(id); point.setEquipmentId(UUID.randomUUID());
+        point.setIsolationMethod("ELECTRICAL"); point.setLockTagIdentifier("LT-1");
+        point.setResponsibleEmployeeId(UUID.randomUUID()); point.setOrderNumber(0);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(isolationPointRepository.findByIdAndPlannedShutdownIdAndIsDeletedFalse(pointId, id))
+                .thenReturn(java.util.Optional.of(point));
+        when(scopeAccessService.currentEmployeeId()).thenReturn(java.util.Optional.of(actor));
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(point));
+
+        service.applyIsolation(id, pointId, new com.toir.dto.plannedshutdown.PlannedShutdownIsolationActionRequest(2L));
+        service.verifyIsolation(id, pointId, new com.toir.dto.plannedshutdown.PlannedShutdownIsolationActionRequest(2L));
+        service.releaseIsolation(id, pointId, new com.toir.dto.plannedshutdown.PlannedShutdownIsolationActionRequest(2L));
+
+        assertThat(point.getAppliedById()).isEqualTo(actor);
+        assertThat(point.getVerifiedById()).isEqualTo(actor);
+        assertThat(point.getReleasedById()).isEqualTo(actor);
+        assertThat(point.getStatus()).isEqualTo(com.toir.enums.PlannedShutdownItemStatus.PASSED);
+        assertThat(point.getReleasedAt()).isNotNull();
+    }
 
     @Test
     void findAllFilteredAppliesFiltersCorrectly() {

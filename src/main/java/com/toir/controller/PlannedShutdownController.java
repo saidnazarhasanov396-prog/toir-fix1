@@ -126,6 +126,114 @@ public class PlannedShutdownController {
         return ResponseEntity.ok(service.reorderWorkItems(id, request));
     }
 
+    @GetMapping("/{id}/readiness")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<PlannedShutdownReadinessScopeResponse> listReadiness(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.listReadiness(id));
+    }
+
+    @PostMapping("/{id}/readiness")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownReadinessScopeResponse> addReadiness(
+            @PathVariable UUID id, @Valid @RequestBody PlannedShutdownReadinessItemRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.addReadinessItem(id, request));
+    }
+
+    @PutMapping("/{id}/readiness/{itemId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownReadinessScopeResponse> updateReadiness(
+            @PathVariable UUID id, @PathVariable UUID itemId,
+            @Valid @RequestBody PlannedShutdownReadinessItemRequest request) {
+        return ResponseEntity.ok(service.updateReadinessItem(id, itemId, request));
+    }
+
+    @DeleteMapping("/{id}/readiness/{itemId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownReadinessScopeResponse> removeReadiness(
+            @PathVariable UUID id, @PathVariable UUID itemId, @RequestParam Long version) {
+        return ResponseEntity.ok(service.removeReadinessItem(id, itemId, version));
+    }
+
+    @PostMapping("/{id}/readiness/{itemId}/complete")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_PREPARE')")
+    public ResponseEntity<PlannedShutdownReadinessScopeResponse> completeReadiness(
+            @PathVariable UUID id, @PathVariable UUID itemId,
+            @Valid @RequestBody PlannedShutdownReadinessActionRequest request) {
+        return ResponseEntity.ok(service.completeReadinessItem(id, itemId, request));
+    }
+
+    @PostMapping("/{id}/readiness/{itemId}/reopen")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_PREPARE')")
+    public ResponseEntity<PlannedShutdownReadinessScopeResponse> reopenReadiness(
+            @PathVariable UUID id, @PathVariable UUID itemId,
+            @Valid @RequestBody PlannedShutdownReadinessActionRequest request) {
+        return ResponseEntity.ok(service.reopenReadinessItem(id, itemId, request));
+    }
+
+    @GetMapping("/{id}/isolation")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<PlannedShutdownIsolationScopeResponse> listIsolation(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.listIsolation(id));
+    }
+
+    @PostMapping("/{id}/isolation")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownIsolationScopeResponse> addIsolation(
+            @PathVariable UUID id, @Valid @RequestBody PlannedShutdownIsolationPointRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.addIsolationPoint(id, request));
+    }
+
+    @PutMapping("/{id}/isolation/{pointId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownIsolationScopeResponse> updateIsolation(
+            @PathVariable UUID id, @PathVariable UUID pointId,
+            @Valid @RequestBody PlannedShutdownIsolationPointRequest request) {
+        return ResponseEntity.ok(service.updateIsolationPoint(id, pointId, request));
+    }
+
+    @DeleteMapping("/{id}/isolation/{pointId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<PlannedShutdownIsolationScopeResponse> removeIsolation(
+            @PathVariable UUID id, @PathVariable UUID pointId, @RequestParam Long version) {
+        return ResponseEntity.ok(service.removeIsolationPoint(id, pointId, version));
+    }
+
+    @PostMapping("/{id}/isolation/{pointId}/apply")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_PREPARE')")
+    public ResponseEntity<PlannedShutdownIsolationScopeResponse> applyIsolation(
+            @PathVariable UUID id, @PathVariable UUID pointId,
+            @Valid @RequestBody PlannedShutdownIsolationActionRequest request) {
+        return ResponseEntity.ok(service.applyIsolation(id, pointId, request));
+    }
+
+    @PostMapping("/{id}/isolation/{pointId}/verify")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE')")
+    public ResponseEntity<PlannedShutdownIsolationScopeResponse> verifyIsolation(
+            @PathVariable UUID id, @PathVariable UUID pointId,
+            @Valid @RequestBody PlannedShutdownIsolationActionRequest request) {
+        return ResponseEntity.ok(service.verifyIsolation(id, pointId, request));
+    }
+
+    @PostMapping("/{id}/isolation/{pointId}/release")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_STARTUP')")
+    public ResponseEntity<PlannedShutdownIsolationScopeResponse> releaseIsolation(
+            @PathVariable UUID id, @PathVariable UUID pointId,
+            @Valid @RequestBody PlannedShutdownIsolationActionRequest request) {
+        return ResponseEntity.ok(service.releaseIsolation(id, pointId, request));
+    }
+
+    @GetMapping("/{id}/readiness/assessment")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<PlannedShutdownReadinessAssessment> assessReadiness(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.assessReadiness(id, null));
+    }
+
+    @GetMapping("/{id}/safe-state/assessment")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE')")
+    public ResponseEntity<PlannedShutdownReadinessAssessment> assessSafeState(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.assessSafeState(id, null));
+    }
+
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_APPROVE')")
     public ResponseEntity<PlannedShutdownDto> reject(@PathVariable UUID id) {

@@ -6,6 +6,8 @@ import com.toir.entity.PlannedShutdown;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.plannedshutdown.PlannedShutdownAsset;
 import com.toir.entity.plannedshutdown.PlannedShutdownWorkItem;
+import com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem;
+import com.toir.entity.plannedshutdown.PlannedShutdownIsolationPoint;
 import com.toir.entity.users.Employee;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -13,6 +15,9 @@ import com.toir.enums.PlanStatus;
 import com.toir.enums.PlannedShutdownAssetDisposition;
 import com.toir.enums.PlannedShutdownStatus;
 import com.toir.enums.PlannedShutdownWorkItemSourceType;
+import com.toir.enums.PlannedShutdownItemStatus;
+import com.toir.enums.PlannedShutdownReadinessSeverity;
+import com.toir.enums.SafetyPermitStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.PlannedShutdownRepository;
 import com.toir.repository.PprTaskRepository;
@@ -22,9 +27,14 @@ import com.toir.repository.department.DepartmentRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownAssetRepository;
 import com.toir.repository.plannedshutdown.PlannedShutdownWorkItemRepository;
+import com.toir.repository.plannedshutdown.PlannedShutdownReadinessItemRepository;
+import com.toir.repository.plannedshutdown.PlannedShutdownIsolationPointRepository;
+import com.toir.repository.SafetyPermitRepository;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import com.toir.service.plannedshutdown.PlannedShutdownWorkItemPolicy;
+import com.toir.service.plannedshutdown.PlannedShutdownReadinessPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,13 +51,19 @@ public class PlannedShutdownService {
     private final PlannedShutdownRepository repository;
     private final PlannedShutdownAssetRepository assetRepository;
     private final PlannedShutdownWorkItemRepository workItemRepository;
+    private final PlannedShutdownReadinessItemRepository readinessItemRepository;
+    private final PlannedShutdownIsolationPointRepository isolationPointRepository;
     private final DepartmentRepository departmentRepository;
     private final EmployeeRepository employeeRepository;
     private final EquipmentRepository equipmentRepository;
     private final DefectRepository defectRepository;
     private final PprTaskRepository pprTaskRepository;
     private final WorkOrderRepository workOrderRepository;
+    private final WorkOrderMaterialReadinessService workOrderMaterialReadinessService;
+    private final SafetyPermitRepository safetyPermitRepository;
     private final PlannedShutdownWorkItemPolicy workItemPolicy;
+    private final PlannedShutdownReadinessPolicy readinessPolicy;
+    private final ScopeAccessService scopeAccessService;
     private final AuditBuilderService auditBuilderService;
 
     private static final Pattern CODE_PATTERN = Pattern.compile("[A-Z0-9-]{3,64}");
@@ -320,6 +336,221 @@ public class PlannedShutdownService {
         return workItemScope(saved);
     }
 
+    @Transactional(readOnly = true)
+    public PlannedShutdownReadinessScopeResponse listReadiness(UUID id) {
+        return readinessScope(find(id));
+    }
+
+    @Transactional
+    public PlannedShutdownReadinessScopeResponse addReadinessItem(
+            UUID id, PlannedShutdownReadinessItemRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        validateReadinessRequest(id, null, request);
+        PlannedShutdownReadinessItem item = new PlannedShutdownReadinessItem();
+        item.setPlannedShutdownId(id);
+        apply(item, request);
+        readinessItemRepository.saveAndFlush(item);
+        PlannedShutdown saved = incrementScope(shutdown);
+        audit("planned_shutdown_readiness", item.getId(), AuditAction.CREATE,
+                "Элемент готовности остановки создан", null, PlannedShutdownReadinessItemResponse.from(item));
+        return readinessScope(saved);
+    }
+
+    @Transactional
+    public PlannedShutdownReadinessScopeResponse updateReadinessItem(
+            UUID id, UUID itemId, PlannedShutdownReadinessItemRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        PlannedShutdownReadinessItem item = findReadiness(id, itemId);
+        validateReadinessRequest(id, itemId, request);
+        var before = PlannedShutdownReadinessItemResponse.from(item);
+        apply(item, request);
+        readinessItemRepository.saveAndFlush(item);
+        PlannedShutdown saved = incrementScope(shutdown);
+        audit("planned_shutdown_readiness", itemId, AuditAction.UPDATE,
+                "Элемент готовности остановки обновлён", before, PlannedShutdownReadinessItemResponse.from(item));
+        return readinessScope(saved);
+    }
+
+    @Transactional
+    public PlannedShutdownReadinessScopeResponse removeReadinessItem(UUID id, UUID itemId, Long version) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, version);
+        PlannedShutdownReadinessItem item = findReadiness(id, itemId);
+        var before = PlannedShutdownReadinessItemResponse.from(item);
+        item.setDeleted(true);
+        readinessItemRepository.saveAndFlush(item);
+        PlannedShutdown saved = incrementScope(shutdown);
+        audit("planned_shutdown_readiness", itemId, AuditAction.DELETE,
+                "Элемент готовности остановки удалён", before, null);
+        return readinessScope(saved);
+    }
+
+    @Transactional
+    public PlannedShutdownReadinessScopeResponse completeReadinessItem(
+            UUID id, UUID itemId, PlannedShutdownReadinessActionRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        PlannedShutdownReadinessItem item = findReadiness(id, itemId);
+        if (item.getStatus() == PlannedShutdownItemStatus.PASSED) {
+            throw RestException.conflict("Readiness item is already completed");
+        }
+        UUID actor = requireUserActor();
+        var before = PlannedShutdownReadinessItemResponse.from(item);
+        item.setStatus(PlannedShutdownItemStatus.PASSED);
+        item.setEvidence(trimToNull(request.evidence()));
+        item.setComment(trimToNull(request.comment()));
+        item.setCompletedById(actor);
+        item.setCompletedAt(java.time.Instant.now());
+        readinessItemRepository.saveAndFlush(item);
+        audit("planned_shutdown_readiness", itemId, AuditAction.UPDATE,
+                "Готовность подтверждена", before, PlannedShutdownReadinessItemResponse.from(item));
+        return readinessScope(shutdown);
+    }
+
+    @Transactional
+    public PlannedShutdownReadinessScopeResponse reopenReadinessItem(
+            UUID id, UUID itemId, PlannedShutdownReadinessActionRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        PlannedShutdownReadinessItem item = findReadiness(id, itemId);
+        if (item.getStatus() != PlannedShutdownItemStatus.PASSED || item.getCompletedAt() == null) {
+            throw RestException.conflict("Only a completed readiness item can be reopened");
+        }
+        requireUserActor();
+        var before = PlannedShutdownReadinessItemResponse.from(item);
+        item.setStatus(PlannedShutdownItemStatus.PENDING);
+        item.setCompletedById(null);
+        item.setCompletedAt(null);
+        if (trimToNull(request.evidence()) != null) item.setEvidence(request.evidence().trim());
+        item.setComment(trimToNull(request.comment()));
+        readinessItemRepository.saveAndFlush(item);
+        audit("planned_shutdown_readiness", itemId, AuditAction.UPDATE,
+                "Готовность открыта повторно", before, PlannedShutdownReadinessItemResponse.from(item));
+        return readinessScope(shutdown);
+    }
+
+    @Transactional(readOnly = true)
+    public PlannedShutdownIsolationScopeResponse listIsolation(UUID id) {
+        return isolationScope(find(id));
+    }
+
+    @Transactional
+    public PlannedShutdownIsolationScopeResponse addIsolationPoint(
+            UUID id, PlannedShutdownIsolationPointRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        validateIsolationRequest(id, null, request);
+        PlannedShutdownIsolationPoint point = new PlannedShutdownIsolationPoint();
+        point.setPlannedShutdownId(id);
+        apply(point, request);
+        isolationPointRepository.saveAndFlush(point);
+        PlannedShutdown saved = incrementScope(shutdown);
+        audit("planned_shutdown_isolation", point.getId(), AuditAction.CREATE,
+                "Точка изоляции создана", null, PlannedShutdownIsolationPointResponse.from(point));
+        return isolationScope(saved);
+    }
+
+    @Transactional
+    public PlannedShutdownIsolationScopeResponse updateIsolationPoint(
+            UUID id, UUID pointId, PlannedShutdownIsolationPointRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        PlannedShutdownIsolationPoint point = findIsolation(id, pointId);
+        if (point.getAppliedAt() != null) throw RestException.conflict("Applied isolation point is immutable");
+        validateIsolationRequest(id, pointId, request);
+        var before = PlannedShutdownIsolationPointResponse.from(point);
+        apply(point, request);
+        isolationPointRepository.saveAndFlush(point);
+        PlannedShutdown saved = incrementScope(shutdown);
+        audit("planned_shutdown_isolation", pointId, AuditAction.UPDATE,
+                "Точка изоляции обновлена", before, PlannedShutdownIsolationPointResponse.from(point));
+        return isolationScope(saved);
+    }
+
+    @Transactional
+    public PlannedShutdownIsolationScopeResponse removeIsolationPoint(UUID id, UUID pointId, Long version) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, version);
+        PlannedShutdownIsolationPoint point = findIsolation(id, pointId);
+        if (point.getAppliedAt() != null && point.getReleasedAt() == null) {
+            throw RestException.conflict("Applied isolation must be released before deletion");
+        }
+        var before = PlannedShutdownIsolationPointResponse.from(point);
+        point.setDeleted(true);
+        isolationPointRepository.saveAndFlush(point);
+        PlannedShutdown saved = incrementScope(shutdown);
+        audit("planned_shutdown_isolation", pointId, AuditAction.DELETE,
+                "Точка изоляции удалена", before, null);
+        return isolationScope(saved);
+    }
+
+    @Transactional
+    public PlannedShutdownIsolationScopeResponse applyIsolation(
+            UUID id, UUID pointId, PlannedShutdownIsolationActionRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        PlannedShutdownIsolationPoint point = findIsolation(id, pointId);
+        if (point.getAppliedAt() != null) throw RestException.conflict("Isolation point is already applied");
+        UUID actor = requireEmployeeActor();
+        var before = PlannedShutdownIsolationPointResponse.from(point);
+        point.setAppliedById(actor);
+        point.setAppliedAt(java.time.Instant.now());
+        point.setStatus(PlannedShutdownItemStatus.IN_PROGRESS);
+        isolationPointRepository.saveAndFlush(point);
+        audit("planned_shutdown_isolation", pointId, AuditAction.UPDATE,
+                "Изоляция применена", before, PlannedShutdownIsolationPointResponse.from(point));
+        return isolationScope(shutdown);
+    }
+
+    @Transactional
+    public PlannedShutdownIsolationScopeResponse verifyIsolation(
+            UUID id, UUID pointId, PlannedShutdownIsolationActionRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        PlannedShutdownIsolationPoint point = findIsolation(id, pointId);
+        if (point.getAppliedAt() == null) throw RestException.conflict("Isolation must be applied before verification");
+        if (point.getVerifiedAt() != null) throw RestException.conflict("Isolation point is already verified");
+        UUID actor = requireEmployeeActor();
+        var before = PlannedShutdownIsolationPointResponse.from(point);
+        point.setVerifiedById(actor);
+        point.setVerifiedAt(java.time.Instant.now());
+        point.setStatus(PlannedShutdownItemStatus.PASSED);
+        isolationPointRepository.saveAndFlush(point);
+        audit("planned_shutdown_isolation", pointId, AuditAction.UPDATE,
+                "Изоляция проверена", before, PlannedShutdownIsolationPointResponse.from(point));
+        return isolationScope(shutdown);
+    }
+
+    @Transactional
+    public PlannedShutdownIsolationScopeResponse releaseIsolation(
+            UUID id, UUID pointId, PlannedShutdownIsolationActionRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        PlannedShutdownIsolationPoint point = findIsolation(id, pointId);
+        if (point.getVerifiedAt() == null) throw RestException.conflict("Isolation must be verified before release");
+        if (point.getReleasedAt() != null) throw RestException.conflict("Isolation point is already released");
+        UUID actor = requireEmployeeActor();
+        var before = PlannedShutdownIsolationPointResponse.from(point);
+        point.setReleasedById(actor);
+        point.setReleasedAt(java.time.Instant.now());
+        isolationPointRepository.saveAndFlush(point);
+        audit("planned_shutdown_isolation", pointId, AuditAction.UPDATE,
+                "Изоляция снята", before, PlannedShutdownIsolationPointResponse.from(point));
+        return isolationScope(shutdown);
+    }
+
+    @Transactional(readOnly = true)
+    public PlannedShutdownReadinessAssessment assessReadiness(UUID id, java.time.Instant evaluatedAt) {
+        return readinessPolicy.evaluateReadiness(readinessFacts(find(id), evaluatedAt));
+    }
+
+    @Transactional(readOnly = true)
+    public PlannedShutdownReadinessAssessment assessSafeState(UUID id, java.time.Instant evaluatedAt) {
+        return readinessPolicy.evaluateSafeState(readinessFacts(find(id), evaluatedAt));
+    }
+
     @Transactional
     public PlannedShutdownDto finalizeApprovalFromApprovalRequest(UUID id) {
         PlannedShutdown s = repository.findByIdAndIsDeletedFalse(id)
@@ -355,6 +586,174 @@ public class PlannedShutdownService {
     private PlannedShutdown find(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Planned shutdown not found: " + id));
+    }
+
+    private PlannedShutdownReadinessScopeResponse readinessScope(PlannedShutdown shutdown) {
+        List<PlannedShutdownReadinessItemResponse> items = readinessItemRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdown.getId()).stream()
+                .map(PlannedShutdownReadinessItemResponse::from).toList();
+        return new PlannedShutdownReadinessScopeResponse(shutdown.getId(), shutdown.getVersion(),
+                shutdown.getScopeVersion(), items);
+    }
+
+    private PlannedShutdownIsolationScopeResponse isolationScope(PlannedShutdown shutdown) {
+        List<PlannedShutdownIsolationPointResponse> points = isolationPointRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdown.getId()).stream()
+                .map(PlannedShutdownIsolationPointResponse::from).toList();
+        return new PlannedShutdownIsolationScopeResponse(shutdown.getId(), shutdown.getVersion(),
+                shutdown.getScopeVersion(), points);
+    }
+
+    private PlannedShutdownReadinessItem findReadiness(UUID shutdownId, UUID itemId) {
+        return readinessItemRepository.findByIdAndPlannedShutdownIdAndIsDeletedFalse(itemId, shutdownId)
+                .orElseThrow(() -> RestException.notFound("Shutdown readiness item not found: " + itemId));
+    }
+
+    private PlannedShutdownIsolationPoint findIsolation(UUID shutdownId, UUID pointId) {
+        return isolationPointRepository.findByIdAndPlannedShutdownIdAndIsDeletedFalse(pointId, shutdownId)
+                .orElseThrow(() -> RestException.notFound("Shutdown isolation point not found: " + pointId));
+    }
+
+    private void validateReadinessRequest(UUID shutdownId, UUID itemId,
+            PlannedShutdownReadinessItemRequest request) {
+        String key = request.readinessKey().trim().toUpperCase(Locale.ROOT);
+        boolean duplicate = itemId == null
+                ? readinessItemRepository.existsByPlannedShutdownIdAndReadinessKeyAndIsDeletedFalse(shutdownId, key)
+                : readinessItemRepository.existsByPlannedShutdownIdAndReadinessKeyAndIdNotAndIsDeletedFalse(
+                        shutdownId, key, itemId);
+        if (duplicate) throw RestException.conflict("Readiness key is already in use: " + key);
+        if (request.responsibleEmployeeId() != null) requireActiveEmployee(request.responsibleEmployeeId());
+    }
+
+    private void validateIsolationRequest(UUID shutdownId, UUID pointId,
+            PlannedShutdownIsolationPointRequest request) {
+        boolean scoped = assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdownId)
+                .stream().anyMatch(asset -> request.equipmentId().equals(asset.getEquipmentId()));
+        if (!scoped) throw RestException.badRequest("Isolation equipment is outside shutdown scope");
+        requireActiveEmployee(request.responsibleEmployeeId());
+        if (request.permitId() != null && safetyPermitRepository.findByIdAndIsDeletedFalse(request.permitId()).isEmpty()) {
+            throw RestException.badRequest("Safety permit not found: " + request.permitId());
+        }
+        String lockTag = request.lockTagIdentifier().trim().toUpperCase(Locale.ROOT);
+        boolean duplicate = pointId == null
+                ? isolationPointRepository.existsByPlannedShutdownIdAndLockTagIdentifierAndIsDeletedFalse(
+                        shutdownId, lockTag)
+                : isolationPointRepository.existsByPlannedShutdownIdAndLockTagIdentifierAndIdNotAndIsDeletedFalse(
+                        shutdownId, lockTag, pointId);
+        if (duplicate) throw RestException.conflict("Isolation lock/tag is already in use: " + lockTag);
+    }
+
+    private void requireActiveEmployee(UUID employeeId) {
+        Employee employee = employeeRepository.findByIdAndIsDeletedFalse(employeeId)
+                .orElseThrow(() -> RestException.badRequest("Responsible employee not found: " + employeeId));
+        if (!employee.isActive()) throw RestException.badRequest("Responsible employee must be active");
+    }
+
+    private UUID requireUserActor() {
+        UUID actor = scopeAccessService.currentUserIdOrNull();
+        if (actor == null) throw RestException.conflict("Authenticated user actor is required");
+        return actor;
+    }
+
+    private UUID requireEmployeeActor() {
+        return scopeAccessService.currentEmployeeId()
+                .orElseThrow(() -> RestException.conflict("Authenticated employee actor is required"));
+    }
+
+    private PlannedShutdownReadinessPolicy.Facts readinessFacts(
+            PlannedShutdown shutdown, java.time.Instant requestedAt) {
+        UUID id = shutdown.getId();
+        List<PlannedShutdownAsset> assets = assetRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id);
+        List<PlannedShutdownWorkItem> work = workItemRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id);
+        List<PlannedShutdownReadinessItem> readiness = readinessItemRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id);
+        List<PlannedShutdownIsolationPoint> points = isolationPointRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id);
+        Set<UUID> isolatedEquipment = points.stream().map(PlannedShutdownIsolationPoint::getEquipmentId)
+                .collect(java.util.stream.Collectors.toSet());
+        List<PlannedShutdownReadinessPolicy.WorkFact> workFacts = work.stream().map(item -> {
+            boolean critical = item.getCriticality() != null && !item.getCriticality().isBlank();
+            boolean material = !critical;
+            boolean assigned = false;
+            if (item.getSourceType() == PlannedShutdownWorkItemSourceType.WORK_ORDER && item.getSourceId() != null) {
+                var source = workOrderRepository.findByIdAndIsDeletedFalse(item.getSourceId()).orElse(null);
+                assigned = source != null && (source.getPerformer() != null || source.getCounteragentId() != null);
+                material = !critical || (source != null
+                        && !workOrderMaterialReadinessService.getReadiness(source.getId()).blocking());
+            }
+            return new PlannedShutdownReadinessPolicy.WorkFact(item.getId(), critical,
+                    item.isRequiresIsolation(), material, assigned);
+        }).toList();
+        List<PlannedShutdownReadinessPolicy.IsolationFact> isolationFacts = new ArrayList<>();
+        points.forEach(point -> isolationFacts.add(new PlannedShutdownReadinessPolicy.IsolationFact(point.getId(),
+                true, point.getAppliedAt() != null && point.getReleasedAt() == null,
+                point.getVerifiedAt() != null && point.getReleasedAt() == null)));
+        work.stream().filter(PlannedShutdownWorkItem::isRequiresIsolation)
+                .filter(item -> !isolatedEquipment.contains(item.getEquipmentId()))
+                .forEach(item -> isolationFacts.add(new PlannedShutdownReadinessPolicy.IsolationFact(
+                        item.getId(), false, false, false)));
+        java.time.Instant now = requestedAt == null ? java.time.Instant.now() : requestedAt;
+        boolean permitsActive = points.stream().filter(point -> point.getReleasedAt() == null).allMatch(point ->
+                point.getPermitId() != null && safetyPermitRepository.findByIdAndIsDeletedFalse(point.getPermitId())
+                        .filter(permit -> permit.getStatus() == SafetyPermitStatus.ISSUED)
+                        .filter(permit -> permit.getValidUntil() == null || !permit.getValidUntil().isBefore(now))
+                        .isPresent());
+        List<PlannedShutdownReadinessItem> criticalReadiness = readiness.stream()
+                .filter(item -> item.getSeverity() == PlannedShutdownReadinessSeverity.CRITICAL).toList();
+        boolean criticalReady = !criticalReadiness.isEmpty() && criticalReadiness.stream()
+                .allMatch(item -> item.getStatus() == PlannedShutdownItemStatus.PASSED);
+        boolean approvalCurrent = shutdown.getApprovalScopeVersion() != null
+                && Objects.equals(shutdown.getApprovalScopeVersion(), shutdown.getScopeVersion());
+        // Production and HSE approval steps become authoritative in Task 5. Until then this adapter fails closed.
+        boolean productionApproved = false;
+        boolean hseApproved = false;
+        return new PlannedShutdownReadinessPolicy.Facts(id,
+                assets.stream().anyMatch(asset -> asset.getDisposition() == PlannedShutdownAssetDisposition.STOPPED
+                        || asset.getDisposition() == PlannedShutdownAssetDisposition.RESERVE),
+                shutdown.getResponsibleEmployeeId() != null, !work.isEmpty(), workFacts,
+                productionApproved, hseApproved, approvalCurrent, criticalReady, isolationFacts,
+                permitsActive, shutdown.getApprovedStartAt() != null && shutdown.getApprovedEndAt() != null,
+                shutdown.getApprovedStartAt(), effectiveEnd(shutdown), now);
+    }
+
+    private static java.time.Instant effectiveEnd(PlannedShutdown shutdown) {
+        return shutdown.getEffectiveExtensionEndAt() != null
+                ? shutdown.getEffectiveExtensionEndAt() : shutdown.getApprovedEndAt();
+    }
+
+    private static void apply(PlannedShutdownReadinessItem item, PlannedShutdownReadinessItemRequest request) {
+        item.setReadinessKey(request.readinessKey().trim().toUpperCase(Locale.ROOT));
+        item.setSourceType(request.sourceType() == null || request.sourceType().isBlank()
+                ? null : request.sourceType().trim().toUpperCase(Locale.ROOT));
+        item.setSourceId(request.sourceId());
+        item.setTitle(request.title().trim());
+        item.setSeverity(request.severity());
+        item.setResponsibleEmployeeId(request.responsibleEmployeeId());
+        item.setDueAt(request.dueAt());
+        item.setEvidence(trimToNull(request.evidence()));
+        item.setComment(trimToNull(request.comment()));
+        item.setOrderNumber(request.orderNumber());
+    }
+
+    private static void apply(PlannedShutdownIsolationPoint point, PlannedShutdownIsolationPointRequest request) {
+        point.setEquipmentId(request.equipmentId());
+        point.setLocationId(request.locationId());
+        point.setIsolationMethod(request.isolationMethod().trim());
+        point.setLockTagIdentifier(request.lockTagIdentifier().trim().toUpperCase(Locale.ROOT));
+        point.setResponsibleEmployeeId(request.responsibleEmployeeId());
+        point.setPermitId(request.permitId());
+        point.setOrderNumber(request.orderNumber());
+    }
+
+    private void audit(String entityType, UUID entityId, AuditAction action, String message, Object before, Object after) {
+        auditBuilderService.log(entityType, entityId.toString(), action, AuditModule.PLANNED_SHUTDOWN,
+                message, before, after);
+    }
+
+    private static String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private PlannedShutdown findLocked(UUID id) {
