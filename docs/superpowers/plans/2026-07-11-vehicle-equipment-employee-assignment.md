@@ -19,16 +19,14 @@
 
 ---
 
-### Task 1: Preflight and failing contracts
+### Task 1: Read-only preflight
 
 **Files:**
-- Modify: `src/test/java/com/toir/service/equipment/EquipmentServiceTest.java`
-- Modify: `src/test/java/com/toir/bootstrap/SeedProfileStartupSmokeTest.java`
-- Modify: `/Users/tenzorsoft/Desktop/Work/toir/toir-front/src/lib/equipment-registry-form.test.ts`
+- No source changes.
 
 **Interfaces:**
 - Consumes: current update DTO, seed sources, and payload builder.
-- Produces: failing contracts for clear/preserve/reject and seed identity.
+- Produces: recorded repository, migration, and baseline verification evidence.
 
 - [ ] **Step 1: Capture baseline**
 
@@ -42,40 +40,9 @@ JAVA_HOME=/Users/tenzorsoft/Library/Java/JavaVirtualMachines/openjdk-24.0.1/Cont
 
 Run `yarn build` in the frontend. Expected: current focused tests/build pass or exact environmental blockers are recorded.
 
-- [ ] **Step 3: Add failing backend tri-state tests**
+- [ ] **Step 3: Preserve the baseline evidence**
 
-```java
-@Test void updateClearsResponsibleWhenExplicitlyRequested() {
-    Equipment equipment = equipmentWithResponsible(existingEmployeeId);
-    when(repository.findByIdAndIsDeletedFalse(equipment.getId())).thenReturn(Optional.of(equipment));
-    service.update(equipment.getId(), updateRequest(null, true));
-    assertThat(equipment.getResponsibleId()).isNull();
-}
-
-@Test void updatePreservesResponsibleWhenOmitted() {
-    Equipment equipment = equipmentWithResponsible(existingEmployeeId);
-    when(repository.findByIdAndIsDeletedFalse(equipment.getId())).thenReturn(Optional.of(equipment));
-    service.update(equipment.getId(), updateRequest(null, null));
-    assertThat(equipment.getResponsibleId()).isEqualTo(existingEmployeeId);
-}
-
-@Test void updateRejectsClearAndAssignTogether() {
-    assertThatThrownBy(() -> service.update(equipmentId, updateRequest(employeeId, true)))
-        .isInstanceOf(RestException.class).hasMessageContaining("clearResponsible");
-}
-```
-
-- [ ] **Step 4: Add failing frontend clear test**
-
-```typescript
-expect(buildEquipmentRegistryUpdatePayload({
-  form: { ...baseForm, responsibleId: "" }, attributes: [],
-})).toMatchObject({ responsibleId: null, clearResponsible: true });
-```
-
-- [ ] **Step 5: Confirm intended failures**
-
-Run focused backend tests and `yarn test src/lib/equipment-registry-form.test.ts`. Expected: missing DTO field and omitted empty responsible cause failures.
+Write exact commands, commits, dirty paths, test counts, build result, and environmental blockers into the Task 1 report. Do not edit or commit repository files. RED tests are added and run by Tasks 2, 4, and 5 immediately before their corresponding implementations.
 
 ---
 
@@ -97,6 +64,8 @@ Run focused backend tests and `yarn test src/lib/equipment-registry-form.test.ts
 @Query(value = "SELECT * FROM hr_employees WHERE user_id = cast(:userId as uuid) AND is_deleted = false ORDER BY id", nativeQuery = true)
 List<Employee> findAllByUserIdAndIsDeletedFalse(@Param("userId") UUID userId);
 ```
+
+Before implementation, add zero/one/multiple mapping tests and run them to capture the expected RED failure.
 
 - [ ] **Step 2: Implement Java seed resolver**
 
@@ -206,6 +175,8 @@ Run migration contract/Postgres tests and `FlywayEmptyDbSmokeTest`; record Docke
 
 Place it after `responsibleId`; legacy constructors pass `null`.
 
+Before implementation, add the clear/preserve/contradictory tests from the approved design and run them to capture the expected RED failure.
+
 - [ ] **Step 2: Implement the single update helper**
 
 ```java
@@ -246,6 +217,8 @@ Run `EquipmentServiceTest,EquipmentResponsibleRefTest,EquipmentControllerContrac
 - Produces: explicit null/clear for empty edit and Employee-ID selector guarantees.
 
 - [ ] **Step 1: Build explicit update payload**
+
+First add the explicit-clear payload test and run it to capture the expected RED failure.
 
 ```typescript
 const responsibleId = form.responsibleId?.trim() || null;
