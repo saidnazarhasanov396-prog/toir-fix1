@@ -398,7 +398,25 @@ git commit -m "feat: add canonical repair campaign work items"
 | `CAMPAIGN_CANCELLED` | transition to `CANCELLED` only when no execution evidence exists | transition to `SUSPENDED`, never blind-cancel | unchanged | campaign remains `CANCELLED`; Planned Shutdown unchanged |
 | `CAMPAIGN_RESUMED` | clear campaign block only after current Campaign and Shutdown policies pass | remain `SUSPENDED` until explicit authorized Work Order resume revalidates policies | unchanged | restore `suspendedFromStatus`; no Planned Shutdown mutation |
 
-- [ ] Write RED commit/rollback, duplicate-delivery, SKIP LOCKED two-dispatcher, batch bound, retry/backoff/dead-letter, stale lease, out-of-order version, every matrix row, partial-completion, admin PBAC, and historical-actual preservation tests.
+The campaign projector applies this exhaustive matrix for each of `SHUTDOWN_RESCHEDULED`, `SHUTDOWN_EXTENDED`, and `SHUTDOWN_CANCELLED`:
+
+| Current Campaign status | Required result |
+|---|---|
+| `DRAFT` | Remain `DRAFT`; update the linked window facts and blocker (`REPLAN_REQUIRED` or `SHUTDOWN_CANCELLED`), invalidate generated planning facts, and increment `scopeVersion`; never enter `SUSPENDED`. |
+| `SCOPE_FORMATION` | Remain `SCOPE_FORMATION`; update the link/blocker, invalidate generated planning facts, and increment `scopeVersion`; never enter `SUSPENDED`. |
+| `RESOURCE_CHECK` | Remain `RESOURCE_CHECK`; invalidate the resource assessment and generated planning facts, update the link/blocker, and increment `scopeVersion`; never enter `SUSPENDED`. |
+| `PENDING_APPROVAL` | Retire the pending approval as stale, clear its approved facts hash, move deterministically to `SCOPE_FORMATION`, update the link/blocker, and increment `scopeVersion`. |
+| `APPROVED` | Retire the current approval as stale, clear its approved facts hash, move deterministically to `SCOPE_FORMATION`, update the link/blocker, and increment `scopeVersion`. |
+| `PREPARATION` | Transition to `SUSPENDED`, set `suspendedFromStatus=PREPARATION`, and update the link/blocker without rewriting historical actuals. |
+| `IN_PROGRESS` | Transition to `SUSPENDED`, set `suspendedFromStatus=IN_PROGRESS`, and apply the Work Order row above without rewriting historical actuals. |
+| `SUSPENDED` | Remain `SUSPENDED`; preserve the existing `suspendedFromStatus`, merge/update the blocker and replanning facts, and emit no second suspension transition. |
+| `COMPLETED`, `CLOSING`, `CLOSED`, or `CANCELLED` | Preserve campaign status, history, versions, approvals, and historical facts; append only the received integration event and its blocker/evidence record. |
+
+- `CAMPAIGN_SUSPENDED` is emitted only for a real `PREPARATION/IN_PROGRESS -> SUSPENDED` transition and records `suspendedFromStatus` once. Re-delivery while already `SUSPENDED` is idempotent and cannot overwrite that value.
+- `CAMPAIGN_RESUMED` restores the recorded source status only after current Campaign, Shutdown, approval, and resource policies pass. It clears only eligible unstarted Work Order campaign blocks; active Work Orders auto-suspended by integration remain `SUSPENDED` until an explicit authorized Work Order resume revalidates policy.
+- `CAMPAIGN_CANCELLED` is emitted only after an actual Campaign cancellation. It cancels only unstarted Work Orders with no execution evidence, suspends active Work Orders, and preserves terminal Work Orders. Early planning statuses affected by Shutdown events do not emit `CAMPAIGN_SUSPENDED`.
+
+- [ ] Write RED commit/rollback, duplicate-delivery, SKIP LOCKED two-dispatcher, batch bound, retry/backoff/dead-letter, stale lease, out-of-order version, all 39 campaign-status/event combinations (13 concrete statuses by three Shutdown event types, with each terminal status independently parameterized), every Work Order matrix row, repeated suspension/resume/cancellation semantics, partial-completion, admin PBAC, and historical-actual preservation tests.
 - [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=IntegrationOutboxMigrationContractTest,RepairCampaignOutboxServiceTest,RepairCampaignIntegrationProjectorTest,RepairCampaignOutboxDispatcherIntegrationTest,RepairCampaignOutboxAdminControllerContractTest,PlannedShutdownLifecycleServiceTest test`; expect FAIL.
 - [ ] Implement same-transaction outbox writes, bounded scheduled dispatch, idempotent projector behavior, and audited dead-letter retry.
 - [ ] Rerun and expect PASS.
@@ -487,17 +505,30 @@ git commit -m "feat: add canonical repair campaign work items"
 - Modify: `src/main/java/com/toir/enums/ApprovalActionType.java`
 - Modify: `src/main/java/com/toir/service/approval/ApprovalHandlerRegistryVerifier.java`
 - Modify: `src/main/java/com/toir/entity/projects/ActualCost.java`
+- Modify: `src/main/java/com/toir/entity/projects/MaintenanceBudget.java`
+- Modify: `src/main/java/com/toir/entity/projects/BudgetLine.java`
 - Modify: `src/main/java/com/toir/dto/actualcost/ActualCostDto.java`
+- Modify: `src/main/java/com/toir/dto/budget/MaintenanceBudgetDto.java`
+- Modify: `src/main/java/com/toir/dto/budget/BudgetLineDto.java`
 - Modify: `src/main/java/com/toir/service/ActualCostService.java`
+- Modify: `src/main/java/com/toir/service/maintanance/MaintenanceBudgetService.java`
+- Modify: `src/main/java/com/toir/service/approval/MaintenanceBudgetApprovalHandler.java`
 - Modify: `src/main/java/com/toir/repository/actualCost/ActualCostRepository.java`
+- Modify: `src/main/java/com/toir/repository/maintenance/MaintenanceBudgetRepository.java`
+- Modify: `src/main/java/com/toir/repository/projects/BudgetLineRepository.java`
 - Modify: `src/main/java/com/toir/dto/repaircampaign/RepairCampaignCostSummaryDto.java`
 - Modify: `src/main/java/com/toir/dto/repaircampaign/RepairCampaignBudgetSummaryDto.java`
 - Modify: `src/main/java/com/toir/service/repair/RepairCampaignService.java`
+- Modify: `src/main/java/com/toir/service/repair/RepairCampaignBudgetLineResolver.java`
 - Modify: `src/main/java/com/toir/service/approval/RepairCampaignApprovalHandler.java`
 - Modify: `src/main/java/com/toir/controller/repair/RepairCampaignController.java`
+- Modify: `src/main/java/com/toir/controller/maintenance/MaintenanceBudgetController.java`
 - Test: `src/test/java/com/toir/migration/RepairCampaignFinancialMigrationContractTest.java`
 - Test: `src/test/java/com/toir/migration/RepairCampaignFinancialMigrationPostgresTest.java`
 - Test: `src/test/java/com/toir/service/ActualCostServiceTest.java`
+- Test: `src/test/java/com/toir/controller/MaintenanceBudgetControllerContractTest.java`
+- Test: `src/test/java/com/toir/entity/projects/BudgetLineTest.java`
+- Test: `src/test/java/com/toir/service/MaintenanceBudgetLifecycleServiceTest.java`
 - Test: `src/test/java/com/toir/controller/ActualCostControllerContractTest.java`
 - Test: `src/test/java/com/toir/service/repair/RepairCampaignFinancialPolicyTest.java`
 - Test: `src/test/java/com/toir/service/RepairCampaignServiceTest.java`
@@ -506,16 +537,18 @@ git commit -m "feat: add canonical repair campaign work items"
 
 **Interfaces:**
 - Add typed `ApprovalActionType.APPROVE_CAMPAIGN_FX` and `APPROVE_BUDGET_OVERRUN`. `ApprovalHandlerRegistryVerifier` requires exactly one handler for each financial `(REPAIR_CAMPAIGN, typed action)` pair and keeps lifecycle `APPROVE/REJECT` handling separate. Task 12 adds the closure action only when its handler and payload exist in the same commit.
-- Actual Cost `amount` becomes `BigDecimal numeric(19,4)` with ISO `currencyCode`. A legacy row inherits currency only when its Work Order resolves to exactly one campaign with a non-null currency; unlinked or ambiguous rows remain nullable, are excluded from campaign totals, and block campaign closure with `ACTUAL_COST_CURRENCY_REMEDIATION_REQUIRED`. New writes require currency.
+- Actual Cost `amount`; Maintenance Budget `totalPlanned`, `totalActual`, and `totalCommitted`; and Budget Line `plannedAmount`, `actualAmount`, and `committedAmount` become Java `BigDecimal`, JSON decimal strings, and PostgreSQL `numeric(19,4)`. `getRemainingAmount`, `getAvailableForActual`, and `getAvailableForCommitment` use `BigDecimal.subtract(...).max(BigDecimal.ZERO)`, leaving no `double` monetary arithmetic in these entities, DTOs, services, approval handlers, or campaign aggregators. Actual Cost also gains ISO `currencyCode`. A legacy row inherits currency only when its Work Order resolves to exactly one campaign with a non-null currency; unlinked or ambiguous rows remain nullable, are excluded from campaign totals, and block campaign closure with `ACTUAL_COST_CURRENCY_REMEDIATION_REQUIRED`. New writes require currency.
+- V10 preflight rejects non-finite legacy monetary values, converts finite values with explicit `round(value::numeric, 4)`, verifies post-conversion row counts/nullability/range, and records the scale-4 compatibility rule. Tests cover binary floating-point artifacts, positive/negative half rounding, maximum magnitude, and dependent financial queries.
+- `MaintenanceBudget` gains `@Version Long version`, exposed as `budgetVersion`. Every Budget Line create/update/revision/transfer/delete locks the parent budget, validates the command's `budgetVersion`, and advances the parent version exactly once in the same transaction. Line mutation does not rely on an unversioned detached line: repository methods lock/reload the target line under the already locked parent. Concurrent mutations against the same starting version yield one success and one stale-version 409.
 - Cross-currency campaign aggregation requires an immutable approved FX snapshot containing currencies, rate, source, approval request, actor, and timestamp.
-- V10 seeds separate `REPAIR_CAMPAIGN_FX_APPROVAL` and `REPAIR_CAMPAIGN_BUDGET_OVERRUN_APPROVAL` templates. FX approval payload is `(campaignId, campaignVersion, scopeVersion, budgetId, budgetVersion, fxDraftId, fromCurrency, toCurrency, rate, factsHash)`. Overrun payload is `(campaignId, campaignVersion, scopeVersion, budgetId, budgetVersion, currencyCode, approvedBudget, approvedActual, distinctActualCostIds, distinctBudgetLineIds, factsHash)`.
+- V10 seeds separate `REPAIR_CAMPAIGN_FX_APPROVAL` and `REPAIR_CAMPAIGN_BUDGET_OVERRUN_APPROVAL` templates. FX approval payload is `(campaignId, campaignVersion, scopeVersion, budgetId, budgetVersion, fxDraftId, fromCurrency, toCurrency, rate, factsHash)`. Overrun payload is `(campaignId, campaignVersion, scopeVersion, budgetId, budgetVersion, currencyCode, approvedBudget, approvedActual, distinctActualCostIds, distinctBudgetLineIds, factsHash)`, where `budgetVersion` is read from the persisted `MaintenanceBudget.version`, never a constant or campaign version.
 - `RepairCampaignFinancialApprovalHandler` supports only `APPROVE_CAMPAIGN_FX` and `APPROVE_BUDGET_OVERRUN`. It marks the exact FX draft or overrun fact approved after recomputing payload hash; it never calls campaign lifecycle approval/finalization or changes campaign status.
-- Any campaign scope/version, budget version, FX draft, Actual Cost ID set, Budget Line ID set, amount, or currency change makes the approval stale and blocks use. Scope-invalidating mutations retire pending financial approvals through the Task 6 invalidation path.
+- The financial facts hash contains the persisted budget ID/version plus sorted Budget Line IDs and scale-4 amounts, as well as the sorted Actual Cost facts. Any campaign scope/version, parent budget version, FX draft, Actual Cost ID set, Budget Line ID set, amount, or currency change makes the approval stale and blocks use. Scope-invalidating mutations retire pending financial approvals through the Task 6 invalidation path.
 - Overrun (`approvedActual > approvedBudget`) creates/reuses only the typed overrun approval; unresolved/stale overrun blocks `CLOSING` and final closure approval.
 - Before summing, campaign aggregation constructs `LinkedHashMap<UUID, ActualCost>` and `LinkedHashMap<UUID, BudgetLine>` across direct campaign Work Orders, Campaign-to-Shutdown windows, and shared canonical Work Orders. Totals are computed once per distinct primary key.
 
-- [ ] Write RED binary-rounding, excessive scale, null currency, mismatch without FX, unapproved FX, snapshot mutation, concurrent cost post, overrun bypass, stale FX/overrun approval, registry ambiguity/missing handler, financial-handler lifecycle non-transition, and multi-path duplicate Actual Cost/Budget Line fixtures with mixed currencies.
-- [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=RepairCampaignFinancialMigrationContractTest,RepairCampaignFinancialMigrationPostgresTest,ActualCostServiceTest,ActualCostControllerContractTest,RepairCampaignFinancialPolicyTest,RepairCampaignServiceTest,ApprovalPbacScopeTest,ApprovalActionHandlerTest test`; expect FAIL.
+- [ ] Write RED migration validation/rounding, BigDecimal serialization, dependent budget query, null currency, mismatch without FX, unapproved FX, snapshot mutation, concurrent cost post, two concurrent Budget Line mutations, stale `budgetVersion` command, overrun payload persisted-version assertion, overrun bypass, stale FX/overrun approval after a line mutation, registry ambiguity/missing handler, financial-handler lifecycle non-transition, and multi-path duplicate Actual Cost/Budget Line fixtures with mixed currencies.
+- [ ] Run: `JAVA_HOME=$(/usr/libexec/java_home -v 24) ./mvnw -Dtest=RepairCampaignFinancialMigrationContractTest,RepairCampaignFinancialMigrationPostgresTest,ActualCostServiceTest,ActualCostControllerContractTest,MaintenanceBudgetControllerContractTest,BudgetLineTest,MaintenanceBudgetLifecycleServiceTest,RepairCampaignFinancialPolicyTest,RepairCampaignServiceTest,ApprovalPbacScopeTest,ApprovalActionHandlerTest test`; expect FAIL.
 - [ ] Implement decimal-string boundaries, immutable FX trigger, ledger-derived totals, and versioned overrun approval.
 - [ ] Rerun and expect PASS.
 - [ ] Commit with `feat: enforce campaign financial integrity`.
