@@ -152,7 +152,7 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignDto update(UUID id, RepairCampaignRequest r) {
-        RepairCampaign c = getOrThrow(id);
+        RepairCampaign c = getLockedOrThrow(id);
         if (c.getStatus() == RepairCampaignStatus.CLOSED || c.getStatus() == RepairCampaignStatus.CANCELLED) {
             throw RestException.badRequest("Closed/cancelled campaign cannot be updated");
         }
@@ -210,7 +210,7 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignDto start(UUID id) {
-        RepairCampaign c = getOrThrow(id);
+        RepairCampaign c = getLockedOrThrow(id);
         if (c.getStatus() != RepairCampaignStatus.APPROVED) {
             throw RestException.badRequest("Only APPROVED campaigns can be started");
         }
@@ -223,7 +223,7 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignDto complete(UUID id) {
-        RepairCampaign c = getOrThrow(id);
+        RepairCampaign c = getLockedOrThrow(id);
         if (c.getStatus() != RepairCampaignStatus.IN_PROGRESS
                 && c.getStatus() != RepairCampaignStatus.APPROVED) {
             throw RestException.badRequest("Only APPROVED/IN_PROGRESS campaigns can be completed");
@@ -248,7 +248,7 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignDto close(UUID id) {
-        RepairCampaign c = getOrThrow(id);
+        RepairCampaign c = getLockedOrThrow(id);
         if (c.getStatus() != RepairCampaignStatus.COMPLETED) {
             throw RestException.badRequest("Only COMPLETED campaigns can be closed");
         }
@@ -279,7 +279,7 @@ public class RepairCampaignService {
         if (reason == null || reason.isBlank()) {
             throw RestException.badRequest("Cancellation reason is required");
         }
-        RepairCampaign c = getOrThrow(id);
+        RepairCampaign c = getLockedOrThrow(id);
         if (c.getStatus() == RepairCampaignStatus.CLOSED) {
             throw RestException.badRequest("Closed campaign cannot be cancelled");
         }
@@ -451,7 +451,7 @@ public class RepairCampaignService {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw RestException.badRequest("Idempotency-Key header is required");
         }
-        RepairCampaign campaign = getOrThrow(campaignId);
+        RepairCampaign campaign = getLockedOrThrow(campaignId);
         assertCampaignCanGenerateWorkOrders(campaign);
         if (campaign.getScopeType() != RepairCampaignScopeType.EQUIPMENT_TYPE || campaign.getEquipmentTypeId() == null) {
             throw RestException.badRequest("Work-order generation requires EQUIPMENT_TYPE campaign scope");
@@ -967,6 +967,11 @@ public class RepairCampaignService {
 
     private RepairCampaign getOrThrow(UUID id) {
         return repository.findByIdAndIsDeletedFalse(id)
+                .orElseThrow(() -> RestException.notFound("Repair campaign not found: " + id));
+    }
+
+    private RepairCampaign getLockedOrThrow(UUID id) {
+        return repository.findLockedByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Repair campaign not found: " + id));
     }
 

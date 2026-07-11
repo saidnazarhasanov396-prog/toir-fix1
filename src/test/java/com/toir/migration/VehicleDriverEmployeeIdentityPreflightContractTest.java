@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class VehicleDriverEmployeeIdentityPreflightContractTest {
 
     private static final Pattern WRITE_STATEMENT = Pattern.compile(
-            "(?is)\\b(update|insert|delete|alter|drop|truncate|create)\\s+");
+            "(?is)\\b(update|insert|delete|alter|drop|truncate|create|merge)\\s+");
 
     private static final Path PREFLIGHT = Path.of(
             "scripts/db/preflight_vehicle_driver_employee_identity.sql");
@@ -41,7 +41,8 @@ class VehicleDriverEmployeeIdentityPreflightContractTest {
                 "ALTER\fTABLE vehicle_details ADD COLUMN unsafe boolean",
                 "DROP\nTABLE vehicle_details",
                 "TRUNCATE\tvehicle_details",
-                "CREATE\rTABLE unsafe (id uuid)")
+                "CREATE\rTABLE unsafe (id uuid)",
+                "MERGE\nINTO vehicle_details USING unsafe ON true WHEN MATCHED THEN DELETE")
                 .forEach(fixture -> assertThatThrownBy(() -> assertReadOnly(fixture))
                         .isInstanceOf(AssertionError.class));
     }

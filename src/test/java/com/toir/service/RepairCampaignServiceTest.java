@@ -137,7 +137,7 @@ class RepairCampaignServiceTest {
     void generateWorkOrdersRejectsDraftCampaign() {
         UUID campaignId = UUID.randomUUID();
         RepairCampaign campaign = campaign(campaignId, null);
-        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
 
         assertThatThrownBy(() -> service.generateWorkOrders(campaignId, generateRequest(), "generation-1"))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
@@ -146,6 +146,36 @@ class RepairCampaignServiceTest {
                 });
 
         verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void generateWorkOrdersLoadsCampaignUnderWriteLockBeforeEligibilityCheck() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+
+        assertThatThrownBy(() -> service.generateWorkOrders(campaignId, generateRequest(), "generation-1"))
+                .isInstanceOf(RestException.class);
+
+        InOrder order = inOrder(repository, workOrderRepository);
+        order.verify(repository).findLockedByIdAndIsDeletedFalse(campaignId);
+        verify(repository, never()).findByIdAndIsDeletedFalse(campaignId);
+        verify(workOrderRepository, never()).lockGenerationKey(anyString());
+    }
+
+    @Test
+    void startSerializesStatusTransitionOnCampaignRow() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setStatus(RepairCampaignStatus.APPROVED);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.save(campaign)).thenReturn(campaign);
+
+        service.start(campaignId);
+
+        verify(repository).findLockedByIdAndIsDeletedFalse(campaignId);
+        verify(repository, never()).findByIdAndIsDeletedFalse(campaignId);
+        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.IN_PROGRESS);
     }
 
     @Test
@@ -165,7 +195,7 @@ class RepairCampaignServiceTest {
         equipment.setCode("P-1");
         equipment.setName("Pump");
         equipment.setDepartmentId(UUID.randomUUID());
-        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
         when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
                 .thenReturn(List.of(equipment));

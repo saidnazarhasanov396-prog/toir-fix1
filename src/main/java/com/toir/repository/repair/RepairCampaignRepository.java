@@ -6,7 +6,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,6 +18,10 @@ import org.springframework.stereotype.Repository;
 public interface RepairCampaignRepository extends JpaRepository<RepairCampaign, UUID> {
     @Query(value = "SELECT * FROM repair_campaigns WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<RepairCampaign> findByIdAndIsDeletedFalse(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select campaign from RepairCampaign campaign where campaign.id = :id and campaign.isDeleted = false")
+    Optional<RepairCampaign> findLockedByIdAndIsDeletedFalse(@Param("id") UUID id);
 
     @Query(value = "SELECT * FROM repair_campaigns WHERE is_deleted = false ORDER BY created_at DESC, updated_at DESC", nativeQuery = true)
     List<RepairCampaign> findAllByIsDeletedFalseOrderByCreatedAtDesc();

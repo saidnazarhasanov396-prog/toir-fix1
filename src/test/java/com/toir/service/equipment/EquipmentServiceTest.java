@@ -1494,6 +1494,8 @@ class EquipmentServiceTest {
         UUID responsibleId = UUID.randomUUID();
         existing.setResponsibleId(responsibleId);
         when(repository.findByIdAndIsDeletedFalse(existing.getId())).thenReturn(Optional.of(existing));
+        when(employeeRepository.findAllByIdInAndIsDeletedFalse(anyCollection()))
+                .thenReturn(List.of(employee(responsibleId, true)));
         when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubEnrichment();
 
@@ -1541,9 +1543,11 @@ class EquipmentServiceTest {
         Equipment existing = equipment("EQ-RESP-EMPLOYEE-ONLY");
         UUID responsibleId = UUID.randomUUID();
         Employee responsible = employee(responsibleId, true);
-        responsible.setUser(null);
+        responsible.setUserId(null);
         when(repository.findByIdAndIsDeletedFalse(existing.getId())).thenReturn(Optional.of(existing));
         when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId)).thenReturn(Optional.of(responsible));
+        when(employeeRepository.findAllByIdInAndIsDeletedFalse(anyCollection()))
+                .thenReturn(List.of(responsible));
         when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubEnrichment();
 
@@ -4047,7 +4051,7 @@ class EquipmentServiceTest {
                 responsibleId, clearResponsible,
                 null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null
+                null, null, null
         );
     }
 
