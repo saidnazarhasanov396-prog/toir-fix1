@@ -36,10 +36,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
-import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -51,6 +51,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -160,28 +161,49 @@ class RepairCampaignServiceTest {
                 fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1");
 
         assertThat(result).hasSize(1);
-        verify(workOrderService).findById(existing.getId());
+        InOrder order = inOrder(workOrderRepository, workOrderService);
+        order.verify(workOrderRepository).lockGenerationKey(key);
+        order.verify(workOrderRepository).findByGenerationKeyAndIsDeletedFalse(key);
+        order.verify(workOrderService).findById(existing.getId());
         verify(workOrderService, never()).create(any());
     }
 
     @Test
-    void generateWorkOrdersReturnsCanonicalOrderAfterUniqueConstraintRace() {
+    void generateWorkOrdersLocksBeforeCanonicalLookupAndCreate() {
         GenerationFixture fixture = generationFixture();
         String key = "RC:" + fixture.campaignId() + ":" + fixture.stageId() + ":" + fixture.equipmentId();
-        WorkOrder existing = new WorkOrder();
-        existing.setId(UUID.randomUUID());
-        existing.setGenerationKey(key);
-        com.toir.dto.workorder.WorkOrderDto existingDto = workOrderDto(existing.getId());
-        when(workOrderRepository.findByGenerationKeyAndIsDeletedFalse(key))
-                .thenReturn(Optional.empty(), Optional.of(existing));
-        when(workOrderService.create(any())).thenThrow(new DataIntegrityViolationException("generation key race"));
-        when(workOrderService.findById(existing.getId())).thenReturn(existingDto);
+        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID()));
 
-        List<com.toir.dto.workorder.WorkOrderDto> result = service.generateWorkOrders(
-                fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1");
+        service.generateWorkOrders(fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1");
 
-        assertThat(result).hasSize(1);
-        verify(workOrderService).findById(existing.getId());
+        InOrder order = inOrder(workOrderRepository, workOrderService);
+        order.verify(workOrderRepository).lockGenerationKey(key);
+        order.verify(workOrderRepository).findByGenerationKeyAndIsDeletedFalse(key);
+        order.verify(workOrderService).create(any());
+    }
+
+    @Test
+    void generateWorkOrdersProcessesEquipmentInDeterministicUuidOrder() {
+        GenerationFixture fixture = generationFixture();
+        Equipment first = fixture.equipment();
+        first.setId(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        Equipment second = new Equipment();
+        second.setId(UUID.fromString("00000000-0000-0000-0000-000000000002"));
+        second.setCode("P-2");
+        second.setName("Pump 2");
+        second.setDepartmentId(UUID.randomUUID());
+        when(equipmentRepository.findAllForMaintenanceRegulations(fixture.campaign().getEquipmentTypeId()))
+                .thenReturn(List.of(second, first));
+        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID()));
+
+        service.generateWorkOrders(fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1");
+
+        String prefix = "RC:" + fixture.campaignId() + ":" + fixture.stageId() + ":";
+        InOrder order = inOrder(workOrderRepository);
+        order.verify(workOrderRepository).lockGenerationKey(prefix + first.getId());
+        order.verify(workOrderRepository).findByGenerationKeyAndIsDeletedFalse(prefix + first.getId());
+        order.verify(workOrderRepository).lockGenerationKey(prefix + second.getId());
+        order.verify(workOrderRepository).findByGenerationKeyAndIsDeletedFalse(prefix + second.getId());
     }
 
     @Test

@@ -52,13 +52,13 @@ import com.toir.service.WorkOrderService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -467,6 +467,7 @@ public class RepairCampaignService {
                 .filter(equipment -> departmentId == null
                         || departmentId.equals(coalesce(equipment.getResponsibleDepartmentId(), equipment.getDepartmentId())))
                 .filter(equipment -> selectedEquipmentIds.isEmpty() || selectedEquipmentIds.contains(equipment.getId()))
+                .sorted(Comparator.comparing(Equipment::getId))
                 .map(equipment -> createOrFindGeneratedWorkOrder(campaign, stage, equipment, request))
                 .toList();
         auditBuilderService.log(
@@ -495,20 +496,14 @@ public class RepairCampaignService {
             RepairCampaignGenerateWorkOrdersRequest request
     ) {
         String key = generationKey(campaign.getId(), stage.getId(), equipment.getId());
+        workOrderRepository.lockGenerationKey(key);
         Optional<WorkOrder> existing = workOrderRepository.findByGenerationKeyAndIsDeletedFalse(key);
         if (existing.isPresent()) {
             return workOrderService.findById(existing.get().getId());
         }
-        try {
-            WorkOrderDto created = workOrderService.create(generatedWorkOrderRequest(campaign, stage, equipment, request));
-            workOrderRepository.flush();
-            return created;
-        } catch (DataIntegrityViolationException race) {
-            return workOrderRepository.findByGenerationKeyAndIsDeletedFalse(key)
-                    .map(WorkOrder::getId)
-                    .map(workOrderService::findById)
-                    .orElseThrow(() -> race);
-        }
+        WorkOrderDto created = workOrderService.create(generatedWorkOrderRequest(campaign, stage, equipment, request));
+        workOrderRepository.flush();
+        return created;
     }
 
     @Transactional(readOnly = true)

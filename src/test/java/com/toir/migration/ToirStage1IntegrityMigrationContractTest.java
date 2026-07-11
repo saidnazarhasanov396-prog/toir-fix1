@@ -2,6 +2,7 @@ package com.toir.migration;
 
 import com.toir.repository.WorkOrderRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.jpa.repository.Query;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,5 +31,17 @@ class ToirStage1IntegrityMigrationContractTest {
                 "findByGenerationKeyAndIsDeletedFalse",
                 String.class
         ).getReturnType()).isEqualTo(java.util.Optional.class);
+    }
+
+    @Test
+    void workOrderRepositorySerializesGenerationKeyWithTransactionScopedAdvisoryLock() throws Exception {
+        Query query = WorkOrderRepository.class
+                .getMethod("lockGenerationKey", String.class)
+                .getAnnotation(Query.class);
+
+        assertThat(query).isNotNull();
+        assertThat(query.nativeQuery()).isTrue();
+        assertThat(query.value().toLowerCase())
+                .contains("select pg_advisory_xact_lock(hashtextextended(:generationkey, 0))");
     }
 }
