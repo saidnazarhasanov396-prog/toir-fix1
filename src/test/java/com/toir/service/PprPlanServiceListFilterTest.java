@@ -55,6 +55,9 @@ class PprPlanServiceListFilterTest {
     PprTaskRepository taskRepository;
 
     @Mock
+    PprTaskQueryService pprTaskQueryService;
+
+    @Mock
     DepartmentRepository departmentRepository;
 
     @Mock
@@ -258,10 +261,11 @@ class PprPlanServiceListFilterTest {
         PprTask task = task(plan, LocalDateTime.of(2026, 5, 1, 9, 0));
         task.setEquipmentId(equipmentId);
         task.setStatus(PprTaskStatus.COMPLETED);
-        when(taskRepository.searchTasks(
+        when(pprTaskQueryService.findTasks(
                 departmentId,
                 equipmentId,
                 PprTaskStatus.COMPLETED,
+                false,
                 PageRequest.of(0, 10)
         )).thenReturn(new PageImpl<>(List.of(task), PageRequest.of(0, 10), 1));
         when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
@@ -272,7 +276,42 @@ class PprPlanServiceListFilterTest {
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().getFirst().status()).isEqualTo(PprTaskStatus.COMPLETED);
         assertThat(result.getContent().getFirst().equipmentName()).isEqualTo("Pump 17");
-        verify(taskRepository).searchTasks(departmentId, equipmentId, PprTaskStatus.COMPLETED, PageRequest.of(0, 10));
+        verify(pprTaskQueryService).findTasks(
+                departmentId,
+                equipmentId,
+                PprTaskStatus.COMPLETED,
+                false,
+                PageRequest.of(0, 10)
+        );
+    }
+
+    @Test
+    void findTasksWithSemanticOverdueUsesSharedTaskQuery() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        PprPlan plan = plan(2026, 5, departmentId);
+        PprTask first = task(plan, LocalDateTime.of(2026, 5, 1, 9, 0));
+        first.setEquipmentId(equipmentId);
+        first.setStatus(PprTaskStatus.PLANNED);
+        PprTask second = task(plan, LocalDateTime.of(2026, 5, 2, 9, 0));
+        second.setEquipmentId(equipmentId);
+        second.setStatus(PprTaskStatus.OVERDUE);
+        when(pprTaskQueryService.findTasks(
+                departmentId,
+                equipmentId,
+                null,
+                true,
+                PageRequest.of(0, 1)
+        )).thenReturn(new PageImpl<>(List.of(first), PageRequest.of(0, 1), 2));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment(equipmentId, "Pump 17")));
+
+        var result = service.findTasks(departmentId, equipmentId, null, true, 0, 1);
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().getFirst().equipmentName()).isEqualTo("Pump 17");
+        verify(pprTaskQueryService).findTasks(departmentId, equipmentId, null, true, PageRequest.of(0, 1));
     }
 
     @Test
@@ -285,7 +324,7 @@ class PprPlanServiceListFilterTest {
         planned.setStatus(PprTaskStatus.PLANNED);
         PprTask cancelled = task(plan, LocalDateTime.of(2026, 5, 3, 9, 0));
         cancelled.setStatus(PprTaskStatus.CANCELLED);
-        when(taskRepository.searchTasks(departmentId, null, null))
+        when(pprTaskQueryService.findTasks(departmentId, null, null, false))
                 .thenReturn(List.of(completed, planned, cancelled));
 
         var result = service.getTaskStats(departmentId, null, null);

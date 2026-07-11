@@ -66,6 +66,7 @@ public class PprPlanService {
 
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
+    private final PprTaskQueryService pprTaskQueryService;
     private final WorkOrderRepository workOrderRepository;
     private final DepartmentRepository departmentRepository;
     private final EquipmentRepository equipmentRepository;
@@ -270,10 +271,21 @@ public class PprPlanService {
                                       PprTaskStatus status,
                                       int page,
                                       int size) {
-        Page<PprTask> tasks = taskRepository.searchTasks(
+        return findTasks(departmentId, equipmentId, status, false, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprTaskDto> findTasks(UUID departmentId,
+                                      UUID equipmentId,
+                                      PprTaskStatus status,
+                                      boolean overdue,
+                                      int page,
+                                      int size) {
+        Page<PprTask> tasks = pprTaskQueryService.findTasks(
                 departmentId,
                 equipmentId,
                 status,
+                overdue,
                 PageRequest.of(page, size)
         );
         List<PprTask> content = tasks.getContent();
@@ -285,7 +297,7 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public PprTaskStatsResponse getTaskStats(UUID departmentId, UUID equipmentId, PprTaskStatus status) {
-        List<PprTask> tasks = taskRepository.searchTasks(departmentId, equipmentId, status);
+        List<PprTask> tasks = pprTaskQueryService.findTasks(departmentId, equipmentId, status, false);
         Map<PprTaskStatus, Long> statusBreakdown = new EnumMap<>(PprTaskStatus.class);
         for (PprTaskStatus taskStatus : PprTaskStatus.values()) {
             statusBreakdown.put(taskStatus, 0L);

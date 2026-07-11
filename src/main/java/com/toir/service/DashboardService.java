@@ -57,7 +57,6 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -87,6 +86,7 @@ public class DashboardService {
     private final RepairRequestRepository repairRequestRepository;
     private final DefectRepository defectRepository;
     private final PprTaskRepository pprTaskRepository;
+    private final PprTaskQueryService pprTaskQueryService;
     private final WorkOrderRepository workOrderRepository;
     private final EquipmentRepository equipmentRepository;
     private final DepartmentRepository departmentRepository;
@@ -120,7 +120,6 @@ public class DashboardService {
         Instant currentMonthStart = currentMonthStartDate
                 .atStartOfDay(tz)
                 .toInstant();
-        LocalDateTime now = LocalDateTime.now();
 
         // Pre-load mappings for filtering
         Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -150,9 +149,7 @@ public class DashboardService {
                 .filter(t -> departmentId == null || (equipById.containsKey(t.getEquipmentId()) && departmentId.equals(equipById.get(t.getEquipmentId()).getDepartmentId())))
                 .toList();
 
-        long overduePpr = scopedPprTasks.stream()
-                .filter(t -> isPprTaskOverdue(t, now))
-                .count();
+        long overduePpr = pprTaskQueryService.countOverdueTasks(departmentId, null, null);
 
         List<WorkOrder> allWorkOrders = workOrderRepository.search(null, departmentId, null);
         Map<UUID, WorkOrder> workOrderById = allWorkOrders.stream()
@@ -528,9 +525,7 @@ public class DashboardService {
         long pprDone = scopedPprTasks.stream()
                 .filter(t -> t.getStatus() == PprTaskStatus.COMPLETED)
                 .count();
-        long pprOver = scopedPprTasks.stream()
-                .filter(t -> isPprTaskOverdue(t, now))
-                .count();
+        long pprOver = overduePpr;
         double pprCompletionRate = pprTotal > 0 ? (double) pprDone / pprTotal * 100 : 0;
         double overdueWorkShare = pprTotal > 0 ? (double) pprOver / pprTotal * 100 : 0;
 
@@ -1264,22 +1259,6 @@ public class DashboardService {
             throw new AccessDeniedException("Access denied by data scope");
         }
         return currentDepartmentId;
-    }
-
-    private boolean isPprTaskOverdue(PprTask task, LocalDateTime now) {
-        if (task.getStatus() == PprTaskStatus.COMPLETED
-                || task.getStatus() == PprTaskStatus.CANCELLED
-                || task.getStatus() == PprTaskStatus.POSTPONED) {
-            return false;
-        }
-        if (task.getStatus() == PprTaskStatus.OVERDUE) {
-            return true;
-        }
-        return task.getDueDate() != null
-                && task.getDueDate().isBefore(now)
-                && (task.getStatus() == PprTaskStatus.PLANNED
-                || task.getStatus() == PprTaskStatus.APPROVED
-                || task.getStatus() == PprTaskStatus.IN_PROGRESS);
     }
 
     private UUID stockMovementDepartment(

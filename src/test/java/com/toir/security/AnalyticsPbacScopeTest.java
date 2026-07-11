@@ -39,6 +39,7 @@ import com.toir.repository.users.UserRepository;
 import com.toir.service.AnalyticsService;
 import com.toir.service.CounteragentService;
 import com.toir.service.DashboardService;
+import com.toir.service.PprTaskQueryService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
@@ -69,6 +70,7 @@ class AnalyticsPbacScopeTest {
     RepairRequestRepository repairRequestRepository;
     DefectRepository defectRepository;
     PprTaskRepository pprTaskRepository;
+    PprTaskQueryService pprTaskQueryService;
     WorkOrderRepository workOrderRepository;
     EquipmentRepository equipmentRepository;
     DepartmentRepository departmentRepository;
@@ -105,6 +107,7 @@ class AnalyticsPbacScopeTest {
         repairRequestRepository = mock(RepairRequestRepository.class);
         defectRepository = mock(DefectRepository.class);
         pprTaskRepository = mock(PprTaskRepository.class);
+        pprTaskQueryService = mock(PprTaskQueryService.class);
         workOrderRepository = mock(WorkOrderRepository.class);
         equipmentRepository = mock(EquipmentRepository.class);
         departmentRepository = mock(DepartmentRepository.class);
@@ -134,6 +137,7 @@ class AnalyticsPbacScopeTest {
                 repairRequestRepository,
                 defectRepository,
                 pprTaskRepository,
+                pprTaskQueryService,
                 workOrderRepository,
                 equipmentRepository,
                 departmentRepository,
