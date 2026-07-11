@@ -1,7 +1,8 @@
 package com.toir.controller;
 import com.toir.dto.plannedshutdown.*;
+import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.exception.RestException;
-import com.toir.enums.PlanStatus;
+import com.toir.enums.PlannedShutdownStatus;
 import com.toir.service.PlannedShutdownService;
 import com.toir.service.plannedshutdown.PlannedShutdownWorkOrderGenerationService;
 import com.toir.util.PaginationUtils;
@@ -33,7 +34,7 @@ public class PlannedShutdownController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
     public ResponseEntity<Page<PlannedShutdownDto>> list(
             @RequestParam(required = false) UUID departmentId,
-            @RequestParam(required = false) PlanStatus status,
+            @RequestParam(required = false) PlannedShutdownStatus status,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -97,6 +98,12 @@ public class PlannedShutdownController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
     public ResponseEntity<PlannedShutdownWorkItemScopeResponse> listWorkItems(@PathVariable UUID id) {
         return ResponseEntity.ok(service.listWorkItems(id));
+    }
+
+    @GetMapping("/{id}/work-orders")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<List<WorkOrderDto>> linkedWorkOrders(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.linkedWorkOrders(id));
     }
 
     @PostMapping("/{id}/work-items")

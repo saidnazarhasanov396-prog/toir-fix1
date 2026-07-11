@@ -287,7 +287,7 @@ class RbacToirBusinessFlowSecurityTest {
     private static PlannedShutdownDto plannedShutdownDto() {
         return new PlannedShutdownDto(UUID.randomUUID(), "Annual shutdown", UUID.randomUUID(),
                 Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"),
-                "Maintenance", PlanStatus.DRAFT);
+                "Maintenance", PlannedShutdownStatus.DRAFT);
     }
 
     private static PlannedShutdownDetailResponse plannedShutdownDetail() {
@@ -315,7 +315,7 @@ class RbacToirBusinessFlowSecurityTest {
     private static Stream<Arguments> operationAnnotations() {
         return Stream.of(
                 Arguments.of(PlannedShutdownController.class, "list",
-                        new Class<?>[]{UUID.class, PlanStatus.class, String.class, int.class, int.class, String.class, String.class},
+                        new Class<?>[]{UUID.class, PlannedShutdownStatus.class, String.class, int.class, int.class, String.class, String.class},
                         PermissionConstants.PLANNED_SHUTDOWN_READ),
                 Arguments.of(PlannedShutdownController.class, "create",
                         new Class<?>[]{PlannedShutdownCreateRequest.class}, PermissionConstants.PLANNED_SHUTDOWN_CREATE),

@@ -53,6 +53,7 @@ class PlannedShutdownWorkItemServiceTest {
     @Mock DefectRepository defectRepository;
     @Mock PprTaskRepository pprTaskRepository;
     @Mock WorkOrderRepository workOrderRepository;
+    @Mock WorkOrderService workOrderService;
     @Mock WorkOrderMaterialReadinessService materialReadinessService;
     @Mock WorkOrderAssignmentEligibilityService assignmentEligibilityService;
     @Mock SafetyPermitRepository safetyPermitRepository;
@@ -74,7 +75,7 @@ class PlannedShutdownWorkItemServiceTest {
                 readinessItemRepository, isolationPointRepository,
                 statusHistoryRepository, approvalRequestRepository,
                 departmentRepository, employeeRepository, equipmentRepository, defectRepository,
-                pprTaskRepository, workOrderRepository, materialReadinessService, assignmentEligibilityService,
+                pprTaskRepository, workOrderRepository, workOrderService, materialReadinessService, assignmentEligibilityService,
                 safetyPermitRepository, new PlannedShutdownWorkItemPolicy(), new PlannedShutdownReadinessPolicy(),
                 new com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy(),
                 new com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy(),

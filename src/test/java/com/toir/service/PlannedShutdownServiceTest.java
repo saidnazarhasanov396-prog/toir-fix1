@@ -63,6 +63,7 @@ class PlannedShutdownServiceTest {
     @Mock private DefectRepository defectRepository;
     @Mock private PprTaskRepository pprTaskRepository;
     @Mock private WorkOrderRepository workOrderRepository;
+    @Mock private WorkOrderService workOrderService;
     @Mock private PlannedShutdownWorkItemPolicy workItemPolicy;
     @Mock private PlannedShutdownReadinessItemRepository readinessItemRepository;
     @Mock private PlannedShutdownIsolationPointRepository isolationPointRepository;
@@ -107,6 +108,20 @@ class PlannedShutdownServiceTest {
                 Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"),
                 "Maintenance", null, null, null, null)))
                 .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    }
+
+    @Test
+    void linkedWorkOrdersUsesAggregatePbacAndCanonicalShutdownQuery() {
+        UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, departmentId, 4L, PlannedShutdownStatus.TESTING);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(workOrderService.findByPlannedShutdown(id, departmentId)).thenReturn(List.of());
+
+        assertThat(service.linkedWorkOrders(id)).isEmpty();
+
+        verify(scopeAccessService).assertCanAccessDepartment(departmentId);
+        verify(workOrderService).findByPlannedShutdown(id, departmentId);
     }
 
     @Test
@@ -309,11 +324,11 @@ class PlannedShutdownServiceTest {
 
         when(repository.findAllFiltered(departmentId, "DRAFT", "%annual%")).thenReturn(List.of(s1));
 
-        List<PlannedShutdownDto> results = service.findAllFiltered(departmentId, PlanStatus.DRAFT, "annual");
+        List<PlannedShutdownDto> results = service.findAllFiltered(departmentId, PlannedShutdownStatus.DRAFT, "annual");
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).name()).isEqualTo("Annual Maintenance");
-        assertThat(results.get(0).status()).isEqualTo(PlanStatus.DRAFT);
+        assertThat(results.get(0).status()).isEqualTo(PlannedShutdownStatus.DRAFT);
     }
 
     @Test

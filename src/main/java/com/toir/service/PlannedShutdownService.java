@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.plannedshutdown.*;
+import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.entity.Department;
 import com.toir.entity.PlannedShutdown;
 import com.toir.entity.ApprovalRequest;
@@ -70,6 +71,7 @@ public class PlannedShutdownService {
     private final DefectRepository defectRepository;
     private final PprTaskRepository pprTaskRepository;
     private final WorkOrderRepository workOrderRepository;
+    private final WorkOrderService workOrderService;
     private final WorkOrderMaterialReadinessService workOrderMaterialReadinessService;
     private final WorkOrderAssignmentEligibilityService workOrderAssignmentEligibilityService;
     private final SafetyPermitRepository safetyPermitRepository;
@@ -90,7 +92,7 @@ public class PlannedShutdownService {
 
 
     @Transactional(readOnly = true)
-    public List<PlannedShutdownDto> findAllFiltered(UUID departmentId, PlanStatus status, String search) {
+    public List<PlannedShutdownDto> findAllFiltered(UUID departmentId, PlannedShutdownStatus status, String search) {
         UUID effectiveDepartmentId = scopeAccessService.enforceDepartmentScope(departmentId);
         if (!scopeAccessService.isScopeAdmin()) {
             scopeAccessService.assertCanAccessDepartment(effectiveDepartmentId);
@@ -99,6 +101,12 @@ public class PlannedShutdownService {
         String searchPattern = (search != null && !search.isBlank()) ? "%" + search.trim().toLowerCase() + "%" : null;
         return repository.findAllFiltered(effectiveDepartmentId, statusStr, searchPattern).stream()
                 .map(PlannedShutdownDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<WorkOrderDto> linkedWorkOrders(UUID id) {
+        PlannedShutdown shutdown = find(id);
+        return workOrderService.findByPlannedShutdown(id, shutdown.getDepartmentId());
     }
 
     @Transactional

@@ -261,6 +261,12 @@ public class WorkOrderService {
     }
 
     @Transactional(readOnly = true)
+    public List<WorkOrderDto> findByPlannedShutdown(UUID shutdownId, UUID departmentId) {
+        scopeAccessService.assertCanAccessDepartment(departmentId);
+        return toDtos(repository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByUpdatedAtDesc(shutdownId));
+    }
+
+    @Transactional(readOnly = true)
     public Page<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId, int page,
                                      int pageSize, String search) {
         var pageable = PaginationUtils.pageRequest(page, pageSize);

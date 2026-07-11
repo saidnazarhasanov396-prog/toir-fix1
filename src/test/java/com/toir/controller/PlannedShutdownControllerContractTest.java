@@ -6,12 +6,12 @@ import com.toir.dto.plannedshutdown.PlannedShutdownAssetScopeResponse;
 import com.toir.dto.plannedshutdown.PlannedShutdownAssetResponse;
 import com.toir.dto.plannedshutdown.PlannedShutdownWorkItemResponse;
 import com.toir.dto.plannedshutdown.PlannedShutdownWorkItemScopeResponse;
+import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.enums.PlannedShutdownAssetDisposition;
 import com.toir.enums.PlannedShutdownItemStatus;
 import com.toir.enums.PlannedShutdownWorkItemSourceType;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.PlannedShutdownStatus;
-import com.toir.enums.PlanStatus;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.service.ApprovalService;
@@ -73,10 +73,10 @@ class PlannedShutdownControllerContractTest {
                 Instant.parse("2026-05-19T10:00:00Z"),
                 Instant.parse("2026-05-19T18:00:00Z"),
                 "Routine check",
-                PlanStatus.DRAFT
+                PlannedShutdownStatus.DRAFT
         );
 
-        when(service.findAllFiltered(eq(departmentId), eq(PlanStatus.DRAFT), eq("annual"))).thenReturn(List.of(dto));
+        when(service.findAllFiltered(eq(departmentId), eq(PlannedShutdownStatus.DRAFT), eq("annual"))).thenReturn(List.of(dto));
 
         mockMvc.perform(get("/api/v1/planned-shutdowns")
                         .param("departmentId", departmentId.toString())
@@ -136,6 +136,24 @@ class PlannedShutdownControllerContractTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(4));
 
         verify(service).replaceAssets(eq(id), any());
+    }
+
+    @Test
+    void linkedWorkOrdersEndpointReturnsCanonicalShutdownLinks() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrderDto workOrder = new WorkOrderDto(workOrderId, "WO-PS-1", "Pump overhaul",
+                UUID.randomUUID(), UUID.randomUUID(), "Pump", "Mechanical", null, null, null, null,
+                com.toir.enums.WorkOrderStatus.PLANNED, com.toir.enums.WorkOrderType.PLANNED,
+                com.toir.enums.WorkType.REPAIR, PriorityLevel.HIGH, null, null, null, null,
+                null, null, null, null, null, null, null, null, List.of(), null, null, 0, 0);
+        when(service.linkedWorkOrders(id)).thenReturn(List.of(workOrder));
+
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/work-orders", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(workOrderId.toString()))
+                .andExpect(jsonPath("$[0].number").value("WO-PS-1"));
+        verify(service).linkedWorkOrders(id);
     }
 
     @Test
