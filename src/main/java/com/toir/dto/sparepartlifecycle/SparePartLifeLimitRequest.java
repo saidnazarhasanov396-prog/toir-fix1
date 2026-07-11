@@ -1,5 +1,7 @@
 package com.toir.dto.sparepartlifecycle;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.toir.enums.MeterType;
 import com.toir.enums.sparepartlifecycle.SparePartCalendarUnit;
 import com.toir.enums.sparepartlifecycle.SparePartLifeLimitKind;
@@ -12,7 +14,12 @@ public record SparePartLifeLimitRequest(
         SparePartCalendarUnit calendarUnit,
         MeterType meterType,
         UUID explicitEquipmentMeterId,
-        @NotNull BigDecimal limitValue,
+        @NotNull
+        @JsonSerialize(using = DecimalStringSerializer.class)
+        @JsonDeserialize(using = DecimalStringDeserializer.class)
+        BigDecimal limitValue,
+        @JsonSerialize(using = DecimalStringSerializer.class)
+        @JsonDeserialize(using = DecimalStringDeserializer.class)
         BigDecimal warningBeforeValue,
         int sequence
 ) {

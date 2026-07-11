@@ -2,6 +2,7 @@ package com.toir.service.sparepartlifecycle;
 
 import com.toir.dto.sparepartlifecycle.SparePartLifeLimitRequest;
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleDto;
+import com.toir.dto.sparepartlifecycle.SparePartLifeRuleFilter;
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleRequest;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.sparepartlifecycle.SparePartLifeLimit;
@@ -15,13 +16,18 @@ import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.sparepartlifecycle.SparePartLifeLimitRepository;
 import com.toir.repository.sparepartlifecycle.SparePartLifeRuleRepository;
+import com.toir.repository.sparepartlifecycle.SparePartLifeRuleSpecifications;
 import com.toir.util.AuditBuilderService;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,13 +45,22 @@ public class SparePartLifeRuleService {
     private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
-    public List<SparePartLifeRuleDto> list() {
-        return ruleRepository.findAll().stream()
-                .filter(rule -> !rule.isDeleted())
-                .sorted(Comparator.comparing(SparePartLifeRule::getUpdatedAt,
-                        Comparator.nullsLast(Comparator.reverseOrder())))
-                .map(this::toDto)
-                .toList();
+    public Page<SparePartLifeRuleDto> list(SparePartLifeRuleFilter filter, Pageable pageable) {
+        Page<SparePartLifeRule> page = ruleRepository.findAll(
+                SparePartLifeRuleSpecifications.byFilter(filter), pageable);
+        List<SparePartLifeRule> rules = page.getContent();
+        if (rules.isEmpty()) {
+            return page.map(rule -> SparePartLifeRuleDto.from(rule, List.of()));
+        }
+        // N+1 dan qochish uchun barcha limitlarni bitta so'rovda olib, rule bo'yicha guruhlaymiz.
+        List<UUID> ruleIds = rules.stream().map(SparePartLifeRule::getId).toList();
+        Map<UUID, List<SparePartLifeLimit>> limitsByRule = limitRepository
+                .findAllByRuleIdInAndIsDeletedFalseOrderBySequenceAsc(ruleIds)
+                .stream()
+                .collect(Collectors.groupingBy(SparePartLifeLimit::getRuleId));
+        return page.map(rule -> SparePartLifeRuleDto.from(
+                rule,
+                limitsByRule.getOrDefault(rule.getId(), List.of())));
     }
 
     @Transactional(readOnly = true)
@@ -70,7 +85,7 @@ public class SparePartLifeRuleService {
         rule.setActive(request.active() == null || request.active());
         rule.setEffectiveFrom(request.effectiveFrom());
         rule.setEffectiveTo(request.effectiveTo());
-        rule.setRevision(nextRevision(request.sparePartId(), scope));
+        rule.setRevision(nextRevision(request, scope));
         rule.setName(normalizeText(request.name()));
         rule.setDescription(normalizeText(request.description()));
         SparePartLifeRule savedRule = ruleRepository.save(rule);
@@ -95,6 +110,16 @@ public class SparePartLifeRuleService {
         if (!Objects.equals(previous.getSparePartId(), request.sparePartId())) {
             throw RestException.conflict("RULE_REVISION_PART_IMMUTABLE: revision cannot change the spare part");
         }
+        // Revizya aynan bir xil scope tuple ustida ishlaydi: equipment/node/slot ni o'zgartira olmaydi.
+        String requestedSlot = slotNormalizer.normalizeNullable(request.slotCode());
+        if (!Objects.equals(previous.getEquipmentId(), request.equipmentId())
+                || !Objects.equals(previous.getEquipmentNodeId(), request.equipmentNodeId())
+                || !Objects.equals(previous.getNormalizedSlotCode(), requestedSlot)) {
+            throw RestException.conflict(
+                    "RULE_REVISION_PART_IMMUTABLE: revision cannot change the equipment, node or slot scope");
+        }
+        // Eski revizyani yopamiz, so'ng yangi revizyani yaratamiz. create() muvaffaqiyatsiz
+        // bo'lsa, @Transactional tufayli quyidagi deaktivatsiya ham rollback bo'ladi.
         previous.setActive(false);
         if (previous.getEffectiveTo() == null) {
             previous.setEffectiveTo(Instant.now());
@@ -182,9 +207,14 @@ public class SparePartLifeRuleService {
         }
     }
 
-    private int nextRevision(UUID sparePartId, Scope scope) {
-        return ruleRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId).stream()
+    private int nextRevision(SparePartLifeRuleRequest request, Scope scope) {
+        // Keyingi revizya raqami aynan bir xil scope tuple (part + scope + equipment + node + slot)
+        // bo'yicha hisoblanadi, faqat scope turi bo'yicha emas.
+        return ruleRepository.findAllBySparePartIdAndIsDeletedFalse(request.sparePartId()).stream()
                 .filter(rule -> rule.getScopeType() == scope.scopeType())
+                .filter(rule -> Objects.equals(rule.getEquipmentId(), request.equipmentId()))
+                .filter(rule -> Objects.equals(rule.getEquipmentNodeId(), request.equipmentNodeId()))
+                .filter(rule -> Objects.equals(rule.getNormalizedSlotCode(), scope.normalizedSlotCode()))
                 .map(SparePartLifeRule::getRevision)
                 .max(Comparator.naturalOrder())
                 .orElse(0) + 1;

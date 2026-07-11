@@ -19,6 +19,7 @@ import com.toir.repository.ConditionReadingRepository;
 import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ReservationRepository;
+import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
@@ -34,11 +35,13 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.AnalyticsService;
 import com.toir.service.CounteragentService;
 import com.toir.service.DashboardService;
+import com.toir.service.PprTaskQueryService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
@@ -69,6 +72,7 @@ class AnalyticsPbacScopeTest {
     RepairRequestRepository repairRequestRepository;
     DefectRepository defectRepository;
     PprTaskRepository pprTaskRepository;
+    PprTaskQueryService pprTaskQueryService;
     WorkOrderRepository workOrderRepository;
     EquipmentRepository equipmentRepository;
     DepartmentRepository departmentRepository;
@@ -88,6 +92,8 @@ class AnalyticsPbacScopeTest {
     CalibrationRecordRepository calibrationRecordRepository;
     MaintenanceDueEventRepository maintenanceDueEventRepository;
     UserRepository userRepository;
+    EmployeeRepository employeeRepository;
+    VehicleDetailsRepository vehicleDetailsRepository;
     RepairMaterialUsageRepository repairMaterialUsageRepository;
     ScopeAccessService scopeAccessService;
     LegacyStockProjectionService legacyStockProjectionService;
@@ -105,6 +111,7 @@ class AnalyticsPbacScopeTest {
         repairRequestRepository = mock(RepairRequestRepository.class);
         defectRepository = mock(DefectRepository.class);
         pprTaskRepository = mock(PprTaskRepository.class);
+        pprTaskQueryService = mock(PprTaskQueryService.class);
         workOrderRepository = mock(WorkOrderRepository.class);
         equipmentRepository = mock(EquipmentRepository.class);
         departmentRepository = mock(DepartmentRepository.class);
@@ -124,6 +131,8 @@ class AnalyticsPbacScopeTest {
         calibrationRecordRepository = mock(CalibrationRecordRepository.class);
         maintenanceDueEventRepository = mock(MaintenanceDueEventRepository.class);
         userRepository = mock(UserRepository.class);
+        employeeRepository = mock(EmployeeRepository.class);
+        vehicleDetailsRepository = mock(VehicleDetailsRepository.class);
         repairMaterialUsageRepository = mock(RepairMaterialUsageRepository.class);
         scopeAccessService = mock(ScopeAccessService.class);
         legacyStockProjectionService = mock(LegacyStockProjectionService.class);
@@ -134,6 +143,7 @@ class AnalyticsPbacScopeTest {
                 repairRequestRepository,
                 defectRepository,
                 pprTaskRepository,
+                pprTaskQueryService,
                 workOrderRepository,
                 equipmentRepository,
                 departmentRepository,
@@ -154,6 +164,8 @@ class AnalyticsPbacScopeTest {
                 counteragentService,
                 maintenanceDueEventRepository,
                 userRepository,
+                employeeRepository,
+                vehicleDetailsRepository,
                 repairMaterialUsageRepository,
                 scopeAccessService,
                 legacyStockProjectionService

@@ -7,10 +7,13 @@ import com.toir.entity.SparePart;
 import com.toir.entity.StockMovement;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.equipment.VehicleDetails;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.users.Employee;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.DefectStatus;
+import com.toir.enums.EquipmentCategory;
 import com.toir.enums.DowntimeType;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestStatus;
@@ -25,6 +28,7 @@ import com.toir.repository.DowntimeEventRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ReliabilityMetricRepository;
 import com.toir.repository.ReservationRepository;
+import com.toir.repository.VehicleDetailsRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseRepository;
@@ -40,6 +44,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.maintenance.MaintenanceDueEventRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
@@ -55,7 +60,6 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -73,6 +77,7 @@ class DashboardServiceKpiTest {
     @Mock RepairRequestRepository repairRequestRepository;
     @Mock DefectRepository defectRepository;
     @Mock PprTaskRepository pprTaskRepository;
+    @Mock PprTaskQueryService pprTaskQueryService;
     @Mock WorkOrderRepository workOrderRepository;
     @Mock EquipmentRepository equipmentRepository;
     @Mock DepartmentRepository departmentRepository;
@@ -92,6 +97,8 @@ class DashboardServiceKpiTest {
     @Mock CalibrationRecordRepository calibrationRecordRepository;
     @Mock MaintenanceDueEventRepository maintenanceDueEventRepository;
     @Mock UserRepository userRepository;
+    @Mock EmployeeRepository employeeRepository;
+    @Mock VehicleDetailsRepository vehicleDetailsRepository;
     @Mock RepairMaterialUsageRepository repairMaterialUsageRepository;
     @Mock ScopeAccessService scopeAccessService;
     @Mock LegacyStockProjectionService legacyStockProjectionService;
@@ -107,8 +114,11 @@ class DashboardServiceKpiTest {
         lenient().when(warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         lenient().when(sparePartRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         lenient().when(userRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(employeeRepository.findAllByIdInAndIsDeletedFalse(any())).thenReturn(List.of());
+        lenient().when(vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(any())).thenReturn(List.of());
         lenient().when(repairRequestRepository.search(any(), any(), any())).thenReturn(List.of());
         lenient().when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        lenient().when(pprTaskQueryService.countOverdueTasks(any(), any(), any())).thenReturn(0L);
         lenient().when(workOrderRepository.search(any(), any(), any())).thenReturn(List.of());
         lenient().when(reservationRepository.findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(any())).thenReturn(List.of());
         lenient().when(warehouseStockRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
@@ -374,23 +384,23 @@ class DashboardServiceKpiTest {
     }
 
     @Test
-    void overviewDoesNotTreatPostponedPprTasksAsOverdueByDueDate() {
+    void overviewUsesSharedOverdueTaskCountForKpi() {
         UUID departmentId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();
         when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
                 equipment(equipmentId, departmentId, "Pump A")));
-        com.toir.entity.PprTask postponed = new com.toir.entity.PprTask();
-        postponed.setId(UUID.randomUUID());
-        postponed.setEquipmentId(equipmentId);
-        postponed.setStatus(com.toir.enums.PprTaskStatus.POSTPONED);
-        postponed.setDueDate(LocalDateTime.now().minusDays(1));
-        com.toir.entity.PprTask overdue = new com.toir.entity.PprTask();
-        overdue.setId(UUID.randomUUID());
-        overdue.setEquipmentId(equipmentId);
-        overdue.setStatus(com.toir.enums.PprTaskStatus.OVERDUE);
-
         when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
-                .thenReturn(List.of(postponed, overdue));
+                .thenReturn(List.of(pprTask(equipmentId, com.toir.enums.PprTaskStatus.PLANNED)));
+        when(pprTaskQueryService.countOverdueTasks(departmentId, null, null)).thenReturn(12L);
+
+        var result = service.overview(departmentId);
+
+        assertThat(result.counters().overduePpr()).isEqualTo(12);
+    }
+
+    @Test
+    void overviewUsesSharedOverdueTaskCountForGlobalScope() {
+        when(pprTaskQueryService.countOverdueTasks(null, null, null)).thenReturn(1L);
 
         var result = service.overview(null);
 
@@ -440,6 +450,7 @@ class DashboardServiceKpiTest {
         com.toir.entity.PprTask overdue = pprTask(equipmentId, com.toir.enums.PprTaskStatus.OVERDUE);
         when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
                 .thenReturn(List.of(completed, planned, overdue));
+        when(pprTaskQueryService.countOverdueTasks(departmentId, null, null)).thenReturn(1L);
 
         var result = service.overview(departmentId);
 
@@ -450,6 +461,41 @@ class DashboardServiceKpiTest {
         assertThat(result.kpis().pprCompletionRatio().denominator()).isEqualTo(3);
         assertThat(result.kpis().overdueWorkRatio().numerator()).isEqualTo(1);
         assertThat(result.kpis().overdueWorkRatio().denominator()).isEqualTo(3);
+    }
+
+    @Test
+    void topBrokenVehicleResponsibleUsesAssignedDriverEmployeeInsteadOfEquipmentResponsibleUser() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID wrongResponsibleId = UUID.randomUUID();
+        UUID driverEmployeeId = UUID.randomUUID();
+        Equipment vehicle = equipment(equipmentId, departmentId, "Truck A");
+        vehicle.setCategory(EquipmentCategory.VEHICLE);
+        vehicle.setResponsibleId(wrongResponsibleId);
+
+        VehicleDetails details = new VehicleDetails();
+        details.setId(UUID.randomUUID());
+        details.setEquipmentId(equipmentId);
+        details.setAssignedDriverId(driverEmployeeId);
+
+        Employee driver = employee(driverEmployeeId, "EMP-DR-1", "Ivanov", "Ivan", "Driver");
+
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(vehicle));
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(
+                defect(equipmentId, DefectStatus.OPEN),
+                defect(equipmentId, DefectStatus.CLOSED)));
+        when(vehicleDetailsRepository.findAllByEquipmentIdInAndIsDeletedFalse(any()))
+                .thenReturn(List.of(details));
+        when(employeeRepository.findAllByIdInAndIsDeletedFalse(any()))
+                .thenReturn(List.of(driver));
+
+        var result = service.overview(null);
+
+        assertThat(result.topBrokenEquipmentResponsibles()).hasSize(1);
+        var responsible = result.topBrokenEquipmentResponsibles().getFirst();
+        assertThat(responsible.responsibleId()).isEqualTo(driverEmployeeId);
+        assertThat(responsible.responsibleName()).isEqualTo("Ivanov Ivan");
+        assertThat(responsible.responsiblePosition()).isEqualTo("Driver");
     }
 
     private Instant monthStart() {
@@ -483,6 +529,17 @@ class DashboardServiceKpiTest {
         equipment.setName(name);
         equipment.setCreatedAt(monthStart().minus(Duration.ofDays(30)));
         return equipment;
+    }
+
+    private Employee employee(UUID id, String personnelNumber, String lastName, String firstName, String position) {
+        Employee employee = new Employee();
+        employee.setId(id);
+        employee.setPersonnelNumber(personnelNumber);
+        employee.setLastName(lastName);
+        employee.setFirstName(firstName);
+        employee.setPosition(position);
+        employee.setActive(true);
+        return employee;
     }
 
     private Warehouse warehouse(UUID id, UUID departmentId) {
