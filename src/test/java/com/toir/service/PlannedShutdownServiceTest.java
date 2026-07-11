@@ -36,6 +36,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
@@ -65,6 +66,9 @@ class PlannedShutdownServiceTest {
     @Mock private PlannedShutdownReadinessItemRepository readinessItemRepository;
     @Mock private PlannedShutdownIsolationPointRepository isolationPointRepository;
     @Mock private PlannedShutdownReadinessPolicy readinessPolicy;
+    @Mock private WorkOrderAssignmentEligibilityService workOrderAssignmentEligibilityService;
+    @Spy private com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy readinessLifecyclePolicy =
+            new com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy();
     @Mock private SafetyPermitRepository safetyPermitRepository;
     @Mock private ScopeAccessService scopeAccessService;
     @Mock private AuditBuilderService auditBuilderService;
@@ -95,6 +99,13 @@ class PlannedShutdownServiceTest {
         assertThat(item.getCompletedAt()).isNotNull();
         assertThat(item.getEvidence()).isEqualTo("photo:1");
 
+        assertThatThrownBy(() -> service.updateReadinessItem(id, itemId,
+                new com.toir.dto.plannedshutdown.PlannedShutdownReadinessItemRequest(4L, "HSE-CHECK", null,
+                        null, "Changed", com.toir.enums.PlannedShutdownReadinessSeverity.CRITICAL,
+                        null, null, "replacement", null, 0)))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT));
+
         assertThatThrownBy(() -> service.completeReadinessItem(id, itemId,
                 new com.toir.dto.plannedshutdown.PlannedShutdownReadinessActionRequest(4L, "photo:2", "again")))
                 .isInstanceOfSatisfying(RestException.class,
@@ -105,7 +116,7 @@ class PlannedShutdownServiceTest {
         assertThat(item.getStatus()).isEqualTo(com.toir.enums.PlannedShutdownItemStatus.PENDING);
         assertThat(item.getCompletedById()).isNull();
         assertThat(item.getCompletedAt()).isNull();
-        assertThat(item.getEvidence()).isEqualTo("photo:1");
+        assertThat(item.getEvidence()).isNull();
     }
 
     @Test
@@ -124,7 +135,17 @@ class PlannedShutdownServiceTest {
                 .thenReturn(List.of(point));
 
         service.applyIsolation(id, pointId, new com.toir.dto.plannedshutdown.PlannedShutdownIsolationActionRequest(2L));
+        assertThatThrownBy(() -> service.verifyIsolation(id, pointId,
+                new com.toir.dto.plannedshutdown.PlannedShutdownIsolationActionRequest(2L)))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT));
+        shutdown.setStatus(PlannedShutdownStatus.SHUTDOWN_STARTED);
         service.verifyIsolation(id, pointId, new com.toir.dto.plannedshutdown.PlannedShutdownIsolationActionRequest(2L));
+        assertThatThrownBy(() -> service.releaseIsolation(id, pointId,
+                new com.toir.dto.plannedshutdown.PlannedShutdownIsolationActionRequest(2L)))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT));
+        shutdown.setStatus(PlannedShutdownStatus.STARTUP);
         service.releaseIsolation(id, pointId, new com.toir.dto.plannedshutdown.PlannedShutdownIsolationActionRequest(2L));
 
         assertThat(point.getAppliedById()).isEqualTo(actor);
@@ -132,6 +153,91 @@ class PlannedShutdownServiceTest {
         assertThat(point.getReleasedById()).isEqualTo(actor);
         assertThat(point.getStatus()).isEqualTo(com.toir.enums.PlannedShutdownItemStatus.PASSED);
         assertThat(point.getReleasedAt()).isNotNull();
+    }
+
+    @Test
+    void isolationRejectsUnrelatedNotIssuedFutureAndExpiredPermits() {
+        UUID id = UUID.randomUUID(); UUID equipmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();
+        UUID permitId = UUID.randomUUID(); UUID workOrderId = UUID.randomUUID(); UUID workItemId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 2L, PlannedShutdownStatus.DRAFT);
+        var asset = new com.toir.entity.plannedshutdown.PlannedShutdownAsset(); asset.setEquipmentId(equipmentId);
+        Employee employee = new Employee(); employee.setId(employeeId); employee.setActive(true);
+        var permit = new com.toir.entity.SafetyPermit(); permit.setId(permitId); permit.setWorkOrderId(workOrderId);
+        var workOrder = new com.toir.entity.maintenance.WorkOrder(); workOrder.setId(workOrderId);
+        workOrder.setPlannedShutdownId(id); workOrder.setShutdownWorkItemId(workItemId); workOrder.setEquipmentId(equipmentId);
+        var workItem = new com.toir.entity.plannedshutdown.PlannedShutdownWorkItem(); workItem.setId(workItemId);
+        workItem.setEquipmentId(equipmentId);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of(asset));
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(java.util.Optional.of(employee));
+        when(safetyPermitRepository.findByIdAndIsDeletedFalse(permitId)).thenReturn(java.util.Optional.of(permit));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(java.util.Optional.of(workOrder));
+        when(workItemRepository.findByIdAndPlannedShutdownIdAndIsDeletedFalse(workItemId, id))
+                .thenReturn(java.util.Optional.of(workItem));
+        var request = new com.toir.dto.plannedshutdown.PlannedShutdownIsolationPointRequest(2L, equipmentId,
+                null, "ELECTRICAL", "LT-7", employeeId, permitId, 0);
+
+        permit.setStatus(com.toir.enums.SafetyPermitStatus.DRAFT);
+        assertThatThrownBy(() -> service.addIsolationPoint(id, request)).isInstanceOf(RestException.class);
+        permit.setStatus(com.toir.enums.SafetyPermitStatus.ISSUED);
+        permit.setIssuedAt(Instant.now().plusSeconds(600));
+        assertThatThrownBy(() -> service.addIsolationPoint(id, request)).isInstanceOf(RestException.class);
+        permit.setIssuedAt(Instant.now().minusSeconds(600)); permit.setValidUntil(Instant.now().minusSeconds(1));
+        assertThatThrownBy(() -> service.addIsolationPoint(id, request)).isInstanceOf(RestException.class);
+        permit.setValidUntil(Instant.now().plusSeconds(600)); workOrder.setPlannedShutdownId(UUID.randomUUID());
+        assertThatThrownBy(() -> service.addIsolationPoint(id, request)).isInstanceOf(RestException.class);
+
+        workOrder.setPlannedShutdownId(id);
+        when(isolationPointRepository.saveAndFlush(any())).thenAnswer(inv -> {
+            var point = (com.toir.entity.plannedshutdown.PlannedShutdownIsolationPoint) inv.getArgument(0);
+            point.setId(UUID.randomUUID()); return point;
+        });
+        when(repository.saveAndFlush(shutdown)).thenReturn(shutdown);
+        assertThat(service.addIsolationPoint(id, request).plannedShutdownId()).isEqualTo(id);
+    }
+
+    @Test
+    void readinessAssessmentRejectsInactiveOwnerAndIneligibleCurrentAssignment() {
+        UUID id = UUID.randomUUID(); UUID department = UUID.randomUUID(); UUID owner = UUID.randomUUID();
+        UUID equipment = UUID.randomUUID(); UUID workItemId = UUID.randomUUID(); UUID workOrderId = UUID.randomUUID();
+        UUID permitId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, department, 3L, PlannedShutdownStatus.APPROVED);
+        shutdown.setResponsibleEmployeeId(owner); shutdown.setScopeVersion(4L); shutdown.setApprovalScopeVersion(4L);
+        shutdown.setApprovedStartAt(Instant.now().minusSeconds(60)); shutdown.setApprovedEndAt(Instant.now().plusSeconds(600));
+        Employee inactive = new Employee(); inactive.setId(owner); inactive.setDepartmentId(department); inactive.setActive(false);
+        var asset = new com.toir.entity.plannedshutdown.PlannedShutdownAsset(); asset.setEquipmentId(equipment);
+        asset.setDisposition(PlannedShutdownAssetDisposition.STOPPED);
+        var item = new com.toir.entity.plannedshutdown.PlannedShutdownWorkItem(); item.setId(workItemId);
+        item.setSourceType(com.toir.enums.PlannedShutdownWorkItemSourceType.WORK_ORDER);
+        item.setSourceId(workOrderId); item.setEquipmentId(equipment);
+        var workOrder = new com.toir.entity.maintenance.WorkOrder(); workOrder.setId(workOrderId);
+        workOrder.setEquipmentId(equipment); workOrder.setPlannedShutdownId(UUID.randomUUID());
+        workOrder.setShutdownWorkItemId(workItemId);
+        var readiness = new com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem();
+        readiness.setSeverity(com.toir.enums.PlannedShutdownReadinessSeverity.CRITICAL);
+        readiness.setStatus(com.toir.enums.PlannedShutdownItemStatus.PASSED);
+        var point = new com.toir.entity.plannedshutdown.PlannedShutdownIsolationPoint();
+        point.setId(UUID.randomUUID()); point.setEquipmentId(equipment); point.setPermitId(permitId);
+        var permit = new com.toir.entity.SafetyPermit(); permit.setId(permitId); permit.setWorkOrderId(workOrderId);
+        permit.setStatus(com.toir.enums.SafetyPermitStatus.ISSUED); permit.setIssuedAt(Instant.now().minusSeconds(60));
+        permit.setValidUntil(Instant.now().plusSeconds(600));
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(employeeRepository.findByIdAndIsDeletedFalse(owner)).thenReturn(java.util.Optional.of(inactive));
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of(asset));
+        when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of(item));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(java.util.Optional.of(workOrder));
+        when(workOrderAssignmentEligibilityService.isCurrentlyEligible(workOrder)).thenReturn(false);
+        when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of(readiness));
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of(point));
+        when(safetyPermitRepository.findByIdAndIsDeletedFalse(permitId)).thenReturn(java.util.Optional.of(permit));
+        when(readinessPolicy.evaluateReadiness(any())).thenAnswer(inv ->
+                new com.toir.service.plannedshutdown.PlannedShutdownReadinessPolicy()
+                        .evaluateReadiness(inv.getArgument(0)));
+
+        var result = service.assessReadiness(id, Instant.now());
+
+        assertThat(result.blockers()).extracting(com.toir.dto.plannedshutdown.PlannedShutdownBlocker::code)
+                .contains("OWNER_MISSING", "PERFORMER_OR_CONTRACTOR_MISSING", "PERMIT_INACTIVE");
     }
 
     @Test

@@ -2326,6 +2326,17 @@ public class WorkOrderService {
         }
     }
 
+    /** Canonical reusable skill eligibility used by readiness policies without duplicating certification rules. */
+    @Transactional(readOnly = true)
+    public boolean hasEligiblePerformerSkills(WorkOrder workOrder) {
+        try {
+            validatePerformerSkillsForWorkOrder(workOrder);
+            return true;
+        } catch (RestException ex) {
+            return false;
+        }
+    }
+
     private Set<String> requiredSkillsForWorkOrder(WorkOrder workOrder) {
         if (workOrder.getTasks() == null || workOrder.getTasks().isEmpty()) {
             return Set.of();
