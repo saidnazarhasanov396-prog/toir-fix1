@@ -5,6 +5,7 @@ import com.toir.enums.RepairCampaignStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -39,11 +40,13 @@ public class RepairCampaignStage extends BaseEntity {
     @Column(name = "budget_line_id")
     private UUID budgetLineId;
 
-    @Column(name = "planned_cost", nullable = false)
-    private double plannedCost;
+    @Column(name = "planned_cost", nullable = false, precision = 19, scale = 4)
+    @Builder.Default
+    private BigDecimal plannedCost = BigDecimal.ZERO;
 
-    @Column(name = "actual_cost", nullable = false)
-    private double actualCost;
+    @Column(name = "actual_cost", nullable = false, precision = 19, scale = 4)
+    @Builder.Default
+    private BigDecimal actualCost = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

@@ -511,6 +511,30 @@ class EquipmentControllerContractTest {
     }
 
     @Test
+    void updateAcceptsExplicitResponsibleClearDirective() throws Exception {
+        UUID id = UUID.randomUUID();
+        EquipmentDto dto = equipmentDto(id, UUID.randomUUID(), null);
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(equipmentEntity(id, null)));
+        when(service.update(eq(id), any())).thenReturn(dto);
+
+        mockMvc.perform(put("/api/v1/equipment/{id}", id)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "responsibleId": null,
+                                  "clearResponsible": true
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<com.toir.dto.equipment.EquipmentUpdateRequest> captor =
+                ArgumentCaptor.forClass(com.toir.dto.equipment.EquipmentUpdateRequest.class);
+        verify(service).update(eq(id), captor.capture());
+        assertThat(captor.getValue().responsibleId()).isNull();
+        assertThat(captor.getValue().clearResponsible()).isTrue();
+    }
+
+    @Test
     void updateAcceptsDynamicAttributesPayload() throws Exception {
         UUID id = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();

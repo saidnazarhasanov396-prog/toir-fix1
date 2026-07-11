@@ -82,6 +82,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -821,7 +822,6 @@ public class EquipmentService {
         validateWarrantyAttachmentForUpdate(request);
         validateCounteragentReferencesForUpdate(entity, request);
         validateMxik(request.mxikId());
-        validateResponsibleEmployee(request.responsibleId());
 
         applyForUpdate(entity, request);
         if (location != null) {
@@ -962,6 +962,16 @@ public class EquipmentService {
         Map<UUID, Employee> employeeMap = responsibleIds.isEmpty()
                 ? Collections.emptyMap()
                 : byId(employeeRepository.findAllByIdInAndIsDeletedFalse(responsibleIds), Employee::getId);
+        items.stream()
+                .filter(equipment -> equipment.getResponsibleId() != null)
+                .filter(equipment -> !employeeMap.containsKey(equipment.getResponsibleId()))
+                .findFirst()
+                .ifPresent(equipment -> {
+                    throw new DataIntegrityViolationException(
+                            "Equipment %s references unresolved responsible Employee %s"
+                                    .formatted(equipment.getId(), equipment.getResponsibleId())
+                    );
+                });
         Map<UUID, Location> locMap = byId(locationRepository.findAllByIdInAndIsDeletedFalse(locIds), Location::getId);
         Set<UUID> unresolvedLocIds = locIds.stream()
                 .filter(id -> !locMap.containsKey(id))
@@ -2036,6 +2046,7 @@ public class EquipmentService {
     }
 
     private void applyForUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        applyResponsibleUpdate(entity, request);
         entity.setName(request.name() != null ? request.name() : entity.getName());
         entity.setInventoryNumber(request.inventoryNumber()  != null ? request.inventoryNumber() : entity.getInventoryNumber());
         entity.setTechnicalNumber(request.technicalNumber() != null ? request.technicalNumber() : entity.getTechnicalNumber());
@@ -2048,7 +2059,6 @@ public class EquipmentService {
         entity.setLocationId(request.locationId() != null ? request.locationId() : entity.getLocationId());
         entity.setParentId(request.parentId());
         entity.setCriticalityClassId(request.criticalityClassId()  != null ? request.criticalityClassId() : entity.getCriticalityClassId());
-        entity.setResponsibleId(request.responsibleId() != null ? request.responsibleId() : entity.getResponsibleId());
         entity.setCounteragentId(request.counteragentId() != null ? request.counteragentId() : entity.getCounteragentId());
         entity.setManufacturer(request.manufacturer() != null ? request.manufacturer() : entity.getManufacturer());
         entity.setCategory(request.category() != null ? request.category() : entity.getCategory());
@@ -2088,6 +2098,18 @@ public class EquipmentService {
             ));
         }
         entity.setDescription(request.description() != null ? request.description() : entity.getDescription());
+    }
+
+    private void applyResponsibleUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        if (Boolean.TRUE.equals(request.clearResponsible())) {
+            if (request.responsibleId() != null) {
+                throw RestException.badRequest("responsibleId must be omitted when clearResponsible is true");
+            }
+            entity.setResponsibleId(null);
+        } else if (request.responsibleId() != null) {
+            validateResponsibleEmployee(request.responsibleId());
+            entity.setResponsibleId(request.responsibleId());
+        }
     }
 
     private boolean hasExpectedLifetimeChange(EquipmentUpdateRequest request) {

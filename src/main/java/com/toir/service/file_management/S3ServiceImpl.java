@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.net.URI;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -59,12 +60,12 @@ public class S3ServiceImpl implements S3Service {
 
     @Override
     public void store(MultipartFile file, String objectName) {
-        try {
+        try (InputStream inputStream = file.getInputStream()) {
             minioClient.putObject(
                     PutObjectArgs.builder()
                             .bucket(properties.getBucketName())
                             .object(objectName)
-                            .stream(file.getInputStream(), file.getSize(), -1)
+                            .stream(inputStream, file.getSize(), -1)
                             .contentType(file.getContentType())
                             .build()
             );

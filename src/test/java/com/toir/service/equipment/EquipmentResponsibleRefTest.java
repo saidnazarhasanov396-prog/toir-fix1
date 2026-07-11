@@ -42,15 +42,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -121,7 +125,7 @@ class EquipmentResponsibleRefTest {
     }
 
     @Test
-    void enrichReturnsNullResponsibleWhenEmployeeNotFound() {
+    void enrichRejectsUnresolvedResponsibleEmployeeIdentityWithoutUserFallback() {
         UUID responsibleId = UUID.randomUUID();
         Equipment equipment = equipment("EQ-RESP-2");
         equipment.setResponsibleId(responsibleId);
@@ -132,11 +136,12 @@ class EquipmentResponsibleRefTest {
         when(employeeRepository.findAllByIdInAndIsDeletedFalse(anyCollection()))
                 .thenReturn(List.of());
 
-        Page<EquipmentDto> result = service.search(null, null, null, null, null, false, null, 0, 20);
+        assertThatThrownBy(() -> service.search(null, null, null, null, null, false, null, 0, 20))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining(equipment.getId().toString())
+                .hasMessageContaining(responsibleId.toString());
 
-        EquipmentDto dto = result.getContent().getFirst();
-        assertThat(dto.responsibleId()).isEqualTo(responsibleId);
-        assertThat(dto.responsible()).isNull();
+        verify(userRepository, never()).findByIdAndIsDeletedFalse(responsibleId);
     }
 
     @Test

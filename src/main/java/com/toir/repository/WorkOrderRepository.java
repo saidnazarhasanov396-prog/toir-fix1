@@ -24,6 +24,11 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
     @Query(value = "SELECT * FROM work_orders WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<WorkOrder> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    Optional<WorkOrder> findByGenerationKeyAndIsDeletedFalse(String generationKey);
+
+    @Query(value = "SELECT pg_advisory_xact_lock(hashtextextended(:generationKey, 0))", nativeQuery = true)
+    void lockGenerationKey(@Param("generationKey") String generationKey);
+
     @Query(value = "SELECT * FROM work_orders WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<WorkOrder> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 

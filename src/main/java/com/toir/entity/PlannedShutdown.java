@@ -16,6 +16,10 @@ import java.util.UUID;
 @Builder
 public class PlannedShutdown extends BaseEntity {
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Column(nullable = false)
     private String name;
 

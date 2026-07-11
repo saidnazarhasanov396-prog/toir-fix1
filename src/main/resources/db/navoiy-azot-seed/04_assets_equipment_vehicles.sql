@@ -34,7 +34,7 @@ INSERT INTO equipment (
 SELECT v.id, now(), now(), false,
        v.code, v.name, v.inventory_number, v.technical_number, v.serial_number, v.model, v.produced_year,
        et.id, d.id, l.id, 'DEPARTMENT', NULL,
-       d.id, u.id, v.manufacturer, v.status, 'PRODUCTION_EQUIPMENT',
+       d.id, responsible_employee.id, v.manufacturer, v.status, 'PRODUCTION_EQUIPMENT',
        v.commissioned_at, v.arrival_date, v.warranty_until, v.has_warranty, v.warranty_start_date, v.warranty_end_date,
        v.average_operating_life_hours, v.average_daily_usage, v.operation_start_date,
        v.expected_lifetime_months, v.expected_lifetime_years, v.expected_lifetime_hours,
@@ -55,6 +55,11 @@ JOIN equipment_types et ON et.code = v.equipment_type_code AND et.is_deleted = f
 JOIN departments d ON d.code = v.department_code AND d.is_deleted = false
 JOIN locations l ON l.code = v.location_code AND l.is_deleted = false
 LEFT JOIN users u ON u.username = v.responsible_username AND u.is_deleted = false
+LEFT JOIN LATERAL (
+    SELECT min(e.id) AS id FROM hr_employees e
+    WHERE e.user_id = u.id AND e.is_deleted = false
+    HAVING count(*) = 1
+) responsible_employee ON true
 ON CONFLICT (code) WHERE is_deleted = false DO UPDATE
 SET name = EXCLUDED.name,
     inventory_number = EXCLUDED.inventory_number,
@@ -68,7 +73,7 @@ SET name = EXCLUDED.name,
     current_location_type = EXCLUDED.current_location_type,
     current_warehouse_id = EXCLUDED.current_warehouse_id,
     responsible_department_id = EXCLUDED.responsible_department_id,
-    responsible_id = EXCLUDED.responsible_id,
+    responsible_id = COALESCE(EXCLUDED.responsible_id, equipment.responsible_id),
     manufacturer = EXCLUDED.manufacturer,
     status = EXCLUDED.status,
     category = EXCLUDED.category,
@@ -134,7 +139,7 @@ SET name = EXCLUDED.name,
     current_location_type = EXCLUDED.current_location_type,
     current_warehouse_id = EXCLUDED.current_warehouse_id,
     responsible_department_id = EXCLUDED.responsible_department_id,
-    responsible_id = EXCLUDED.responsible_id,
+    responsible_id = COALESCE(EXCLUDED.responsible_id, equipment.responsible_id),
     manufacturer = EXCLUDED.manufacturer,
     status = EXCLUDED.status,
     category = EXCLUDED.category,

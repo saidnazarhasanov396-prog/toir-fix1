@@ -94,6 +94,59 @@ class FileAssetServiceTest {
         assertThat(Files.exists(Path.of(saved.getStoragePath()))).isTrue();
     }
 
+    @Test
+    void uploadRemovesLocalFileWhenMetadataSaveFails() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "report.pdf",
+                "application/pdf",
+                "%PDF-1.4\n".getBytes()
+        );
+        when(fileValidator.validate(file)).thenReturn(FileValidator.ValidatedFile.builder()
+                .originalName("report.pdf")
+                .extension("pdf")
+                .contentType("application/pdf")
+                .size(file.getSize())
+                .build());
+        when(repository.save(any(FileAsset.class))).thenThrow(new RuntimeException("database unavailable"));
+
+        assertThatThrownBy(() -> service().upload(file, "equipment-warranty", "eq-1", UUID.randomUUID()))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("database unavailable");
+
+        try (var storedFiles = Files.list(storageDir)) {
+            assertThat(storedFiles).isEmpty();
+        }
+    }
+
+    @Test
+    void uploadRemovesLocalFileWhenAuditSchedulingFails() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "report.pdf", "application/pdf", "%PDF-1.4\n".getBytes());
+        when(fileValidator.validate(file)).thenReturn(FileValidator.ValidatedFile.builder()
+                .originalName("report.pdf")
+                .extension("pdf")
+                .contentType("application/pdf")
+                .size(file.getSize())
+                .build());
+        when(repository.save(any(FileAsset.class))).thenAnswer(invocation -> {
+            FileAsset asset = invocation.getArgument(0);
+            asset.setId(UUID.randomUUID());
+            return asset;
+        });
+        org.mockito.Mockito.doThrow(new RuntimeException("audit unavailable"))
+                .when(auditBuilderService)
+                .log(any(), any(), any(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> service().upload(file, "equipment-warranty", "eq-1", UUID.randomUUID()))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("audit unavailable");
+
+        try (var storedFiles = Files.list(storageDir)) {
+            assertThat(storedFiles).isEmpty();
+        }
+    }
+
 
     @Test
     void downloadChecksOwningEntityAccessForKnownEntityFiles() {

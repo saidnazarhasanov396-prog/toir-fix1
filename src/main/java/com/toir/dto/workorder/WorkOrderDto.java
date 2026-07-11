@@ -72,11 +72,15 @@ public record WorkOrderDto(
         UUID repairCampaignStageId,
         String repairCampaignName,
         String repairCampaignStageName,
-        UUID budgetLineId
+        UUID budgetLineId,
+        Boolean requiresShutdown,
+        Boolean requiresIsolation
 ) {
     public WorkOrderDto {
         repairActRequired = Boolean.TRUE.equals(repairActRequired);
         stoppageActRequired = Boolean.TRUE.equals(stoppageActRequired);
+        requiresShutdown = Boolean.TRUE.equals(requiresShutdown);
+        requiresIsolation = Boolean.TRUE.equals(requiresIsolation);
         materialUsages = materialUsages == null ? List.of() : List.copyOf(materialUsages);
     }
 
@@ -138,7 +142,7 @@ public record WorkOrderDto(
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes, createdById,
                 approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName, tasks, repairRequest,
                 defect, operationsCount, materialsCount, repairActRequired, stoppageActRequired, repairActFileId,
-                stoppageActFileId, materialUsages, updatedAt, null, null, null, null, null);
+                stoppageActFileId, materialUsages, updatedAt, null, null, null, null, null, null, null);
     }
 
     public WorkOrderDto(UUID id,
@@ -204,7 +208,7 @@ public record WorkOrderDto(
                 approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName, tasks, repairRequest,
                 defect, operationsCount, materialsCount, repairActRequired, stoppageActRequired, repairActFileId,
                 stoppageActFileId, materialUsages, updatedAt, repairCampaignId, repairCampaignStageId,
-                repairCampaignName, repairCampaignStageName, null);
+                repairCampaignName, repairCampaignStageName, null, null, null);
     }
 
     public WorkOrderDto(UUID id,
@@ -248,7 +252,8 @@ public record WorkOrderDto(
                 null, null, null, pprTaskId, counteragentId, null, null, null, status, type, workType, priority, startPlannedAt, endPlannedAt,
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
-                materialsCount, false, false, null, null, List.of(), null);
+                materialsCount, false, false, null, null, List.of(), null,
+                null, null, null, null, null, null, null);
     }
 
     public WorkOrderDto(UUID id,
@@ -294,7 +299,8 @@ public record WorkOrderDto(
                 null, null, null, pprTaskId, counteragentId, null, performerId, performerName, status, type, workType, priority, startPlannedAt, endPlannedAt,
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
-                materialsCount, false, false, null, null, List.of(), null);
+                materialsCount, false, false, null, null, List.of(), null,
+                null, null, null, null, null, null, null);
     }
 
     public WorkOrderDto(UUID id,
@@ -334,7 +340,8 @@ public record WorkOrderDto(
                 repairRequestId, defectId, null, null, null, pprTaskId, counteragentId, null, null, null, status, type, workType, priority,
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
-                tasks, repairRequest, defect, operationsCount, materialsCount, false, false, null, null, List.of(), null);
+                tasks, repairRequest, defect, operationsCount, materialsCount, false, false, null, null, List.of(), null,
+                null, null, null, null, null, null, null);
     }
 
     public WorkOrderDto(UUID id,
@@ -376,7 +383,8 @@ public record WorkOrderDto(
                 repairRequestId, defectId, null, null, null, pprTaskId, counteragentId, null, performerId, performerName, status, type, workType, priority,
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
-                tasks, repairRequest, defect, operationsCount, materialsCount, false, false, null, null, List.of(), null);
+                tasks, repairRequest, defect, operationsCount, materialsCount, false, false, null, null, List.of(), null,
+                null, null, null, null, null, null, null);
     }
 
     public record CounteragentRef(UUID id, String code, String name) {

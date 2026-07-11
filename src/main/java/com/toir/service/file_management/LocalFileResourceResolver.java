@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriUtils;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
@@ -25,10 +26,20 @@ public class LocalFileResourceResolver {
 
     public FileSystemResource load(String storedPath) {
         Path resolved = resolve(storedPath);
-        if (!Files.isRegularFile(resolved) || !Files.isReadable(resolved)) {
+        Path realStorageRoot;
+        Path realResolved;
+        try {
+            realStorageRoot = storageRoot.toRealPath();
+            realResolved = resolved.toRealPath();
+        } catch (IOException e) {
             throw RestException.notFound("File not found");
         }
-        return new FileSystemResource(resolved);
+        if (!realResolved.startsWith(realStorageRoot)
+                || !Files.isRegularFile(realResolved)
+                || !Files.isReadable(realResolved)) {
+            throw RestException.notFound("File not found");
+        }
+        return new FileSystemResource(realResolved);
     }
 
     public Path resolve(String storedPath) {

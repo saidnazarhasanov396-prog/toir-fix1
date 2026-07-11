@@ -16,6 +16,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
@@ -38,8 +39,9 @@ public class RepairCampaignDepartment extends BaseEntity {
     @Column(nullable = false)
     private RepairCampaignDepartmentRole role = RepairCampaignDepartmentRole.PARTICIPANT;
 
-    @Column(name = "planned_budget", nullable = false)
-    private double plannedBudget;
+    @Column(name = "planned_budget", nullable = false, precision = 19, scale = 4)
+    @Builder.Default
+    private BigDecimal plannedBudget = BigDecimal.ZERO;
 
     @Column(columnDefinition = "text")
     private String notes;

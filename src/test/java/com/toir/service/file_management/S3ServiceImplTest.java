@@ -11,6 +11,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,6 +46,28 @@ class S3ServiceImplTest {
         service.store(file, "documents/2026/05/a.txt");
 
         verify(minioClient).putObject(any(PutObjectArgs.class));
+    }
+
+    @Test
+    void closesUploadInputStreamAfterStorageCall() {
+        AtomicBoolean closed = new AtomicBoolean();
+        byte[] content = "hello".getBytes();
+        MockMultipartFile file = new MockMultipartFile("file", "a.txt", "text/plain", content) {
+            @Override
+            public InputStream getInputStream() {
+                return new ByteArrayInputStream(content) {
+                    @Override
+                    public void close() throws IOException {
+                        closed.set(true);
+                        super.close();
+                    }
+                };
+            }
+        };
+
+        service.store(file, "documents/2026/05/a.txt");
+
+        assertThat(closed).isTrue();
     }
 
     @Test

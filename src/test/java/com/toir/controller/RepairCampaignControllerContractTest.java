@@ -21,13 +21,17 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -55,6 +59,28 @@ class RepairCampaignControllerContractTest {
     }
 
     @Test
+    void generateWorkOrdersRequiresIdempotencyKeyAndHandsItToService() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/generate-work-orders", campaignId)
+                        .contentType("application/json")
+                        .content("{\"stageId\":\"" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        when(service.generateWorkOrders(eq(campaignId), org.mockito.ArgumentMatchers.any(), eq("generation-1")))
+                .thenReturn(List.of());
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/generate-work-orders", campaignId)
+                        .header("Idempotency-Key", "generation-1")
+                        .contentType("application/json")
+                        .content("{\"stageId\":\"" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isCreated());
+
+        assertThat(mockingDetails(service).getInvocations())
+                .anySatisfy(invocation -> assertThat(invocation.getArguments())
+                        .containsExactly(campaignId, invocation.getArgument(1), "generation-1"));
+    }
+
+    @Test
     void listCampaignsWithFiltersReturnsFilteredPage() throws Exception {
         UUID campaignId = UUID.randomUUID();
         RepairCampaignDto dto = new RepairCampaignDto(
@@ -66,12 +92,13 @@ class RepairCampaignControllerContractTest {
                 RepairCampaignStatus.DRAFT,
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 12, 31),
-                50000.0,
-                0.0,
-                50000.0,
+                new BigDecimal("50000.1234"),
+                new BigDecimal("0.0000"),
+                new BigDecimal("50000.1234"),
                 "Scope details",
                 "Notes",
-                List.of()
+                List.of(),
+                "UZS"
         );
 
         when(service.findAllFiltered(
@@ -92,7 +119,147 @@ class RepairCampaignControllerContractTest {
                 .andExpect(jsonPath("$.content[0].status").value("DRAFT"))
                 .andExpect(jsonPath("$.content[0].startDate").value("2026-01-01"))
                 .andExpect(jsonPath("$.content[0].endDate").value("2026-12-31"))
+                .andExpect(jsonPath("$.content[0].totalBudget").value("50000.1234"))
+                .andExpect(jsonPath("$.content[0].currencyCode").value("UZS"))
                 .andExpect(jsonPath("$.content[0].description").value("Scope details"));
+    }
+
+    @Test
+    void createAcceptsCanonicalFourDecimalStringsAndRejectsJsonNumbers() throws Exception {
+        when(service.create(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> {
+            com.toir.dto.repaircampaign.RepairCampaignRequest request = invocation.getArgument(0);
+            assertThat(request.totalBudget()).isEqualByComparingTo("123456789.1234");
+            assertThat(request.currencyCode()).isEqualTo("UZS");
+            return null;
+        });
+
+        String canonical = """
+                {"name":"Precision overhaul","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"123456789.1234","currencyCode":"UZS"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(canonical))
+                .andExpect(status().isCreated());
+
+        String numeric = """
+                {"name":"Precision overhaul","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":123.45,"currencyCode":"UZS"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(numeric))
+                .andExpect(status().isBadRequest());
+
+        String excessiveScale = """
+                {"name":"Precision overhaul","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"123.45678","currencyCode":"UZS"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(excessiveScale))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void campaignOwnedMoneyRejectsMoreThanFifteenIntegerDigits() throws Exception {
+        String campaign = """
+                {"name":"Oversized budget","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"1234567890123456.0000","currencyCode":"UZS"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(campaign))
+                .andExpect(status().isBadRequest());
+
+        String participant = """
+                {"name":"Oversized participant","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"100","currencyCode":"UZS","participantDepartments":[
+                   {"departmentId":"%s","role":"PARTICIPANT","plannedBudget":"1234567890123456.0000"}
+                 ]}
+                """.formatted(UUID.randomUUID());
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(participant))
+                .andExpect(status().isBadRequest());
+
+        String stage = """
+                {"sequence":1,"name":"Oversized stage","startDate":"2026-01-01",
+                 "endDate":"2026-01-02","plannedCost":"1234567890123456.0000"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/stages", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content(stage))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void currencyCodeMustBeUppercaseIso4217() throws Exception {
+        for (String currency : List.of("uzs", "ZZZ")) {
+            String body = """
+                    {"name":"Currency boundary","startDate":"2026-01-01","endDate":"2026-02-01",
+                     "totalBudget":"100.0000","currencyCode":"%s"}
+                    """.formatted(currency);
+            mockMvc.perform(post("/api/v1/repair-campaigns")
+                            .contentType("application/json")
+                            .content(body))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
+    void explicitNullCampaignMoneyIsRejected() throws Exception {
+        String nullTotalBudget = """
+                {"name":"Null budget","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":null,"currencyCode":"UZS"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(nullTotalBudget))
+                .andExpect(status().isBadRequest());
+
+        String nullParticipantBudget = """
+                {"name":"Null participant budget","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"100","currencyCode":"UZS","participantDepartments":[
+                   {"departmentId":"%s","role":"PARTICIPANT","plannedBudget":null}
+                 ]}
+                """.formatted(UUID.randomUUID());
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(nullParticipantBudget))
+                .andExpect(status().isBadRequest());
+
+        String nullStagePlannedCost = """
+                {"sequence":1,"name":"Null stage budget","startDate":"2026-01-01",
+                 "endDate":"2026-01-02","plannedCost":null}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/stages", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content(nullStagePlannedCost))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void omittedCampaignMoneyKeepsExistingZeroDefaults() throws Exception {
+        String omittedTotalBudget = """
+                {"name":"Default budget","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "currencyCode":"UZS","participantDepartments":[
+                   {"departmentId":"%s","role":"PARTICIPANT"}
+                 ]}
+                """.formatted(UUID.randomUUID());
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(omittedTotalBudget))
+                .andExpect(status().isCreated());
+
+        String omittedStagePlannedCost = """
+                {"sequence":1,"name":"Default stage budget","startDate":"2026-01-01",
+                 "endDate":"2026-01-02"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/stages", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content(omittedStagePlannedCost))
+                .andExpect(status().isCreated());
     }
 
     @Test
@@ -104,26 +271,27 @@ class RepairCampaignControllerContractTest {
                 campaignId,
                 budgetId,
                 BudgetStatus.APPROVED,
-                1000,
-                400,
-                75,
-                5000,
-                1200,
-                3800,
+                BigDecimal.valueOf(1000),
+                BigDecimal.valueOf(400),
+                BigDecimal.valueOf(75),
+                BigDecimal.valueOf(5000),
+                BigDecimal.valueOf(1200),
+                BigDecimal.valueOf(3800),
                 1,
-                75,
+                BigDecimal.valueOf(75),
                 List.of(new RepairCampaignBudgetStageSummaryDto(
                         UUID.randomUUID(),
                         "Preparation",
                         budgetLineId,
-                        300,
-                        120,
-                        50,
-                        500,
-                        120,
-                        380,
-                        180
-                ))
+                        BigDecimal.valueOf(300),
+                        BigDecimal.valueOf(120),
+                        BigDecimal.valueOf(50),
+                        BigDecimal.valueOf(500),
+                        BigDecimal.valueOf(120),
+                        BigDecimal.valueOf(380),
+                        BigDecimal.valueOf(180)
+                )),
+                "UZS"
         ));
 
         mockMvc.perform(get("/api/v1/repair-campaigns/{id}/budget-summary", campaignId))
@@ -131,7 +299,7 @@ class RepairCampaignControllerContractTest {
                 .andExpect(jsonPath("$.campaignId").value(campaignId.toString()))
                 .andExpect(jsonPath("$.maintenanceBudgetId").value(budgetId.toString()))
                 .andExpect(jsonPath("$.budgetStatus").value("APPROVED"))
-                .andExpect(jsonPath("$.campaignApprovedActual").value(400))
+                .andExpect(jsonPath("$.campaignApprovedActual").value("400"))
                 .andExpect(jsonPath("$.unallocatedActualCostCount").value(1))
                 .andExpect(jsonPath("$.stages[0].budgetLineId").value(budgetLineId.toString()));
     }

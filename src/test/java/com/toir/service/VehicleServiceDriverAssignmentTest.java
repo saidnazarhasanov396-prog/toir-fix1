@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.vehicle.VehicleRequest;
+import com.toir.dto.equipment.EquipmentDto;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.VehicleDetails;
 import com.toir.entity.users.Employee;
@@ -79,6 +80,28 @@ class VehicleServiceDriverAssignmentTest {
 
     @InjectMocks
     VehicleService service;
+
+    @Test
+    void findByEquipmentIdUsesVehicleDetailsAsCanonicalDriverWhenEquipmentMirrorDiffers() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID canonicalDriverId = UUID.randomUUID();
+        UUID mirroredResponsibleId = UUID.randomUUID();
+        Equipment equipment = vehicle(equipmentId, UUID.randomUUID());
+        equipment.setResponsibleId(mirroredResponsibleId);
+        VehicleDetails details = details(equipmentId);
+        details.setAssignedDriverId(canonicalDriverId);
+
+        when(equipmentService.findById(equipmentId)).thenReturn(EquipmentDto.from(equipment));
+        when(vehicleDetailsRepository.findByEquipmentIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(details));
+        when(vehicleDocumentRepository.findAllByEquipmentId(equipmentId)).thenReturn(List.of());
+        when(equipmentAttributeService.findValues(equipmentId)).thenReturn(List.of());
+        when(equipmentManualAttributeService.list(equipmentId)).thenReturn(List.of());
+
+        var result = service.findByEquipmentId(equipmentId);
+
+        assertThat(result.equipment().responsibleId()).isEqualTo(mirroredResponsibleId);
+        assertThat(result.vehicleDetails().assignedDriverId()).isEqualTo(canonicalDriverId);
+    }
 
     @Test
     void updateRejectsAssignedDriverFromDifferentDepartment() {

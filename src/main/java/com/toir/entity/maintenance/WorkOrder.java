@@ -71,6 +71,15 @@ public class WorkOrder extends ActorStampedEntity {
     @Column(name = "cycle_key")
     private String cycleKey;
 
+    @Column(name = "requires_shutdown", nullable = false)
+    private boolean requiresShutdown;
+
+    @Column(name = "requires_isolation", nullable = false)
+    private boolean requiresIsolation;
+
+    @Column(name = "generation_key", length = 512)
+    private String generationKey;
+
     @Column(name = "counteragent_id")
     private UUID counteragentId;
 

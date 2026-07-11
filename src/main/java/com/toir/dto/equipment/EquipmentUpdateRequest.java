@@ -28,6 +28,7 @@ public record EquipmentUpdateRequest(
         UUID parentId,
         UUID criticalityClassId,
         UUID responsibleId,
+        Boolean clearResponsible,
         String manufacturer,
         EquipmentStatus status,
         EquipmentCategory category,
@@ -98,7 +99,7 @@ public record EquipmentUpdateRequest(
                 UUID warrantyCounteragentId
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, producedYear, equipmentTypeId,
-                        departmentId, locationId, parentId, criticalityClassId, responsibleId, manufacturer,
+                        departmentId, locationId, parentId, criticalityClassId, responsibleId, null, manufacturer,
                         status, category, commissionedAt, arrivalDate, warrantyUntil, hasWarranty,
                         warrantyAttachmentId, warrantyStartDate, warrantyEndDate, description, operationStartDate,
                         expectedLifetimeMonths, expectedLifetimeYears, expectedLifetimeHours, attributes,

@@ -1,9 +1,11 @@
 package com.toir.service.file_management;
 
 import com.toir.exception.RestException;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,7 +32,7 @@ class LocalFileResourceResolverTest {
         var resource = new LocalFileResourceResolver(storageRoot.toString()).load(legacyUrl);
 
         assertThat(resource.contentLength()).isEqualTo(3);
-        assertThat(resource.getFile().toPath()).isEqualTo(file);
+        assertThat(resource.getFile().toPath()).isEqualTo(file.toRealPath());
     }
 
     @Test
@@ -43,7 +45,7 @@ class LocalFileResourceResolverTest {
         var resource = new LocalFileResourceResolver(storageRoot.toString())
                 .load("uploads/report%20with%20spaces.pdf");
 
-        assertThat(resource.getFile().toPath()).isEqualTo(file);
+        assertThat(resource.getFile().toPath()).isEqualTo(file.toRealPath());
     }
 
     @Test
@@ -53,5 +55,44 @@ class LocalFileResourceResolverTest {
         assertThatThrownBy(() -> new LocalFileResourceResolver(storageRoot.toString()).load("uploads/missing.pdf"))
                 .isInstanceOf(RestException.class)
                 .hasMessage("File not found");
+    }
+
+    @Test
+    void rejectsSymbolicLinkThatEscapesConfiguredStorageRoot() throws Exception {
+        Path storageRoot = tempDir.resolve("uploads");
+        Path outsideRoot = tempDir.resolve("outside");
+        Files.createDirectories(storageRoot);
+        Files.createDirectories(outsideRoot);
+        Files.writeString(outsideRoot.resolve("secret.txt"), "secret", StandardCharsets.UTF_8);
+        createSymbolicLinkOrSkip(storageRoot.resolve("external"), outsideRoot);
+
+        assertThatThrownBy(() -> new LocalFileResourceResolver(storageRoot.toString())
+                .load("uploads/external/secret.txt"))
+                .isInstanceOf(RestException.class)
+                .hasMessage("File not found");
+    }
+
+    @Test
+    void rejectsParentTraversalOutsideConfiguredStorageRoot() throws Exception {
+        Path storageRoot = tempDir.resolve("uploads");
+        Files.createDirectories(storageRoot);
+        Files.writeString(tempDir.resolve("secret.txt"), "secret", StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> new LocalFileResourceResolver(storageRoot.toString())
+                .load("uploads/../secret.txt"))
+                .isInstanceOf(RestException.class)
+                .hasMessage("File not found");
+    }
+
+    private static void createSymbolicLinkOrSkip(Path link, Path target) {
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (IOException | UnsupportedOperationException | SecurityException exception) {
+            Assumptions.assumeTrue(
+                    false,
+                    () -> "Symbolic-link creation is unavailable in this test environment: "
+                            + exception.getMessage()
+            );
+        }
     }
 }

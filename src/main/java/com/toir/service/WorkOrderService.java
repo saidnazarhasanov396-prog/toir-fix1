@@ -824,6 +824,7 @@ public class WorkOrderService {
         }
         entity.setBudgetLineId(effectiveBudgetLineId);
         entity.setCycleKey(request.cycleKey());
+        entity.setGenerationKey(request.generationKey());
         entity.setCounteragentId(request.counteragentId());
         entity.setPerformer(performer);
         entity.setType(request.type());
@@ -840,6 +841,8 @@ public class WorkOrderService {
         entity.setSummary(request.summary());
         entity.setRepairActRequired(Boolean.TRUE.equals(request.repairActRequired()));
         entity.setStoppageActRequired(Boolean.TRUE.equals(request.stoppageActRequired()));
+        entity.setRequiresShutdown(Boolean.TRUE.equals(request.requiresShutdown()));
+        entity.setRequiresIsolation(Boolean.TRUE.equals(request.requiresIsolation()));
         WorkOrder saved = repository.save(entity);
         generateTemplateTasksFromWorkOrderContext(saved);
         validatePerformerSkillsForWorkOrder(saved);
@@ -2986,7 +2989,9 @@ public class WorkOrderService {
                 entity.getRepairCampaignStageId(),
                 null,
                 null,
-                entity.getBudgetLineId());
+                entity.getBudgetLineId(),
+                entity.isRequiresShutdown(),
+                entity.isRequiresIsolation());
     }
 
     private WorkOrderDto.CounteragentRef counteragentRef(UUID counteragentId) {

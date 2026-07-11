@@ -64,6 +64,8 @@ import com.toir.entity.StockMovement;
 import com.toir.repository.StockMovementRepository;
 import com.toir.enums.StockMovementType;
 import com.toir.entity.users.User;
+import com.toir.entity.users.Employee;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.repository.WarehouseRepository;
@@ -77,6 +79,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.context.annotation.Profile;
@@ -96,6 +99,7 @@ import java.util.UUID;
 @Transactional
 @Profile("dev & demo-seed")
 @RequiredArgsConstructor
+@Slf4j
 public class SampleDataSeeder implements CommandLineRunner {
 
     private final DepartmentRepository departmentRepository;
@@ -110,6 +114,7 @@ public class SampleDataSeeder implements CommandLineRunner {
     private final RepairRequestRepository repairRequestRepository;
     private final DefectRepository defectRepository;
     private final UserRepository userRepository;
+    private final EmployeeRepository employeeRepository;
     private final WorkOrderRepository workOrderRepository;
     private final DefectCategoryRepository defectCategoryRepository;
     private final DefectSeverityRepository defectSeverityRepository;
@@ -287,7 +292,8 @@ public class SampleDataSeeder implements CommandLineRunner {
         CriticalityClass high = crits.stream().filter(c -> "CRIT-HIGH".equals(c.getCode())).findFirst().orElse(null);
         CriticalityClass medium = crits.stream().filter(c -> "CRIT-MED".equals(c.getCode())).findFirst().orElse(null);
         CriticalityClass low = crits.stream().filter(c -> "CRIT-LOW".equals(c.getCode())).findFirst().orElse(null);
-        UUID admin = userRepository.findByUsernameAndIsDeletedFalse("admin").map(User::getId).orElse(null);
+        UUID adminUserId = userRepository.findByUsernameAndIsDeletedFalse("admin").map(User::getId).orElse(null);
+        UUID responsibleEmployeeId = uniqueEmployeeIdForUser(adminUserId);
 
         for (Equipment eq : all) {
             CriticalityClass cls;
@@ -296,9 +302,17 @@ public class SampleDataSeeder implements CommandLineRunner {
             else if (eq.getCode().contains("PMP") || eq.getCode().contains("HE")) cls = medium;
             else cls = low;
             if (cls != null) eq.setCriticalityClassId(cls.getId());
-            if (admin != null) eq.setResponsibleId(admin);
+            eq.setResponsibleId(responsibleEmployeeId);
             equipmentRepository.save(eq);
         }
+    }
+
+    private UUID uniqueEmployeeIdForUser(UUID userId) {
+        if (userId == null) return null;
+        List<Employee> matches = employeeRepository.findAllByUserIdAndIsDeletedFalse(userId);
+        if (matches.size() == 1) return matches.getFirst().getId();
+        log.warn("Equipment seed responsible mapping skipped: userId={}, employeeMatches={}", userId, matches.size());
+        return null;
     }
 
     private void seedDefectLists(List<Equipment> all, UUID admin, SparePart bearing, SparePart seal) {

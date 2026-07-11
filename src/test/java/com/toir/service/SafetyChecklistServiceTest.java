@@ -179,6 +179,25 @@ class SafetyChecklistServiceTest {
     }
 
     @Test
+    void startShutdownRequiredWorkOrderWithoutChecklistFailsClosed() {
+        WorkOrder workOrder = workOrder();
+        workOrder.setRequiresShutdown(true);
+        when(checklistRepository.findFirstByWorkOrderIdAndIsDeletedFalseAndStatusNotInOrderByUpdatedAtDesc(
+                workOrder.getId(), EnumSet.of(SafetyChecklistStatus.CANCELLED))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.assertCanStart(workOrder))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Safety checklist is required");
+    }
+
+    @Test
+    void ordinaryWorkOrderWithoutChecklistRemainsStartable() {
+        WorkOrder workOrder = workOrder();
+
+        service.assertCanStart(workOrder);
+    }
+
+    @Test
     void failedChecklistBlocksWorkOrderStart() {
         WorkOrder workOrder = workOrder();
         WorkOrderSafetyChecklist checklist = checklist(workOrder, SafetyChecklistStatus.FAILED);

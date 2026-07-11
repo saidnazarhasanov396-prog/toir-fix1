@@ -163,6 +163,9 @@ public class SafetyChecklistService {
     public void assertCanStart(WorkOrder workOrder) {
         Optional<WorkOrderSafetyChecklist> checklist = activeChecklist(workOrder.getId());
         if (checklist.isEmpty()) {
+            if (workOrder.isRequiresShutdown() || workOrder.isRequiresIsolation()) {
+                throw RestException.badRequest("Safety checklist is required for shutdown/isolation work");
+            }
             return;
         }
         WorkOrderSafetyChecklist value = checklist.get();

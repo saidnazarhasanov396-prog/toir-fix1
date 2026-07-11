@@ -5,6 +5,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -69,6 +74,28 @@ class FileValidatorTest {
         MockMultipartFile gif = new MockMultipartFile("file", "image.gif", "image/gif", gifBytes());
 
         assertThat(validator.validate(gif).contentType()).isEqualTo("image/gif");
+    }
+
+    @Test
+    void closesMimeDetectionInputStream() {
+        AtomicBoolean closed = new AtomicBoolean();
+        byte[] content = "%PDF-1.4\n".getBytes();
+        MockMultipartFile file = new MockMultipartFile("file", "report.pdf", "application/pdf", content) {
+            @Override
+            public InputStream getInputStream() {
+                return new ByteArrayInputStream(content) {
+                    @Override
+                    public void close() throws IOException {
+                        closed.set(true);
+                        super.close();
+                    }
+                };
+            }
+        };
+
+        validator.validate(file);
+
+        assertThat(closed).isTrue();
     }
 
     private byte[] pngBytes() {

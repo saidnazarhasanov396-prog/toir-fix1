@@ -15,6 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -42,7 +45,7 @@ public class FileServiceImpl implements FileService {
         String storedName = storedId + "." + validated.extension();
         String objectName = buildObjectName(safeCategory, storedName);
 
-        s3Service.store(file, objectName);
+        s3Service.store(new ValidatedContentTypeMultipartFile(file, validated.contentType()), objectName);
         try {
             UploadedFile uploadedFile = UploadedFile.builder()
                     .originalName(validated.originalName())
@@ -181,6 +184,52 @@ public class FileServiceImpl implements FileService {
             s3Service.delete(objectName);
         } catch (RuntimeException rollbackError) {
             log.warn("Failed to rollback uploaded object '{}': {}", objectName, rollbackError.getMessage());
+        }
+    }
+
+    private record ValidatedContentTypeMultipartFile(
+            MultipartFile delegate,
+            String validatedContentType
+    ) implements MultipartFile {
+
+        @Override
+        public String getName() {
+            return delegate.getName();
+        }
+
+        @Override
+        public String getOriginalFilename() {
+            return delegate.getOriginalFilename();
+        }
+
+        @Override
+        public String getContentType() {
+            return validatedContentType;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return delegate.isEmpty();
+        }
+
+        @Override
+        public long getSize() {
+            return delegate.getSize();
+        }
+
+        @Override
+        public byte[] getBytes() throws IOException {
+            return delegate.getBytes();
+        }
+
+        @Override
+        public InputStream getInputStream() throws IOException {
+            return delegate.getInputStream();
+        }
+
+        @Override
+        public void transferTo(File destination) throws IOException, IllegalStateException {
+            delegate.transferTo(destination);
         }
     }
 

@@ -16,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -27,6 +28,7 @@ public class PlannedShutdownController {
     private final PlannedShutdownService service;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
     public ResponseEntity<Page<PlannedShutdownDto>> list(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) PlanStatus status,
@@ -58,11 +60,13 @@ public class PlannedShutdownController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_CREATE')")
     public ResponseEntity<PlannedShutdownDto> create(@Valid @RequestBody PlannedShutdownDto r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(r));
     }
 
     @PostMapping("/{id}/reject")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_APPROVE')")
     public ResponseEntity<PlannedShutdownDto> reject(@PathVariable UUID id) {
         throw RestException.conflict("Use /api/v1/approvals/{id}/reject to reject approval requests");
     }
