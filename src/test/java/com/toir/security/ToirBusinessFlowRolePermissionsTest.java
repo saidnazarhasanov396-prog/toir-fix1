@@ -52,9 +52,11 @@ class ToirBusinessFlowRolePermissionsTest {
     @Test
     void defaultsGrantFullBusinessFlowPermissionsToEstablishedApproverRoles() {
         assertThat(RolePermissionDefaults.forRole("TECHNICAL_DIRECTOR"))
-                .containsAll(FULL_BUSINESS_FLOW_PERMISSIONS);
+                .containsAll(FULL_BUSINESS_FLOW_PERMISSIONS)
+                .contains(PermissionConstants.PLANNED_SHUTDOWN_REQUEST_APPROVAL);
         assertThat(RolePermissionDefaults.forRole("CHIEF_MECHANIC"))
-                .containsAll(FULL_BUSINESS_FLOW_PERMISSIONS);
+                .containsAll(FULL_BUSINESS_FLOW_PERMISSIONS)
+                .contains(PermissionConstants.PLANNED_SHUTDOWN_REQUEST_APPROVAL);
     }
 
     @Test
@@ -68,6 +70,7 @@ class ToirBusinessFlowRolePermissionsTest {
                 PermissionConstants.REPAIR_CAMPAIGN_UPDATE,
                 PermissionConstants.REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS
         ).doesNotContain(
+                PermissionConstants.PLANNED_SHUTDOWN_REQUEST_APPROVAL,
                 PermissionConstants.PLANNED_SHUTDOWN_APPROVE,
                 PermissionConstants.REPAIR_CAMPAIGN_APPROVE
         );

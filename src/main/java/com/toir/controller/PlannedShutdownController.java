@@ -255,7 +255,7 @@ public class PlannedShutdownController {
     }
 
     @PostMapping("/{id}/request-approval")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_REQUEST_APPROVAL')")
     public ResponseEntity<PlannedShutdownDetailResponse> requestApproval(@PathVariable UUID id,
             @Valid @RequestBody PlannedShutdownTransitionRequest request) {
         return ResponseEntity.ok(service.requestApproval(id, request));

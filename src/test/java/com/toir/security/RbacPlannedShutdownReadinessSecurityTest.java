@@ -57,6 +57,18 @@ class RbacPlannedShutdownReadinessSecurityTest {
         performComplete().andExpect(status().isForbidden());
     }
 
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_UPDATE)
+    void updatePermissionCannotRequestApproval() throws Exception {
+        performRequestApproval().andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_REQUEST_APPROVAL)
+    void requestApprovalPermissionCanRequestApproval() throws Exception {
+        performRequestApproval().andExpect(status().isOk());
+    }
+
     private org.springframework.test.web.servlet.ResultActions performComplete() throws Exception {
         return mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/readiness/{itemId}/complete",
                 UUID.randomUUID(), UUID.randomUUID()).contentType("application/json").content("{\"version\":1}"));
@@ -65,5 +77,10 @@ class RbacPlannedShutdownReadinessSecurityTest {
     private org.springframework.test.web.servlet.ResultActions performVerify() throws Exception {
         return mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/isolation/{pointId}/verify",
                 UUID.randomUUID(), UUID.randomUUID()).contentType("application/json").content("{\"version\":1}"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions performRequestApproval() throws Exception {
+        return mockMvc.perform(post("/api/v1/planned-shutdowns/{id}/request-approval", UUID.randomUUID())
+                .contentType("application/json").content("{\"version\":1,\"reason\":\"ready\"}"));
     }
 }

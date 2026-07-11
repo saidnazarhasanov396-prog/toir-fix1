@@ -63,6 +63,7 @@ public final class PermissionConstants {
     public static final String PLANNED_SHUTDOWN_READ = "PLANNED_SHUTDOWN_READ";
     public static final String PLANNED_SHUTDOWN_CREATE = "PLANNED_SHUTDOWN_CREATE";
     public static final String PLANNED_SHUTDOWN_UPDATE = "PLANNED_SHUTDOWN_UPDATE";
+    public static final String PLANNED_SHUTDOWN_REQUEST_APPROVAL = "PLANNED_SHUTDOWN_REQUEST_APPROVAL";
     public static final String PLANNED_SHUTDOWN_APPROVE = "PLANNED_SHUTDOWN_APPROVE";
     public static final String PLANNED_SHUTDOWN_PREPARE = "PLANNED_SHUTDOWN_PREPARE";
     public static final String PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE = "PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE";

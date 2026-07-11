@@ -14,6 +14,7 @@ public final class RolePermissionDefaults {
             PermissionConstants.PLANNED_SHUTDOWN_READ,
             PermissionConstants.PLANNED_SHUTDOWN_CREATE,
             PermissionConstants.PLANNED_SHUTDOWN_UPDATE,
+            PermissionConstants.PLANNED_SHUTDOWN_REQUEST_APPROVAL,
             PermissionConstants.PLANNED_SHUTDOWN_APPROVE,
             PermissionConstants.PLANNED_SHUTDOWN_PREPARE,
             PermissionConstants.PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE,
