@@ -41,6 +41,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -99,6 +100,37 @@ class RepairCampaignServiceTest {
 
     @InjectMocks
     private RepairCampaignService service;
+
+    @Test
+    void createPreservesFourDecimalBudgetAndCurrency() {
+        RepairCampaignRequest request = new RepairCampaignRequest(
+                null,
+                "Precision overhaul",
+                null,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 2, 1),
+                new BigDecimal("123456789.1234"),
+                RepairCampaignScopeType.CUSTOM,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                "UZS"
+        );
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
+        when(repository.save(any(RepairCampaign.class))).thenAnswer(invocation -> {
+            RepairCampaign campaign = invocation.getArgument(0);
+            campaign.setId(UUID.randomUUID());
+            return campaign;
+        });
+
+        RepairCampaignDto result = service.create(request);
+
+        assertThat(result.totalBudget()).isEqualByComparingTo("123456789.1234");
+        assertThat(result.currencyCode()).isEqualTo("UZS");
+    }
 
     @Test
     void generateWorkOrdersRejectsDraftCampaign() {
@@ -340,7 +372,7 @@ class RepairCampaignServiceTest {
                 null,
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 2, 1),
-                1000,
+                BigDecimal.valueOf(1000),
                 null,
                 null,
                 List.of(),
@@ -365,7 +397,7 @@ class RepairCampaignServiceTest {
                 null,
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 2, 1),
-                1000,
+                BigDecimal.valueOf(1000),
                 RepairCampaignScopeType.EQUIPMENT_TYPE,
                 null,
                 List.of(),
@@ -390,7 +422,7 @@ class RepairCampaignServiceTest {
                 null,
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 2, 1),
-                1000,
+                BigDecimal.valueOf(1000),
                 RepairCampaignScopeType.CROSS_DEPARTMENT,
                 null,
                 List.of(),
@@ -427,18 +459,19 @@ class RepairCampaignServiceTest {
                 departmentId,
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 2, 1),
-                1000,
+                BigDecimal.valueOf(1000),
                 RepairCampaignScopeType.DEPARTMENT,
                 null,
                 List.of(),
                 null,
                 null,
-                budgetId
+                budgetId,
+                "UZS"
         ));
 
         assertThat(result.maintenanceBudgetId()).isEqualTo(budgetId);
-        assertThat(result.budgetPlanned()).isEqualTo(10_000);
-        assertThat(result.budgetRemaining()).isEqualTo(10_000);
+        assertThat(result.budgetPlanned()).isEqualByComparingTo("10000");
+        assertThat(result.budgetRemaining()).isEqualByComparingTo("10000");
     }
 
     @Test
@@ -453,13 +486,14 @@ class RepairCampaignServiceTest {
                 UUID.randomUUID(),
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 2, 1),
-                1000,
+                BigDecimal.valueOf(1000),
                 RepairCampaignScopeType.DEPARTMENT,
                 null,
                 List.of(),
                 null,
                 null,
-                budgetId
+                budgetId,
+                "UZS"
         )))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -491,23 +525,23 @@ class RepairCampaignServiceTest {
                 "Preparation",
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 1, 10),
-                700,
-                0,
+                BigDecimal.valueOf(700),
+                BigDecimal.ZERO,
                 RepairCampaignStatus.DRAFT,
                 null,
                 0,
                 0,
-                0,
-                0,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
                 budgetLineId,
-                0,
-                0,
-                0
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
         ));
 
         assertThat(result.budgetLineId()).isEqualTo(budgetLineId);
-        assertThat(result.budgetLinePlanned()).isEqualTo(5000);
-        assertThat(result.budgetLineRemaining()).isEqualTo(3800);
+        assertThat(result.budgetLinePlanned()).isEqualByComparingTo("5000");
+        assertThat(result.budgetLineRemaining()).isEqualByComparingTo("3800");
     }
 
     @Test
@@ -525,18 +559,18 @@ class RepairCampaignServiceTest {
                 "Preparation",
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 1, 10),
-                700,
-                0,
+                BigDecimal.valueOf(700),
+                BigDecimal.ZERO,
                 RepairCampaignStatus.DRAFT,
                 null,
                 0,
                 0,
-                0,
-                0,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
                 budgetLineId,
-                0,
-                0,
-                0
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
         )))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);

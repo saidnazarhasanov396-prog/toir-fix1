@@ -29,6 +29,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 @RestController
 @RequestMapping("/api/v1/repair-campaigns")
 @Tag(name = "repair-campaigns")
@@ -158,7 +159,7 @@ public class RepairCampaignController {
 
     @PostMapping("/stages/{stageId}/complete")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_COMPLETE')")
-    public ResponseEntity<RepairCampaignStageDto> completeStage(@PathVariable UUID stageId, @RequestParam double actualCost) {
+    public ResponseEntity<RepairCampaignStageDto> completeStage(@PathVariable UUID stageId, @RequestParam BigDecimal actualCost) {
         return ResponseEntity.ok(service.completeStage(stageId, actualCost));
     }
 

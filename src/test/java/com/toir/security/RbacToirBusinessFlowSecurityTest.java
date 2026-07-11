@@ -24,6 +24,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -232,14 +233,15 @@ class RbacToirBusinessFlowSecurityTest {
 
     private static String campaignPayload() {
         return """
-                {"name":"Annual repair","departmentId":"%s","startDate":"2026-08-01","endDate":"2026-08-10","totalBudget":1000}
+                {"name":"Annual repair","departmentId":"%s","startDate":"2026-08-01","endDate":"2026-08-10","totalBudget":"1000","currencyCode":"UZS"}
                 """.formatted(UUID.randomUUID());
     }
 
     private static RepairCampaignDto campaignDto() {
         return new RepairCampaignDto(UUID.randomUUID(), "RC-1", "Annual repair", UUID.randomUUID(),
                 "Maintenance", RepairCampaignStatus.DRAFT, LocalDate.of(2026, 8, 1),
-                LocalDate.of(2026, 8, 10), 1000, 0, 1000, null, null, List.of());
+                LocalDate.of(2026, 8, 10), new BigDecimal("1000"), BigDecimal.ZERO,
+                new BigDecimal("1000"), null, null, List.of());
     }
 
     private static Stream<Arguments> operationAnnotations() {

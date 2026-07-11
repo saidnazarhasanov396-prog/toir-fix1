@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -91,12 +92,13 @@ class RepairCampaignControllerContractTest {
                 RepairCampaignStatus.DRAFT,
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 12, 31),
-                50000.0,
-                0.0,
-                50000.0,
+                new BigDecimal("50000.1234"),
+                new BigDecimal("0.0000"),
+                new BigDecimal("50000.1234"),
                 "Scope details",
                 "Notes",
-                List.of()
+                List.of(),
+                "UZS"
         );
 
         when(service.findAllFiltered(
@@ -117,7 +119,46 @@ class RepairCampaignControllerContractTest {
                 .andExpect(jsonPath("$.content[0].status").value("DRAFT"))
                 .andExpect(jsonPath("$.content[0].startDate").value("2026-01-01"))
                 .andExpect(jsonPath("$.content[0].endDate").value("2026-12-31"))
+                .andExpect(jsonPath("$.content[0].totalBudget").value("50000.1234"))
+                .andExpect(jsonPath("$.content[0].currencyCode").value("UZS"))
                 .andExpect(jsonPath("$.content[0].description").value("Scope details"));
+    }
+
+    @Test
+    void createAcceptsCanonicalFourDecimalStringsAndRejectsJsonNumbers() throws Exception {
+        when(service.create(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> {
+            com.toir.dto.repaircampaign.RepairCampaignRequest request = invocation.getArgument(0);
+            assertThat(request.totalBudget()).isEqualByComparingTo("123456789.1234");
+            assertThat(request.currencyCode()).isEqualTo("UZS");
+            return null;
+        });
+
+        String canonical = """
+                {"name":"Precision overhaul","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"123456789.1234","currencyCode":"UZS"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(canonical))
+                .andExpect(status().isCreated());
+
+        String numeric = """
+                {"name":"Precision overhaul","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":123.45,"currencyCode":"UZS"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(numeric))
+                .andExpect(status().isBadRequest());
+
+        String excessiveScale = """
+                {"name":"Precision overhaul","startDate":"2026-01-01","endDate":"2026-02-01",
+                 "totalBudget":"123.45678","currencyCode":"UZS"}
+                """;
+        mockMvc.perform(post("/api/v1/repair-campaigns")
+                        .contentType("application/json")
+                        .content(excessiveScale))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -129,26 +170,27 @@ class RepairCampaignControllerContractTest {
                 campaignId,
                 budgetId,
                 BudgetStatus.APPROVED,
-                1000,
-                400,
-                75,
-                5000,
-                1200,
-                3800,
+                BigDecimal.valueOf(1000),
+                BigDecimal.valueOf(400),
+                BigDecimal.valueOf(75),
+                BigDecimal.valueOf(5000),
+                BigDecimal.valueOf(1200),
+                BigDecimal.valueOf(3800),
                 1,
-                75,
+                BigDecimal.valueOf(75),
                 List.of(new RepairCampaignBudgetStageSummaryDto(
                         UUID.randomUUID(),
                         "Preparation",
                         budgetLineId,
-                        300,
-                        120,
-                        50,
-                        500,
-                        120,
-                        380,
-                        180
-                ))
+                        BigDecimal.valueOf(300),
+                        BigDecimal.valueOf(120),
+                        BigDecimal.valueOf(50),
+                        BigDecimal.valueOf(500),
+                        BigDecimal.valueOf(120),
+                        BigDecimal.valueOf(380),
+                        BigDecimal.valueOf(180)
+                )),
+                "UZS"
         ));
 
         mockMvc.perform(get("/api/v1/repair-campaigns/{id}/budget-summary", campaignId))
@@ -156,7 +198,7 @@ class RepairCampaignControllerContractTest {
                 .andExpect(jsonPath("$.campaignId").value(campaignId.toString()))
                 .andExpect(jsonPath("$.maintenanceBudgetId").value(budgetId.toString()))
                 .andExpect(jsonPath("$.budgetStatus").value("APPROVED"))
-                .andExpect(jsonPath("$.campaignApprovedActual").value(400))
+                .andExpect(jsonPath("$.campaignApprovedActual").value("400"))
                 .andExpect(jsonPath("$.unallocatedActualCostCount").value(1))
                 .andExpect(jsonPath("$.stages[0].budgetLineId").value(budgetLineId.toString()));
     }

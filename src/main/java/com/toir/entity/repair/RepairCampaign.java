@@ -6,6 +6,7 @@ import com.toir.enums.RepairCampaignStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,11 +59,13 @@ public class RepairCampaign extends BaseEntity {
     @Column(name = "end_date", nullable = false)
     private LocalDate endDate;
 
-    @Column(name = "total_budget", nullable = false)
-    private double totalBudget;
+    @Column(name = "total_budget", nullable = false, precision = 19, scale = 4)
+    @Builder.Default
+    private BigDecimal totalBudget = BigDecimal.ZERO;
 
-    @Column(name = "total_actual", nullable = false)
-    private double totalActual;
+    @Column(name = "total_actual", nullable = false, precision = 19, scale = 4)
+    @Builder.Default
+    private BigDecimal totalActual = BigDecimal.ZERO;
 
     @Column(name = "currency_code", nullable = false, length = 3)
     @Builder.Default

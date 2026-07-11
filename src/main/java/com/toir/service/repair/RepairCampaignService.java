@@ -55,6 +55,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Collection;
@@ -137,7 +139,8 @@ public class RepairCampaignService {
         c.setStartDate(r.startDate());
         c.setEndDate(r.endDate());
         c.setTotalBudget(r.totalBudget());
-        c.setTotalActual(0);
+        c.setTotalActual(BigDecimal.ZERO);
+        c.setCurrencyCode(r.currencyCode());
         c.setScope(r.description());
         c.setNotes(r.notes());
         replaceParticipantDepartments(c, r.participantDepartments());
@@ -167,6 +170,7 @@ public class RepairCampaignService {
         c.setStartDate(r.startDate());
         c.setEndDate(r.endDate());
         c.setTotalBudget(r.totalBudget());
+        c.setCurrencyCode(r.currencyCode());
         c.setScope(r.description());
         c.setNotes(r.notes());
         replaceParticipantDepartments(c, r.participantDepartments());
@@ -258,7 +262,7 @@ public class RepairCampaignService {
                 .anyMatch(cost -> cost.getBudgetLineId() == null)) {
             throw RestException.badRequest("Cannot close campaign while actual costs are not allocated to budget lines");
         }
-        if (totals.pendingActual() > 0) {
+        if (totals.pendingActual().compareTo(BigDecimal.ZERO) > 0) {
             throw RestException.badRequest("Cannot close campaign while pending actual costs exist");
         }
 
@@ -297,7 +301,7 @@ public class RepairCampaignService {
         RepairCampaignStage s = new RepairCampaignStage();
         s.setCampaign(c);
         applyStageRequest(s, r);
-        s.setActualCost(0);
+        s.setActualCost(BigDecimal.ZERO);
         c.getStages().add(s);
         RepairCampaignStage savedStage = stageRepository.save(s);
         recalcTotals(c);
@@ -348,7 +352,7 @@ public class RepairCampaignService {
 
     @Deprecated(forRemoval = false)
     @Transactional
-    public RepairCampaignStageDto completeStage(UUID stageId, double ignoredActualCost) {
+    public RepairCampaignStageDto completeStage(UUID stageId, BigDecimal ignoredActualCost) {
         RepairCampaignStage stage = stageRepository.findByIdAndIsDeletedFalse(stageId)
                 .orElseThrow(() -> RestException.notFound("Stage not found: " + stageId));
         return completeStage(stage.getCampaign().getId(), stageId);
@@ -407,7 +411,7 @@ public class RepairCampaignService {
             throw RestException.badRequest("Cannot detach work order with accepted contractor work");
         }
         CampaignCostTotals totals = costTotals(List.of(workOrder));
-        if (totals.approvedActual() > 0) {
+        if (totals.approvedActual().compareTo(BigDecimal.ZERO) > 0) {
             throw RestException.badRequest("Cannot detach work order with approved actual costs");
         }
 
@@ -531,9 +535,10 @@ public class RepairCampaignService {
                 totals.approvedActual(),
                 totals.pendingActual(),
                 totals.rejectedActual(),
-                campaign.getTotalBudget() - totals.approvedActual(),
-                campaign.getTotalBudget() - totals.approvedActual(),
-                variancePercentage(campaign.getTotalBudget(), totals.approvedActual())
+                campaign.getTotalBudget().subtract(totals.approvedActual()),
+                campaign.getTotalBudget().subtract(totals.approvedActual()),
+                variancePercentage(campaign.getTotalBudget(), totals.approvedActual()),
+                campaign.getCurrencyCode()
         );
     }
 
@@ -541,16 +546,17 @@ public class RepairCampaignService {
     public RepairCampaignCostSummaryDto costs(UUID campaignId) {
         RepairCampaign campaign = getOrThrow(campaignId);
         CampaignCostTotals totals = costTotals(campaignWorkOrders(campaignId));
-        double variance = campaign.getTotalBudget() - totals.approvedActual();
+        BigDecimal variance = campaign.getTotalBudget().subtract(totals.approvedActual());
         return new RepairCampaignCostSummaryDto(
                 campaign.getId(),
                 campaign.getTotalBudget(),
                 totals.approvedActual(),
                 totals.pendingActual(),
                 totals.rejectedActual(),
-                campaign.getTotalBudget() - totals.approvedActual(),
+                campaign.getTotalBudget().subtract(totals.approvedActual()),
                 variance,
-                variancePercentage(campaign.getTotalBudget(), totals.approvedActual())
+                variancePercentage(campaign.getTotalBudget(), totals.approvedActual()),
+                campaign.getCurrencyCode()
         );
     }
 
@@ -576,12 +582,16 @@ public class RepairCampaignService {
                 campaign.getTotalBudget(),
                 totals.approvedActual(),
                 totals.pendingActual(),
-                budget == null ? 0 : budget.getTotalPlanned(),
-                budget == null ? 0 : budget.getTotalActual(),
-                budget == null ? 0 : budget.getTotalPlanned() - budget.getTotalActual(),
+                budget == null ? BigDecimal.ZERO : decimal(budget.getTotalPlanned()),
+                budget == null ? BigDecimal.ZERO : decimal(budget.getTotalActual()),
+                budget == null ? BigDecimal.ZERO : decimal(budget.getTotalPlanned()).subtract(decimal(budget.getTotalActual())),
                 unallocatedCosts.size(),
-                unallocatedCosts.stream().mapToDouble(ActualCost::getAmount).sum(),
-                stages
+                unallocatedCosts.stream()
+                        .map(ActualCost::getAmount)
+                        .map(RepairCampaignService::decimal)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add),
+                stages,
+                campaign.getCurrencyCode()
         );
     }
 
@@ -661,7 +671,7 @@ public class RepairCampaignService {
         if (!r.endDate().isAfter(r.startDate())) {
             throw RestException.badRequest("End date must be after start date");
         }
-        if (r.totalBudget() < 0) {
+        if (r.totalBudget().compareTo(BigDecimal.ZERO) < 0) {
             throw RestException.badRequest("Total budget must be non-negative");
         }
         RepairCampaignScopeType scopeType = effectiveScopeType(r.scopeType());
@@ -729,7 +739,7 @@ public class RepairCampaignService {
             if (dto.departmentId() == null) {
                 throw RestException.badRequest("Participant department id is required");
             }
-            if (dto.plannedBudget() < 0) {
+            if (dto.plannedBudget().compareTo(BigDecimal.ZERO) < 0) {
                 throw RestException.badRequest("Participant department planned budget must be non-negative");
             }
             RepairCampaignDepartment item = new RepairCampaignDepartment();
@@ -749,7 +759,7 @@ public class RepairCampaignService {
         if (!r.endDate().isAfter(r.startDate())) {
             throw RestException.badRequest("Stage end date must be after start date");
         }
-        if (r.plannedCost() < 0) {
+        if (r.plannedCost().compareTo(BigDecimal.ZERO) < 0) {
             throw RestException.badRequest("Stage planned cost must be non-negative");
         }
     }
@@ -914,11 +924,12 @@ public class RepairCampaignService {
         );
     }
 
-    private double sumByStatus(Collection<ActualCost> costs, ActualCostStatus status) {
+    private BigDecimal sumByStatus(Collection<ActualCost> costs, ActualCostStatus status) {
         return safeList(costs).stream()
                 .filter(cost -> cost.getStatus() == status)
-                .mapToDouble(ActualCost::getAmount)
-                .sum();
+                .map(ActualCost::getAmount)
+                .map(RepairCampaignService::decimal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private List<ContractorWork> contractorWorksForWorkOrders(List<WorkOrder> workOrders) {
@@ -983,7 +994,7 @@ public class RepairCampaignService {
                 c.getDepartmentId(), departmentName(c.getDepartmentId()), c.getStatus(),
                 c.getStartDate(), c.getEndDate(),
                 c.getTotalBudget(), totals.approvedActual(),
-                c.getTotalBudget() - totals.approvedActual(),
+                c.getTotalBudget().subtract(totals.approvedActual()),
                 c.getScope(), c.getNotes(),
                 stageDtos,
                 effectiveScopeType(c.getScopeType()),
@@ -994,10 +1005,11 @@ public class RepairCampaignService {
                 totals.approvedActual(),
                 totals.pendingActual(),
                 c.getMaintenanceBudgetId(),
-                budget == null ? 0 : budget.getTotalPlanned(),
-                budget == null ? 0 : budget.getTotalActual(),
-                budget == null ? 0 : budget.getTotalPlanned() - budget.getTotalActual(),
-                budget == null || budget.getStatus() == null ? null : budget.getStatus().name()
+                budget == null ? BigDecimal.ZERO : decimal(budget.getTotalPlanned()),
+                budget == null ? BigDecimal.ZERO : decimal(budget.getTotalActual()),
+                budget == null ? BigDecimal.ZERO : decimal(budget.getTotalPlanned()).subtract(decimal(budget.getTotalActual())),
+                budget == null || budget.getStatus() == null ? null : budget.getStatus().name(),
+                c.getCurrencyCode()
         );
     }
 
@@ -1019,9 +1031,9 @@ public class RepairCampaignService {
                 totals.approvedActual(),
                 totals.pendingActual(),
                 stage.getBudgetLineId(),
-                budgetLine == null ? 0 : budgetLine.getPlannedAmount(),
-                budgetLine == null ? 0 : budgetLine.getActualAmount(),
-                budgetLine == null ? 0 : budgetLine.getPlannedAmount() - budgetLine.getActualAmount()
+                budgetLine == null ? BigDecimal.ZERO : decimal(budgetLine.getPlannedAmount()),
+                budgetLine == null ? BigDecimal.ZERO : decimal(budgetLine.getActualAmount()),
+                budgetLine == null ? BigDecimal.ZERO : decimal(budgetLine.getPlannedAmount()).subtract(decimal(budgetLine.getActualAmount()))
         );
     }
 
@@ -1035,10 +1047,10 @@ public class RepairCampaignService {
                 stage.getPlannedCost(),
                 totals.approvedActual(),
                 totals.pendingActual(),
-                budgetLine == null ? 0 : budgetLine.getPlannedAmount(),
-                budgetLine == null ? 0 : budgetLine.getActualAmount(),
-                budgetLine == null ? 0 : budgetLine.getPlannedAmount() - budgetLine.getActualAmount(),
-                stage.getPlannedCost() - totals.approvedActual()
+                budgetLine == null ? BigDecimal.ZERO : decimal(budgetLine.getPlannedAmount()),
+                budgetLine == null ? BigDecimal.ZERO : decimal(budgetLine.getActualAmount()),
+                budgetLine == null ? BigDecimal.ZERO : decimal(budgetLine.getPlannedAmount()).subtract(decimal(budgetLine.getActualAmount())),
+                stage.getPlannedCost().subtract(totals.approvedActual())
         );
     }
 
@@ -1101,11 +1113,13 @@ public class RepairCampaignService {
                 .count();
     }
 
-    private double variancePercentage(double plannedBudget, double approvedActual) {
-        if (plannedBudget <= 0) {
-            return 0;
+    private BigDecimal variancePercentage(BigDecimal plannedBudget, BigDecimal approvedActual) {
+        if (plannedBudget.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
         }
-        return ((plannedBudget - approvedActual) / plannedBudget) * 100.0;
+        return plannedBudget.subtract(approvedActual)
+                .divide(plannedBudget, 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100));
     }
 
     private RepairCampaignScopeType effectiveScopeType(RepairCampaignScopeType scopeType) {
@@ -1170,6 +1184,7 @@ public class RepairCampaignService {
         copy.setEndDate(source.getEndDate());
         copy.setTotalBudget(source.getTotalBudget());
         copy.setTotalActual(source.getTotalActual());
+        copy.setCurrencyCode(source.getCurrencyCode());
         copy.setScope(source.getScope());
         copy.setNotes(source.getNotes());
         return copy;
@@ -1191,6 +1206,10 @@ public class RepairCampaignService {
         return copy;
     }
 
-    private record CampaignCostTotals(double approvedActual, double pendingActual, double rejectedActual) {
+    private static BigDecimal decimal(double value) {
+        return BigDecimal.valueOf(value);
+    }
+
+    private record CampaignCostTotals(BigDecimal approvedActual, BigDecimal pendingActual, BigDecimal rejectedActual) {
     }
 }
