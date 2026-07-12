@@ -56,10 +56,10 @@ class RepairCampaignControllerContractTest {
     void workItemEndpointsDeclareReadAndMutationPbac() {
         java.util.Map<String, String> expected = java.util.Map.of(
                 "listWorkItems", "REPAIR_CAMPAIGN_READ",
-                "addWorkItem", "REPAIR_CAMPAIGN_UPDATE",
-                "updateWorkItem", "REPAIR_CAMPAIGN_UPDATE",
-                "removeWorkItem", "REPAIR_CAMPAIGN_UPDATE",
-                "reorderWorkItems", "REPAIR_CAMPAIGN_UPDATE");
+                "addWorkItem", "REPAIR_CAMPAIGN_MANAGE_WORK",
+                "updateWorkItem", "REPAIR_CAMPAIGN_MANAGE_WORK",
+                "removeWorkItem", "REPAIR_CAMPAIGN_MANAGE_WORK",
+                "reorderWorkItems", "REPAIR_CAMPAIGN_MANAGE_WORK");
         for (var method : RepairCampaignController.class.getDeclaredMethods()) {
             if (!expected.containsKey(method.getName())) continue;
             PreAuthorize annotation = method.getAnnotation(PreAuthorize.class);
@@ -75,11 +75,11 @@ class RepairCampaignControllerContractTest {
         java.util.Map<String, String> expected = java.util.Map.of(
                 "getShutdownLink", "REPAIR_CAMPAIGN_READ",
                 "listShutdownLinks", "REPAIR_CAMPAIGN_READ",
-                "linkShutdown", "REPAIR_CAMPAIGN_UPDATE",
-                "unlinkShutdown", "REPAIR_CAMPAIGN_UPDATE",
+                "linkShutdown", "REPAIR_CAMPAIGN_MANAGE_SHUTDOWN_LINKS",
+                "unlinkShutdown", "REPAIR_CAMPAIGN_MANAGE_SHUTDOWN_LINKS",
                 "listWorkItemWindows", "REPAIR_CAMPAIGN_READ",
-                "addWorkItemWindow", "REPAIR_CAMPAIGN_UPDATE",
-                "removeWorkItemWindow", "REPAIR_CAMPAIGN_UPDATE");
+                "addWorkItemWindow", "REPAIR_CAMPAIGN_MANAGE_SHUTDOWN_LINKS",
+                "removeWorkItemWindow", "REPAIR_CAMPAIGN_MANAGE_SHUTDOWN_LINKS");
         for (var method : RepairCampaignController.class.getDeclaredMethods()) {
             if (!expected.containsKey(method.getName())) continue;
             assertThat(method.getAnnotation(PreAuthorize.class)).isNotNull();
@@ -93,11 +93,11 @@ class RepairCampaignControllerContractTest {
     void planningEndpointsDeclareReadAndMutationPbac() {
         java.util.Map<String, String> expected = java.util.Map.of(
                 "listDependencies", "REPAIR_CAMPAIGN_READ",
-                "addDependency", "REPAIR_CAMPAIGN_UPDATE",
-                "removeDependency", "REPAIR_CAMPAIGN_UPDATE",
+                "addDependency", "REPAIR_CAMPAIGN_MANAGE_DEPENDENCIES",
+                "removeDependency", "REPAIR_CAMPAIGN_MANAGE_DEPENDENCIES",
                 "listResources", "REPAIR_CAMPAIGN_READ",
-                "assignResource", "REPAIR_CAMPAIGN_UPDATE",
-                "removeResource", "REPAIR_CAMPAIGN_UPDATE",
+                "assignResource", "REPAIR_CAMPAIGN_MANAGE_RESOURCES",
+                "removeResource", "REPAIR_CAMPAIGN_MANAGE_RESOURCES",
                 "assessPlanning", "REPAIR_CAMPAIGN_READ");
         for (var method : RepairCampaignController.class.getDeclaredMethods()) {
             if (!expected.containsKey(method.getName())) continue;
@@ -110,7 +110,7 @@ class RepairCampaignControllerContractTest {
 
     @Test
     void materialEndpointsDeclareReadAndMutationPbac() {
-        java.util.Map<String,String> expected=java.util.Map.of("listMaterials","REPAIR_CAMPAIGN_READ","addMaterial","REPAIR_CAMPAIGN_UPDATE","updateMaterial","REPAIR_CAMPAIGN_UPDATE","removeMaterial","REPAIR_CAMPAIGN_UPDATE");
+        java.util.Map<String,String> expected=java.util.Map.of("listMaterials","REPAIR_CAMPAIGN_READ","addMaterial","REPAIR_CAMPAIGN_MANAGE_MATERIALS","updateMaterial","REPAIR_CAMPAIGN_MANAGE_MATERIALS","removeMaterial","REPAIR_CAMPAIGN_MANAGE_MATERIALS");
         for(var method:RepairCampaignController.class.getDeclaredMethods()){if(!expected.containsKey(method.getName()))continue;assertThat(method.getAnnotation(PreAuthorize.class)).isNotNull();assertThat(method.getAnnotation(PreAuthorize.class).value()).contains(expected.get(method.getName()));}
         assertThat(java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods()).map(java.lang.reflect.Method::getName).filter(expected::containsKey)).hasSize(expected.size());
     }
@@ -176,6 +176,8 @@ class RepairCampaignControllerContractTest {
     private RepairCampaignShutdownLinkService shutdownLinkService;
     @Mock
     private com.toir.service.repair.RepairCampaignMaterialService materialService;
+    @Mock
+    private com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
 
     @Mock
     private ApprovalService approvalService;
@@ -188,7 +190,7 @@ class RepairCampaignControllerContractTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService, shutdownLinkService, materialService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService, shutdownLinkService, materialService, mutationImpactService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();

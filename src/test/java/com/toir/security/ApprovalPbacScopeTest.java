@@ -1456,6 +1456,7 @@ class ApprovalPbacScopeTest {
                 userRepository,
                 mock(com.toir.repository.equipment.EquipmentCommissioningActRepository.class),
                 plannedShutdownRepository,
+                mock(com.toir.repository.repair.RepairCampaignRepository.class),
                 new SecurityAccessService()
         );
     }

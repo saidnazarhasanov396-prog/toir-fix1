@@ -21,6 +21,7 @@ public class RepairCampaignDependencyPolicy {
     private final RepairCampaignWorkDependencyRepository dependencies;
     private final ScopeAccessService scope;
     private final AuditBuilderService audit;
+    private final RepairCampaignMutationImpactService mutationImpactService;
 
     @Transactional(readOnly=true)
     public List<RepairCampaignDependencyResponse> list(UUID campaignId) {
@@ -38,6 +39,7 @@ public class RepairCampaignDependencyPolicy {
         if (cycle(all,r.predecessorId(),r.successorId())) throw RestException.conflict("DEPENDENCY_CYCLE");
         var d=dependencies.findByRepairCampaignIdAndPredecessorWorkItemIdAndSuccessorWorkItemId(campaignId,r.predecessorId(),r.successorId()).orElseGet(RepairCampaignWorkDependency::new);
         if(d.getId()!=null&&!d.isDeleted()) throw RestException.conflict("DEPENDENCY_DUPLICATE");
+        mutationImpactService.apply(c, RepairCampaignMutationType.DEPENDENCIES);
         d.setRepairCampaignId(campaignId); d.setPredecessorWorkItemId(r.predecessorId()); d.setSuccessorWorkItemId(r.successorId()); d.setDeleted(false);
         try { dependencies.saveAndFlush(d); } catch(DataIntegrityViolationException e) {
             if(messages(e).contains("uq_repair_campaign_dependencies_active_edge")) throw RestException.conflict("DEPENDENCY_DUPLICATE"); throw e;
@@ -51,7 +53,7 @@ public class RepairCampaignDependencyPolicy {
     public RepairCampaignDependencyResponse remove(UUID campaignId,UUID id,Long v) {
         var c=find(campaignId,true); version(c,v); mutable(c);
         var d=dependencies.findByIdAndRepairCampaignIdAndIsDeletedFalse(id,campaignId).orElseThrow(()->RestException.notFound("Dependency not found"));
-        var before=response(d,c.getVersion(),true); d.setDeleted(true); dependencies.saveAndFlush(d);
+        var before=response(d,c.getVersion(),true); mutationImpactService.apply(c, RepairCampaignMutationType.DEPENDENCIES); d.setDeleted(true); dependencies.saveAndFlush(d);
         var out=response(d,touch(c),false); audit.log("repair_campaign_dependency",id.toString(),AuditAction.DELETE,AuditModule.REPAIR_CAMPAIGN,"Dependency removed",before,out); return out;
     }
 
@@ -70,7 +72,7 @@ public class RepairCampaignDependencyPolicy {
     private RepairCampaign find(UUID id,boolean lock){var c=(lock?campaigns.findLockedByIdAndIsDeletedFalse(id):campaigns.findByIdAndIsDeletedFalse(id)).orElseThrow(()->RestException.notFound("Campaign not found"));scope.assertCanAccessDepartment(c.getDepartmentId());return c;}
     private void item(UUID c,UUID id){items.findByIdAndCampaignIdAndIsDeletedFalse(id,c).orElseThrow(()->RestException.badRequest("DEPENDENCY_FOREIGN_ITEM"));}
     private static void version(RepairCampaign c,Long v){if(v==null||!Objects.equals(v,c.getVersion()))throw RestException.conflict("CAMPAIGN_VERSION_CONFLICT");}
-    private static void mutable(RepairCampaign c){if(c.getStatus()==RepairCampaignStatus.PENDING_APPROVAL)throw RestException.conflict("CAMPAIGN_PLANNING_APPROVAL_INVALIDATION_REQUIRED");if(c.getStatus().ordinal()>=RepairCampaignStatus.APPROVED.ordinal())throw RestException.conflict("CAMPAIGN_PLANNING_FROZEN");}
+    private static void mutable(RepairCampaign c){if(c.getStatus().ordinal()>RepairCampaignStatus.PREPARATION.ordinal()||(c.getStatus().ordinal()>=RepairCampaignStatus.APPROVED.ordinal()&&c.getApprovalScopeHash()==null))throw RestException.conflict("CAMPAIGN_PLANNING_FROZEN");if(c.getStatus()==RepairCampaignStatus.PENDING_APPROVAL&&c.getApprovalScopeHash()==null)throw RestException.conflict("CAMPAIGN_PLANNING_APPROVAL_INVALIDATION_REQUIRED");}
     private long touch(RepairCampaign c){c.setUpdatedAt(Instant.now());return campaigns.saveAndFlush(c).getVersion();}
     private static RepairCampaignDependencyResponse response(RepairCampaignWorkDependency d,long v,boolean a){return new RepairCampaignDependencyResponse(d.getId(),d.getRepairCampaignId(),d.getPredecessorWorkItemId(),d.getSuccessorWorkItemId(),v,a);}
     static boolean cycle(List<RepairCampaignWorkDependency> rows,UUID p,UUID s){Map<UUID,List<UUID>>g=new TreeMap<>();rows.forEach(d->g.computeIfAbsent(d.getPredecessorWorkItemId(),x->new ArrayList<>()).add(d.getSuccessorWorkItemId()));if(p!=null)g.computeIfAbsent(p,x->new ArrayList<>()).add(s);Set<UUID>seen=new HashSet<>(),stack=new HashSet<>();for(UUID n:g.keySet())if(dfs(n,g,seen,stack))return true;return false;}

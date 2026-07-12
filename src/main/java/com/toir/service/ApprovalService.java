@@ -415,6 +415,7 @@ public class ApprovalService implements ApprovalOrchestrator {
             case REPAIR_REQUEST -> repairRequestServiceProvider.getObject().assertMeterReadingsReadyForApproval(targetId);
             case MAINTENANCE_REGULATION -> maintenanceRegulationServiceProvider.getObject().validateCanApprove(targetId);
             case PLANNED_SHUTDOWN -> loadPlannedShutdownApprovalSnapshot(targetId);
+            case REPAIR_CAMPAIGN -> loadRepairCampaignApprovalSnapshot(targetId);
             case EQUIPMENT_COMMISSIONING -> {
                 if (equipmentCommissioningActServiceProvider == null) {
                     throw RestException.conflict("Equipment commissioning approval service is unavailable");
@@ -455,6 +456,31 @@ public class ApprovalService implements ApprovalOrchestrator {
     private static String plannedShutdownApprovalPayload(PlannedShutdownApprovalSnapshot snapshot) {
         return "{\"scopeVersion\":" + snapshot.scopeVersion()
                 + ",\"scopeHash\":\"" + snapshot.scopeHash() + "\"}";
+    }
+
+    private record RepairCampaignApprovalSnapshot(Long scopeVersion, String scopeHash, Long campaignVersion) {}
+
+    private RepairCampaignApprovalSnapshot loadRepairCampaignApprovalSnapshot(UUID targetId) {
+        return jdbcTemplate.queryForObject("""
+                select status, scope_version, approval_scope_version, approval_scope_hash, version
+                from repair_campaigns where id = ? and is_deleted = false
+                """, (rs, rowNum) -> {
+            Long scopeVersion = rs.getLong("scope_version");
+            Long approvalVersion = rs.getLong("approval_scope_version");
+            String scopeHash = rs.getString("approval_scope_hash");
+            if (!"PENDING_APPROVAL".equals(rs.getString("status"))
+                    || !Objects.equals(scopeVersion, approvalVersion)
+                    || scopeHash == null || !scopeHash.matches("[0-9a-f]{64}")) {
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_STALE");
+            }
+            return new RepairCampaignApprovalSnapshot(scopeVersion, scopeHash, rs.getLong("version"));
+        }, targetId);
+    }
+
+    private static String repairCampaignApprovalPayload(RepairCampaignApprovalSnapshot snapshot) {
+        return "{\"scopeVersion\":" + snapshot.scopeVersion()
+                + ",\"scopeHash\":\"" + snapshot.scopeHash()
+                + "\",\"campaignVersion\":" + snapshot.campaignVersion() + "}";
     }
 
     @Transactional
@@ -1127,6 +1153,9 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
             PlannedShutdownApprovalSnapshot snapshot = loadPlannedShutdownApprovalSnapshot(targetId);
             request.setPayloadJson(plannedShutdownApprovalPayload(snapshot));
+        }
+        if (targetType == ApprovalTargetType.REPAIR_CAMPAIGN) {
+            request.setPayloadJson(repairCampaignApprovalPayload(loadRepairCampaignApprovalSnapshot(targetId)));
         }
         if (request.getExpiresAt() == null) {
             request.setExpiresAt(Instant.now().plus(slaPolicyService.slaFor(request)));

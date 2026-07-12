@@ -14,5 +14,7 @@ public interface RepairCampaignWorkItemWindowRepository extends JpaRepository<Re
             UUID id, UUID campaignId, UUID shutdownId);
     List<RepairCampaignWorkItemWindow> findAllByRepairCampaignIdAndPlannedShutdownIdAndIsDeletedFalseOrderById(
             UUID campaignId, UUID shutdownId);
+    List<RepairCampaignWorkItemWindow> findAllByRepairCampaignIdAndIsDeletedFalseOrderByPlannedShutdownIdAscIdAsc(
+            UUID campaignId);
     boolean existsByRepairCampaignIdAndPlannedShutdownIdAndIsDeletedFalse(UUID campaignId, UUID shutdownId);
 }

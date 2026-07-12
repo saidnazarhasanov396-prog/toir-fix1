@@ -43,12 +43,14 @@ public class RepairCampaignShutdownLinkService {
     private final PlannedShutdownWorkItemRepository shutdownItemRepository;
     private final ScopeAccessService scopeAccessService;
     private final AuditBuilderService audit;
+    private final RepairCampaignMutationImpactService mutationImpactService;
 
     @Transactional
     public RepairCampaignShutdownLinkResponse link(UUID campaignId, UUID shutdownId,
                                                     RepairCampaignShutdownLinkRequest request) {
         Pair pair = lockPair(campaignId, shutdownId);
         validate(pair, request.repairCampaignVersion(), request.plannedShutdownVersion());
+        mutationImpactService.apply(pair.campaign, RepairCampaignMutationType.SHUTDOWN_LINKS);
         PlannedShutdownCampaignLink link = linkRepository
                 .findByPlannedShutdownIdAndRepairCampaignId(shutdownId, campaignId)
                 .orElseGet(PlannedShutdownCampaignLink::new);
@@ -112,6 +114,7 @@ public class RepairCampaignShutdownLinkService {
         if (windowRepository.existsByRepairCampaignIdAndPlannedShutdownIdAndIsDeletedFalse(campaignId, shutdownId)) {
             throw RestException.conflict("CAMPAIGN_SHUTDOWN_LINK_HAS_WINDOWS");
         }
+        mutationImpactService.apply(pair.campaign, RepairCampaignMutationType.SHUTDOWN_LINKS);
         var link = activeLink(campaignId, shutdownId);
         var before = linkResponse(link,
                 new Versions(pair.campaign.getVersion(), pair.shutdown.getVersion()), true);
@@ -135,6 +138,7 @@ public class RepairCampaignShutdownLinkService {
                 .findByIdAndPlannedShutdownIdAndIsDeletedFalse(request.shutdownWorkItemId(), shutdownId)
                 .orElseThrow(() -> RestException.notFound("Shutdown work item not found"));
         requireSameCanonicalIdentity(campaignItem, shutdownItem);
+        mutationImpactService.apply(pair.campaign, RepairCampaignMutationType.SHUTDOWN_LINKS);
         RepairCampaignWorkItemWindow window = windowRepository
                 .findByRepairCampaignWorkItemIdAndPlannedShutdownIdAndShutdownWorkItemId(
                         campaignItem.getId(), shutdownId, shutdownItem.getId())
@@ -170,6 +174,7 @@ public class RepairCampaignShutdownLinkService {
                 windowId, campaignId, shutdownId).orElseThrow(() -> RestException.notFound("Campaign work item window not found"));
         var before = windowResponse(window,
                 new Versions(pair.campaign.getVersion(), pair.shutdown.getVersion()), true);
+        mutationImpactService.apply(pair.campaign, RepairCampaignMutationType.SHUTDOWN_LINKS);
         window.setDeleted(true); windowRepository.saveAndFlush(window);
         Versions versions = touch(pair); var response = windowResponse(window, versions, false);
         auditBoth(pair, windowId, AuditAction.DELETE, "Campaign work item removed from shutdown window", before, response);

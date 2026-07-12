@@ -53,6 +53,7 @@ class RepairCampaignMaterialServiceTest {
     @Mock ReservationRepository reservations;
     @Mock ScopeAccessService scope;
     @Mock AuditBuilderService audit;
+    @Mock RepairCampaignMutationImpactService mutationImpactService;
     @InjectMocks RepairCampaignMaterialService service;
 
     UUID campaignId=UUID.randomUUID(),itemId=UUID.randomUUID(),spareId=UUID.randomUUID(),warehouseId=UUID.randomUUID();

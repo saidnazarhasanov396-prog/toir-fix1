@@ -57,7 +57,8 @@ public record RepairCampaignDto(
         Instant closedAt,
         Instant cancelledAt,
         RepairCampaignStatus suspendedFromStatus,
-        Long closureVersion
+        Long closureVersion,
+        Long scopeVersion
 ) {
     public RepairCampaignDto(
             UUID id,
@@ -79,7 +80,7 @@ public record RepairCampaignDto(
                 totalActual, variance, description, notes, stages, RepairCampaignScopeType.CUSTOM, null, List.of(),
                 0, 0, totalActual, BigDecimal.ZERO, null, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                 null, "UZS", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, 0L);
+                null, null, null, null, null, null, null, null, null, 0L, 0L);
     }
 
     public RepairCampaignDto(
@@ -92,7 +93,7 @@ public record RepairCampaignDto(
                 totalActual, variance, description, notes, stages, RepairCampaignScopeType.CUSTOM, null, List.of(),
                 0, 0, totalActual, BigDecimal.ZERO, null, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                 null, currencyCode, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, 0L);
+                null, null, null, null, null, null, null, null, null, 0L, 0L);
     }
 
     public RepairCampaignDto(
@@ -123,7 +124,7 @@ public record RepairCampaignDto(
                 workOrderCount, completedWorkOrderCount, approvedActual, pendingActual, null,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null, "UZS",
                 null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, 0L);
+                null, null, null, null, null, null, null, null, null, 0L, 0L);
     }
 
     public static RepairCampaignDto from(RepairCampaign c, String departmentName) {
@@ -164,7 +165,8 @@ public record RepairCampaignDto(
                 c.getClosedAt(),
                 c.getCancelledAt(),
                 c.getSuspendedFromStatus(),
-                c.getClosureVersion()
+                c.getClosureVersion(),
+                c.getScopeVersion()
         );
     }
 

@@ -49,6 +49,7 @@ public class RepairCampaignWorkItemService {
     private final RepairCampaignDependencyPolicy dependencyPolicy;
     private final RepairCampaignResourcePolicy resourcePolicy;
     private final RepairCampaignMaterialService materialService;
+    private final RepairCampaignMutationImpactService mutationImpactService;
 
     public List<com.toir.dto.repaircampaign.RepairCampaignDependencyResponse> listDependencies(UUID campaignId) { return dependencyPolicy.list(campaignId); }
     public com.toir.dto.repaircampaign.RepairCampaignDependencyResponse addDependency(UUID campaignId, com.toir.dto.repaircampaign.RepairCampaignDependencyRequest r) { return dependencyPolicy.add(campaignId, r); }
@@ -77,6 +78,7 @@ public class RepairCampaignWorkItemService {
         requireMutable(campaign);
         ResolvedInput input = resolveInput(campaign, request);
         requireAvailable(campaignId, null, request.sourceType(), request.sourceId(), request.orderNumber());
+        mutationImpactService.apply(campaign, com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
         RepairCampaignWorkItem item = new RepairCampaignWorkItem();
         item.setCampaign(campaign);
         apply(item, request, input);
@@ -95,13 +97,16 @@ public class RepairCampaignWorkItemService {
         RepairCampaign campaign = findLocked(campaignId);
         requireVersion(campaign, request.version());
         RepairCampaignWorkItem item = findItem(campaignId, itemId);
-        boolean frozen = FROZEN.contains(campaign.getStatus());
+        boolean frozen = FROZEN.contains(campaign.getStatus())
+                && (campaign.getStatus().ordinal() > RepairCampaignStatus.PREPARATION.ordinal()
+                || campaign.getApprovalScopeHash() == null);
         if (frozen && identityChanged(item, request)) throw RestException.conflict("CAMPAIGN_SCOPE_FROZEN");
         ResolvedInput input = frozen
                 ? new ResolvedInput(item.getEquipmentId(), item.getSourceType() == RepairCampaignWorkItemSourceType.MANUAL
                         ? requireManualTitle(request.title()) : item.getTitle())
                 : resolveInput(campaign, request);
         requireAvailable(campaignId, itemId, request.sourceType(), request.sourceId(), request.orderNumber());
+        mutationImpactService.apply(campaign, com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
         RepairCampaignWorkItemResponse before = response(item, campaign.getVersion());
         apply(item, request, input);
         save(item);
@@ -122,6 +127,7 @@ public class RepairCampaignWorkItemService {
                 || materialService.assigned(campaignId, itemId)) {
             throw RestException.conflict("CAMPAIGN_WORK_ITEM_PLANNING_LINKED");
         }
+        mutationImpactService.apply(campaign, com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
         RepairCampaignWorkItemResponse before = response(item, campaign.getVersion());
         item.setDeleted(true);
         repository.saveAndFlush(item);
@@ -147,6 +153,7 @@ public class RepairCampaignWorkItemService {
         if (!byId.keySet().equals(new HashSet<>(itemIds))) {
             throw RestException.badRequest("Reorder contains a work item outside this campaign");
         }
+        mutationImpactService.apply(campaign, com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
         List<RepairCampaignWorkItemResponse> before = items.stream()
                 .map(item -> response(item, campaign.getVersion())).toList();
         int temporary = items.stream().mapToInt(RepairCampaignWorkItem::getOrderNumber).max().orElse(0)
@@ -262,7 +269,11 @@ public class RepairCampaignWorkItemService {
     }
 
     private static void requireMutable(RepairCampaign campaign) {
-        if (FROZEN.contains(campaign.getStatus())) throw RestException.conflict("CAMPAIGN_SCOPE_FROZEN");
+        if (FROZEN.contains(campaign.getStatus())
+                && (campaign.getStatus().ordinal() > RepairCampaignStatus.PREPARATION.ordinal()
+                || campaign.getApprovalScopeHash() == null)) {
+            throw RestException.conflict("CAMPAIGN_SCOPE_FROZEN");
+        }
     }
 
     private static boolean identityChanged(RepairCampaignWorkItem item, RepairCampaignWorkItemRequest request) {

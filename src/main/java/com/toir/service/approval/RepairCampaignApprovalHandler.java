@@ -26,7 +26,7 @@ public class RepairCampaignApprovalHandler implements ApprovalActionHandler {
         if (request.getActionType() == ApprovalActionType.REJECT) {
             return "{\"status\":\"REJECTED\"}";
         }
-        repairCampaignService.finalizeApprovalFromApprovalRequest(targetId(request));
+        repairCampaignService.finalizeApprovalFromApprovalRequest(request);
         return "{\"status\":\"APPROVED\"}";
     }
 

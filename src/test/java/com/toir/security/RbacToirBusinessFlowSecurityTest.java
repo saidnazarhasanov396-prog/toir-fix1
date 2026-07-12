@@ -82,6 +82,8 @@ class RbacToirBusinessFlowSecurityTest {
     RepairCampaignWorkItemService repairCampaignWorkItemService;
     @org.springframework.boot.test.mock.mockito.MockBean
     com.toir.service.repair.RepairCampaignMaterialService repairCampaignMaterialService;
+    @org.springframework.boot.test.mock.mockito.MockBean
+    com.toir.service.repair.RepairCampaignMutationImpactService repairCampaignMutationImpactService;
 
     @TestConfiguration
     static class SecurityBeans {
@@ -279,7 +281,7 @@ class RbacToirBusinessFlowSecurityTest {
     }
 
     @Test
-    @WithMockUser(authorities = PermissionConstants.REPAIR_CAMPAIGN_UPDATE)
+    @WithMockUser(authorities = PermissionConstants.REPAIR_CAMPAIGN_MANAGE_SCOPE)
     void campaignUpdaterCanUpdateCampaign() throws Exception {
         when(repairCampaignService.update(any(), any())).thenReturn(campaignDto());
 
@@ -290,7 +292,7 @@ class RbacToirBusinessFlowSecurityTest {
     }
 
     @Test
-    @WithMockUser(authorities = PermissionConstants.REPAIR_CAMPAIGN_UPDATE)
+    @WithMockUser(authorities = PermissionConstants.REPAIR_CAMPAIGN_MANAGE_SCOPE)
     void campaignUpdaterStillReceivesForbiddenForForeignOwnerScope() throws Exception {
         when(repairCampaignService.update(any(), any()))
                 .thenThrow(new AccessDeniedException("Access denied by repair campaign scope"));
@@ -408,7 +410,7 @@ class RbacToirBusinessFlowSecurityTest {
                         PermissionConstants.REPAIR_CAMPAIGN_CREATE),
                 Arguments.of(RepairCampaignController.class, "update",
                         new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignRequest.class},
-                        PermissionConstants.REPAIR_CAMPAIGN_UPDATE),
+                        PermissionConstants.REPAIR_CAMPAIGN_MANAGE_SCOPE),
                 Arguments.of(RepairCampaignController.class, "start",
                         new Class<?>[]{UUID.class}, PermissionConstants.REPAIR_CAMPAIGN_START),
                 Arguments.of(RepairCampaignController.class, "complete",

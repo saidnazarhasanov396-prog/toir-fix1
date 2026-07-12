@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 @ExtendWith(org.mockito.junit.jupiter.MockitoExtension.class)
 class RepairCampaignDependencyPolicyTest {
- @Mock RepairCampaignRepository campaigns; @Mock RepairCampaignWorkItemRepository items; @Mock RepairCampaignWorkDependencyRepository dependencies; @Mock ScopeAccessService scope; @Mock AuditBuilderService audit; @InjectMocks RepairCampaignDependencyPolicy policy;
+ @Mock RepairCampaignRepository campaigns; @Mock RepairCampaignWorkItemRepository items; @Mock RepairCampaignWorkDependencyRepository dependencies; @Mock ScopeAccessService scope; @Mock AuditBuilderService audit; @Mock RepairCampaignMutationImpactService mutationImpactService; @InjectMocks RepairCampaignDependencyPolicy policy;
  UUID campaignId=UUID.randomUUID(),a=UUID.randomUUID(),b=UUID.randomUUID(); RepairCampaign campaign;
  @BeforeEach void setup(){campaign=new RepairCampaign();campaign.setId(campaignId);campaign.setVersion(1L);campaign.setStatus(RepairCampaignStatus.DRAFT);lenient().when(campaigns.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));}
  @Test void rejectsSelfAndForeignItems(){assertThatThrownBy(()->policy.add(campaignId,new RepairCampaignDependencyRequest(1L,a,a))).hasMessageContaining("SELF");when(items.findByIdAndCampaignIdAndIsDeletedFalse(a,campaignId)).thenReturn(Optional.empty());assertThatThrownBy(()->policy.add(campaignId,new RepairCampaignDependencyRequest(1L,a,b))).hasMessageContaining("FOREIGN_ITEM");}

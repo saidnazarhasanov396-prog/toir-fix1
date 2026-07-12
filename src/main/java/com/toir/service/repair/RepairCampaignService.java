@@ -58,6 +58,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.ObjectProvider;
+import com.toir.service.ApprovalService;
+import com.toir.dto.approval.ApprovalStartRequest;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
+import com.toir.entity.ApprovalRequest;
+import com.toir.security.ScopeAccessService;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -105,6 +112,10 @@ public class RepairCampaignService {
     private final RepairAcceptanceRepository repairAcceptanceRepository;
     private final WorkOrderService workOrderService;
     private final AuditBuilderService auditBuilderService;
+    private final RepairCampaignApprovalPolicy approvalPolicy;
+    private final ScopeAccessService scopeAccessService;
+    private final ObjectProvider<ApprovalService> approvalServiceProvider;
+    private final RepairCampaignMutationImpactService mutationImpactService;
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findAll() {
@@ -175,6 +186,7 @@ public class RepairCampaignService {
         validateResponsibleEmployee(r.departmentId(), r.responsibleEmployeeId());
         validateMaintenanceBudgetLink(r);
         validateExistingStageBudgetLines(c, r.maintenanceBudgetId());
+        mutationImpactService.apply(c, com.toir.enums.RepairCampaignMutationType.METADATA);
 
         RepairCampaign before = snapshot(c);
         c.setName(r.name());
@@ -199,6 +211,18 @@ public class RepairCampaignService {
         return toDto(saved);
     }
 
+    @Transactional
+    public RepairCampaignDto requestApproval(UUID id, Long expectedVersion, Long expectedScopeVersion, String comment) {
+        RepairCampaign campaign = getLockedOrThrow(id);
+        scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
+        validateExpectedVersion(campaign, expectedVersion);
+        approvalPolicy.prepareRequest(campaign, expectedScopeVersion);
+        RepairCampaign saved = repository.saveAndFlush(campaign);
+        approvalServiceProvider.getObject().requestApproval(new ApprovalStartRequest(
+                ApprovalTargetType.REPAIR_CAMPAIGN, saved.getId(), ApprovalActionType.APPROVE, comment));
+        return toDto(saved);
+    }
+
     private String nextCode() {
         String prefix = "RCMP-" + java.time.Year.now().getValue() + "-";
         return CodeGenerationUtils.nextYearSequenceCode(
@@ -218,6 +242,19 @@ public class RepairCampaignService {
         c.setStatus(RepairCampaignStatus.APPROVED);
         RepairCampaign saved = repository.save(c);
         logCampaign(saved, AuditAction.UPDATE, "Ремонтная кампания обновлена", before, saved);
+        return toDto(saved);
+    }
+
+    @Transactional
+    public RepairCampaignDto finalizeApprovalFromApprovalRequest(ApprovalRequest request) {
+        UUID id = request.getTargetId() == null ? request.getDocumentId() : request.getTargetId();
+        RepairCampaign campaign = getLockedOrThrow(id);
+        approvalPolicy.validateDecision(campaign, request);
+        RepairCampaign before = snapshot(campaign);
+        campaign.setStatus(RepairCampaignStatus.APPROVED);
+        campaign.setApprovedAt(java.time.Instant.now());
+        RepairCampaign saved = repository.save(campaign);
+        logCampaign(saved, AuditAction.UPDATE, "Repair campaign approved", before, saved);
         return toDto(saved);
     }
 
@@ -1086,7 +1123,8 @@ public class RepairCampaignService {
                 c.getClosedAt(),
                 c.getCancelledAt(),
                 c.getSuspendedFromStatus(),
-                c.getClosureVersion()
+                c.getClosureVersion(),
+                c.getScopeVersion()
         );
     }
 

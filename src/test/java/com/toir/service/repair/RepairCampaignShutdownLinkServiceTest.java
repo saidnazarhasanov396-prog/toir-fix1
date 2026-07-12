@@ -46,6 +46,7 @@ class RepairCampaignShutdownLinkServiceTest {
     @Mock PlannedShutdownWorkItemRepository shutdownItemRepository;
     @Mock ScopeAccessService scopeAccessService;
     @Mock AuditBuilderService audit;
+    @Mock RepairCampaignMutationImpactService mutationImpactService;
     @InjectMocks RepairCampaignShutdownLinkService service;
 
     UUID campaignId = UUID.fromString("00000000-0000-0000-0000-000000000001");

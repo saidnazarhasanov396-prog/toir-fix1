@@ -95,6 +95,10 @@ public class RepairCampaign extends BaseEntity {
     @Column(name = "approval_scope_version")
     private Long approvalScopeVersion;
 
+    @Column(name = "scope_version", nullable = false)
+    @Builder.Default
+    private Long scopeVersion = 0L;
+
     @Column(name = "approval_scope_hash")
     private String approvalScopeHash;
 

@@ -110,6 +110,9 @@ class RepairCampaignServiceTest {
     @Mock
     private AuditBuilderService auditBuilderService;
 
+    @Mock
+    private com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
+
     @InjectMocks
     private RepairCampaignService service;
 
