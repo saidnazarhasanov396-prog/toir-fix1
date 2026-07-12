@@ -369,7 +369,7 @@ public class DashboardService {
                 .toList();
         long materialIssuedThisMonth = issuedMovements.stream()
                 .filter(m -> isMovementInCurrentMonth(m, currentMonthStartDate, currentMonthStart))
-                .mapToLong(m -> (long) m.getQuantity())
+                .mapToLong(m -> m.getQuantity().longValue())
                 .sum();
         BigDecimal totalSparePartsCost = issuedMovements.stream()
                 .map(m -> IndustrialKpiAggregations.stockIssueCost(m, partById.get(m.getSparePartId())))
@@ -659,7 +659,7 @@ public class DashboardService {
         for (RepairMaterialUsage usage : materialUsages) {
             if (usage.getSparePartId() == null) continue;
             double[] agg = spareUsageAgg.computeIfAbsent(usage.getSparePartId(), id -> new double[2]);
-            agg[0] += usage.getQuantity();
+            agg[0] += usage.getQuantity().doubleValue();
             agg[1] += 1;
             Instant issuedAt = usage.getIssuedAt() != null ? usage.getIssuedAt() : usage.getCreatedAt();
             if (issuedAt != null) {
@@ -767,7 +767,7 @@ public class DashboardService {
                             null,
                             w != null ? new WarehouseRef(w.getId(), w.getCode(), w.getName()) : null,
                             m.getType().name(),
-                            m.getQuantity(),
+                            m.getQuantity().doubleValue(),
                             m.getOccurredAt());
                 })
                 .toList();

@@ -7,6 +7,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -39,6 +41,11 @@ public interface WorkOrderSparePartRequirementRepository
             UUID regulationRequirementId);
 
     Optional<WorkOrderSparePartRequirement> findByIdAndWorkOrderIdAndIsDeletedFalse(UUID id, UUID workOrderId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from WorkOrderSparePartRequirement r where r.id=:id and r.workOrderId=:workOrderId and r.isDeleted=false")
+    Optional<WorkOrderSparePartRequirement> findByIdAndWorkOrderIdAndIsDeletedFalseForUpdate(
+            @Param("id") UUID id,@Param("workOrderId") UUID workOrderId);
 
     List<WorkOrderSparePartRequirement> findAllByCampaignRequirementIdInAndIsDeletedFalse(List<UUID> campaignRequirementIds);
 

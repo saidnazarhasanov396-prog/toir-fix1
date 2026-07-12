@@ -12,6 +12,7 @@ import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderSparePartRequirement;
 import com.toir.enums.WorkOrderSparePartRequirementSourceType;
+import com.toir.exception.RestException;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
@@ -44,6 +45,9 @@ import com.toir.enums.WorkOrderSparePartRequirementStatus;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import com.toir.repository.repair.RepairCampaignMaterialRequirementRepository;
+import com.toir.repository.repair.RepairCampaignWorkItemRepository;
+import com.toir.repository.ReservationRepository;
+import com.toir.entity.Reservation;
 import com.toir.entity.repair.RepairCampaignMaterialRequirement;
 
 @ExtendWith(MockitoExtension.class)
@@ -76,6 +80,8 @@ class WorkOrderSparePartRequirementServiceTest {
     private ScopeAccessService scopeAccessService;
     @Mock
     private RepairCampaignMaterialRequirementRepository campaignMaterialRequirementRepository;
+    @Mock private RepairCampaignWorkItemRepository campaignWorkItemRepository;
+    @Mock private ReservationRepository reservationRepository;
 
     @InjectMocks
     private WorkOrderSparePartRequirementService service;
@@ -83,9 +89,10 @@ class WorkOrderSparePartRequirementServiceTest {
     @Test
     void syncFromCampaignWorkItemIsReplaySafeAndPreservesExactQuantity() {
         UUID workOrderId=UUID.randomUUID(),campaignId=UUID.randomUUID(),itemId=UUID.randomUUID(),campaignRequirementId=UUID.randomUUID(),sparePartId=UUID.randomUUID();
-        WorkOrder workOrder=workOrder(workOrderId);RepairCampaignMaterialRequirement campaignRequirement=new RepairCampaignMaterialRequirement();campaignRequirement.setId(campaignRequirementId);campaignRequirement.setRepairCampaignId(campaignId);campaignRequirement.setWorkItemId(itemId);campaignRequirement.setSparePartId(sparePartId);campaignRequirement.setRequiredQuantity(new java.math.BigDecimal("2.3456"));campaignRequirement.setCritical(true);
+        WorkOrder workOrder=workOrder(workOrderId);workOrder.setRepairCampaignId(campaignId);RepairCampaignMaterialRequirement campaignRequirement=new RepairCampaignMaterialRequirement();campaignRequirement.setId(campaignRequirementId);campaignRequirement.setRepairCampaignId(campaignId);campaignRequirement.setWorkItemId(itemId);campaignRequirement.setSparePartId(sparePartId);campaignRequirement.setRequiredQuantity(new java.math.BigDecimal("2.3456"));campaignRequirement.setCritical(true);
         SparePart sparePart=new SparePart();sparePart.setId(sparePartId);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(campaignWorkItemRepository.findByIdAndCampaignIdAndIsDeletedFalse(itemId,campaignId)).thenReturn(Optional.of(new com.toir.entity.repair.RepairCampaignWorkItem()));
         when(campaignMaterialRequirementRepository.findAllByRepairCampaignIdAndWorkItemIdAndIsDeletedFalseOrderBySparePartIdAsc(campaignId,itemId)).thenReturn(List.of(campaignRequirement));
         when(repository.findByWorkOrderIdAndCampaignRequirementIdAndIsDeletedFalse(workOrderId,campaignRequirementId)).thenReturn(Optional.empty());
         when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(sparePart));
@@ -93,6 +100,33 @@ class WorkOrderSparePartRequirementServiceTest {
         ArgumentCaptor<WorkOrderSparePartRequirement> saved=ArgumentCaptor.forClass(WorkOrderSparePartRequirement.class);verify(repository).save(saved.capture());assertThat(saved.getValue().getSourceType()).isEqualTo(WorkOrderSparePartRequirementSourceType.REPAIR_CAMPAIGN_WORK_ITEM);assertThat(saved.getValue().getCampaignRequirementId()).isEqualTo(campaignRequirementId);assertThat(saved.getValue().getRequiredQty()).isEqualByComparingTo("2.3456");
         when(repository.findByWorkOrderIdAndCampaignRequirementIdAndIsDeletedFalse(workOrderId,campaignRequirementId)).thenReturn(Optional.of(saved.getValue()));
         service.syncFromCampaignWorkItem(workOrderId,campaignId,itemId);verify(repository,org.mockito.Mockito.times(1)).save(any());
+    }
+
+    @Test void campaignSyncRejectsWorkOrderFromAnotherCampaign(){
+        UUID workOrderId=UUID.randomUUID(),campaignId=UUID.randomUUID(),itemId=UUID.randomUUID();WorkOrder workOrder=workOrder(workOrderId);workOrder.setRepairCampaignId(UUID.randomUUID());
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->service.syncFromCampaignWorkItem(workOrderId,campaignId,itemId)).isInstanceOf(RestException.class).hasMessageContaining("CAMPAIGN_WORK_ORDER_MISMATCH");
+        verifyNoInteractions(campaignMaterialRequirementRepository);
+    }
+
+    @Test void campaignSyncRejectsForeignWorkItem(){
+        UUID workOrderId=UUID.randomUUID(),campaignId=UUID.randomUUID(),itemId=UUID.randomUUID();WorkOrder workOrder=workOrder(workOrderId);workOrder.setRepairCampaignId(campaignId);
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(campaignWorkItemRepository.findByIdAndCampaignIdAndIsDeletedFalse(itemId,campaignId)).thenReturn(Optional.empty());
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->service.syncFromCampaignWorkItem(workOrderId,campaignId,itemId)).isInstanceOf(RestException.class).hasMessageContaining("CAMPAIGN_WORK_ITEM_MISMATCH");
+        verifyNoInteractions(campaignMaterialRequirementRepository);
+    }
+
+    @Test void activeReservationPreventsManualRequirementReductionAndDeletion(){
+        UUID workOrderId=UUID.randomUUID(),requirementId=UUID.randomUUID(),sparePartId=UUID.randomUUID();WorkOrder workOrder=workOrder(workOrderId);WorkOrderSparePartRequirement requirement=requirement(requirementId,workOrderId,sparePartId);Reservation reservation=new Reservation();reservation.setQuantity(new java.math.BigDecimal("2.0000"));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findByIdAndWorkOrderIdAndIsDeletedFalseForUpdate(requirementId,workOrderId)).thenReturn(Optional.of(requirement));
+        when(reservationRepository.findAllByRequirementIdAndStatusAndIsDeletedFalse(requirementId,com.toir.enums.ReservationStatus.ACTIVE)).thenReturn(List.of(reservation));
+        when(sparePartRepository.findByIdAndIsDeletedFalse(sparePartId)).thenReturn(Optional.of(new SparePart()));
+        var reduced=new com.toir.dto.workorder.WorkOrderSparePartRequirementRequest(sparePartId,new java.math.BigDecimal("1.9999"),"pcs",null,null);
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->service.updateManual(workOrderId,requirementId,reduced)).hasMessageContaining("RESERVATION_REQUIREMENT_IN_USE");
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->service.deleteManual(workOrderId,requirementId)).hasMessageContaining("RESERVATION_REQUIREMENT_IN_USE");
+        verify(repository,never()).save(requirement);
     }
 
     @Test
@@ -126,7 +160,7 @@ class WorkOrderSparePartRequirementServiceTest {
         assertThat(saved.getTemplate()).isEqualTo(templateRequirement.getTemplate());
         assertThat(saved.getOperation()).isEqualTo(templateRequirement.getOperation());
         assertThat(saved.getSparePart()).isEqualTo(templateRequirement.getSparePart());
-        assertThat(saved.getRequiredQty()).isEqualByComparingTo(java.math.BigDecimal.valueOf(templateRequirement.getQuantity()));
+        assertThat(saved.getRequiredQty()).isEqualByComparingTo(templateRequirement.getQuantity());
         assertThat(saved.getUnit()).isEqualTo(templateRequirement.getUnit());
         assertThat(saved.getCriticality()).isEqualTo(templateRequirement.getCriticality());
         assertThat(saved.getNotes()).isEqualTo(templateRequirement.getNotes());
@@ -176,7 +210,7 @@ class WorkOrderSparePartRequirementServiceTest {
                 .isEqualTo(WorkOrderSparePartRequirementSourceType.REGULATION_REQUIRED_SPARE_PART);
         assertThat(saved.getRegulationRequirement()).isEqualTo(regulationRequirement);
         assertThat(saved.getSparePart()).isEqualTo(regulationRequirement.getSparePart());
-        assertThat(saved.getRequiredQty()).isEqualByComparingTo(java.math.BigDecimal.valueOf(regulationRequirement.getQuantity()));
+        assertThat(saved.getRequiredQty()).isEqualByComparingTo(regulationRequirement.getQuantity());
         assertThat(saved.getUnit()).isEqualTo(regulationRequirement.getUnit());
         assertThat(saved.getCriticality()).isEqualTo(regulationRequirement.getCriticality());
         assertThat(saved.getNotes()).isEqualTo(regulationRequirement.getNotes());
@@ -334,7 +368,7 @@ class WorkOrderSparePartRequirementServiceTest {
         requirement.setOperationId(operationId);
         requirement.setSparePart(sparePart);
         requirement.setSparePartId(sparePartId);
-        requirement.setQuantity(3.5);
+        requirement.setQuantity(new java.math.BigDecimal("3.5"));
         requirement.setUnit("pcs");
         requirement.setCriticality("CRITICAL");
         requirement.setNotes("keep ready");
@@ -360,7 +394,7 @@ class WorkOrderSparePartRequirementServiceTest {
         requirement.setRegulationId(regulationId);
         requirement.setSparePart(sparePart);
         requirement.setSparePartId(sparePartId);
-        requirement.setQuantity(4.0);
+        requirement.setQuantity(new java.math.BigDecimal("4.0"));
         requirement.setUnit("pcs");
         requirement.setCriticality("NORMAL");
         requirement.setNotes("planned stock");
@@ -381,7 +415,7 @@ class WorkOrderSparePartRequirementServiceTest {
         usage.setId(UUID.randomUUID());
         usage.setRequirementId(requirementId);
         usage.setSparePartId(sparePartId);      // bir xil — almashtirish yo'q
-        usage.setQuantity(3.0);
+        usage.setQuantity(new java.math.BigDecimal("3.0"));
 
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder));
@@ -394,7 +428,7 @@ class WorkOrderSparePartRequirementServiceTest {
         List<WorkOrderSparePartRequirementDto> result = service.findByWorkOrder(workOrderId);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).issuedQty()).isEqualTo(3.0);
+        assertThat(result.get(0).issuedQty()).isEqualByComparingTo("3.0");
         assertThat(result.get(0).issuedSparePartId()).isEqualTo(sparePartId);
         assertThat(result.get(0).isReplacement()).isFalse();
     }
@@ -414,7 +448,7 @@ class WorkOrderSparePartRequirementServiceTest {
         usage.setRequirementId(requirementId);
         usage.setSparePartId(actualSparePartId);           // faktda ishlatilgan
         usage.setReplacedSparePartId(plannedSparePartId);  // almashtirish
-        usage.setQuantity(2.0);
+        usage.setQuantity(new java.math.BigDecimal("2.0"));
 
         SparePart replacedSparePart = new SparePart();
         replacedSparePart.setId(plannedSparePartId);
@@ -434,7 +468,7 @@ class WorkOrderSparePartRequirementServiceTest {
         List<WorkOrderSparePartRequirementDto> result = service.findByWorkOrder(workOrderId);
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).issuedQty()).isEqualTo(2.0);
+        assertThat(result.get(0).issuedQty()).isEqualByComparingTo("2.0");
         assertThat(result.get(0).issuedSparePartId()).isEqualTo(actualSparePartId);
         assertThat(result.get(0).isReplacement()).isTrue();
     }
@@ -479,7 +513,7 @@ class WorkOrderSparePartRequirementServiceTest {
         RepairMaterialUsage usage1 = new RepairMaterialUsage();
         usage1.setRequirementId(requirementId1);
         usage1.setSparePartId(sparePartId1);
-        usage1.setQuantity(1.0);
+        usage1.setQuantity(new java.math.BigDecimal("1.0"));
 
         // req2 uchun usage yo'q
 
@@ -500,7 +534,7 @@ class WorkOrderSparePartRequirementServiceTest {
         WorkOrderSparePartRequirementDto dto2 = result.stream()
                 .filter(d -> d.id().equals(requirementId2)).findFirst().orElseThrow();
 
-        assertThat(dto1.issuedQty()).isEqualTo(1.0);
+        assertThat(dto1.issuedQty()).isEqualByComparingTo("1.0");
         assertThat(dto2.issuedQty()).isNull();
     }
 
@@ -559,7 +593,7 @@ class WorkOrderSparePartRequirementServiceTest {
 
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
-        when(repository.findByIdAndWorkOrderIdAndIsDeletedFalse(requirementId, workOrderId))
+        when(repository.findByIdAndWorkOrderIdAndIsDeletedFalseForUpdate(requirementId, workOrderId))
                 .thenReturn(Optional.of(requirement));
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.updateManual(

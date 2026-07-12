@@ -229,7 +229,6 @@ public class InventoryAnalyticsService {
                 .filter(movement -> movement.getType() == StockMovementType.ISSUE)
                 .filter(movement -> !movementDate(movement).isBefore(since))
                 .map(StockMovement::getQuantity)
-                .map(BigDecimal::valueOf)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return annualQty.multiply(zero(part.getAverageCost())).setScale(2, RoundingMode.HALF_UP);
     }
@@ -244,7 +243,7 @@ public class InventoryAnalyticsService {
                 .filter(movement -> part.getId().equals(movement.getSparePartId()))
                 .filter(movement -> movement.getType() == StockMovementType.ISSUE)
                 .filter(movement -> !movementDate(movement).isBefore(since))
-                .forEach(movement -> months.merge(movementDate(movement).getMonthValue(), BigDecimal.valueOf(movement.getQuantity()), BigDecimal::add));
+                .forEach(movement -> months.merge(movementDate(movement).getMonthValue(), movement.getQuantity(), BigDecimal::add));
         BigDecimal average = months.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add)
                 .divide(BigDecimal.valueOf(12), 4, RoundingMode.HALF_UP);
         double avg = average.doubleValue();
@@ -287,7 +286,6 @@ public class InventoryAnalyticsService {
                 .filter(movement -> movement.getType() == StockMovementType.ISSUE)
                 .filter(movement -> !movementDate(movement).isBefore(since))
                 .map(StockMovement::getQuantity)
-                .map(BigDecimal::valueOf)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return issued.divide(BigDecimal.valueOf(90), 4, RoundingMode.HALF_UP);
     }
@@ -303,7 +301,7 @@ public class InventoryAnalyticsService {
     }
 
     private BigDecimal quantity(List<StockMovement> movements) {
-        return movements.stream().map(StockMovement::getQuantity).map(BigDecimal::valueOf).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return movements.stream().map(StockMovement::getQuantity).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private BigDecimal amount(List<StockMovement> movements, SparePart part) {

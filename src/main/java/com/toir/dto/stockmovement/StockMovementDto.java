@@ -23,7 +23,7 @@ public record StockMovementDto(
         String workOrderNumber,
         String workOrderName,
         StockMovementType type,
-        double quantity,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal quantity,
         String unit,
         Double unitCost,
         BigDecimal unitPrice,
@@ -70,7 +70,7 @@ public record StockMovementDto(
             String workOrderNumber,
             String workOrderName,
             StockMovementType type,
-            double quantity,
+            BigDecimal quantity,
             String unit,
             Double unitCost,
             BigDecimal unitPrice,
@@ -106,7 +106,7 @@ public record StockMovementDto(
             String workOrderNumber,
             String workOrderName,
             StockMovementType type,
-            double quantity,
+            BigDecimal quantity,
             Double unitCost,
             String documentNumber,
             UUID createdById,
@@ -251,13 +251,13 @@ public record StockMovementDto(
     }
 
     private static BigDecimal unitPriceFromLegacy(Double unitCost) {
-        return unitCost == null ? null : BigDecimal.valueOf(unitCost);
+        return unitCost == null ? null : new BigDecimal(unitCost.toString());
     }
 
-    private static BigDecimal totalAmount(double quantity, BigDecimal unitPrice, BigDecimal storedTotal) {
+    private static BigDecimal totalAmount(BigDecimal quantity, BigDecimal unitPrice, BigDecimal storedTotal) {
         if (storedTotal != null) {
             return storedTotal;
         }
-        return unitPrice == null ? null : unitPrice.multiply(BigDecimal.valueOf(quantity));
+        return unitPrice == null ? null : unitPrice.multiply(quantity);
     }
 }

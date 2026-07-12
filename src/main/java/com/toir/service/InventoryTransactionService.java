@@ -126,7 +126,7 @@ public class InventoryTransactionService {
         movement.setWarehouseId(warehouse.getId());
         movement.setSparePartId(sparePart.getId());
         movement.setType(StockMovementType.RECEIPT);
-        movement.setQuantity(request.quantity().doubleValue());
+        movement.setQuantity(request.quantity());
         movement.setUnit(unit);
         movement.setUnitPrice(request.unitPrice());
         movement.setUnitCost(request.unitPrice().doubleValue());
@@ -219,7 +219,7 @@ public class InventoryTransactionService {
         movement.setSparePartId(sparePart.getId());
         movement.setWorkOrderId(workOrder == null ? null : workOrder.getId());
         movement.setType(StockMovementType.ISSUE);
-        movement.setQuantity(request.quantity().doubleValue());
+        movement.setQuantity(request.quantity());
         movement.setUnit(unit);
         movement.setMovementDate(transactionDate);
         movement.setTakenById(takenBy.getId());
@@ -354,9 +354,9 @@ public class InventoryTransactionService {
                 continue;
             }
             if (movement.getType() == StockMovementType.ISSUE) {
-                alreadyIssued = alreadyIssued.add(BigDecimal.valueOf(movement.getQuantity()));
+                alreadyIssued = alreadyIssued.add(movement.getQuantity());
             } else if (movement.getType() == StockMovementType.RETURN) {
-                alreadyReturned = alreadyReturned.add(BigDecimal.valueOf(movement.getQuantity()));
+                alreadyReturned = alreadyReturned.add(movement.getQuantity());
             }
         }
         if (request.quantity().compareTo(alreadyIssued.subtract(alreadyReturned)) > 0) {
@@ -735,7 +735,7 @@ public class InventoryTransactionService {
         movement.setWarehouseId(warehouseId);
         movement.setSparePartId(sparePartId);
         movement.setType(type);
-        movement.setQuantity(quantity);
+        movement.setQuantity(BigDecimal.valueOf(quantity));
         movement.setUnit(unit);
         movement.setMovementDate(movementDate);
         movement.setResponsiblePersonId(responsiblePersonId);

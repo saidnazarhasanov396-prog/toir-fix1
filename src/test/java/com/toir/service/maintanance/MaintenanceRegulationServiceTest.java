@@ -659,7 +659,7 @@ class MaintenanceRegulationServiceTest {
         assertThat(created.sparePartRequirements()).hasSize(1);
         assertThat(created.sparePartRequirements().getFirst().sparePartCode()).isEqualTo("BRG-001");
         assertThat(created.sparePartRequirements().getFirst().sparePartName()).isEqualTo("Bearing");
-        assertThat(created.sparePartRequirements().getFirst().quantity()).isEqualTo(2.0);
+        assertThat(created.sparePartRequirements().getFirst().quantity()).isEqualByComparingTo("2.0");
         assertThat(created.sparePartRequirements().getFirst().unit()).isEqualTo("pcs");
 
         ArgumentCaptor<Iterable<MaintenanceRegulationSparePartRequirement>> captor =
@@ -669,7 +669,7 @@ class MaintenanceRegulationServiceTest {
                 ((List<MaintenanceRegulationSparePartRequirement>) captor.getValue()).getFirst();
         assertThat(saved.getRegulationId()).isEqualTo(regulationId);
         assertThat(saved.getSparePart()).isEqualTo(sparePart);
-        assertThat(saved.getQuantity()).isEqualTo(2.0);
+        assertThat(saved.getQuantity()).isEqualByComparingTo("2.0");
         assertThat(saved.getUnit()).isEqualTo("pcs");
     }
 
@@ -965,7 +965,7 @@ class MaintenanceRegulationServiceTest {
                 UUID.randomUUID(),
                 List.of(new MaintenanceRegulationSparePartRequirementRequest(
                         sparePartId,
-                        2.0,
+                        new java.math.BigDecimal("2.0"),
                         unit,
                         "CRITICAL",
                         "keep ready",
@@ -1111,7 +1111,7 @@ class MaintenanceRegulationServiceTest {
         requirement.setRegulationId(regulationId);
         requirement.setSparePart(sparePart);
         requirement.setSparePartId(sparePart.getId());
-        requirement.setQuantity(quantity);
+        requirement.setQuantity(new java.math.BigDecimal(Double.toString(quantity)));
         requirement.setUnit(sparePart.getUnit());
         requirement.setCriticality("CRITICAL");
         requirement.setNotes("keep ready");

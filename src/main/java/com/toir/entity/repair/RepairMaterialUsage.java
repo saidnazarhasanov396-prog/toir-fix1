@@ -68,8 +68,8 @@ public class RepairMaterialUsage extends BaseEntity {
     @Column(name = "issued_at")
     private Instant issuedAt;
 
-    @Column(nullable = false)
-    private double quantity;
+    @Column(nullable = false, precision = 19, scale = 4)
+    private java.math.BigDecimal quantity;
 
     @Column(name = "unit_cost")
     private Double unitCost;

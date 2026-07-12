@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Positive;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 public record RepairMaterialUsageDto(
         UUID id,
@@ -21,7 +22,7 @@ public record RepairMaterialUsageDto(
         String sparePartName,
         String sparePartCode,
         InventoryItemKind kind,
-        @Positive double quantity,
+        @Positive @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal quantity,
         Double unitCost,
         Double totalCost,
         Instant issuedAt,
@@ -44,7 +45,7 @@ public record RepairMaterialUsageDto(
                                   UUID workOrderId,
                                   UUID warehouseId,
                                   UUID sparePartId,
-                                  double quantity,
+                                  BigDecimal quantity,
                                   Double unitCost) {
         this(id, workOrderId, null, null, warehouseId, null, sparePartId, null, null, null,
                 quantity, unitCost, totalCost(quantity, unitCost), null, null, null, null, null, null,
@@ -62,7 +63,7 @@ public record RepairMaterialUsageDto(
             String sparePartName,
             String sparePartCode,
             InventoryItemKind kind,
-            @Positive double quantity,
+            @Positive BigDecimal quantity,
             Double unitCost,
             Double totalCost,
             Instant issuedAt,
@@ -88,7 +89,7 @@ public record RepairMaterialUsageDto(
             String sparePartName,
             String sparePartCode,
             InventoryItemKind kind,
-            @Positive double quantity,
+            @Positive BigDecimal quantity,
             Double unitCost,
             Double totalCost,
             Instant issuedAt,
@@ -170,8 +171,8 @@ public record RepairMaterialUsageDto(
         );
     }
 
-    private static Double totalCost(double quantity, Double unitCost) {
-        return unitCost == null ? null : quantity * unitCost;
+    private static Double totalCost(BigDecimal quantity, Double unitCost) {
+        return unitCost == null||quantity==null ? null : quantity.multiply(new BigDecimal(unitCost.toString())).doubleValue();
     }
 
     private static String costWarning(Double unitCost) {

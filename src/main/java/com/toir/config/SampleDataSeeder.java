@@ -86,6 +86,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -667,7 +668,7 @@ public class SampleDataSeeder implements CommandLineRunner {
         m.setWarehouseId(warehouseId);
         m.setSparePartId(sparePartId);
         m.setType(type);
-        m.setQuantity(qty);
+        m.setQuantity(BigDecimal.valueOf(qty));
         m.setOccurredAt(occurredAt);
         m.setNotes(notes);
         m.setCreatedById(createdById);

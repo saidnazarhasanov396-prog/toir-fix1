@@ -62,4 +62,42 @@ class RepairCampaignMaterialServiceTest {
     @Test void demandPreservesFourDecimalPrecisionAndNeverReserves(){when(requirements.saveAndFlush(any())).thenAnswer(i->{RepairCampaignMaterialRequirement r=i.getArgument(0);r.setId(UUID.randomUUID());return r;});when(campaigns.saveAndFlush(campaign)).thenAnswer(i->{campaign.setVersion(2L);return campaign;});var result=service.add(campaignId,new RepairCampaignMaterialRequirementRequest(1L,itemId,spareId,warehouseId,new BigDecimal("0.1234"),true,false));assertThat(result.requiredQuantity()).isEqualByComparingTo("0.1234");ArgumentCaptor<RepairCampaignMaterialRequirement> saved=ArgumentCaptor.forClass(RepairCampaignMaterialRequirement.class);verify(requirements).saveAndFlush(saved.capture());assertThat(saved.getValue().getRequiredQuantity()).isEqualByComparingTo("0.1234");verify(reservations,never()).save(any());}
 
     @Test void assessmentReturnsExactDeterministicMissingDeficitDuplicateAndProcurementBlockers(){UUID missingItem=UUID.randomUUID(),requirementId=UUID.randomUUID(),workRequirementId=UUID.randomUUID();RepairCampaignWorkItem missing=new RepairCampaignWorkItem();missing.setId(missingItem);missing.setPriority(RepairCampaignPriority.CRITICAL);RepairCampaignMaterialRequirement requirement=new RepairCampaignMaterialRequirement();requirement.setId(requirementId);requirement.setRepairCampaignId(campaignId);requirement.setWorkItemId(itemId);requirement.setSparePartId(spareId);requirement.setWarehouseId(warehouseId);requirement.setRequiredQuantity(new BigDecimal("5.0000"));requirement.setCritical(true);requirement.setProcurementRequired(true);WarehouseStockBalance balance=new WarehouseStockBalance();balance.setQtyOnHand(new BigDecimal("3.0000"));balance.setQtyReserved(new BigDecimal("1.0000"));WorkOrderSparePartRequirement workRequirement=new WorkOrderSparePartRequirement();workRequirement.setId(workRequirementId);workRequirement.setWorkOrderId(UUID.randomUUID());workRequirement.setCampaignRequirementId(requirementId);workRequirement.setSparePartId(spareId);when(items.findAllByCampaignIdAndIsDeletedFalseOrderByOrderNumberAsc(campaignId)).thenReturn(List.of(missing));when(requirements.findAllByRepairCampaignIdAndIsDeletedFalseOrderByWorkItemIdAscSparePartIdAsc(campaignId)).thenReturn(List.of(requirement));when(balances.findAllByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId,spareId)).thenReturn(List.of(balance));when(workRequirements.findAllByCampaignRequirementIdInAndIsDeletedFalse(List.of(requirementId))).thenReturn(List.of(workRequirement));when(reservations.findAllByWorkOrderIdAndRequirementIdAndSparePartIdAndStatusAndIsDeletedFalse(any(),any(),any(),any())).thenReturn(List.of(new Reservation(),new Reservation()));assertThat(service.blockers(campaignId)).containsExactly("CRITICAL_MATERIAL_DEFICIT:"+requirementId,"MATERIAL_REQUIREMENT_MISSING:"+missingItem,"PROCUREMENT_REQUIRED:"+requirementId,"RESERVATION_DUPLICATE:"+workRequirementId);}
+
+    @Test void fullyReservedCanonicalRequirementHasNoFalseDeficit(){
+        UUID requirementId=UUID.randomUUID();
+        RepairCampaignMaterialRequirement requirement=critical(requirementId,spareId,warehouseId,"5.0000");
+        WorkOrderSparePartRequirement workRequirement=workRequirement(requirementId,spareId);
+        Reservation reservation=new Reservation(); reservation.setQuantity(new BigDecimal("5.0000"));
+        when(requirements.findAllByRepairCampaignIdAndIsDeletedFalseOrderByWorkItemIdAscSparePartIdAsc(campaignId)).thenReturn(List.of(requirement));
+        when(workRequirements.findAllByCampaignRequirementIdInAndIsDeletedFalse(List.of(requirementId))).thenReturn(List.of(workRequirement));
+        when(balances.findAllByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId,spareId)).thenReturn(List.of());
+        when(reservations.findAllByWorkOrderIdAndRequirementIdAndSparePartIdAndStatusAndIsDeletedFalse(workRequirement.getWorkOrderId(),workRequirement.getId(),spareId,com.toir.enums.ReservationStatus.ACTIVE)).thenReturn(List.of(reservation));
+        assertThat(service.blockers(campaignId)).doesNotContain("CRITICAL_MATERIAL_DEFICIT:"+requirementId);
+    }
+
+    @Test void sharedAvailableStockIsConsumedOnlyOnceAcrossCanonicalRequirements(){
+        UUID firstId=new UUID(0,1),secondId=new UUID(0,2);
+        var first=critical(firstId,spareId,warehouseId,"4.0000");
+        var second=critical(secondId,spareId,warehouseId,"4.0000");
+        WarehouseStockBalance balance=new WarehouseStockBalance(); balance.setQtyOnHand(new BigDecimal("5.0000")); balance.setQtyReserved(BigDecimal.ZERO);
+        when(requirements.findAllByRepairCampaignIdAndIsDeletedFalseOrderByWorkItemIdAscSparePartIdAsc(campaignId)).thenReturn(List.of(second,first));
+        when(workRequirements.findAllByCampaignRequirementIdInAndIsDeletedFalse(List.of(firstId,secondId))).thenReturn(List.of());
+        when(balances.findAllByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId,spareId)).thenReturn(List.of(balance));
+        assertThat(service.blockers(campaignId)).containsExactly("CRITICAL_MATERIAL_DEFICIT:"+secondId);
+    }
+
+    @Test void reservationForAnotherCanonicalRequirementDoesNotCreditDeficit(){
+        UUID requirementId=UUID.randomUUID(), otherRequirementId=UUID.randomUUID();
+        var requirement=critical(requirementId,spareId,warehouseId,"5.0000");
+        var other=workRequirement(otherRequirementId,spareId);
+        Reservation reservation=new Reservation(); reservation.setQuantity(new BigDecimal("9.0000"));
+        when(requirements.findAllByRepairCampaignIdAndIsDeletedFalseOrderByWorkItemIdAscSparePartIdAsc(campaignId)).thenReturn(List.of(requirement));
+        when(workRequirements.findAllByCampaignRequirementIdInAndIsDeletedFalse(List.of(requirementId))).thenReturn(List.of());
+        when(balances.findAllByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId,spareId)).thenReturn(List.of());
+        org.mockito.Mockito.lenient().when(reservations.findAllByWorkOrderIdAndRequirementIdAndSparePartIdAndStatusAndIsDeletedFalse(other.getWorkOrderId(),other.getId(),spareId,com.toir.enums.ReservationStatus.ACTIVE)).thenReturn(List.of(reservation));
+        assertThat(service.blockers(campaignId)).containsExactly("CRITICAL_MATERIAL_DEFICIT:"+requirementId);
+    }
+
+    private RepairCampaignMaterialRequirement critical(UUID id,UUID spare,UUID warehouse,String quantity){RepairCampaignMaterialRequirement r=new RepairCampaignMaterialRequirement();r.setId(id);r.setRepairCampaignId(campaignId);r.setWorkItemId(itemId);r.setSparePartId(spare);r.setWarehouseId(warehouse);r.setRequiredQuantity(new BigDecimal(quantity));r.setCritical(true);return r;}
+    private WorkOrderSparePartRequirement workRequirement(UUID campaignRequirementId,UUID spare){WorkOrderSparePartRequirement r=new WorkOrderSparePartRequirement();r.setId(UUID.randomUUID());r.setWorkOrderId(UUID.randomUUID());r.setCampaignRequirementId(campaignRequirementId);r.setSparePartId(spare);return r;}
 }

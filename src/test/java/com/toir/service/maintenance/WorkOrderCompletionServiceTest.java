@@ -92,7 +92,7 @@ class WorkOrderCompletionServiceTest {
         RepairMaterialUsage usage = new RepairMaterialUsage();
         usage.setId(UUID.randomUUID());
         usage.setWorkOrderId(workOrder.getId());
-        usage.setQuantity(2);
+        usage.setQuantity(java.math.BigDecimal.valueOf(2));
         usage.setUnitCost(50.0);
 
         when(repairMaterialUsageRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrder.getId()))

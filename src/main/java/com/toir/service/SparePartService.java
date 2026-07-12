@@ -927,11 +927,11 @@ public class SparePartService {
                 : movement.getUnitCost() == null ? null : BigDecimal.valueOf(movement.getUnitCost());
         BigDecimal totalAmount = movement.getTotalAmount() != null
                 ? movement.getTotalAmount()
-                : unitPrice == null ? null : unitPrice.multiply(BigDecimal.valueOf(movement.getQuantity()));
+                : unitPrice == null ? null : unitPrice.multiply(movement.getQuantity());
         return new SparePartRecentMovementDto(
                 movement.getId(),
                 movement.getType(),
-                movement.getQuantity(),
+                movement.getQuantity().doubleValue(),
                 firstNonBlank(movement.getUnit(), part.getUnit()),
                 unitPrice,
                 totalAmount,

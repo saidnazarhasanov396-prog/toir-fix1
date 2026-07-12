@@ -672,7 +672,7 @@ class DashboardServiceKpiTest {
         movement.setSparePartId(sparePartId);
         movement.setType(StockMovementType.ISSUE);
         movement.setOccurredAt(occurredAt);
-        movement.setQuantity(quantity);
+        movement.setQuantity(BigDecimal.valueOf(quantity));
         movement.setTotalAmount(totalAmount);
         movement.setUnitCost(unitCost);
         return movement;

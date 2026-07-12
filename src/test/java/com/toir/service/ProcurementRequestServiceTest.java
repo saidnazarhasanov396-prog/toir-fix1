@@ -567,7 +567,7 @@ class ProcurementRequestServiceTest {
         assertThat(movement.getType()).isEqualTo(StockMovementType.RECEIPT);
         assertThat(movement.getWarehouseId()).isEqualTo(warehouseId);
         assertThat(movement.getSparePartId()).isEqualTo(sparePartId);
-        assertThat(movement.getQuantity()).isEqualTo(4);
+        assertThat(movement.getQuantity()).isEqualByComparingTo("4");
         assertThat(movement.getUnitCost()).isEqualTo(12.5);
         assertThat(movement.getDocumentNumber()).isEqualTo("PR-2026-0001");
         assertThat(movement.getNotes()).contains(requestId.toString());

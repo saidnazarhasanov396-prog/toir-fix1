@@ -203,7 +203,7 @@ class MaterialStockPbacScopeTest {
                 sparePartId,
                 null,
                 type,
-                quantity,
+                java.math.BigDecimal.valueOf(quantity),
                 null,
                 "DOC-1",
                 null,
@@ -217,7 +217,7 @@ class MaterialStockPbacScopeTest {
         movement.setWarehouseId(warehouseId);
         movement.setSparePartId(UUID.randomUUID());
         movement.setType(StockMovementType.RECEIPT);
-        movement.setQuantity(1);
+        movement.setQuantity(java.math.BigDecimal.ONE);
         return movement;
     }
 

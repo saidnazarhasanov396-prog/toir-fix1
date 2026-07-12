@@ -503,7 +503,7 @@ class AnalyticsPbacScopeTest {
         movement.setSparePartId(UUID.randomUUID());
         movement.setType(StockMovementType.ISSUE);
         movement.setOccurredAt(occurredAt);
-        movement.setQuantity(quantity);
+        movement.setQuantity(java.math.BigDecimal.valueOf(quantity));
         return movement;
     }
 

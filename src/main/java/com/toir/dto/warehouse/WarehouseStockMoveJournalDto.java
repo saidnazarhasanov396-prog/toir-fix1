@@ -47,7 +47,7 @@ public record WarehouseStockMoveJournalDto(
                 movement.getToBinId(),
                 toBinCode,
                 movement.getStockStatus(),
-                BigDecimal.valueOf(movement.getQuantity()),
+                movement.getQuantity(),
                 movement.getDocumentNumber(),
                 movement.getLotNumber(),
                 movement.getSerialNumber(),

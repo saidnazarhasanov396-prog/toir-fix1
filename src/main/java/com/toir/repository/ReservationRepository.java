@@ -8,6 +8,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -16,6 +18,10 @@ import org.springframework.stereotype.Repository;
 public interface ReservationRepository extends JpaRepository<Reservation, UUID> {
     @Query(value = "SELECT * FROM reservations WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<Reservation> findByIdAndIsDeletedFalse(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from Reservation r where r.id=:id and r.isDeleted=false")
+    Optional<Reservation> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
 
     @Query(value = "SELECT * FROM reservations WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Reservation> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
@@ -41,4 +47,6 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
 
     List<Reservation> findAllByWorkOrderIdAndRequirementIdAndSparePartIdAndStatusAndIsDeletedFalse(
             UUID workOrderId, UUID requirementId, UUID sparePartId, ReservationStatus status);
+
+    List<Reservation> findAllByRequirementIdAndStatusAndIsDeletedFalse(UUID requirementId,ReservationStatus status);
 }

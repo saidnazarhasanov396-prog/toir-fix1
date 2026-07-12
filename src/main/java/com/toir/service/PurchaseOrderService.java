@@ -341,7 +341,7 @@ public class PurchaseOrderService {
         movement.setWarehouseId(order.getWarehouseId());
         movement.setSparePartId(sparePart.getId());
         movement.setType(StockMovementType.RECEIPT);
-        movement.setQuantity(quantity.doubleValue());
+        movement.setQuantity(quantity);
         movement.setUnit(sparePart.getUnit());
         movement.setUnitPrice(line.getUnitPrice());
         movement.setUnitCost(line.getUnitPrice().doubleValue());

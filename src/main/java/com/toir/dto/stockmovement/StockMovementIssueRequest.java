@@ -6,12 +6,13 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public record StockMovementIssueRequest(
         @NotNull UUID sparePartId,
         @NotNull UUID warehouseId,
-        @Positive double quantity,
+        @Positive @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using=com.toir.dto.common.MoneyDecimalStringDeserializer.class) BigDecimal quantity,
         @NotBlank String unit,
         LocalDate issuedAt,
         UUID takenById,
@@ -28,7 +29,7 @@ public record StockMovementIssueRequest(
 ) {
     public StockMovementIssueRequest(UUID sparePartId,
                                      UUID warehouseId,
-                                     double quantity,
+                                     BigDecimal quantity,
                                      String unit,
                                      LocalDate issuedAt,
                                      UUID takenById,

@@ -996,7 +996,7 @@ class SparePartServiceTest {
         movement.setSparePartId(sparePartId);
         movement.setWarehouseId(warehouseId);
         movement.setType(StockMovementType.RECEIPT);
-        movement.setQuantity(100);
+        movement.setQuantity(BigDecimal.valueOf(100));
         movement.setUnit("LITER");
         movement.setUnitPrice(BigDecimal.valueOf(45000));
         movement.setTotalAmount(BigDecimal.valueOf(4500000));

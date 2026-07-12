@@ -211,7 +211,7 @@ class RepairRequestInsightsServiceTest {
         RepairMaterialUsage materialUsage = new RepairMaterialUsage();
         materialUsage.setId(materialUsageId);
         materialUsage.setSparePartId(sparePartId);
-        materialUsage.setQuantity(2);
+        materialUsage.setQuantity(java.math.BigDecimal.valueOf(2));
         SparePart sparePart = new SparePart();
         sparePart.setId(sparePartId);
         sparePart.setName("Bearing 6205");

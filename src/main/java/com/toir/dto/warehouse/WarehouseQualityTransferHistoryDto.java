@@ -44,7 +44,7 @@ public record WarehouseQualityTransferHistoryDto(
                 movement.getBinId(),
                 binCode,
                 movement.getStockStatus(),
-                BigDecimal.valueOf(movement.getQuantity()),
+                movement.getQuantity(),
                 movement.getNotes(),
                 movement.getDocumentNumber(),
                 movement.getLotNumber(),

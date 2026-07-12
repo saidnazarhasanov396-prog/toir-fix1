@@ -421,7 +421,7 @@ public class SparePartForecastService {
                         requirement.getSparePartId(),
                         location.warehouseId(),
                         location.departmentId(),
-                        requirement.getQuantity(),
+                        requirement.getQuantity().doubleValue(),
                         requirement.getUnit()
                 ));
             }
@@ -445,7 +445,7 @@ public class SparePartForecastService {
                         requirement.getSparePartId(),
                         location.warehouseId(),
                         location.departmentId(),
-                        requirement.getQuantity(),
+                        requirement.getQuantity().doubleValue(),
                         requirement.getUnit()
                 ));
             }

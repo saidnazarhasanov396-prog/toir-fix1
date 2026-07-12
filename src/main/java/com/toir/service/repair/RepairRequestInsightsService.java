@@ -643,6 +643,10 @@ public class RepairRequestInsightsService {
         return value == null ? "0" : formatNumber(value.doubleValue());
     }
 
+    private String formatNumber(java.math.BigDecimal value) {
+        return value == null ? "0" : value.stripTrailingZeros().toPlainString();
+    }
+
     private String formatNumber(double value) {
         if (value == Math.rint(value)) {
             return Long.toString((long) value);

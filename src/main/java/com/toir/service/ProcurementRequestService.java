@@ -782,7 +782,7 @@ public class ProcurementRequestService {
         movement.setWarehouseId(request.getWarehouseId());
         movement.setSparePartId(line.getSparePartId());
         movement.setType(StockMovementType.RECEIPT);
-        movement.setQuantity(quantity);
+        movement.setQuantity(BigDecimal.valueOf(quantity));
         movement.setUnit(line.getUnit());
         movement.setUnitCost(line.getUnitPrice());
         movement.setUnitPrice(unitPrice(line));
@@ -811,7 +811,7 @@ public class ProcurementRequestService {
         movement.setSparePartId(null);
         movement.setEquipmentTypeId(line.getEquipmentTypeId());
         movement.setType(StockMovementType.EQUIPMENT_IN);
-        movement.setQuantity(quantity);
+        movement.setQuantity(BigDecimal.valueOf(quantity));
         movement.setUnit(line.getUnit());
         movement.setUnitCost(line.getUnitPrice());
         movement.setUnitPrice(unitPrice(line));

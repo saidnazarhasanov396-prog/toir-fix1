@@ -28,6 +28,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
@@ -195,7 +196,7 @@ public class EquipmentCommissioningActService {
         movement.setWarehouseId(act.getSourceWarehouseId());
         movement.setEquipmentTypeId(equipment.getEquipmentTypeId());
         movement.setType(StockMovementType.EQUIPMENT_OUT);
-        movement.setQuantity(1);
+        movement.setQuantity(BigDecimal.ONE);
         movement.setUnit("PCS");
         movement.setDocumentNumber(act.getActNumber());
         movement.setMovementDate(act.getActDate());

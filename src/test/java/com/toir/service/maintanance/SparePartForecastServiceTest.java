@@ -860,7 +860,7 @@ class SparePartForecastServiceTest {
         requirement.setTemplateId(templateId);
         requirement.setSparePart(sparePart);
         requirement.setSparePartId(sparePartId);
-        requirement.setQuantity(quantity);
+        requirement.setQuantity(new java.math.BigDecimal(Double.toString(quantity)));
         requirement.setUnit("pcs");
         requirement.setActive(true);
         return requirement;
@@ -882,7 +882,7 @@ class SparePartForecastServiceTest {
         requirement.setRegulationId(regulationId);
         requirement.setSparePart(sparePart);
         requirement.setSparePartId(sparePartId);
-        requirement.setQuantity(quantity);
+        requirement.setQuantity(new java.math.BigDecimal(Double.toString(quantity)));
         requirement.setUnit("pcs");
         requirement.setActive(true);
         return requirement;

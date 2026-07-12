@@ -46,8 +46,8 @@ public class MaintenanceTemplateSparePartRequirement extends BaseEntity {
     @Column(name = "spare_part_id", nullable = false, insertable = false, updatable = false)
     private UUID sparePartId;
 
-    @Column(nullable = false)
-    private double quantity;
+    @Column(nullable = false, precision = 19, scale = 4)
+    private java.math.BigDecimal quantity;
 
     @Column(nullable = false)
     private String unit;

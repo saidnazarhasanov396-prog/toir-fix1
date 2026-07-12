@@ -12,7 +12,7 @@ import java.util.UUID;
 public record StockMovementReceiptRequest(
         @NotNull UUID sparePartId,
         @NotNull UUID warehouseId,
-        @Positive double quantity,
+        @Positive @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using=com.toir.dto.common.MoneyDecimalStringDeserializer.class) BigDecimal quantity,
         @NotBlank String unit,
         @Positive BigDecimal unitPrice,
         LocalDate receivedAt,
@@ -28,7 +28,7 @@ public record StockMovementReceiptRequest(
 ) {
     public StockMovementReceiptRequest(UUID sparePartId,
                                        UUID warehouseId,
-                                       double quantity,
+                                       BigDecimal quantity,
                                        String unit,
                                        BigDecimal unitPrice,
                                        LocalDate receivedAt,

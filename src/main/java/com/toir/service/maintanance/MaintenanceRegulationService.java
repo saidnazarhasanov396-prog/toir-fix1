@@ -799,7 +799,7 @@ public class MaintenanceRegulationService {
             if (request.sparePartId() == null) {
                 throw RestException.badRequest("sparePartId is required");
             }
-            if (request.quantity() <= 0) {
+            if (request.quantity()==null||request.quantity().signum() <= 0) {
                 throw RestException.badRequest("quantity must be positive");
             }
             SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(request.sparePartId())

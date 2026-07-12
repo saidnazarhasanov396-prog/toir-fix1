@@ -699,7 +699,7 @@ class PprPlanServiceLifecycleTest {
                 null,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                3,
+                java.math.BigDecimal.valueOf(3),
                 8.0
         );
 
@@ -726,7 +726,7 @@ class PprPlanServiceLifecycleTest {
                 null,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                3,
+                java.math.BigDecimal.valueOf(3),
                 8.0
         );
 

@@ -25,7 +25,7 @@ public record WorkOrderSparePartRequirementDto(
         String notes,
         WorkOrderSparePartRequirementStatus status,
         // Faktik bajarilish ma'lumotlari
-        Double issuedQty,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal issuedQty,
         UUID issuedSparePartId,
         String issuedSparePartCode,
         String issuedSparePartName,
@@ -69,7 +69,7 @@ public record WorkOrderSparePartRequirementDto(
 
     public static WorkOrderSparePartRequirementDto withUsage(
             WorkOrderSparePartRequirement requirement,
-            Double issuedQty,
+            BigDecimal issuedQty,
             UUID issuedSparePartId,
             String issuedSparePartCode,
             String issuedSparePartName

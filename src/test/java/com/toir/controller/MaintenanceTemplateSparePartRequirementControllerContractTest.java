@@ -55,7 +55,7 @@ class MaintenanceTemplateSparePartRequirementControllerContractTest {
                 sparePartId,
                 "BRG-001",
                 "Bearing",
-                2,
+                java.math.BigDecimal.valueOf(2),
                 "dona",
                 "NORMAL",
                 null,
@@ -69,7 +69,7 @@ class MaintenanceTemplateSparePartRequirementControllerContractTest {
                         .content("""
                                 {
                                   "sparePartId": "%s",
-                                  "quantity": 2,
+                                  "quantity": "2.0000",
                                   "criticality": "NORMAL",
                                   "active": true
                                 }
@@ -96,7 +96,7 @@ class MaintenanceTemplateSparePartRequirementControllerContractTest {
                         .content("""
                                 {
                                   "sparePartId": "%s",
-                                  "quantity": 2,
+                                  "quantity": "2.0000",
                                   "unit": "kg",
                                   "criticality": "NORMAL",
                                   "active": true

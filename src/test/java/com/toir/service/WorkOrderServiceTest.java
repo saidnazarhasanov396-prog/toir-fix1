@@ -1974,7 +1974,7 @@ class WorkOrderServiceTest {
                 "Bearing",
                 "BRG-1",
                 null,
-                2,
+                java.math.BigDecimal.valueOf(2),
                 15.0,
                 30.0,
                 java.time.Instant.parse("2026-06-04T09:00:00Z"),
@@ -3341,7 +3341,7 @@ class WorkOrderServiceTest {
                 null,
                 warehouseId,
                 sparePartId,
-                2,
+                java.math.BigDecimal.valueOf(2),
                 12.5
         );
 
@@ -3410,7 +3410,7 @@ class WorkOrderServiceTest {
                 null,
                 warehouseId,
                 sparePartId,
-                99,
+                java.math.BigDecimal.valueOf(99),
                 12.5
         );
 

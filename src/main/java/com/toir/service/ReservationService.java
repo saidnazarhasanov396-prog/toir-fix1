@@ -14,13 +14,18 @@ import com.toir.exception.RestException;
 import com.toir.repository.ReservationRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.WarehouseRepository;
+import com.toir.repository.SparePartRepository;
+import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -40,10 +45,15 @@ public class ReservationService {
     private final ToirStockService toirStockService;
     private final LegacyStockProjectionService legacyStockProjectionService;
     private final WorkOrderSparePartRequirementRepository requirementRepository;
+    private final WorkOrderRepository workOrderRepository;
+    private final WarehouseRepository warehouseRepository;
+    private final SparePartRepository sparePartRepository;
+    private final ScopeAccessService scopeAccessService;
 
 
     @Transactional(readOnly = true)
     public List<ReservationDto> findByWorkOrder(UUID workOrderId) {
+        authorizeWorkOrder(workOrderId);
         return repository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId).stream().map(ReservationDto::from).toList();
     }
 
@@ -74,11 +84,11 @@ public class ReservationService {
         reservation.setRepairRequestId(r.repairRequestId());
         reservation.setReservedById(r.reservedById());
         reservation.setQuantity(r.quantity());
+        authorize(reservation);
         validateCanonicalRequirement(reservation);
         Reservation saved;
         try {
-            saved = repository.save(reservation);
-            repository.flush();
+            saved = repository.saveAndFlush(reservation);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             if (messages(e).contains("uq_reservations_active_work_requirement_spare")) {
                 throw RestException.conflict("RESERVATION_DUPLICATE");
@@ -104,16 +114,15 @@ public class ReservationService {
     }
 
     public ReservationDto cancel(UUID id) {
-        Reservation reservation = getOrThrow(id);
-        if (reservation.getStatus() != ReservationStatus.ACTIVE) {
-            throw RestException.badRequest("Only active reservations can be cancelled");
-        }
-        validatePositiveQuantity(reservation.getQuantity());
+        Reservation reservation = getLockedOrThrow(id);
         hydrateCoordinates(reservation);
-
+        authorize(reservation);
+        if (reservation.getStatus() == ReservationStatus.CANCELLED) return ReservationDto.from(reservation);
+        if (reservation.getStatus() != ReservationStatus.ACTIVE) throw RestException.conflict("RESERVATION_ALREADY_FULFILLED");
+        validatePositiveQuantity(reservation.getQuantity());
+        ReservationDto before=ReservationDto.from(reservation);
         reservation.setStatus(ReservationStatus.CANCELLED);
-
-        Reservation saved = repository.save(reservation);
+        Reservation saved = repository.saveAndFlush(reservation);
         postCoreRelease(saved);
         WarehouseStock stock = legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
         stockMovementRepository.save(buildMovement(saved, StockMovementType.RELEASE));
@@ -125,8 +134,8 @@ public class ReservationService {
                 AuditAction.UPDATE,
                 AuditModule.RESERVATION,
                 "Резерв обновлен",
-                reservation,
-                saved
+                before,
+                ReservationDto.from(saved)
         );
 
         return ReservationDto.from(saved);
@@ -134,16 +143,15 @@ public class ReservationService {
 
     @Transactional
     public ReservationDto fulfill(UUID id) {
-        Reservation reservation = getOrThrow(id);
-        if (reservation.getStatus() != ReservationStatus.ACTIVE) {
-            throw RestException.badRequest("Only active reservations can be fulfilled");
-        }
-        validatePositiveQuantity(reservation.getQuantity());
+        Reservation reservation = getLockedOrThrow(id);
         hydrateCoordinates(reservation);
-
+        authorize(reservation);
+        if (reservation.getStatus() == ReservationStatus.FULFILLED) return ReservationDto.from(reservation);
+        if (reservation.getStatus() != ReservationStatus.ACTIVE) throw RestException.conflict("RESERVATION_ALREADY_CANCELLED");
+        validatePositiveQuantity(reservation.getQuantity());
+        ReservationDto before=ReservationDto.from(reservation);
         reservation.setStatus(ReservationStatus.FULFILLED);
-
-        Reservation saved = repository.save(reservation);
+        Reservation saved = repository.saveAndFlush(reservation);
         postCoreFulfill(saved);
         WarehouseStock stock = legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
         stockMovementRepository.save(buildMovement(saved, StockMovementType.ISSUE));
@@ -155,16 +163,16 @@ public class ReservationService {
                 AuditAction.UPDATE,
                 AuditModule.RESERVATION,
                 "Резерв обновлен",
-                reservation,
-                saved
+                before,
+                ReservationDto.from(saved)
         );
 
-        return ReservationDto.from(reservation);
+        return ReservationDto.from(saved);
     }
 
-    private Reservation getOrThrow(UUID id) {
-        return repository.findByIdAndIsDeletedFalse(id)
-                .orElseThrow(() -> RestException.notFound("Reservation not found: " + id));
+    private Reservation getLockedOrThrow(UUID id) {
+        return repository.findByIdAndIsDeletedFalseForUpdate(id)
+                .orElseThrow(this::denied);
     }
 
     private void hydrateCoordinates(Reservation reservation) {
@@ -178,8 +186,7 @@ public class ReservationService {
             throw RestException.badRequest("Reservation warehouseId and sparePartId are required");
         }
         WarehouseStock stock = stockRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseStockId())
-                .orElseThrow(() -> RestException.notFound(
-                        "Stock not found: " + reservation.getWarehouseStockId()));
+                .orElseThrow(this::denied);
         reservation.setWarehouseId(stock.getWarehouseId());
         reservation.setSparePartId(stock.getSparePartId());
     }
@@ -194,13 +201,13 @@ public class ReservationService {
     }
 
     private void validateCanonicalRequirement(Reservation reservation) {
-        if (reservation.getRequirementId() == null) {
-            return;
-        }
+        if(reservation.getWorkOrderId()!=null&&reservation.getRequirementId()==null)
+            throw RestException.badRequest("RESERVATION_REQUIREMENT_REQUIRED");
+        if (reservation.getRequirementId() == null) return;
         if (reservation.getWorkOrderId() == null || reservation.getSparePartId() == null) {
             throw RestException.badRequest("RESERVATION_CANONICAL_IDENTITY_REQUIRED");
         }
-        var requirement = requirementRepository.findByIdAndWorkOrderIdAndIsDeletedFalse(
+        var requirement = requirementRepository.findByIdAndWorkOrderIdAndIsDeletedFalseForUpdate(
                         reservation.getRequirementId(), reservation.getWorkOrderId())
                 .orElseThrow(() -> RestException.badRequest("RESERVATION_REQUIREMENT_INVALID"));
         UUID requiredSpare = requirement.getSparePartId() != null ? requirement.getSparePartId()
@@ -218,6 +225,21 @@ public class ReservationService {
         }
     }
 
+    private void authorize(Reservation reservation){
+        if(reservation.getWorkOrderId()!=null)authorizeWorkOrder(reservation.getWorkOrderId());
+        var warehouse=warehouseRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseId())
+                .filter(com.toir.entity.warehouse.Warehouse::isActive).orElseThrow(this::denied);
+        if(warehouse.getDepartmentId()!=null)scopeAccessService.assertCanAccessDepartment(warehouse.getDepartmentId());
+        sparePartRepository.findByIdAndIsDeletedFalse(reservation.getSparePartId()).orElseThrow(this::denied);
+    }
+
+    private void authorizeWorkOrder(UUID workOrderId){
+        var workOrder=workOrderRepository.findByIdAndIsDeletedFalse(workOrderId).orElseThrow(this::denied);
+        if(workOrder.getDepartmentId()!=null)scopeAccessService.assertCanAccessDepartment(workOrder.getDepartmentId());
+    }
+
+    private AccessDeniedException denied(){return new AccessDeniedException("Access denied");}
+
     private String messages(Throwable error) {
         StringBuilder result = new StringBuilder();
         for (Throwable current = error; current != null; current = current.getCause()) {
@@ -234,7 +256,7 @@ public class ReservationService {
         movement.setWorkOrderId(reservation.getWorkOrderId());
         movement.setCreatedById(reservation.getReservedById());
         movement.setType(type);
-        movement.setQuantity(reservation.getQuantity().doubleValue());
+        movement.setQuantity(reservation.getQuantity());
         movement.setLotNumber(reservation.getLotNumber());
         movement.setSerialNumber(reservation.getSerialNumber());
         movement.setExpiryDate(reservation.getExpiryDate());

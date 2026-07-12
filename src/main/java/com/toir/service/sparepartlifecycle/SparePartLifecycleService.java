@@ -536,7 +536,7 @@ public class SparePartLifecycleService {
                         "Repair material usage not found: " + request.sourceMaterialUsageId()));
         if (!Objects.equals(usage.getSparePartId(), request.sparePartId())
                 || !Objects.equals(usage.getWorkOrderId(), request.workOrderId())
-                || BigDecimal.valueOf(usage.getQuantity()).compareTo(request.quantity()) < 0
+                || usage.getQuantity().compareTo(request.quantity()) < 0
                 || (serialNumber != null && !Objects.equals(serialNumber, normalizeText(usage.getSerialNumber())))
                 || (lotNumber != null && !Objects.equals(lotNumber, normalizeText(usage.getLotNumber())))) {
             throw RestException.conflict("MATERIAL_USAGE_MISMATCH: part, work order, quantity, serial or lot does not match");

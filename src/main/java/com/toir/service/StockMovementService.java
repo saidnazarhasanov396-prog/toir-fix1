@@ -134,7 +134,7 @@ public class StockMovementService {
         WmsStockSnapshot currentStock =
                 legacyStockProjectionService.current(request.warehouseId(), request.sparePartId());
         if (request.type() == StockMovementType.ADJUSTMENT
-                && BigDecimal.valueOf(request.quantity()).compareTo(currentStock.qtyReserved()) < 0) {
+                && request.quantity().compareTo(currentStock.qtyReserved()) < 0) {
             throw RestException.badRequest("Cannot adjust quantity below reserved: reserved="
                     + currentStock.qtyReserved() + ", requested=" + request.quantity());
         }
@@ -192,7 +192,7 @@ public class StockMovementService {
         movement.setQuantity(request.quantity());
         movement.setUnit(normalizeRequiredToken(request.unit(), "unit"));
         movement.setUnitPrice(request.unitPrice());
-        movement.setUnitCost(request.unitPrice() == null ? null : request.unitPrice().doubleValue());
+        movement.setUnitCost(null);
         movement.setTotalAmount(totalAmount(request.quantity(), request.unitPrice()));
         movement.setMovementDate(defaultDate(request.receivedAt()));
         movement.setResponsiblePersonId(request.responsiblePersonId());
@@ -511,10 +511,11 @@ public class StockMovementService {
                 || type == StockMovementType.ADJUSTMENT;
     }
 
-    private void validatePositiveQuantity(double quantity) {
-        if (quantity <= 0) {
+    private void validatePositiveQuantity(BigDecimal quantity) {
+        if (quantity == null || quantity.signum() <= 0) {
             throw RestException.badRequest("Quantity must be greater than 0");
         }
+        if(quantity.stripTrailingZeros().scale()>4||quantity.precision()-quantity.scale()>15)throw RestException.badRequest("Quantity must fit numeric(19,4)");
     }
 
     private void validateOptionalUnitPrice(BigDecimal unitPrice) {
@@ -571,7 +572,7 @@ public class StockMovementService {
     private void postCoreStockReceipt(StockMovement saved) {
         toirStockService.postReceipt(stockReceiptCommand(
                 saved,
-                BigDecimal.valueOf(saved.getQuantity()),
+                saved.getQuantity(),
                 "stock-movement-receipt:" + saved.getId()
         ));
     }
@@ -579,7 +580,7 @@ public class StockMovementService {
     private void postCoreStockIssue(StockMovement saved) {
         toirStockService.postIssue(stockIssueCommand(
                 saved,
-                BigDecimal.valueOf(saved.getQuantity()),
+                saved.getQuantity(),
                 "stock-movement-issue:" + saved.getId()
         ));
     }
@@ -587,15 +588,15 @@ public class StockMovementService {
     private void postCoreStockMovement(StockMovement saved, BigDecimal previousQuantity) {
         switch (saved.getType()) {
             case RECEIPT -> postCoreStockIncrease(saved, StockLedgerMovementType.RECEIPT,
-                    BigDecimal.valueOf(saved.getQuantity()));
+                    saved.getQuantity());
             case RETURN -> postCoreStockIncrease(saved, StockLedgerMovementType.RETURN,
-                    BigDecimal.valueOf(saved.getQuantity()));
+                    saved.getQuantity());
             case ISSUE -> postCoreStockDecrease(saved, StockLedgerMovementType.ISSUE,
-                    BigDecimal.valueOf(saved.getQuantity()));
+                    saved.getQuantity());
             case TRANSFER -> postCoreStockDecrease(saved, StockLedgerMovementType.TRANSFER_OUT,
-                    BigDecimal.valueOf(saved.getQuantity()));
+                    saved.getQuantity());
             case ADJUSTMENT -> {
-                BigDecimal delta = BigDecimal.valueOf(saved.getQuantity()).subtract(previousQuantity);
+                BigDecimal delta = saved.getQuantity().subtract(previousQuantity);
                 if (delta.signum() > 0) {
                     postCoreStockIncrease(saved, StockLedgerMovementType.ADJUSTMENT_INC, delta);
                 } else if (delta.signum() < 0) {
@@ -666,7 +667,7 @@ public class StockMovementService {
         if (saved.getUnitPrice() != null) {
             return saved.getUnitPrice();
         }
-        return saved.getUnitCost() == null ? null : BigDecimal.valueOf(saved.getUnitCost());
+        return saved.getUnitCost() == null ? null : new BigDecimal(saved.getUnitCost().toString());
     }
 
     private String coreStockIdempotencyKey(StockMovement saved, StockLedgerMovementType movementType) {
@@ -690,8 +691,8 @@ public class StockMovementService {
         return stockStatus == null ? WarehouseStockStatus.AVAILABLE : stockStatus;
     }
 
-    private BigDecimal totalAmount(double quantity, BigDecimal unitPrice) {
-        return unitPrice == null ? null : unitPrice.multiply(BigDecimal.valueOf(quantity));
+    private BigDecimal totalAmount(BigDecimal quantity, BigDecimal unitPrice) {
+        return unitPrice == null ? null : unitPrice.multiply(quantity);
     }
 
     private LocalDate defaultDate(LocalDate movementDate) {
