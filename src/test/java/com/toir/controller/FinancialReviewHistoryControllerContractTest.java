@@ -119,7 +119,7 @@ class FinancialReviewHistoryControllerContractTest {
         ActualCost actualCost = new ActualCost();
         ReflectionTestUtils.setField(actualCost, "id", id);
         actualCost.setStatus(ActualCostStatus.APPROVED);
-        actualCost.setAmount(100.0);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100.0));
         actualCost.setCostDate(Instant.now());
         actualCost.setReviewedAt(Instant.now());
         actualCost.setReviewedById(reviewerId);
@@ -148,7 +148,7 @@ class FinancialReviewHistoryControllerContractTest {
         ActualCost actualCost = new ActualCost();
         ReflectionTestUtils.setField(actualCost, "id", id);
         actualCost.setStatus(ActualCostStatus.REJECTED);
-        actualCost.setAmount(90.0);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(90.0));
         actualCost.setCostDate(Instant.now());
         actualCost.setReviewedAt(Instant.now());
         actualCost.setReviewedById(null);
@@ -177,7 +177,7 @@ class FinancialReviewHistoryControllerContractTest {
         ActualCost actualCost = new ActualCost();
         ReflectionTestUtils.setField(actualCost, "id", id);
         actualCost.setStatus(ActualCostStatus.PENDING);
-        actualCost.setAmount(10.0);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(10.0));
         actualCost.setCostDate(Instant.now());
         actualCost.setReviewedAt(null);
         actualCost.setReviewedById(null);

@@ -352,14 +352,14 @@ class BudgetSummaryControllerContractTest {
         approved.setCostCategoryId(categoryId);
         approved.setBudgetLineId(budgetLineId);
         approved.setStatus(ActualCostStatus.APPROVED);
-        approved.setAmount(200.0);
+        approved.setAmount(java.math.BigDecimal.valueOf(200.0));
         ActualCost pending = actualCost(UUID.randomUUID());
         pending.setWorkOrderId(workOrderId);
         pending.setContractorWorkId(contractorWorkId);
         pending.setCostCategoryId(categoryId);
         pending.setBudgetLineId(budgetLineId);
         pending.setStatus(ActualCostStatus.PENDING);
-        pending.setAmount(100.0);
+        pending.setAmount(java.math.BigDecimal.valueOf(100.0));
 
         when(contractorWorkRepository.findByIdAndIsDeletedFalse(contractorWorkId)).thenReturn(Optional.of(contractorWork));
         when(counteragentService.load(counteragentId)).thenReturn(counteragent);
@@ -501,7 +501,7 @@ class BudgetSummaryControllerContractTest {
         ActualCost pendingCost = new ActualCost();
         pendingCost.setId(UUID.randomUUID());
         pendingCost.setStatus(ActualCostStatus.PENDING);
-        pendingCost.setAmount(300.0);
+        pendingCost.setAmount(java.math.BigDecimal.valueOf(300.0));
         pendingCost.setBudgetLineId(lineId);
         pendingCost.setCostCategoryId(costCategoryId);
         pendingCost.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
@@ -549,7 +549,7 @@ class BudgetSummaryControllerContractTest {
         ActualCost approved = new ActualCost();
         approved.setId(UUID.randomUUID());
         approved.setStatus(ActualCostStatus.APPROVED);
-        approved.setAmount(500.0);
+        approved.setAmount(java.math.BigDecimal.valueOf(500.0));
         approved.setBudgetLineId(lineId);
         approved.setCostCategoryId(costCategoryId);
         approved.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
@@ -557,7 +557,7 @@ class BudgetSummaryControllerContractTest {
         ActualCost pending = new ActualCost();
         pending.setId(UUID.randomUUID());
         pending.setStatus(ActualCostStatus.PENDING);
-        pending.setAmount(300.0);
+        pending.setAmount(java.math.BigDecimal.valueOf(300.0));
         pending.setBudgetLineId(lineId);
         pending.setCostCategoryId(costCategoryId);
         pending.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
@@ -565,7 +565,7 @@ class BudgetSummaryControllerContractTest {
         ActualCost rejected = new ActualCost();
         rejected.setId(UUID.randomUUID());
         rejected.setStatus(ActualCostStatus.REJECTED);
-        rejected.setAmount(200.0);
+        rejected.setAmount(java.math.BigDecimal.valueOf(200.0));
         rejected.setBudgetLineId(lineId);
         rejected.setCostCategoryId(costCategoryId);
         rejected.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
@@ -630,7 +630,7 @@ class BudgetSummaryControllerContractTest {
         ReflectionTestUtils.setField(actualCost, "id", id);
         actualCost.setCostCategoryId(UUID.randomUUID());
         actualCost.setStatus(ActualCostStatus.PENDING);
-        actualCost.setAmount(100.0);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100.0));
         actualCost.setCostDate(Instant.parse("2026-05-26T09:00:00Z"));
         actualCost.setNotes("Existing notes");
         return actualCost;
@@ -644,7 +644,7 @@ class BudgetSummaryControllerContractTest {
                 actualCost.getContractorWorkId(),
                 actualCost.getCostCategoryId(),
                 actualCost.getStatus().name(),
-                actualCost.getAmount(),
+                actualCost.getAmount().doubleValue(),
                 actualCost.getCostDate(),
                 actualCost.getNotes(),
                 actualCost.getReviewedAt(),

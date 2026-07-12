@@ -132,11 +132,11 @@ class StockMovementServiceTest {
 
         assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.ISSUE, 0)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("STOCK_QUANTITY_INVALID");
 
         assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.ISSUE, -1)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("STOCK_QUANTITY_INVALID");
 
         verifyNoInteractions(stockRepository, repository, sparePartRepository);
     }
@@ -148,11 +148,11 @@ class StockMovementServiceTest {
 
         assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.RESERVATION, 0)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("STOCK_QUANTITY_INVALID");
 
         assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.RESERVATION, -2)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("STOCK_QUANTITY_INVALID");
 
         verifyNoInteractions(stockRepository, repository, sparePartRepository);
     }

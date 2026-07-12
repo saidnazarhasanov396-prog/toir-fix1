@@ -14,6 +14,7 @@ public record WorkOrderSparePartRequirementDto(
         UUID templateId,
         UUID operationId,
         UUID campaignRequirementId,
+        UUID warehouseId,
         String operationName,
         UUID sparePartId,
         String sparePartCode,
@@ -52,6 +53,7 @@ public record WorkOrderSparePartRequirementDto(
                         ? requirement.getOperationId()
                         : operation == null ? null : operation.getId(),
                 requirement.getCampaignRequirementId(),
+                requirement.getWarehouseId(),
                 operation == null ? null : operation.getName(),
                 requirement.getSparePartId() != null
                         ? requirement.getSparePartId()
@@ -79,7 +81,7 @@ public record WorkOrderSparePartRequirementDto(
                 && !issuedSparePartId.equals(requirement.getSparePartId());
         return new WorkOrderSparePartRequirementDto(
                 base.id(), base.workOrderId(), base.sourceType(), base.sourceRequirementId(),
-                base.templateId(), base.operationId(), base.campaignRequirementId(), base.operationName(),
+                base.templateId(), base.operationId(), base.campaignRequirementId(), base.warehouseId(), base.operationName(),
                 base.sparePartId(), base.sparePartCode(), base.sparePartName(),
                 base.requiredQty(), base.unit(), base.criticality(), base.notes(), base.status(),
                 issuedQty, issuedSparePartId, issuedSparePartCode, issuedSparePartName, isReplacement

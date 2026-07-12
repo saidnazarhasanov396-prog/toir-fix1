@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Objects;
 import java.util.UUID;
+import java.math.BigDecimal;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -82,6 +83,7 @@ public class WorkOrderSparePartRequirementService {
             requirement.setWorkOrder(workOrder);
             requirement.setSourceType(WorkOrderSparePartRequirementSourceType.REPAIR_CAMPAIGN_WORK_ITEM);
             requirement.setCampaignRequirementId(campaignRequirement.getId());
+            requirement.setWarehouseId(campaignRequirement.getWarehouseId());
             requirement.setSparePart(sparePart);
             requirement.setRequiredQty(campaignRequirement.getRequiredQuantity());
             requirement.setUnit(sparePart.getUnit());
@@ -152,9 +154,7 @@ public class WorkOrderSparePartRequirementService {
         WorkOrder workOrder = workOrderOrThrow(workOrderId);
         assertCanMutateWorkOrder(workOrder);
         SparePart sparePart = sparePartOrThrow(request.sparePartId());
-        if (request.requiredQty() == null || request.requiredQty().signum() <= 0) {
-            throw RestException.badRequest("requiredQty must be positive");
-        }
+        validateQuantity(request.requiredQty());
 
         WorkOrderSparePartRequirement requirement = new WorkOrderSparePartRequirement();
         requirement.setWorkOrder(workOrder);
@@ -177,9 +177,7 @@ public class WorkOrderSparePartRequirementService {
         WorkOrderSparePartRequirement requirement = requirementOrThrow(workOrderId, requirementId);
         assertManualRequirement(requirement);
         SparePart sparePart = sparePartOrThrow(request.sparePartId());
-        if (request.requiredQty() == null || request.requiredQty().signum() <= 0) {
-            throw RestException.badRequest("requiredQty must be positive");
-        }
+        validateQuantity(request.requiredQty());
         assertReservationFactsAllowUpdate(requirement,request.sparePartId(),request.requiredQty());
 
         requirement.setSparePart(sparePart);
@@ -188,6 +186,13 @@ public class WorkOrderSparePartRequirementService {
         requirement.setCriticality(request.criticality());
         requirement.setNotes(request.notes());
         return WorkOrderSparePartRequirementDto.from(repository.save(requirement));
+    }
+
+    private void validateQuantity(BigDecimal quantity) {
+        if (quantity == null || quantity.signum() <= 0 || quantity.stripTrailingZeros().scale() > 4
+                || quantity.precision() - quantity.scale() > 15) {
+            throw RestException.badRequest("MATERIAL_QUANTITY_INVALID");
+        }
     }
 
     @Transactional

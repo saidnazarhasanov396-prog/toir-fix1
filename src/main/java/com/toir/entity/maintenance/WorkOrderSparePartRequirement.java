@@ -72,6 +72,9 @@ public class WorkOrderSparePartRequirement extends BaseEntity {
     @Column(name = "campaign_requirement_id")
     private UUID campaignRequirementId;
 
+    @Column(name = "warehouse_id")
+    private UUID warehouseId;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "spare_part_id", nullable = false)
     private SparePart sparePart;

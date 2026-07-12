@@ -813,7 +813,7 @@ class ProcurementRequestServiceTest {
         assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.PROCUREMENT_RECEIPT);
         assertThat(cost.getSourceId()).isEqualTo(movement.getId());
         assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
-        assertThat(cost.getAmount()).isEqualTo(10_000_000.0);
+        assertThat(cost.getAmount()).isEqualByComparingTo("10000000.0");
         assertThat(cost.getCostCategoryId()).isEqualTo(materials.getId());
         assertThat(movement.getSparePartId()).isNull();
         assertThat(movement.getEquipmentTypeId()).isEqualTo(equipmentTypeId);
@@ -900,7 +900,7 @@ class ProcurementRequestServiceTest {
         assertThat(cost.getBudgetLineId()).isEqualTo(budgetLineId);
         assertThat(cost.getCostCategoryId()).isEqualTo(budgetCategoryId);
         assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
-        assertThat(cost.getAmount()).isEqualTo(3_000_000.0);
+        assertThat(cost.getAmount()).isEqualByComparingTo("3000000.0");
     }
 
     @Test
@@ -970,7 +970,7 @@ class ProcurementRequestServiceTest {
         assertThat(cost.getSourceId()).isNotNull();
         assertThat(cost.getCostCategoryId()).isEqualTo(categoryId);
         assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
-        assertThat(cost.getAmount()).isEqualTo(22.0);
+        assertThat(cost.getAmount()).isEqualByComparingTo("22.0");
         assertThat(cost.getNotes()).contains(requestId.toString());
     }
 
@@ -1027,7 +1027,7 @@ class ProcurementRequestServiceTest {
         existingCost.setId(existingCostId);
         existingCost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
         existingCost.setSourceId(movementId);
-        existingCost.setAmount(10.0);
+        existingCost.setAmount(java.math.BigDecimal.valueOf(10.0));
         when(repository.findByIdAndIsDeletedFalseForUpdate(requestId)).thenReturn(Optional.of(request));
         when(legacyStockProjectionService.sync(warehouseId, sparePartId))
                 .thenReturn(stock(warehouseId, sparePartId, 5));
@@ -1050,7 +1050,7 @@ class ProcurementRequestServiceTest {
         assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.PROCUREMENT_RECEIPT);
         assertThat(cost.getSourceId()).isEqualTo(movementId);
         assertThat(cost.getCostCategoryId()).isEqualTo(categoryId);
-        assertThat(cost.getAmount()).isEqualTo(48.0);
+        assertThat(cost.getAmount()).isEqualByComparingTo("48.0");
     }
 
     @Test

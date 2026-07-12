@@ -114,7 +114,7 @@ public class ActualCostReviewRouteOverrideResponseMapper {
                 calculateIsOverdue(actualCost, override),
                 calculateHoursToOverdue(actualCost, override),
                 calculateAgeHours(actualCost),
-                actualCost.getAmount(),
+                actualCost.getAmount().doubleValue(),
                 safeText(override.getApprovalRoleCode()),
                 safeText(override.getEscalationRoleCode()),
                 safeText(actualCost.getReviewComment()),
@@ -172,7 +172,7 @@ public class ActualCostReviewRouteOverrideResponseMapper {
 
         Optional<FinancialApprovalRule> matched = financialApprovalRuleRepository.findFirstMatchingRule(
                 departmentId,
-                actualCost.getAmount()
+                actualCost.getAmount().doubleValue()
         );
         return matched == null ? Optional.empty() : matched;
     }

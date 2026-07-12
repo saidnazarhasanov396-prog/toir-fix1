@@ -14,7 +14,7 @@ public record StockMovementRequest(
         @NotNull UUID sparePartId,
         UUID workOrderId,
         @NotNull StockMovementType type,
-        @Positive @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using=com.toir.dto.common.MoneyDecimalStringDeserializer.class) BigDecimal quantity,
+        @Positive @jakarta.validation.constraints.Digits(integer=15,fraction=4) @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using=com.toir.dto.common.MoneyDecimalStringDeserializer.class) BigDecimal quantity,
         Double unitCost,
         String documentNumber,
         UUID createdById,

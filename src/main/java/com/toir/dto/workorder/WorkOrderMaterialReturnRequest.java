@@ -17,7 +17,8 @@ public record WorkOrderMaterialReturnRequest(
         String serialNumber,
         LocalDate expiryDate,
         WarehouseStockStatus stockStatus,
-        BigDecimal quantity,
+        @jakarta.validation.constraints.Positive @jakarta.validation.constraints.Digits(integer=15,fraction=4)
+        @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using=com.toir.dto.common.MoneyDecimalStringDeserializer.class) BigDecimal quantity,
         String reason,
         UUID returnedById,
         UUID responsiblePersonId,

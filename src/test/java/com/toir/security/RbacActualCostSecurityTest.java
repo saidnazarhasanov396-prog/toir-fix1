@@ -187,7 +187,7 @@ class RbacActualCostSecurityTest {
                 null,
                 null,
                 null,
-                100.0,
+                java.math.BigDecimal.valueOf(100.0),
                 Instant.now(),
                 "Test actual cost"
         );
@@ -199,7 +199,7 @@ class RbacActualCostSecurityTest {
                   "workOrderId": "%s",
                   "budgetLineId": "%s",
                   "costCategoryId": "%s",
-                  "amount": 100,
+                  "amount": "100.0000",
                   "costDate": "2026-05-01T00:00:00Z",
                   "notes": "Test actual cost"
                 }

@@ -459,7 +459,7 @@ public class ActualCostReviewFacadeService {
         ActualCostContext context = resolveContext(cost, activeOverride);
         FinancialApprovalRule matchingRule = activeOverride == null && context.department() != null
                 ? financialApprovalRuleRepository
-                .findFirstMatchingRule(context.department().getId(), cost.getAmount())
+                .findFirstMatchingRule(context.department().getId(), cost.getAmount().doubleValue())
                 .orElse(null)
                 : null;
         int ageHours = ageHours(cost);
@@ -494,7 +494,7 @@ public class ActualCostReviewFacadeService {
                 cost.getContractorWorkId(),
                 cost.getCostCategoryId(),
                 cost.getStatus() != null ? cost.getStatus().name() : null,
-                cost.getAmount(),
+                cost.getAmount().doubleValue(),
                 cost.getCostDate(),
                 cost.getNotes(),
                 cost.getReviewedAt(),
@@ -568,7 +568,7 @@ public class ActualCostReviewFacadeService {
                 event.getOccurredAt(),
                 event.getActualCostId(),
                 cost != null && cost.getStatus() != null ? cost.getStatus().name() : event.getStatus(),
-                cost != null ? cost.getAmount() : 0,
+                cost != null ? cost.getAmount().doubleValue() : 0,
                 event.getTitle(),
                 event.getDescription(),
                 null,
@@ -597,7 +597,7 @@ public class ActualCostReviewFacadeService {
                 event.getOccurredAt(),
                 event.getActualCostId(),
                 cost != null && cost.getStatus() != null ? cost.getStatus().name() : event.getStatus(),
-                cost != null ? cost.getAmount() : 0,
+                cost != null ? cost.getAmount().doubleValue() : 0,
                 toDepartmentRef(context.department()),
                 toCounteragentRef(context.counteragentWork()),
                 toCounteragentWorkRef(context.counteragentWork(), context.workOrder()),

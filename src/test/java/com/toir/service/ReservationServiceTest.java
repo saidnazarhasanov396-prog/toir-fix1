@@ -20,6 +20,8 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.repository.repair.RepairCampaignMaterialRequirementRepository;
+import com.toir.entity.repair.RepairCampaignMaterialRequirement;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
@@ -74,13 +76,14 @@ class ReservationServiceTest {
     @Mock WarehouseRepository warehouseRepository;
     @Mock SparePartRepository sparePartRepository;
     @Mock ScopeAccessService scopeAccessService;
+    @Mock RepairCampaignMaterialRequirementRepository campaignRequirementRepository;
 
     @InjectMocks
     ReservationService service;
 
     @BeforeEach void authorizationFixtures(){
-        org.mockito.Mockito.lenient().when(workOrderRepository.findByIdAndIsDeletedFalse(any())).thenAnswer(i->{WorkOrder w=new WorkOrder();w.setId(i.getArgument(0));return Optional.of(w);});
-        org.mockito.Mockito.lenient().when(warehouseRepository.findByIdAndIsDeletedFalse(any())).thenAnswer(i->{Warehouse w=new Warehouse();w.setId(i.getArgument(0));w.setActive(true);return Optional.of(w);});
+        org.mockito.Mockito.lenient().when(workOrderRepository.findByIdAndIsDeletedFalse(any())).thenAnswer(i->{WorkOrder w=new WorkOrder();w.setId(i.getArgument(0));w.setDepartmentId(UUID.randomUUID());return Optional.of(w);});
+        org.mockito.Mockito.lenient().when(warehouseRepository.findByIdAndIsDeletedFalse(any())).thenAnswer(i->{Warehouse w=new Warehouse();w.setId(i.getArgument(0));w.setDepartmentId(UUID.randomUUID());w.setActive(true);return Optional.of(w);});
         org.mockito.Mockito.lenient().when(sparePartRepository.findByIdAndIsDeletedFalse(any())).thenAnswer(i->{SparePart p=new SparePart();p.setId(i.getArgument(0));return Optional.of(p);});
     }
 
@@ -366,6 +369,25 @@ class ReservationServiceTest {
         assertThatThrownBy(()->service.reserve(new ReservationRequest(stockId,workOrderId,null,null,java.math.BigDecimal.ONE)))
                 .isInstanceOf(org.springframework.security.access.AccessDeniedException.class).hasMessage("Access denied");
         verify(repository,never()).saveAndFlush(any());
+    }
+
+    @Test void campaignRequirementReservationRejectsForeignWarehouse(){
+        UUID stockId=UUID.randomUUID(),workOrderId=UUID.randomUUID(),requirementId=UUID.randomUUID(),campaignRequirementId=UUID.randomUUID(),sparePartId=UUID.randomUUID(),actualWarehouse=UUID.randomUUID(),requiredWarehouse=UUID.randomUUID();
+        when(stockRepository.findByIdAndIsDeletedFalse(stockId)).thenReturn(Optional.of(stock(stockId,actualWarehouse,sparePartId,10,0)));
+        WorkOrderSparePartRequirement requirement=new WorkOrderSparePartRequirement();requirement.setId(requirementId);requirement.setWorkOrderId(workOrderId);requirement.setSparePartId(sparePartId);requirement.setRequiredQty(java.math.BigDecimal.TEN);requirement.setCampaignRequirementId(campaignRequirementId);
+        when(requirementRepository.findByIdAndWorkOrderIdAndIsDeletedFalseForUpdate(requirementId,workOrderId)).thenReturn(Optional.of(requirement));
+        RepairCampaignMaterialRequirement campaignRequirement=new RepairCampaignMaterialRequirement();campaignRequirement.setId(campaignRequirementId);campaignRequirement.setSparePartId(sparePartId);campaignRequirement.setWarehouseId(requiredWarehouse);
+        when(campaignRequirementRepository.findByIdAndIsDeletedFalse(campaignRequirementId)).thenReturn(Optional.of(campaignRequirement));
+        assertThatThrownBy(()->service.reserve(canonical(stockId,workOrderId,requirementId,java.math.BigDecimal.ONE))).hasMessageContaining("RESERVATION_WAREHOUSE_MISMATCH");
+        verify(repository,never()).saveAndFlush(any());verifyNoInteractions(toirStockService);
+    }
+
+    @Test void nullDepartmentWarehouseAndWorkOrderFailClosed(){
+        UUID warehouseId=UUID.randomUUID(),spareId=UUID.randomUUID();Warehouse warehouse=new Warehouse();warehouse.setId(warehouseId);warehouse.setActive(true);
+        when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));
+        assertThatThrownBy(()->service.reserve(new ReservationRequest(null,warehouseId,spareId,null,null,null,null,null,null,null,null,null,java.math.BigDecimal.ONE))).isInstanceOf(org.springframework.security.access.AccessDeniedException.class).hasMessage("Access denied");
+        UUID workOrderId=UUID.randomUUID();WorkOrder workOrder=new WorkOrder();workOrder.setId(workOrderId);when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        assertThatThrownBy(()->service.findByWorkOrder(workOrderId)).isInstanceOf(org.springframework.security.access.AccessDeniedException.class).hasMessage("Access denied");
     }
 
     private WarehouseStock stock(UUID stockId, UUID warehouseId, UUID sparePartId, double quantity, double reservedQty) {

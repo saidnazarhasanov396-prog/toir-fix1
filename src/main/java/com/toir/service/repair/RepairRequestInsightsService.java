@@ -558,7 +558,7 @@ public class RepairRequestInsightsService {
                 cost.getWorkOrderId(),
                 workOrder == null ? null : workOrder.getNumber(),
                 cost.getStatus(),
-                cost.getAmount(),
+                cost.getAmount().doubleValue(),
                 effectiveCostDate(cost)
         );
     }

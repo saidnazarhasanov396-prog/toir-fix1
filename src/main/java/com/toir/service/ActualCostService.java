@@ -132,7 +132,7 @@ public class ActualCostService {
 
         UUID deptIdForRule = resolveActualCostDepartment(effectiveWorkOrder, repairRequest, budgetLine);
         FinancialApprovalRule matchedRule = financialApprovalRuleRepository
-                .findFirstMatchingRule(deptIdForRule, saved.getAmount())
+                .findFirstMatchingRule(deptIdForRule, legacyAmount(saved.getAmount()))
                 .orElse(null);
         String initialApprovalRole = (matchedRule != null && matchedRule.getRequiredRoleCode() != null)
                 ? matchedRule.getRequiredRoleCode()
@@ -141,7 +141,7 @@ public class ActualCostService {
         Integer initialThresholdHours = matchedRule != null ? matchedRule.getThresholdHours() : null;
         recordInitialReviewEvent(
                 saved.getId(),
-                saved.getAmount(),
+                legacyAmount(saved.getAmount()),
                 initialApprovalRole,
                 initialEscalationRole,
                 initialThresholdHours
@@ -177,7 +177,7 @@ public class ActualCostService {
      */
     @Transactional
     public void syncPendingFromWorkOrderCompletion(ActualCostDto request) {
-        if (request == null || request.amount() <= 0 || request.costCategoryId() == null) {
+        if (request == null || request.amount()==null||request.amount().signum() <= 0 || request.costCategoryId() == null) {
             return;
         }
         if (request.sourceType() == null || request.sourceId() == null) {
@@ -216,7 +216,7 @@ public class ActualCostService {
         if (approve && c.getBudgetLineId() != null) {
             BudgetLine line = requireBudgetLine(c.getBudgetLineId());
             assertBudgetLineUsable(line);
-            assertBudgetRemaining(line, c.getAmount());
+            assertBudgetRemaining(line, legacyAmount(c.getAmount()));
             if (c.getSourceType() == ActualCostSourceType.PROCUREMENT_RECEIPT) {
                 releaseProcurementCommitment(line, c, reviewerId,
                         "Release commitment on actual cost approval");
@@ -325,7 +325,7 @@ public class ActualCostService {
                                            WorkOrder workOrder,
                                            RepairRequest repairRequest,
                                            BudgetLine budgetLine) {
-        if (request.amount() <= 0) {
+        if (request.amount()==null||request.amount().signum() <= 0) {
             throw RestException.badRequest("Actual cost amount must be positive");
         }
         if (request.costCategoryId() == null) {
@@ -479,12 +479,12 @@ public class ActualCostService {
         if (cost.getStatus() == ActualCostStatus.APPROVED) {
             return;
         }
-        line.setActualAmount(line.getActualAmount() + cost.getAmount());
+        line.setActualAmount(line.getActualAmount() + legacyAmount(cost.getAmount()));
         budgetLineRepository.save(line);
 
         MaintenanceBudget budget = line.getBudget();
         if (budget != null) {
-            budget.setTotalActual(budget.getTotalActual() + cost.getAmount());
+            budget.setTotalActual(budget.getTotalActual() + legacyAmount(cost.getAmount()));
             maintenanceBudgetRepository.save(budget);
         }
     }
@@ -497,7 +497,7 @@ public class ActualCostService {
         }
         budgetCommitmentService.releaseBudget(
                 line.getId(),
-                cost.getAmount(),
+                legacyAmount(cost.getAmount()),
                 "ACTUAL_COST_PENDING",
                 cost.getId(),
                 actorUserId,
@@ -512,7 +512,7 @@ public class ActualCostService {
         }
         budgetCommitmentService.commitBudget(
                 budgetLine.getId(),
-                saved.getAmount(),
+                legacyAmount(saved.getAmount()),
                 "ACTUAL_COST_PENDING",
                 saved.getId(),
                 null,
@@ -523,7 +523,7 @@ public class ActualCostService {
     private void releasePendingCommitmentOnApprove(BudgetLine line, ActualCost cost, UUID reviewerId) {
         budgetCommitmentService.releaseBudget(
                 line.getId(),
-                cost.getAmount(),
+                legacyAmount(cost.getAmount()),
                 "ACTUAL_COST_PENDING",
                 cost.getId(),
                 reviewerId,
@@ -545,7 +545,7 @@ public class ActualCostService {
         }
         budgetCommitmentService.releaseBudget(
                 line.getId(),
-                cost.getAmount(),
+                legacyAmount(cost.getAmount()),
                 sourceType,
                 sourceId,
                 reviewerId,
@@ -666,4 +666,6 @@ public class ActualCostService {
             cost.setCostDate(request.costDate());
         }
     }
+
+    private static double legacyAmount(java.math.BigDecimal amount){return amount.doubleValue();}
 }

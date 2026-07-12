@@ -7,6 +7,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Getter
@@ -65,8 +66,8 @@ public class ActualCost extends BaseEntity {
     @Column(name = "allocated_at")
     private Instant allocatedAt;
 
-    @Column(nullable = false)
-    private double amount;
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal amount;
 
     @Column(name = "cost_date", nullable = false)
     private Instant costDate = Instant.now();

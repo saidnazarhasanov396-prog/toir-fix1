@@ -12,7 +12,7 @@ public record RepairCampaignMaterialRequirementRequest(
         @NotNull UUID workItemId,
         @NotNull UUID sparePartId,
         @NotNull UUID warehouseId,
-        @NotNull @DecimalMin(value="0",inclusive=false)
+        @NotNull @DecimalMin(value="0",inclusive=false) @jakarta.validation.constraints.Digits(integer=15,fraction=4)
         @JsonDeserialize(using=com.toir.dto.common.MoneyDecimalStringDeserializer.class) BigDecimal requiredQuantity,
         boolean critical,
         boolean procurementRequired) {}

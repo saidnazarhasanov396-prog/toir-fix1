@@ -20,7 +20,7 @@ public record WarehouseStockMoveJournalDto(
         UUID toBinId,
         String toBinCode,
         WarehouseStockStatus stockStatus,
-        BigDecimal quantity,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal quantity,
         String documentNumber,
         String lotNumber,
         String serialNumber,

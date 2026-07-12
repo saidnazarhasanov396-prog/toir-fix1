@@ -394,7 +394,7 @@ class ActualCostServiceTest {
         actualCost.setSourceType(ActualCostSourceType.WORK_ORDER);
         actualCost.setBudgetLineId(budgetLineId);
         actualCost.setCostCategoryId(UUID.randomUUID());
-        actualCost.setAmount(100);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100));
         BudgetLine line = budgetLine(budgetLineId, 500, 200, BudgetStatus.APPROVED);
 
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
@@ -427,7 +427,7 @@ class ActualCostServiceTest {
         ActualCost actualCost = new ActualCost();
         ReflectionTestUtils.setField(actualCost, "id", id);
         actualCost.setStatus(ActualCostStatus.PENDING);
-        actualCost.setAmount(100);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100));
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
 
         assertThatThrownBy(() -> service.review(id, true, UUID.randomUUID(), "Approved without allocation"))
@@ -515,7 +515,7 @@ class ActualCostServiceTest {
         actualCost.setId(id);
         actualCost.setStatus(ActualCostStatus.PENDING);
         actualCost.setBudgetLineId(budgetLineId);
-        actualCost.setAmount(300);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(300));
         BudgetLine line = budgetLine(budgetLineId, 400, 200, BudgetStatus.APPROVED);
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
@@ -535,7 +535,7 @@ class ActualCostServiceTest {
         actualCost.setId(id);
         actualCost.setStatus(ActualCostStatus.PENDING);
         actualCost.setBudgetLineId(budgetLineId);
-        actualCost.setAmount(100);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100));
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
 
         assertThatThrownBy(() -> service.review(id, false, UUID.randomUUID(), " "))
@@ -556,7 +556,7 @@ class ActualCostServiceTest {
         actualCost.setStatus(ActualCostStatus.PENDING);
         actualCost.setBudgetLineId(budgetLineId);
         actualCost.setSourceType(ActualCostSourceType.WORK_ORDER);
-        actualCost.setAmount(100);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100));
         BudgetLine line = budgetLine(budgetLineId, 500, 200, BudgetStatus.APPROVED);
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
@@ -588,7 +588,7 @@ class ActualCostServiceTest {
         actualCost.setId(id);
         actualCost.setStatus(ActualCostStatus.PENDING);
         actualCost.setBudgetLineId(budgetLineId);
-        actualCost.setAmount(100);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100));
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(actualCost));
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.empty());
 
@@ -707,7 +707,7 @@ class ActualCostServiceTest {
         actualCost.setWorkOrderId(workOrderId);
         actualCost.setCostCategoryId(UUID.randomUUID());
         actualCost.setStatus(ActualCostStatus.PENDING);
-        actualCost.setAmount(400);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(400));
         actualCost.setCostDate(Instant.parse("2026-05-10T10:00:00Z"));
 
         when(repository.findAllByFiltersOrderByUpdatedAtDesc(workOrderId, "WO-2026-1"))
@@ -781,7 +781,7 @@ class ActualCostServiceTest {
                 null,
                 null,
                 null,
-                amount,
+                java.math.BigDecimal.valueOf(amount),
                 Instant.parse("2026-05-01T00:00:00Z"),
                 notes
         );
@@ -805,7 +805,7 @@ class ActualCostServiceTest {
                 null,
                 null,
                 null,
-                amount,
+                java.math.BigDecimal.valueOf(amount),
                 Instant.parse("2026-05-01T00:00:00Z"),
                 notes
         );
@@ -833,7 +833,7 @@ class ActualCostServiceTest {
         actualCost.setStatus(ActualCostStatus.PENDING);
         actualCost.setBudgetLineId(budgetLineId);
         actualCost.setCostCategoryId(costCategoryId);
-        actualCost.setAmount(amount);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(amount));
         return actualCost;
     }
 }

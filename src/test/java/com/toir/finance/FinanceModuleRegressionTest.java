@@ -116,7 +116,7 @@ class FinanceModuleRegressionTest {
             mismatched.setBudgetLineId(lineId);
             mismatched.setCostCategoryId(materialsCategoryId);
             mismatched.setStatus(ActualCostStatus.APPROVED);
-            mismatched.setAmount(300_000);
+            mismatched.setAmount(java.math.BigDecimal.valueOf(300_000));
             mismatched.setCostDate(Instant.parse("2026-06-01T00:00:00Z"));
 
             when(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(budget));
@@ -189,7 +189,7 @@ class FinanceModuleRegressionTest {
             cost.setBudgetLineId(lineId);
             cost.setCostCategoryId(categoryId);
             cost.setStatus(status);
-            cost.setAmount(amount);
+            cost.setAmount(java.math.BigDecimal.valueOf(amount));
             cost.setCostDate(Instant.parse("2026-06-15T00:00:00Z"));
             return cost;
         }
@@ -238,7 +238,7 @@ class FinanceModuleRegressionTest {
             cost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
             cost.setSourceId(UUID.randomUUID());
             cost.setBudgetLineId(lineId);
-            cost.setAmount(150_000);
+            cost.setAmount(java.math.BigDecimal.valueOf(150_000));
 
             BudgetLine line = new BudgetLine();
             line.setId(lineId);
@@ -272,7 +272,7 @@ class FinanceModuleRegressionTest {
             cost.setStatus(ActualCostStatus.PENDING);
             cost.setSourceType(ActualCostSourceType.WORK_ORDER);
             cost.setBudgetLineId(lineId);
-            cost.setAmount(75_000);
+            cost.setAmount(java.math.BigDecimal.valueOf(75_000));
 
             BudgetLine line = new BudgetLine();
             line.setId(lineId);
@@ -331,7 +331,7 @@ class FinanceModuleRegressionTest {
             cost.setSourceType(ActualCostSourceType.PROCUREMENT_RECEIPT);
             cost.setSourceId(UUID.randomUUID());
             cost.setBudgetLineId(lineId);
-            cost.setAmount(150_000);
+            cost.setAmount(java.math.BigDecimal.valueOf(150_000));
 
             BudgetLine line = new BudgetLine();
             line.setId(lineId);
@@ -538,7 +538,7 @@ class FinanceModuleRegressionTest {
 
             service.create(new com.toir.dto.actualcost.ActualCostDto(
                     null, workOrderId, null, null, null, null, lineId,
-                    UUID.randomUUID(), null, null, null, null, 90_000, null, null, null, null, null, null
+                    UUID.randomUUID(), null, null, null, null, java.math.BigDecimal.valueOf(90_000), null, null, null, null, null, null
             ));
 
             verify(budgetCommitmentService).commitBudget(

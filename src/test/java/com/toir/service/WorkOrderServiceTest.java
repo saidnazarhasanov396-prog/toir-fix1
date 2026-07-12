@@ -1976,7 +1976,7 @@ class WorkOrderServiceTest {
                 null,
                 java.math.BigDecimal.valueOf(2),
                 15.0,
-                30.0,
+                java.math.BigDecimal.valueOf(30.0),
                 java.time.Instant.parse("2026-06-04T09:00:00Z"),
                 UUID.randomUUID(),
                 "Technician",

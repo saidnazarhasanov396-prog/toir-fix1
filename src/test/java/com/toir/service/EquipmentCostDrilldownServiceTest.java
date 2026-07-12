@@ -240,7 +240,7 @@ class EquipmentCostDrilldownServiceTest {
                             String costDate) {
         ActualCost cost = new ActualCost();
         cost.setId(id);
-        cost.setAmount(amount);
+        cost.setAmount(java.math.BigDecimal.valueOf(amount));
         cost.setStatus(status);
         cost.setSourceType(sourceType);
         cost.setSourceId(sourceId);

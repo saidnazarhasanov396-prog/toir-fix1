@@ -753,7 +753,7 @@ public class ProcurementRequestService {
         cost.setSourceId(movement.getId());
         cost.setBudgetLineId(request.getBudgetLineId());
         cost.setCostCategoryId(categoryId);
-        cost.setAmount(quantity * line.getUnitPrice());
+        cost.setAmount(BigDecimal.valueOf(quantity).multiply(BigDecimal.valueOf(line.getUnitPrice())));
         cost.setStatus(ActualCostStatus.PENDING);
         cost.setCostDate(movement.getOccurredAt() == null ? Instant.now() : movement.getOccurredAt());
         cost.setNotes("Generated from procurement receipt %s line %s".formatted(request.getId(), line.getId()));

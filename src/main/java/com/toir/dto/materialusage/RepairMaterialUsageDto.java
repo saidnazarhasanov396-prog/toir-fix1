@@ -22,9 +22,11 @@ public record RepairMaterialUsageDto(
         String sparePartName,
         String sparePartCode,
         InventoryItemKind kind,
-        @Positive @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal quantity,
+        @Positive @jakarta.validation.constraints.Digits(integer=15,fraction=4)
+        @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using=com.toir.dto.common.MoneyDecimalStringDeserializer.class)
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal quantity,
         Double unitCost,
-        Double totalCost,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal totalCost,
         Instant issuedAt,
         UUID issuedById,
         String issuedByName,
@@ -41,6 +43,12 @@ public record RepairMaterialUsageDto(
         LocalDate expiryDate,
         WarehouseStockStatus stockStatus
 ) {
+    public RepairMaterialUsageDto {
+        if (totalCost == null) {
+            totalCost = totalCost(quantity, unitCost);
+        }
+    }
+
     public RepairMaterialUsageDto(UUID id,
                                   UUID workOrderId,
                                   UUID warehouseId,
@@ -65,7 +73,7 @@ public record RepairMaterialUsageDto(
             InventoryItemKind kind,
             @Positive BigDecimal quantity,
             Double unitCost,
-            Double totalCost,
+            BigDecimal totalCost,
             Instant issuedAt,
             UUID issuedById,
             String issuedByName,
@@ -91,7 +99,7 @@ public record RepairMaterialUsageDto(
             InventoryItemKind kind,
             @Positive BigDecimal quantity,
             Double unitCost,
-            Double totalCost,
+            BigDecimal totalCost,
             Instant issuedAt,
             UUID issuedById,
             String issuedByName,
@@ -171,8 +179,8 @@ public record RepairMaterialUsageDto(
         );
     }
 
-    private static Double totalCost(BigDecimal quantity, Double unitCost) {
-        return unitCost == null||quantity==null ? null : quantity.multiply(new BigDecimal(unitCost.toString())).doubleValue();
+    private static BigDecimal totalCost(BigDecimal quantity, Double unitCost) {
+        return unitCost == null||quantity==null ? null : quantity.multiply(new BigDecimal(unitCost.toString()));
     }
 
     private static String costWarning(Double unitCost) {

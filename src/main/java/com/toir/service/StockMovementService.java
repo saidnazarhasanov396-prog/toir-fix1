@@ -513,9 +513,9 @@ public class StockMovementService {
 
     private void validatePositiveQuantity(BigDecimal quantity) {
         if (quantity == null || quantity.signum() <= 0) {
-            throw RestException.badRequest("Quantity must be greater than 0");
+            throw RestException.badRequest("STOCK_QUANTITY_INVALID");
         }
-        if(quantity.stripTrailingZeros().scale()>4||quantity.precision()-quantity.scale()>15)throw RestException.badRequest("Quantity must fit numeric(19,4)");
+        if(quantity.stripTrailingZeros().scale()>4||quantity.precision()-quantity.scale()>15)throw RestException.badRequest("STOCK_QUANTITY_INVALID");
     }
 
     private void validateOptionalUnitPrice(BigDecimal unitPrice) {

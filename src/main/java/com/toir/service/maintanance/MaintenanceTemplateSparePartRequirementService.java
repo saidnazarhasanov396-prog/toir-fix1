@@ -115,8 +115,9 @@ public class MaintenanceTemplateSparePartRequirementService {
     }
 
     private void validateQuantity(java.math.BigDecimal quantity) {
-        if (quantity==null||quantity.signum() <= 0) {
-            throw RestException.badRequest("quantity must be positive");
+        if (quantity==null||quantity.signum() <= 0||quantity.stripTrailingZeros().scale()>4
+                ||quantity.precision()-quantity.scale()>15) {
+            throw RestException.badRequest("MATERIAL_QUANTITY_INVALID");
         }
     }
 

@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.EnumSet;
@@ -245,7 +246,7 @@ public class CounteragentWorkService {
         cost.setContractorWorkId(work.getId());
         cost.setBudgetLineId(repairCampaignBudgetLineResolver.resolveForWorkOrderId(work.getWorkOrderId()));
         cost.setCostCategoryId(resolveCostCategoryId(work));
-        cost.setAmount(work.getCost());
+        cost.setAmount(work.getCost()==null?BigDecimal.ZERO:BigDecimal.valueOf(work.getCost()));
         cost.setStatus(ActualCostStatus.PENDING);
         cost.setNotes("Auto-created from counteragent work acceptance: " + work.getId());
         financeScopeService.assertCanMutateActualCost(cost);

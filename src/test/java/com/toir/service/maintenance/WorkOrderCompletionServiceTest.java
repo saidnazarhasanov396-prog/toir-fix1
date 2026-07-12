@@ -146,7 +146,8 @@ class WorkOrderCompletionServiceTest {
         });
         assertThat(captor.getAllValues())
                 .extracting(ActualCostDto::amount)
-                .containsExactlyInAnyOrder(100.0, 500.0);
+                .usingElementComparator(java.math.BigDecimal::compareTo)
+                .containsExactlyInAnyOrder(java.math.BigDecimal.valueOf(100.0), java.math.BigDecimal.valueOf(500.0));
         verify(budgetLineRepository, never()).save(any(BudgetLine.class));
         verify(maintenanceBudgetRepository, never()).save(any(MaintenanceBudget.class));
     }
@@ -207,7 +208,7 @@ class WorkOrderCompletionServiceTest {
         ArgumentCaptor<ActualCostDto> costCaptor = ArgumentCaptor.forClass(ActualCostDto.class);
         verify(actualCostService).syncPendingFromWorkOrderCompletion(costCaptor.capture());
         assertThat(costCaptor.getValue().budgetLineId()).isEqualTo(unplannedLineId);
-        assertThat(costCaptor.getValue().amount()).isEqualTo(100.0);
+        assertThat(costCaptor.getValue().amount()).isEqualByComparingTo("100.0");
         assertThat(costCaptor.getValue().sourceType()).isEqualTo(ActualCostSourceType.LABOR_ENTRY);
         assertThat(budget.getTotalPlanned()).isEqualTo(1_000_000);
         assertThat(budget.getTotalActual()).isZero();
@@ -244,7 +245,7 @@ class WorkOrderCompletionServiceTest {
         ArgumentCaptor<ActualCostDto> costCaptor = ArgumentCaptor.forClass(ActualCostDto.class);
         verify(actualCostService).syncPendingFromWorkOrderCompletion(costCaptor.capture());
         assertThat(costCaptor.getValue().budgetLineId()).isNull();
-        assertThat(costCaptor.getValue().amount()).isEqualTo(10.0);
+        assertThat(costCaptor.getValue().amount()).isEqualByComparingTo("10.0");
     }
 
     @Test

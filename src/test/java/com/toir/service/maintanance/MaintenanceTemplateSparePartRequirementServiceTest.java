@@ -100,7 +100,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
                 null,
                 true
         ))).isInstanceOf(RestException.class)
-                .hasMessageContaining("quantity must be positive");
+                .hasMessageContaining("MATERIAL_QUANTITY_INVALID");
 
         verify(repository, never()).save(any());
     }

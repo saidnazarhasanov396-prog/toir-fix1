@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public record ActualCostDto(
@@ -22,7 +23,9 @@ public record ActualCostDto(
         UUID reviewedById,
         Instant reviewedAt,
         String reviewComment,
-        @Positive double amount,
+        @Positive @jakarta.validation.constraints.Digits(integer=15,fraction=4)
+        @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using=com.toir.dto.common.MoneyDecimalStringDeserializer.class)
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal amount,
         Instant costDate,
         String notes,
         String correctionReason,
@@ -42,7 +45,7 @@ public record ActualCostDto(
                          UUID reviewedById,
                          Instant reviewedAt,
                          String reviewComment,
-                         double amount,
+                         BigDecimal amount,
                          Instant costDate,
                          String notes) {
         this(id, workOrderId, repairRequestId, contractorWorkId, sourceType, sourceId, budgetLineId,
@@ -60,7 +63,7 @@ public record ActualCostDto(
                          UUID reviewedById,
                          Instant reviewedAt,
                          String reviewComment,
-                         double amount,
+                         BigDecimal amount,
                          Instant costDate,
                          String notes) {
         this(id, workOrderId, repairRequestId, contractorWorkId, null, null, budgetLineId, costCategoryId, status,

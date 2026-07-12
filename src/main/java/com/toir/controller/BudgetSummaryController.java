@@ -136,12 +136,12 @@ public class BudgetSummaryController {
         double totalAvailable = FinanceBudgetMath.remainingBudget(totalPlanned, totalActual, totalCommitted);
         double pendingReviewAmount = visibleActualCosts.stream()
                 .filter(cost -> cost.getStatus() == ActualCostStatus.PENDING)
-                .mapToDouble(ActualCost::getAmount)
+                .mapToDouble(cost->cost.getAmount().doubleValue())
                 .sum();
         double unallocatedActualAmount = visibleActualCosts.stream()
                 .filter(cost -> cost.getBudgetLineId() == null)
                 .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED || cost.getStatus() == ActualCostStatus.PENDING)
-                .mapToDouble(ActualCost::getAmount)
+                .mapToDouble(cost->cost.getAmount().doubleValue())
                 .sum();
         long atRiskBudgetLineCount = scopedLines.stream()
                 .filter(line -> line.getPlannedAmount() > 0)
@@ -378,7 +378,7 @@ public class BudgetSummaryController {
                 new ActualCostReviewHistoryResponse.ActualCostRef(
                         actualCost.getId(),
                         actualCost.getStatus() != null ? actualCost.getStatus().name() : null,
-                        actualCost.getAmount(),
+                        actualCost.getAmount().doubleValue(),
                         actualCost.getCostDate(),
                         actualCost.getReviewedAt(),
                         actualCost.getReviewedById(),
@@ -490,11 +490,11 @@ public class BudgetSummaryController {
         double expected = contractorWork.getCost() != null ? contractorWork.getCost() : 0.0d;
         double reflected = counteragentActualCosts.stream()
                 .filter(cost -> cost.getStatus() == ActualCostStatus.APPROVED)
-                .mapToDouble(ActualCost::getAmount)
+                .mapToDouble(cost->cost.getAmount().doubleValue())
                 .sum();
         double pending = counteragentActualCosts.stream()
                 .filter(cost -> cost.getStatus() == ActualCostStatus.PENDING)
-                .mapToDouble(ActualCost::getAmount)
+                .mapToDouble(cost->cost.getAmount().doubleValue())
                 .sum();
         double submitted = reflected + pending;
         CostCategory recommendedCategory = recommendedCounteragentCostCategory(workOrder);
@@ -576,7 +576,7 @@ public class BudgetSummaryController {
                 c.getContractorWorkId(),
                 c.getCostCategoryId(),
                 c.getStatus().name(),
-                c.getAmount(),
+                c.getAmount().doubleValue(),
                 c.getCostDate(),
                 c.getNotes(),
                 c.getReviewedAt(),
@@ -615,7 +615,7 @@ public class BudgetSummaryController {
                 .filter(cost -> cost.getStatus() == status)
                 .collect(Collectors.groupingBy(
                         ActualCost::getBudgetLineId,
-                        Collectors.summingDouble(ActualCost::getAmount)
+                        Collectors.summingDouble(cost->cost.getAmount().doubleValue())
                 ));
     }
 

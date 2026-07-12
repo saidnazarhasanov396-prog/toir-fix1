@@ -27,6 +27,14 @@ class RepairCampaignMaterialCorrectiveMigrationPostgresTest {
             s.execute("CREATE DATABASE "+db);
         }
         try{
+            migrate(url,"20260712.4");
+            UUID invalidV5=UUID.randomUUID();
+            try(Connection c=conn(url);Statement s=c.createStatement()){
+                s.execute("INSERT INTO reservations(id,quantity,status,is_deleted,created_at,updated_at,stock_status) VALUES ('"+invalidV5+"',-1.0,'ACTIVE',false,now(),now(),'AVAILABLE')");
+            }
+            assertThatThrownBy(()->migrate(url,"20260712.5"))
+                    .hasStackTraceContaining("RC_V5_INVALID_LEGACY_QUANTITY_REMEDIATION_REQUIRED");
+            try(Connection c=conn(url);Statement s=c.createStatement()){s.execute("DELETE FROM reservations WHERE id='"+invalidV5+"'");}
             migrate(url,"20260712.5");
             UUID movement=UUID.randomUUID();
             try(Connection c=conn(url);Statement s=c.createStatement()){
@@ -40,8 +48,27 @@ class RepairCampaignMaterialCorrectiveMigrationPostgresTest {
                     assertThat(r.next()).as(table).isTrue();assertThat(r.getInt(1)).as(table).isEqualTo(19);assertThat(r.getInt(2)).as(table).isEqualTo(4);
                 }
             }
+            try(Connection c=conn(url);Statement s=c.createStatement();ResultSet r=s.executeQuery("SELECT numeric_precision,numeric_scale FROM information_schema.columns WHERE table_name='actual_costs' AND column_name='amount'")){
+                assertThat(r.next()).isTrue();assertThat(r.getInt(1)).isEqualTo(19);assertThat(r.getInt(2)).isEqualTo(4);
+            }
+            stockMovementCompatibilityViewProbe(url);
+            try(Connection c=conn(url);Statement s=c.createStatement();ResultSet r=s.executeQuery("SELECT count(*) FROM information_schema.table_constraints WHERE constraint_name IN ('uq_wo_spare_req_owner','fk_reservation_requirement_owner')")){
+                assertThat(r.next()).isTrue();assertThat(r.getInt(1)).isEqualTo(2);
+            }
             reservationTransitionLockProbe(url);
         }finally{try(Connection c=conn(admin);Statement s=c.createStatement()){s.execute("DROP DATABASE IF EXISTS "+db+" WITH (FORCE)");}}
+    }
+    private void stockMovementCompatibilityViewProbe(String url)throws Exception{
+        UUID id=UUID.randomUUID(),warehouseId=UUID.randomUUID(),sparePartId=UUID.randomUUID();
+        try(Connection c=conn(url);Statement s=c.createStatement()){
+            s.execute("INSERT INTO stock_movements(id,warehouse_id,spare_part_id,quantity,type,is_deleted,created_at,updated_at,occurred_at,stock_status) VALUES ('"+id+"','"+warehouseId+"','"+sparePartId+"',1.2500,'ISSUE',false,now(),now(),now(),'AVAILABLE')");
+            try(ResultSet r=s.executeQuery("SELECT submitted_quantity FROM warehouse_stock_ledger_metadata WHERE id='"+id+"'")){assertThat(r.next()).isTrue();assertThat(r.getBigDecimal(1)).isEqualByComparingTo("1.2500");}
+            assertThatThrownBy(()->s.execute("UPDATE stock_movements SET quantity=2 WHERE id='"+id+"'"))
+                    .hasMessageContaining("STOCK_MOVEMENTS_APPEND_ONLY");
+            assertThatThrownBy(()->s.execute("DELETE FROM stock_movements WHERE id='"+id+"'"))
+                    .hasMessageContaining("STOCK_MOVEMENTS_APPEND_ONLY");
+            try(ResultSet r=s.executeQuery("SELECT obj_description('stock_movements'::regclass,'pg_class')")){assertThat(r.next()).isTrue();assertThat(r.getString(1)).contains("Deprecated compatibility view");}
+        }
     }
     private void reservationTransitionLockProbe(String url)throws Exception{
         UUID id=UUID.randomUUID();

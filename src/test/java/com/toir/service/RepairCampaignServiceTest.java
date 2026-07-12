@@ -927,7 +927,7 @@ class RepairCampaignServiceTest {
         approvedUnallocated.setWorkOrderId(closedOrder.getId());
         approvedUnallocated.setStatus(ActualCostStatus.APPROVED);
         approvedUnallocated.setCostCategoryId(UUID.randomUUID());
-        approvedUnallocated.setAmount(100);
+        approvedUnallocated.setAmount(java.math.BigDecimal.valueOf(100));
 
         when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(workOrderRepository.findAllByRepairCampaignIdAndIsDeletedFalseOrderByUpdatedAtDesc(campaignId))

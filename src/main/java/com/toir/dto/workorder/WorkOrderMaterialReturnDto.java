@@ -19,7 +19,7 @@ public record WorkOrderMaterialReturnDto(
         String serialNumber,
         LocalDate expiryDate,
         WarehouseStockStatus stockStatus,
-        BigDecimal quantity,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal quantity,
         String reason,
         UUID returnedById,
         UUID responsiblePersonId,

@@ -525,7 +525,7 @@ class RepairRequestInsightsServiceTest {
         cost.setSourceType(sourceType);
         cost.setSourceId(UUID.randomUUID());
         cost.setStatus(status);
-        cost.setAmount(amount);
+        cost.setAmount(java.math.BigDecimal.valueOf(amount));
         cost.setNotes(notes);
         cost.setCostDate(costDate);
         return cost;

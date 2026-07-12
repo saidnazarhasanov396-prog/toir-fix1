@@ -18,6 +18,7 @@ import com.toir.repository.WarehouseRepository;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
+import com.toir.repository.repair.RepairCampaignMaterialRequirementRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
@@ -45,6 +46,7 @@ public class ReservationService {
     private final ToirStockService toirStockService;
     private final LegacyStockProjectionService legacyStockProjectionService;
     private final WorkOrderSparePartRequirementRepository requirementRepository;
+    private final RepairCampaignMaterialRequirementRepository campaignRequirementRepository;
     private final WorkOrderRepository workOrderRepository;
     private final WarehouseRepository warehouseRepository;
     private final SparePartRepository sparePartRepository;
@@ -215,6 +217,22 @@ public class ReservationService {
         if (!Objects.equals(requiredSpare, reservation.getSparePartId())) {
             throw RestException.badRequest("RESERVATION_SPARE_PART_MISMATCH");
         }
+        if (requirement.getCampaignRequirementId() != null) {
+            var campaignRequirement = campaignRequirementRepository
+                    .findByIdAndIsDeletedFalse(requirement.getCampaignRequirementId())
+                    .orElseThrow(() -> RestException.badRequest("RESERVATION_REQUIREMENT_INVALID"));
+            if (!Objects.equals(campaignRequirement.getSparePartId(), reservation.getSparePartId())) {
+                throw RestException.badRequest("RESERVATION_SPARE_PART_MISMATCH");
+            }
+            if (!Objects.equals(campaignRequirement.getWarehouseId(), reservation.getWarehouseId())
+                    || (requirement.getWarehouseId() != null
+                    && !Objects.equals(requirement.getWarehouseId(), reservation.getWarehouseId()))) {
+                throw RestException.badRequest("RESERVATION_WAREHOUSE_MISMATCH");
+            }
+        } else if (requirement.getWarehouseId() != null
+                && !Objects.equals(requirement.getWarehouseId(), reservation.getWarehouseId())) {
+            throw RestException.badRequest("RESERVATION_WAREHOUSE_MISMATCH");
+        }
         if (reservation.getQuantity().compareTo(requirement.getRequiredQty()) > 0) {
             throw RestException.badRequest("RESERVATION_EXCEEDS_REQUIREMENT");
         }
@@ -229,13 +247,15 @@ public class ReservationService {
         if(reservation.getWorkOrderId()!=null)authorizeWorkOrder(reservation.getWorkOrderId());
         var warehouse=warehouseRepository.findByIdAndIsDeletedFalse(reservation.getWarehouseId())
                 .filter(com.toir.entity.warehouse.Warehouse::isActive).orElseThrow(this::denied);
-        if(warehouse.getDepartmentId()!=null)scopeAccessService.assertCanAccessDepartment(warehouse.getDepartmentId());
+        if(warehouse.getDepartmentId()==null)throw denied();
+        scopeAccessService.assertCanAccessDepartment(warehouse.getDepartmentId());
         sparePartRepository.findByIdAndIsDeletedFalse(reservation.getSparePartId()).orElseThrow(this::denied);
     }
 
     private void authorizeWorkOrder(UUID workOrderId){
         var workOrder=workOrderRepository.findByIdAndIsDeletedFalse(workOrderId).orElseThrow(this::denied);
-        if(workOrder.getDepartmentId()!=null)scopeAccessService.assertCanAccessDepartment(workOrder.getDepartmentId());
+        if(workOrder.getDepartmentId()==null)throw denied();
+        scopeAccessService.assertCanAccessDepartment(workOrder.getDepartmentId());
     }
 
     private AccessDeniedException denied(){return new AccessDeniedException("Access denied");}

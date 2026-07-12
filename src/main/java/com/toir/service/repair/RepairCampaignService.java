@@ -608,7 +608,6 @@ public class RepairCampaignService {
                 unallocatedCosts.size(),
                 unallocatedCosts.stream()
                         .map(ActualCost::getAmount)
-                        .map(RepairCampaignService::decimal)
                         .reduce(BigDecimal.ZERO, BigDecimal::add),
                 stages,
                 campaign.getCurrencyCode()
@@ -985,7 +984,6 @@ public class RepairCampaignService {
         return safeList(costs).stream()
                 .filter(cost -> cost.getStatus() == status)
                 .map(ActualCost::getAmount)
-                .map(RepairCampaignService::decimal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 

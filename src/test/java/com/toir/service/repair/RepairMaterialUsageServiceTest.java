@@ -175,11 +175,11 @@ class RepairMaterialUsageServiceTest {
 
         assertThatThrownBy(() -> service.register(workOrderId, usageDto(0)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("MATERIAL_QUANTITY_INVALID");
 
         assertThatThrownBy(() -> service.register(workOrderId, usageDto(-1)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("MATERIAL_QUANTITY_INVALID");
 
         verifyNoInteractions(stockRepository, repository, stockMovementRepository);
     }
@@ -297,7 +297,7 @@ class RepairMaterialUsageServiceTest {
         assertThat(cost.getBudgetLineId()).isEqualTo(budgetLineId);
         assertThat(cost.getCostCategoryId()).isEqualTo(categoryId);
         assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
-        assertThat(cost.getAmount()).isEqualTo(30.0);
+        assertThat(cost.getAmount()).isEqualByComparingTo("30.0");
     }
 
     @Test
@@ -316,7 +316,7 @@ class RepairMaterialUsageServiceTest {
         existingCost.setId(existingCostId);
         existingCost.setSourceType(ActualCostSourceType.MATERIAL_ISSUE);
         existingCost.setSourceId(usageId);
-        existingCost.setAmount(10.0);
+        existingCost.setAmount(java.math.BigDecimal.valueOf(10.0));
 
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
@@ -348,7 +348,7 @@ class RepairMaterialUsageServiceTest {
         assertThat(cost.getId()).isEqualTo(existingCostId);
         assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.MATERIAL_ISSUE);
         assertThat(cost.getSourceId()).isEqualTo(usageId);
-        assertThat(cost.getAmount()).isEqualTo(60.0);
+        assertThat(cost.getAmount()).isEqualByComparingTo("60.0");
     }
 
     @Test
