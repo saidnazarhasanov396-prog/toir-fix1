@@ -11,12 +11,17 @@ import com.toir.dto.repaircampaign.RepairCampaignStageDto;
 import com.toir.dto.repaircampaign.RepairCampaignSummaryDto;
 import com.toir.dto.repaircampaign.RepairCampaignWorkItemRequest;
 import com.toir.dto.repaircampaign.RepairCampaignWorkItemResponse;
+import com.toir.dto.repaircampaign.RepairCampaignShutdownLinkRequest;
+import com.toir.dto.repaircampaign.RepairCampaignShutdownLinkResponse;
+import com.toir.dto.repaircampaign.RepairCampaignWorkItemWindowRequest;
+import com.toir.dto.repaircampaign.RepairCampaignWorkItemWindowResponse;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.RestException;
 import com.toir.service.repair.RepairCampaignService;
 import com.toir.service.repair.RepairCampaignWorkItemService;
+import com.toir.service.repair.RepairCampaignShutdownLinkService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -41,6 +46,7 @@ public class RepairCampaignController {
 
     private final RepairCampaignService service;
     private final RepairCampaignWorkItemService workItemService;
+    private final RepairCampaignShutdownLinkService shutdownLinkService;
 
     public record WorkItemOrderRequest(@jakarta.validation.constraints.NotNull Long version,
                                        @jakarta.validation.constraints.NotNull List<UUID> itemIds) { }
@@ -115,6 +121,52 @@ public class RepairCampaignController {
     public ResponseEntity<List<RepairCampaignWorkItemResponse>> reorderWorkItems(
             @PathVariable UUID id, @Valid @RequestBody WorkItemOrderRequest request) {
         return ResponseEntity.ok(workItemService.reorder(id, request.itemIds(), request.version()));
+    }
+
+    @GetMapping("/{id}/planned-shutdowns/{shutdownId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
+    public ResponseEntity<RepairCampaignShutdownLinkResponse> getShutdownLink(@PathVariable UUID id,
+            @PathVariable UUID shutdownId, @RequestParam Long repairCampaignVersion,
+            @RequestParam Long plannedShutdownVersion) {
+        return ResponseEntity.ok(shutdownLinkService.get(id, shutdownId, repairCampaignVersion, plannedShutdownVersion));
+    }
+
+    @PostMapping("/{id}/planned-shutdowns/{shutdownId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<RepairCampaignShutdownLinkResponse> linkShutdown(@PathVariable UUID id,
+            @PathVariable UUID shutdownId, @Valid @RequestBody RepairCampaignShutdownLinkRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(shutdownLinkService.link(id, shutdownId, request));
+    }
+
+    @DeleteMapping("/{id}/planned-shutdowns/{shutdownId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<RepairCampaignShutdownLinkResponse> unlinkShutdown(@PathVariable UUID id,
+            @PathVariable UUID shutdownId, @Valid @RequestBody RepairCampaignShutdownLinkRequest request) {
+        return ResponseEntity.ok(shutdownLinkService.unlink(id, shutdownId, request));
+    }
+
+    @GetMapping("/{id}/planned-shutdowns/{shutdownId}/work-item-windows")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
+    public ResponseEntity<List<RepairCampaignWorkItemWindowResponse>> listWorkItemWindows(@PathVariable UUID id,
+            @PathVariable UUID shutdownId, @RequestParam Long repairCampaignVersion,
+            @RequestParam Long plannedShutdownVersion) {
+        return ResponseEntity.ok(shutdownLinkService.listWindows(id, shutdownId,
+                repairCampaignVersion, plannedShutdownVersion));
+    }
+
+    @PostMapping("/{id}/planned-shutdowns/{shutdownId}/work-item-windows")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<RepairCampaignWorkItemWindowResponse> addWorkItemWindow(@PathVariable UUID id,
+            @PathVariable UUID shutdownId, @Valid @RequestBody RepairCampaignWorkItemWindowRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(shutdownLinkService.addWindow(id, shutdownId, request));
+    }
+
+    @DeleteMapping("/{id}/planned-shutdowns/{shutdownId}/work-item-windows/{windowId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<RepairCampaignWorkItemWindowResponse> removeWorkItemWindow(@PathVariable UUID id,
+            @PathVariable UUID shutdownId, @PathVariable UUID windowId,
+            @Valid @RequestBody RepairCampaignShutdownLinkRequest request) {
+        return ResponseEntity.ok(shutdownLinkService.removeWindow(id, shutdownId, windowId, request));
     }
 
     @PostMapping("/{id}/reject")

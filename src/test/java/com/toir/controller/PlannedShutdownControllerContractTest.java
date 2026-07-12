@@ -16,6 +16,7 @@ import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.service.ApprovalService;
 import com.toir.service.PlannedShutdownService;
+import com.toir.service.repair.RepairCampaignShutdownLinkService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.time.Instant;
 import java.util.List;
@@ -43,11 +45,29 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class PlannedShutdownControllerContractTest {
 
+    @Test
+    void campaignRelationshipEndpointsDeclareShutdownReadAndMutationPbac() {
+        java.util.Map<String, String> expected = java.util.Map.of(
+                "getCampaignLink", "PLANNED_SHUTDOWN_READ",
+                "linkCampaign", "PLANNED_SHUTDOWN_UPDATE",
+                "unlinkCampaign", "PLANNED_SHUTDOWN_UPDATE");
+        for (var method : PlannedShutdownController.class.getDeclaredMethods()) {
+            if (!expected.containsKey(method.getName())) continue;
+            assertThat(method.getAnnotation(PreAuthorize.class)).isNotNull();
+            assertThat(method.getAnnotation(PreAuthorize.class).value()).contains(expected.get(method.getName()));
+        }
+        assertThat(java.util.Arrays.stream(PlannedShutdownController.class.getDeclaredMethods())
+                .map(java.lang.reflect.Method::getName).filter(expected::containsKey)).hasSize(expected.size());
+    }
+
     @Mock
     private PlannedShutdownService service;
 
     @Mock
     private com.toir.service.plannedshutdown.PlannedShutdownWorkOrderGenerationService workOrderGenerationService;
+
+    @Mock
+    private RepairCampaignShutdownLinkService campaignLinkService;
 
     @Mock
     private ApprovalService approvalService;
@@ -56,7 +76,7 @@ class PlannedShutdownControllerContractTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new PlannedShutdownController(service, workOrderGenerationService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new PlannedShutdownController(service, workOrderGenerationService, campaignLinkService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

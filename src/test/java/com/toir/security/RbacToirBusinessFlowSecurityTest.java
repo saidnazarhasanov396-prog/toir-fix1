@@ -60,6 +60,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class RbacToirBusinessFlowSecurityTest {
 
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private com.toir.service.repair.RepairCampaignShutdownLinkService campaignLinkService;
+
     @Autowired
     MockMvc mockMvc;
 

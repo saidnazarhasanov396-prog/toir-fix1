@@ -27,6 +27,9 @@ import static org.mockito.Mockito.verify;
         RestAccessDeniedHandler.class, SecurityAccessService.class,
         RbacPlannedShutdownReadinessSecurityTest.SecurityBeans.class})
 class RbacPlannedShutdownReadinessSecurityTest {
+
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private com.toir.service.repair.RepairCampaignShutdownLinkService campaignLinkService;
     @Autowired MockMvc mockMvc;
     @MockBean JwtService jwtService;
     @MockBean PlannedShutdownService service;

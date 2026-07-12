@@ -5,6 +5,9 @@ import com.toir.exception.RestException;
 import com.toir.enums.PlannedShutdownStatus;
 import com.toir.service.PlannedShutdownService;
 import com.toir.service.plannedshutdown.PlannedShutdownWorkOrderGenerationService;
+import com.toir.service.repair.RepairCampaignShutdownLinkService;
+import com.toir.dto.repaircampaign.RepairCampaignShutdownLinkRequest;
+import com.toir.dto.repaircampaign.RepairCampaignShutdownLinkResponse;
 import com.toir.util.PaginationUtils;
 import com.toir.util.SortUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +32,29 @@ public class PlannedShutdownController {
 
     private final PlannedShutdownService service;
     private final PlannedShutdownWorkOrderGenerationService workOrderGenerationService;
+    private final RepairCampaignShutdownLinkService campaignLinkService;
+
+    @GetMapping("/{id}/repair-campaigns/{campaignId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<RepairCampaignShutdownLinkResponse> getCampaignLink(@PathVariable UUID id,
+            @PathVariable UUID campaignId, @RequestParam Long repairCampaignVersion,
+            @RequestParam Long plannedShutdownVersion) {
+        return ResponseEntity.ok(campaignLinkService.get(campaignId, id, repairCampaignVersion, plannedShutdownVersion));
+    }
+
+    @PostMapping("/{id}/repair-campaigns/{campaignId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<RepairCampaignShutdownLinkResponse> linkCampaign(@PathVariable UUID id,
+            @PathVariable UUID campaignId, @Valid @RequestBody RepairCampaignShutdownLinkRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(campaignLinkService.link(campaignId, id, request));
+    }
+
+    @DeleteMapping("/{id}/repair-campaigns/{campaignId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_UPDATE')")
+    public ResponseEntity<RepairCampaignShutdownLinkResponse> unlinkCampaign(@PathVariable UUID id,
+            @PathVariable UUID campaignId, @Valid @RequestBody RepairCampaignShutdownLinkRequest request) {
+        return ResponseEntity.ok(campaignLinkService.unlink(campaignId, id, request));
+    }
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")

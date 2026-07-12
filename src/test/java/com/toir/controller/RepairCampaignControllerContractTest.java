@@ -17,6 +17,7 @@ import com.toir.exception.GlobalExceptionHandler;
 import com.toir.exception.RestException;
 import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairCampaignService;
+import com.toir.service.repair.RepairCampaignShutdownLinkService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -68,6 +69,24 @@ class RepairCampaignControllerContractTest {
     }
 
     @Test
+    void shutdownRelationshipEndpointsDeclareReadAndMutationPbac() {
+        java.util.Map<String, String> expected = java.util.Map.of(
+                "getShutdownLink", "REPAIR_CAMPAIGN_READ",
+                "linkShutdown", "REPAIR_CAMPAIGN_UPDATE",
+                "unlinkShutdown", "REPAIR_CAMPAIGN_UPDATE",
+                "listWorkItemWindows", "REPAIR_CAMPAIGN_READ",
+                "addWorkItemWindow", "REPAIR_CAMPAIGN_UPDATE",
+                "removeWorkItemWindow", "REPAIR_CAMPAIGN_UPDATE");
+        for (var method : RepairCampaignController.class.getDeclaredMethods()) {
+            if (!expected.containsKey(method.getName())) continue;
+            assertThat(method.getAnnotation(PreAuthorize.class)).isNotNull();
+            assertThat(method.getAnnotation(PreAuthorize.class).value()).contains(expected.get(method.getName()));
+        }
+        assertThat(java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods())
+                .map(java.lang.reflect.Method::getName).filter(expected::containsKey)).hasSize(expected.size());
+    }
+
+    @Test
     void addWorkItemIgnoresClientAttemptToSetServerOwnedStatus() throws Exception {
         UUID campaignId = UUID.randomUUID(); UUID equipmentId = UUID.randomUUID(); UUID itemId = UUID.randomUUID();
         when(workItemService.add(eq(campaignId), any(RepairCampaignWorkItemRequest.class)))
@@ -97,6 +116,9 @@ class RepairCampaignControllerContractTest {
     private com.toir.service.repair.RepairCampaignWorkItemService workItemService;
 
     @Mock
+    private RepairCampaignShutdownLinkService shutdownLinkService;
+
+    @Mock
     private ApprovalService approvalService;
 
     private MockMvc mockMvc;
@@ -107,7 +129,7 @@ class RepairCampaignControllerContractTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService, shutdownLinkService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
