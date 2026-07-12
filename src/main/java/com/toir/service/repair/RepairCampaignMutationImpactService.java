@@ -69,6 +69,15 @@ public class RepairCampaignMutationImpactService {
         RepairCampaign campaign = campaignRepository.findByIdAndIsDeletedFalse(campaignId)
                 .orElseThrow(() -> RestException.notFound("Repair campaign not found"));
         scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
+        return preview(campaign, mutationType, expectedVersion, expectedScopeVersion);
+    }
+
+    public CampaignMutationImpact preview(
+            RepairCampaign campaign,
+            RepairCampaignMutationType mutationType,
+            Long expectedVersion,
+            Long expectedScopeVersion
+    ) {
         assertMutationPermission(mutationType);
         long version = campaign.getVersion() == null ? 0L : campaign.getVersion();
         long scopeVersion = campaign.getScopeVersion() == null ? 0L : campaign.getScopeVersion();
@@ -115,7 +124,7 @@ public class RepairCampaignMutationImpactService {
         };
     }
 
-    private void assertMutationPermission(RepairCampaignMutationType mutationType) {
+    public void assertMutationPermission(RepairCampaignMutationType mutationType) {
         String required = requiredPermission(mutationType);
         if (!scopeAccessService.isScopeAdmin() && !scopeAccessService.hasAuthority(required)) {
             throw new org.springframework.security.access.AccessDeniedException("Access denied");

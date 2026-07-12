@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
+import com.toir.dto.repaircampaign.CampaignMutationImpact;
 import com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
@@ -19,6 +20,7 @@ import com.toir.enums.ActualCostStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignScopeType;
 import com.toir.enums.RepairCampaignPriority;
+import com.toir.enums.RepairCampaignMutationType;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.enums.RepairCampaignStageStatus;
 import com.toir.enums.WorkOrderStatus;
@@ -62,6 +64,7 @@ import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
 
@@ -237,6 +240,42 @@ class RepairCampaignServiceTest {
     }
 
     @Test
+    void proposedUpdatePreviewAndCommitUseTheSameStrictClassifier() {
+        record Scenario(BigDecimal budget, String currency, RepairCampaignMutationType expected) {}
+        List<Scenario> scenarios = List.of(
+                new Scenario(new BigDecimal("1000.0000"), "UZS", RepairCampaignMutationType.METADATA),
+                new Scenario(new BigDecimal("2000.0000"), "UZS", RepairCampaignMutationType.BUDGET),
+                new Scenario(new BigDecimal("1000.0000"), "USD", RepairCampaignMutationType.FX),
+                new Scenario(new BigDecimal("2000.0000"), "USD", RepairCampaignMutationType.FX));
+
+        for (Scenario scenario : scenarios) {
+            UUID campaignId = UUID.randomUUID();
+            RepairCampaign campaign = campaign(campaignId, null);
+            campaign.setVersion(3L);
+            campaign.setScopeVersion(7L);
+            campaign.setTotalBudget(new BigDecimal("1000.0000"));
+            campaign.setCurrencyCode("UZS");
+            RepairCampaignRequest proposed = updateRequest(scenario.budget(), scenario.currency());
+            CampaignMutationImpact expectedImpact = com.toir.service.repair.RepairCampaignMutationImpactService.evaluate(
+                    campaign.getStatus(), 7L, 3L, scenario.expected());
+
+            when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+            when(mutationImpactService.preview(same(campaign), eq(scenario.expected()), eq(3L), eq(7L)))
+                    .thenReturn(expectedImpact);
+            when(repository.saveAndFlush(campaign)).thenReturn(campaign);
+
+            assertThat(service.previewUpdateImpact(campaignId, proposed, 7L)).isEqualTo(expectedImpact);
+            service.update(campaignId, proposed);
+
+            verify(mutationImpactService).preview(same(campaign), eq(scenario.expected()), eq(3L), eq(7L));
+            verify(mutationImpactService).apply(campaign, scenario.expected());
+        }
+        verify(mutationImpactService).assertMutationPermission(RepairCampaignMutationType.METADATA);
+        verify(mutationImpactService).assertMutationPermission(RepairCampaignMutationType.BUDGET);
+        verify(mutationImpactService, times(2)).assertMutationPermission(RepairCampaignMutationType.FX);
+    }
+
+    @Test
     void addStageCannotAcceptAggregateOnlyStatus() {
         assertThatThrownBy(() -> new RepairCampaignStageDto(
                 null, 1, "Invalid", LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 2),
@@ -249,7 +288,7 @@ class RepairCampaignServiceTest {
     void addStageKeepsServerOwnedDedicatedDraftStatus() {
         UUID campaignId = UUID.randomUUID();
         RepairCampaign campaign = campaign(campaignId, null);
-        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(stageRepository.save(any())).thenAnswer(invocation -> {
             RepairCampaignStage stage = invocation.getArgument(0);
             stage.setId(UUID.randomUUID());
@@ -362,17 +401,14 @@ class RepairCampaignServiceTest {
     }
 
     @Test
-    void approvalFinalizationSerializesStatusTransitionOnCampaignRow() {
+    void legacyDirectApprovalPathIsDenied() {
         UUID campaignId = UUID.randomUUID();
         RepairCampaign campaign = campaign(campaignId, null);
-        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
-        when(repository.save(campaign)).thenReturn(campaign);
-
-        service.finalizeApprovalFromApprovalRequest(campaignId);
-
-        verify(repository).findLockedByIdAndIsDeletedFalse(campaignId);
-        verify(repository, never()).findByIdAndIsDeletedFalse(campaignId);
-        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.APPROVED);
+        assertThatThrownBy(() -> service.finalizeApprovalFromApprovalRequest(campaignId))
+                .hasMessageContaining("approval request");
+        assertThatThrownBy(() -> service.approve(campaignId))
+                .hasMessageContaining("approval request");
+        verify(repository, never()).save(campaign);
     }
 
     @Test
@@ -790,7 +826,7 @@ class RepairCampaignServiceTest {
         UUID budgetLineId = UUID.randomUUID();
         RepairCampaign campaign = campaign(campaignId, budgetId);
         BudgetLine line = budgetLine(budgetLineId, budget(budgetId, 2026, UUID.randomUUID(), BudgetStatus.APPROVED, 5000, 1200));
-        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
         when(stageRepository.save(any(RepairCampaignStage.class))).thenAnswer(invocation -> {
             RepairCampaignStage stage = invocation.getArgument(0);
@@ -830,7 +866,7 @@ class RepairCampaignServiceTest {
         UUID budgetLineId = UUID.randomUUID();
         RepairCampaign campaign = campaign(campaignId, UUID.randomUUID());
         BudgetLine line = budgetLine(budgetLineId, budget(UUID.randomUUID(), 2026, UUID.randomUUID(), BudgetStatus.APPROVED, 5000, 0));
-        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(budgetLineRepository.findByIdAndIsDeletedFalse(budgetLineId)).thenReturn(Optional.of(line));
 
         assertThatThrownBy(() -> service.addStage(campaignId, new RepairCampaignStageDto(
@@ -878,6 +914,7 @@ class RepairCampaignServiceTest {
         workOrder.setId(workOrderId);
         workOrder.setType(com.toir.enums.WorkOrderType.OVERHAUL);
 
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(workOrderRepository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -971,6 +1008,14 @@ class RepairCampaignServiceTest {
             LocalDate endDate
     ) {
         return taskOneRequest(departmentId, responsibleEmployeeId, endDate, 3L);
+    }
+
+    private RepairCampaignRequest updateRequest(BigDecimal budget, String currency) {
+        RepairCampaignRequest base = taskOneRequest(null, null, LocalDate.of(2026, 2, 1), 3L);
+        return new RepairCampaignRequest(base.code(), base.name(), base.departmentId(), base.startDate(), base.endDate(),
+                budget, base.scopeType(), base.equipmentTypeId(), base.participantDepartments(), base.description(),
+                base.notes(), base.maintenanceBudgetId(), currency, base.campaignType(), base.responsibleEmployeeId(),
+                base.priority(), base.objective(), base.version());
     }
 
     private RepairCampaignRequest taskOneRequest(

@@ -55,6 +55,7 @@ class RepairCampaignApprovalPolicyTest {
         campaign.setVersion(9L);
         when(hasher.hash(campaign)).thenReturn("b".repeat(64));
         ApprovalRequest request = new ApprovalRequest();
+        completeRoute(request);
         request.setPayloadJson(RepairCampaignApprovalPolicy.payload(campaign));
 
         new RepairCampaignApprovalPolicy(hasher).validateDecision(campaign, request);
@@ -62,5 +63,21 @@ class RepairCampaignApprovalPolicyTest {
         assertThatThrownBy(() -> new RepairCampaignApprovalPolicy(hasher).validateDecision(campaign, request))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("REPAIR_CAMPAIGN_APPROVAL_SCOPE_STALE");
+    }
+
+    private void completeRoute(ApprovalRequest request) {
+        request.setStatus(com.toir.enums.ApprovalStatus.APPROVED);
+        request.setActionType(com.toir.enums.ApprovalActionType.APPROVE);
+        request.setRequesterId(java.util.UUID.randomUUID());
+        String[] roles = {"REPAIR_CAMPAIGN_CHIEF_MECHANIC_APPROVER","REPAIR_CAMPAIGN_PRODUCTION_APPROVER",
+                "REPAIR_CAMPAIGN_WAREHOUSE_APPROVER","REPAIR_CAMPAIGN_PROCUREMENT_APPROVER",
+                "REPAIR_CAMPAIGN_FINANCE_APPROVER","REPAIR_CAMPAIGN_HSE_APPROVER",
+                "REPAIR_CAMPAIGN_CHIEF_ENGINEER_APPROVER"};
+        java.util.List<com.toir.entity.ApprovalStep> steps = new java.util.ArrayList<>();
+        for (int i = 0; i < roles.length; i++) {
+            var step = new com.toir.entity.ApprovalStep(); step.setStepNumber(i + 1); step.setApproverRole(roles[i]);
+            step.setDecision(com.toir.enums.ApprovalDecision.APPROVED); step.setDecidedById(java.util.UUID.randomUUID()); steps.add(step);
+        }
+        request.setSteps(steps);
     }
 }
