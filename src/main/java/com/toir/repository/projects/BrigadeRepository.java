@@ -13,6 +13,9 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface BrigadeRepository extends JpaRepository<Brigade, UUID> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from Brigade b where b.id=:id and b.isDeleted=false")
+    Optional<Brigade> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
     @Query(value = "SELECT * FROM brigades WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<Brigade> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 

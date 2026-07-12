@@ -61,6 +61,8 @@ public class RepairCampaignDependencyPolicy {
         items.findAllByCampaignIdAndIsDeletedFalseOrderByOrderNumberAsc(campaignId).forEach(i->states.put(i.getId(),i.getStatus()));
         List<String>b=new ArrayList<>(); if(cycle(ds,null,null))b.add("DEPENDENCY_CYCLE");
         ds.stream().filter(d->states.get(d.getPredecessorWorkItemId())!=RepairCampaignWorkItemStatus.COMPLETED)
+                .filter(d->states.get(d.getSuccessorWorkItemId())==RepairCampaignWorkItemStatus.IN_PROGRESS
+                        || states.get(d.getSuccessorWorkItemId())==RepairCampaignWorkItemStatus.COMPLETED)
                 .forEach(d->b.add("PREDECESSOR_INCOMPLETE:"+d.getPredecessorWorkItemId()+":"+d.getSuccessorWorkItemId()));
         return b.stream().sorted().toList();
     }
