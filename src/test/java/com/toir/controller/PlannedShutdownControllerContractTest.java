@@ -49,6 +49,7 @@ class PlannedShutdownControllerContractTest {
     void campaignRelationshipEndpointsDeclareShutdownReadAndMutationPbac() {
         java.util.Map<String, String> expected = java.util.Map.of(
                 "getCampaignLink", "PLANNED_SHUTDOWN_READ",
+                "listCampaignLinks", "PLANNED_SHUTDOWN_READ",
                 "linkCampaign", "PLANNED_SHUTDOWN_UPDATE",
                 "unlinkCampaign", "PLANNED_SHUTDOWN_UPDATE");
         for (var method : PlannedShutdownController.class.getDeclaredMethods()) {
@@ -58,6 +59,23 @@ class PlannedShutdownControllerContractTest {
         }
         assertThat(java.util.Arrays.stream(PlannedShutdownController.class.getDeclaredMethods())
                 .map(java.lang.reflect.Method::getName).filter(expected::containsKey)).hasSize(expected.size());
+    }
+
+    @Test
+    void listCampaignLinksDelegatesVersionAndReturnsPagedTypedRelationships() throws Exception {
+        UUID shutdownId = UUID.randomUUID(); UUID campaignId = UUID.randomUUID(); UUID linkId = UUID.randomUUID();
+        when(campaignLinkService.listForShutdown(shutdownId, 11L)).thenReturn(List.of(
+                new com.toir.dto.repaircampaign.RepairCampaignShutdownLinkResponse(
+                        linkId, campaignId, shutdownId, 8L, 11L, true)));
+
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/repair-campaigns", shutdownId)
+                        .param("version", "11").param("page", "0").param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(linkId.toString()))
+                .andExpect(jsonPath("$.content[0].repairCampaignId").value(campaignId.toString()))
+                .andExpect(jsonPath("$.content[0].repairCampaignVersion").value(8));
+        verify(campaignLinkService).listForShutdown(shutdownId, 11L);
     }
 
     @Mock

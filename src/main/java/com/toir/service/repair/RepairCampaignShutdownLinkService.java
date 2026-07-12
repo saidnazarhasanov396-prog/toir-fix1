@@ -70,6 +70,36 @@ public class RepairCampaignShutdownLinkService {
         return linkResponse(link, new Versions(pair.campaign.getVersion(), pair.shutdown.getVersion()), true);
     }
 
+    @Transactional(readOnly = true)
+    public List<RepairCampaignShutdownLinkResponse> listForCampaign(UUID campaignId, Long campaignVersion) {
+        RepairCampaign campaign = campaignRepository.findByIdAndIsDeletedFalse(campaignId)
+                .orElseThrow(() -> RestException.notFound("Repair campaign not found"));
+        scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
+        requireVersion(campaign.getVersion(), campaignVersion);
+        return linkRepository.findAllByRepairCampaignIdAndIsDeletedFalseOrderByPlannedShutdownId(campaignId)
+                .stream().map(link -> {
+                    PlannedShutdown shutdown = shutdownRepository.findByIdAndIsDeletedFalse(link.getPlannedShutdownId())
+                            .orElseThrow(() -> RestException.notFound("Planned shutdown not found"));
+                    scopeAccessService.assertCanAccessDepartment(shutdown.getDepartmentId());
+                    return linkResponse(link, new Versions(campaign.getVersion(), shutdown.getVersion()), true);
+                }).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<RepairCampaignShutdownLinkResponse> listForShutdown(UUID shutdownId, Long shutdownVersion) {
+        PlannedShutdown shutdown = shutdownRepository.findByIdAndIsDeletedFalse(shutdownId)
+                .orElseThrow(() -> RestException.notFound("Planned shutdown not found"));
+        scopeAccessService.assertCanAccessDepartment(shutdown.getDepartmentId());
+        requireVersion(shutdown.getVersion(), shutdownVersion);
+        return linkRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByRepairCampaignId(shutdownId)
+                .stream().map(link -> {
+                    RepairCampaign campaign = campaignRepository.findByIdAndIsDeletedFalse(link.getRepairCampaignId())
+                            .orElseThrow(() -> RestException.notFound("Repair campaign not found"));
+                    scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
+                    return linkResponse(link, new Versions(campaign.getVersion(), shutdown.getVersion()), true);
+                }).toList();
+    }
+
     @Transactional
     public RepairCampaignShutdownLinkResponse unlink(UUID campaignId, UUID shutdownId,
                                                       RepairCampaignShutdownLinkRequest request) {
@@ -83,10 +113,12 @@ public class RepairCampaignShutdownLinkService {
             throw RestException.conflict("CAMPAIGN_SHUTDOWN_LINK_HAS_WINDOWS");
         }
         var link = activeLink(campaignId, shutdownId);
+        var before = linkResponse(link,
+                new Versions(pair.campaign.getVersion(), pair.shutdown.getVersion()), true);
         link.setDeleted(true); linkRepository.saveAndFlush(link);
         Versions versions = touch(pair);
         var response = linkResponse(link, versions, false);
-        auditBoth(pair, link.getId(), AuditAction.DELETE, "Campaign unlinked from planned shutdown", null, response);
+        auditBoth(pair, link.getId(), AuditAction.DELETE, "Campaign unlinked from planned shutdown", before, response);
         return response;
     }
 
@@ -136,9 +168,11 @@ public class RepairCampaignShutdownLinkService {
             throw RestException.conflict("CAMPAIGN_WINDOW_UNLINK_AFTER_START");
         var window = windowRepository.findByIdAndRepairCampaignIdAndPlannedShutdownIdAndIsDeletedFalse(
                 windowId, campaignId, shutdownId).orElseThrow(() -> RestException.notFound("Campaign work item window not found"));
+        var before = windowResponse(window,
+                new Versions(pair.campaign.getVersion(), pair.shutdown.getVersion()), true);
         window.setDeleted(true); windowRepository.saveAndFlush(window);
         Versions versions = touch(pair); var response = windowResponse(window, versions, false);
-        auditBoth(pair, windowId, AuditAction.DELETE, "Campaign work item removed from shutdown window", null, response);
+        auditBoth(pair, windowId, AuditAction.DELETE, "Campaign work item removed from shutdown window", before, response);
         return response;
     }
 
@@ -167,6 +201,11 @@ public class RepairCampaignShutdownLinkService {
         if (campaignVersion == null || shutdownVersion == null) throw RestException.badRequest("Both aggregate versions are required");
         if (!Objects.equals(pair.campaign.getVersion(), campaignVersion)
                 || !Objects.equals(pair.shutdown.getVersion(), shutdownVersion))
+            throw RestException.conflict("CAMPAIGN_SHUTDOWN_VERSION_CONFLICT");
+    }
+    private static void requireVersion(Long actual, Long requested) {
+        if (requested == null) throw RestException.badRequest("Aggregate version is required");
+        if (!Objects.equals(actual, requested))
             throw RestException.conflict("CAMPAIGN_SHUTDOWN_VERSION_CONFLICT");
     }
     private PlannedShutdownCampaignLink activeLink(UUID campaignId, UUID shutdownId) {
@@ -214,10 +253,12 @@ public class RepairCampaignShutdownLinkService {
         return message.toString();
     }
     private void auditBoth(Pair pair, UUID id, AuditAction action, String description, Object before, Object after) {
+        String identity = " campaign=" + pair.campaign.getId() + " shutdown=" + pair.shutdown.getId()
+                + " relationship=" + id;
         audit.log("repair_campaign_shutdown_link", pair.campaign.getId().toString(), action,
-                AuditModule.REPAIR_CAMPAIGN, description + " link=" + id, before, after);
+                AuditModule.REPAIR_CAMPAIGN, description + identity, before, after);
         audit.log("repair_campaign_shutdown_link", pair.shutdown.getId().toString(), action,
-                AuditModule.PLANNED_SHUTDOWN, description + " link=" + id, before, after);
+                AuditModule.PLANNED_SHUTDOWN, description + identity, before, after);
     }
     private static RepairCampaignShutdownLinkResponse linkResponse(PlannedShutdownCampaignLink link, Versions v, boolean active) {
         return new RepairCampaignShutdownLinkResponse(link.getId(), link.getRepairCampaignId(), link.getPlannedShutdownId(), v.campaign, v.shutdown, active);

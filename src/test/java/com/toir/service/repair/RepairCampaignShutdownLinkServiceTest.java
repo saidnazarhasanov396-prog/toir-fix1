@@ -6,6 +6,7 @@ import com.toir.entity.plannedshutdown.PlannedShutdownCampaignLink;
 import com.toir.entity.plannedshutdown.PlannedShutdownWorkItem;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignWorkItem;
+import com.toir.entity.repair.RepairCampaignWorkItemWindow;
 import com.toir.enums.*;
 import com.toir.exception.RestException;
 import com.toir.repository.PlannedShutdownRepository;
@@ -27,6 +28,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -155,6 +157,112 @@ class RepairCampaignShutdownLinkServiceTest {
                 new DataIntegrityViolationException("uq_planned_shutdown_campaigns_active_pair"));
         assertThatThrownBy(() -> service.link(campaignId, shutdownId,
                 new RepairCampaignShutdownLinkRequest(2L, 3L))).hasMessageContaining("DUPLICATE");
+    }
+
+    @Test
+    void listsActiveLinksFromEitherRootInRepositoryOrderWithBothCurrentVersionsAndPbac() {
+        PlannedShutdownCampaignLink link = link(false);
+        when(campaignRepository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(shutdownRepository.findByIdAndIsDeletedFalse(shutdownId)).thenReturn(Optional.of(shutdown));
+        when(linkRepository.findAllByRepairCampaignIdAndIsDeletedFalseOrderByPlannedShutdownId(campaignId))
+                .thenReturn(List.of(link));
+        when(linkRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByRepairCampaignId(shutdownId))
+                .thenReturn(List.of(link));
+
+        assertThat(service.listForCampaign(campaignId, 2L)).singleElement().satisfies(row -> {
+            assertThat(row.repairCampaignId()).isEqualTo(campaignId);
+            assertThat(row.plannedShutdownId()).isEqualTo(shutdownId);
+            assertThat(row.repairCampaignVersion()).isEqualTo(2L);
+            assertThat(row.plannedShutdownVersion()).isEqualTo(3L);
+        });
+        assertThat(service.listForShutdown(shutdownId, 3L)).containsExactlyElementsOf(
+                service.listForCampaign(campaignId, 2L));
+        verify(scopeAccessService, atLeast(2)).assertCanAccessDepartment(campaign.getDepartmentId());
+        verify(scopeAccessService, atLeast(2)).assertCanAccessDepartment(shutdown.getDepartmentId());
+    }
+
+    @Test
+    void unlinkAuditsImmutableActiveBeforeAndInactiveAfterWithExactIdentityAndAdvancedVersions() {
+        PlannedShutdownCampaignLink link = link(false);
+        when(linkRepository.findByPlannedShutdownIdAndRepairCampaignIdAndIsDeletedFalse(shutdownId, campaignId))
+                .thenReturn(Optional.of(link));
+        when(linkRepository.saveAndFlush(link)).thenReturn(link);
+
+        var result = service.unlink(campaignId, shutdownId, new RepairCampaignShutdownLinkRequest(2L, 3L));
+
+        var before = org.mockito.ArgumentCaptor.forClass(Object.class);
+        var after = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(audit, times(2)).log(eq("repair_campaign_shutdown_link"), any(), eq(AuditAction.DELETE),
+                any(), contains(link.getId().toString()), before.capture(), after.capture());
+        assertThat(before.getAllValues()).allSatisfy(value -> {
+            var snapshot = (RepairCampaignShutdownLinkResponse) value;
+            assertThat(snapshot.id()).isEqualTo(link.getId());
+            assertThat(snapshot.repairCampaignId()).isEqualTo(campaignId);
+            assertThat(snapshot.plannedShutdownId()).isEqualTo(shutdownId);
+            assertThat(snapshot.active()).isTrue();
+            assertThat(snapshot.repairCampaignVersion()).isEqualTo(2L);
+            assertThat(snapshot.plannedShutdownVersion()).isEqualTo(3L);
+        });
+        assertThat(after.getAllValues()).allSatisfy(value -> assertThat(value).isEqualTo(result));
+        assertThat(result.active()).isFalse();
+        assertThat(result.repairCampaignVersion()).isEqualTo(3L);
+        assertThat(result.plannedShutdownVersion()).isEqualTo(4L);
+    }
+
+    @Test
+    void reverseUuidOrderingLocksShutdownBeforeCampaignAndStillAdvancesBothRoots() {
+        UUID highCampaignId = UUID.fromString("70000000-0000-0000-0000-000000000000");
+        UUID lowShutdownId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        campaign.setId(highCampaignId); shutdown.setId(lowShutdownId);
+        when(shutdownRepository.findByIdAndIsDeletedFalseForUpdate(lowShutdownId)).thenReturn(Optional.of(shutdown));
+        when(campaignRepository.findLockedByIdAndIsDeletedFalse(highCampaignId)).thenReturn(Optional.of(campaign));
+        when(linkRepository.findByPlannedShutdownIdAndRepairCampaignId(lowShutdownId, highCampaignId))
+                .thenReturn(Optional.empty());
+        when(linkRepository.saveAndFlush(any())).thenAnswer(inv -> {
+            PlannedShutdownCampaignLink value = inv.getArgument(0); value.setId(UUID.randomUUID()); return value;
+        });
+
+        var result = service.link(highCampaignId, lowShutdownId,
+                new RepairCampaignShutdownLinkRequest(2L, 3L));
+
+        InOrder order = inOrder(campaignRepository, shutdownRepository);
+        order.verify(shutdownRepository).findByIdAndIsDeletedFalseForUpdate(lowShutdownId);
+        order.verify(campaignRepository).findLockedByIdAndIsDeletedFalse(highCampaignId);
+        assertThat(result.repairCampaignVersion()).isEqualTo(3L);
+        assertThat(result.plannedShutdownVersion()).isEqualTo(4L);
+    }
+
+    @Test
+    void removeWindowAuditsImmutableActiveBeforeAndInactiveAfterWithExactItemIds() {
+        UUID windowId = UUID.randomUUID(); UUID campaignItemId = UUID.randomUUID(); UUID shutdownItemId = UUID.randomUUID();
+        RepairCampaignWorkItemWindow window = new RepairCampaignWorkItemWindow();
+        window.setId(windowId); window.setRepairCampaignId(campaignId);
+        window.setRepairCampaignWorkItemId(campaignItemId); window.setPlannedShutdownId(shutdownId);
+        window.setShutdownWorkItemId(shutdownItemId);
+        when(windowRepository.findByIdAndRepairCampaignIdAndPlannedShutdownIdAndIsDeletedFalse(
+                windowId, campaignId, shutdownId)).thenReturn(Optional.of(window));
+        when(windowRepository.saveAndFlush(window)).thenReturn(window);
+
+        var result = service.removeWindow(campaignId, shutdownId, windowId,
+                new RepairCampaignShutdownLinkRequest(2L, 3L));
+
+        var before = org.mockito.ArgumentCaptor.forClass(Object.class);
+        var after = org.mockito.ArgumentCaptor.forClass(Object.class);
+        verify(audit, times(2)).log(eq("repair_campaign_shutdown_link"), any(), eq(AuditAction.DELETE),
+                any(), contains(windowId.toString()), before.capture(), after.capture());
+        assertThat(before.getAllValues()).allSatisfy(value -> {
+            var snapshot = (RepairCampaignWorkItemWindowResponse) value;
+            assertThat(snapshot.id()).isEqualTo(windowId);
+            assertThat(snapshot.repairCampaignWorkItemId()).isEqualTo(campaignItemId);
+            assertThat(snapshot.shutdownWorkItemId()).isEqualTo(shutdownItemId);
+            assertThat(snapshot.active()).isTrue();
+            assertThat(snapshot.repairCampaignVersion()).isEqualTo(2L);
+            assertThat(snapshot.plannedShutdownVersion()).isEqualTo(3L);
+        });
+        assertThat(after.getAllValues()).allSatisfy(value -> assertThat(value).isEqualTo(result));
+        assertThat(result.active()).isFalse();
+        assertThat(result.repairCampaignVersion()).isEqualTo(3L);
+        assertThat(result.plannedShutdownVersion()).isEqualTo(4L);
     }
 
     private PlannedShutdownCampaignLink link(boolean deleted) {

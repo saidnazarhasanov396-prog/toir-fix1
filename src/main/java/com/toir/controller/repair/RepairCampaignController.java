@@ -131,6 +131,14 @@ public class RepairCampaignController {
         return ResponseEntity.ok(shutdownLinkService.get(id, shutdownId, repairCampaignVersion, plannedShutdownVersion));
     }
 
+    @GetMapping("/{id}/planned-shutdowns")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
+    public ResponseEntity<Page<RepairCampaignShutdownLinkResponse>> listShutdownLinks(@PathVariable UUID id,
+            @RequestParam Long version, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(shutdownLinkService.listForCampaign(id, version), page, size));
+    }
+
     @PostMapping("/{id}/planned-shutdowns/{shutdownId}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
     public ResponseEntity<RepairCampaignShutdownLinkResponse> linkShutdown(@PathVariable UUID id,

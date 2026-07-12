@@ -9,6 +9,7 @@ import com.toir.dto.repaircampaign.RepairCampaignBudgetSummaryDto;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.RepairCampaignWorkItemRequest;
 import com.toir.dto.repaircampaign.RepairCampaignWorkItemResponse;
+import com.toir.dto.repaircampaign.RepairCampaignShutdownLinkResponse;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.enums.RepairCampaignWorkItemSourceType;
@@ -72,6 +73,7 @@ class RepairCampaignControllerContractTest {
     void shutdownRelationshipEndpointsDeclareReadAndMutationPbac() {
         java.util.Map<String, String> expected = java.util.Map.of(
                 "getShutdownLink", "REPAIR_CAMPAIGN_READ",
+                "listShutdownLinks", "REPAIR_CAMPAIGN_READ",
                 "linkShutdown", "REPAIR_CAMPAIGN_UPDATE",
                 "unlinkShutdown", "REPAIR_CAMPAIGN_UPDATE",
                 "listWorkItemWindows", "REPAIR_CAMPAIGN_READ",
@@ -84,6 +86,22 @@ class RepairCampaignControllerContractTest {
         }
         assertThat(java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods())
                 .map(java.lang.reflect.Method::getName).filter(expected::containsKey)).hasSize(expected.size());
+    }
+
+    @Test
+    void listShutdownLinksDelegatesVersionAndReturnsPagedTypedRelationships() throws Exception {
+        UUID campaignId = UUID.randomUUID(); UUID shutdownId = UUID.randomUUID(); UUID linkId = UUID.randomUUID();
+        when(shutdownLinkService.listForCampaign(campaignId, 7L)).thenReturn(List.of(
+                new RepairCampaignShutdownLinkResponse(linkId, campaignId, shutdownId, 7L, 9L, true)));
+
+        mockMvc.perform(get("/api/v1/repair-campaigns/{id}/planned-shutdowns", campaignId)
+                        .param("version", "7").param("page", "0").param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(linkId.toString()))
+                .andExpect(jsonPath("$.content[0].plannedShutdownId").value(shutdownId.toString()))
+                .andExpect(jsonPath("$.content[0].plannedShutdownVersion").value(9));
+        verify(shutdownLinkService).listForCampaign(campaignId, 7L);
     }
 
     @Test

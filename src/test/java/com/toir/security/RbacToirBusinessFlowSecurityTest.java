@@ -143,6 +143,30 @@ class RbacToirBusinessFlowSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_READ)
+    void plannedShutdownReaderCanDiscoverCampaignLinksButCannotUseCampaignDiscoveryRoute() throws Exception {
+        UUID shutdownId = UUID.randomUUID(); UUID campaignId = UUID.randomUUID();
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/repair-campaigns", shutdownId)
+                        .param("version", "3"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/repair-campaigns/{id}/planned-shutdowns", campaignId)
+                        .param("version", "2"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.REPAIR_CAMPAIGN_READ)
+    void campaignReaderCanDiscoverShutdownLinksButCannotUseShutdownDiscoveryRoute() throws Exception {
+        UUID shutdownId = UUID.randomUUID(); UUID campaignId = UUID.randomUUID();
+        mockMvc.perform(get("/api/v1/repair-campaigns/{id}/planned-shutdowns", campaignId)
+                        .param("version", "2"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/planned-shutdowns/{id}/repair-campaigns", shutdownId)
+                        .param("version", "3"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_CREATE)
     void plannedShutdownCreatorCanCreate() throws Exception {
         when(plannedShutdownService.create(any())).thenReturn(plannedShutdownDetail());

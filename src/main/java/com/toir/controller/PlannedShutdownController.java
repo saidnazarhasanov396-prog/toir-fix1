@@ -34,6 +34,14 @@ public class PlannedShutdownController {
     private final PlannedShutdownWorkOrderGenerationService workOrderGenerationService;
     private final RepairCampaignShutdownLinkService campaignLinkService;
 
+    @GetMapping("/{id}/repair-campaigns")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
+    public ResponseEntity<Page<RepairCampaignShutdownLinkResponse>> listCampaignLinks(@PathVariable UUID id,
+            @RequestParam Long version, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(campaignLinkService.listForShutdown(id, version), page, size));
+    }
+
     @GetMapping("/{id}/repair-campaigns/{campaignId}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_READ')")
     public ResponseEntity<RepairCampaignShutdownLinkResponse> getCampaignLink(@PathVariable UUID id,
