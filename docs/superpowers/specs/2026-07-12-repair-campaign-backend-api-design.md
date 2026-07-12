@@ -18,7 +18,7 @@ The backend work starts from local `Codex_org` commit `9509b337`, merged with `o
 
 `GET /api/v1/repair-campaigns/{campaignId}/defects` accepts `page`, `size`, optional `status`, and optional `severity`, and returns Spring's `Page<DefectResponse>`, the same shape returned by `GET /api/v1/defects`.
 
-The actual schema stores the relation in the opposite direction from the prose requirement: `work_orders.defect_id -> defects.id`, while `work_orders.repair_campaign_id -> repair_campaigns.id`. The repository query therefore selects distinct defects joined through campaign work orders. The service first verifies the campaign exists and is in the caller's department scope, then reuses the existing bulk response enrichment to avoid N+1 lookups.
+The actual schema stores the relation in the opposite direction from the prose requirement: `work_orders.defect_id -> defects.id`, while `work_orders.repair_campaign_id -> repair_campaigns.id`. The repository query therefore selects distinct defects joined through campaign work orders. The service first verifies the campaign exists and is in the caller's department scope, then reuses the existing bulk response enrichment to avoid N+1 lookups. The standard `DefectResponse` exposes `workOrderId` as the first linked work order so the existing frontend column is populated, while retaining `linkedWorkOrders` for full triad context.
 
 ### Campaign risks
 
@@ -40,7 +40,7 @@ The service validates campaign scope for every operation, validates an owner aga
 
 `GET /api/v1/defect-lists` accepts optional `status` and already-supported `equipmentId`; both are applied in the repository query and scope-filtered fallback. Stats remain unchanged.
 
-The campaign work-order flow will no longer require an approved defect list for `MEDIUM_REPAIR` and `CAPITAL_REPAIR`. A provided defect-list ID is still validated for existence, approval, and equipment consistency. This makes the code match the frontend and business documentation: a defect list is recommended during creation, while unresolved acceptance defects belong to completion/closure governance.
+Campaign work-order creation no longer requires an approved defect list for `MEDIUM_REPAIR` and `CAPITAL_REPAIR`. A provided defect-list ID is still validated for existence, approval, and equipment consistency. Existing approval/start readiness checks remain unchanged, so a list can be attached after draft creation. This removes the frontend creation blocker without weakening the later execution gate.
 
 ## Security and errors
 
@@ -49,4 +49,3 @@ Read endpoints require `REPAIR_CAMPAIGN_READ`; risk writes require `REPAIR_CAMPA
 ## Testing strategy
 
 All behavior is developed test-first. Controller contract tests cover request binding, response status, and authorities. Service tests cover campaign scope, defect filters, owner resolution, risk transitions, soft delete, and close-note persistence. Repository query contracts are covered by focused tests where practical, while migration SQL is checked by compilation and the project's migration test suite. Final verification runs targeted tests, full Maven tests, and package/compile under Java 21-compatible JDK.
-

@@ -5,6 +5,7 @@ import com.toir.dto.defectlist.DefectListRequest;
 import com.toir.dto.defectlist.DefectListStatsResponse;
 import com.toir.exception.RestException;
 import com.toir.service.defects.DefectListService;
+import com.toir.enums.DefectListStatus;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
@@ -29,11 +30,12 @@ public class DefectListController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEFECT_LIST_READ')")
     public ResponseEntity<Page<DefectListDto>> list(
             @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) DefectListStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search
     ) {
-        return ResponseEntity.ok(service.search(equipmentId, page, size, search));
+        return ResponseEntity.ok(service.search(equipmentId, status, page, size, search));
     }
 
     @GetMapping("/stats")

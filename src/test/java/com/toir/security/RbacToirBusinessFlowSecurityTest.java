@@ -18,6 +18,7 @@ import com.toir.enums.ApprovalTargetType;
 import com.toir.service.PlannedShutdownService;
 import com.toir.service.repair.RepairCampaignService;
 import com.toir.service.repair.RepairCampaignWorkItemService;
+import com.toir.service.defects.DefectService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -80,6 +81,9 @@ class RbacToirBusinessFlowSecurityTest {
 
     @MockBean
     RepairCampaignWorkItemService repairCampaignWorkItemService;
+
+    @MockBean
+    DefectService defectService;
     @org.springframework.boot.test.mock.mockito.MockBean
     com.toir.service.repair.RepairCampaignMaterialService repairCampaignMaterialService;
     @org.springframework.boot.test.mock.mockito.MockBean
@@ -416,7 +420,8 @@ class RbacToirBusinessFlowSecurityTest {
                 Arguments.of(RepairCampaignController.class, "complete",
                         new Class<?>[]{UUID.class}, PermissionConstants.REPAIR_CAMPAIGN_COMPLETE),
                 Arguments.of(RepairCampaignController.class, "close",
-                        new Class<?>[]{UUID.class}, PermissionConstants.REPAIR_CAMPAIGN_CLOSE),
+                        new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignCloseRequest.class},
+                        PermissionConstants.REPAIR_CAMPAIGN_CLOSE),
                 Arguments.of(RepairCampaignController.class, "cancel",
                         new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignCancelRequest.class},
                         PermissionConstants.REPAIR_CAMPAIGN_CANCEL),

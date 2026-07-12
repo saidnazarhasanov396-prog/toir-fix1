@@ -889,31 +889,35 @@ class WorkOrderServiceTest {
     }
 
     @Test
-    void createMediumRepairWithoutDefectListReturns400() {
+    void createMediumRepairWithoutDefectListSucceeds() {
         WorkOrderRequest request = requestWithDefectList(WorkOrderType.MEDIUM_REPAIR, null, UUID.randomUUID());
-        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            return workOrder;
+        });
+        mockSuccessfulCreateDependencies(request);
 
-        assertThatThrownBy(() -> service.create(request))
-                .isInstanceOfSatisfying(RestException.class, ex -> {
-                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("Approved DefectList is required for MEDIUM_REPAIR");
-                });
+        WorkOrderDto result = service.create(request);
 
-        verify(repository, never()).save(any(WorkOrder.class));
+        assertThat(result.type()).isEqualTo(WorkOrderType.MEDIUM_REPAIR);
+        assertThat(result.defectListId()).isNull();
     }
 
     @Test
-    void createCapitalRepairWithoutDefectListReturns400() {
+    void createCapitalRepairWithoutDefectListSucceeds() {
         WorkOrderRequest request = requestWithDefectList(WorkOrderType.CAPITAL_REPAIR, null, UUID.randomUUID());
-        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            return workOrder;
+        });
+        mockSuccessfulCreateDependencies(request);
 
-        assertThatThrownBy(() -> service.create(request))
-                .isInstanceOfSatisfying(RestException.class, ex -> {
-                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("Approved DefectList is required for CAPITAL_REPAIR");
-                });
+        WorkOrderDto result = service.create(request);
 
-        verify(repository, never()).save(any(WorkOrder.class));
+        assertThat(result.type()).isEqualTo(WorkOrderType.CAPITAL_REPAIR);
+        assertThat(result.defectListId()).isNull();
     }
 
     @Test
@@ -971,7 +975,7 @@ class WorkOrderServiceTest {
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("Approved DefectList is required for CAPITAL_REPAIR");
+                    assertThat(ex.getMessage()).contains("DefectList must be APPROVED");
                 });
 
         verify(repository, never()).save(any(WorkOrder.class));

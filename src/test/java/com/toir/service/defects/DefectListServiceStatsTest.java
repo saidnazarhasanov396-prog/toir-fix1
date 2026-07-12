@@ -18,6 +18,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.UUID;
+import java.util.List;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.lenient;
@@ -82,6 +85,19 @@ class DefectListServiceStatsTest {
                 DefectListStatus.APPROVED.name(),
                 DefectListStatus.CLOSED.name()
         );
+    }
+
+    @Test
+    void searchForwardsEquipmentAndStatusToRepository() {
+        UUID equipmentId = UUID.randomUUID();
+        PageRequest pageable = PageRequest.of(0, 20);
+        when(repository.searchPaginated(equipmentId, DefectListStatus.APPROVED, "pump", pageable))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        var result = service.search(equipmentId, DefectListStatus.APPROVED, 0, 20, "pump");
+
+        assertThat(result).isEmpty();
+        verify(repository).searchPaginated(equipmentId, DefectListStatus.APPROVED, "pump", pageable);
     }
 
     @Test

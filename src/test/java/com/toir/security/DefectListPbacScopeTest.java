@@ -177,7 +177,7 @@ class DefectListPbacScopeTest {
         DefectList inScope = defectList(UUID.randomUUID(), equipmentInScope, null, null);
         DefectList outOfScope = defectList(UUID.randomUUID(), equipmentOutOfScope, null, null);
         PageRequest pageRequest = PageRequest.of(0, 20);
-        when(repository.searchPaginated(null, null, pageRequest))
+        when(repository.searchPaginated(null, null, null, pageRequest))
                 .thenReturn(new PageImpl<>(List.of(inScope, outOfScope), pageRequest, 2));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentInScope)).thenReturn(Optional.of(equipment(equipmentInScope, departmentA)));
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentOutOfScope)).thenReturn(Optional.of(equipment(equipmentOutOfScope, departmentB)));

@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.UUID;
+import com.toir.enums.DefectListStatus;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -84,5 +85,23 @@ class DefectListControllerContractTest {
                 .andExpect(jsonPath("$.closed").value(1));
 
         verify(service).getStats(equipmentId, "pump");
+    }
+
+    @Test
+    void listForwardsEquipmentAndStatusFilters() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        when(service.search(equipmentId, DefectListStatus.APPROVED, 2, 50, "pump"))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(java.util.List.of(),
+                        org.springframework.data.domain.PageRequest.of(2, 50), 0));
+
+        mockMvc.perform(get("/api/v1/defect-lists")
+                        .param("equipmentId", equipmentId.toString())
+                        .param("status", "APPROVED")
+                        .param("page", "2")
+                        .param("size", "50")
+                        .param("search", "pump"))
+                .andExpect(status().isOk());
+
+        verify(service).search(equipmentId, DefectListStatus.APPROVED, 2, 50, "pump");
     }
 }

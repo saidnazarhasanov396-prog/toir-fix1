@@ -949,6 +949,22 @@ class RepairCampaignServiceTest {
         verify(repository, never()).save(campaign);
     }
 
+    @Test
+    void closePersistsTrimmedClosingNotes() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setStatus(RepairCampaignStatus.COMPLETED);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(workOrderRepository.findAllByRepairCampaignIdAndIsDeletedFalseOrderByUpdatedAtDesc(campaignId))
+                .thenReturn(List.of());
+        when(repository.save(campaign)).thenReturn(campaign);
+
+        service.close(campaignId, "  completed on schedule  ");
+
+        assertThat(campaign.getClosingNotes()).isEqualTo("completed on schedule");
+        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.CLOSED);
+    }
+
     private RepairCampaignRequest taskOneRequest(
             UUID departmentId,
             UUID responsibleEmployeeId,

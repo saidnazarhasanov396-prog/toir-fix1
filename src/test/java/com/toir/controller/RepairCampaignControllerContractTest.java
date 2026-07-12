@@ -19,6 +19,7 @@ import com.toir.exception.RestException;
 import com.toir.service.ApprovalService;
 import com.toir.service.repair.RepairCampaignService;
 import com.toir.service.repair.RepairCampaignShutdownLinkService;
+import com.toir.service.defects.DefectService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -180,6 +181,9 @@ class RepairCampaignControllerContractTest {
     private com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
 
     @Mock
+    private DefectService defectService;
+
+    @Mock
     private ApprovalService approvalService;
 
     private MockMvc mockMvc;
@@ -190,7 +194,7 @@ class RepairCampaignControllerContractTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService, shutdownLinkService, materialService, mutationImpactService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService, shutdownLinkService, materialService, mutationImpactService, defectService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
@@ -216,6 +220,38 @@ class RepairCampaignControllerContractTest {
         assertThat(mockingDetails(service).getInvocations())
                 .anySatisfy(invocation -> assertThat(invocation.getArguments())
                         .containsExactly(campaignId, invocation.getArgument(1), "generation-1"));
+    }
+
+    @Test
+    void closeAcceptsOptionalNotesBodyAndPreservesNoBodyCompatibility() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/close", campaignId))
+                .andExpect(status().isOk());
+        verify(service).close(campaignId, null);
+
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/close", campaignId)
+                        .contentType("application/json")
+                        .content("{\"notes\":\"  completed on schedule  \"}"))
+                .andExpect(status().isOk());
+        verify(service).close(campaignId, "  completed on schedule  ");
+    }
+
+    @Test
+    void campaignDefectsForwardsPaginationAndFilters() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+        when(defectService.searchByRepairCampaign(campaignId, com.toir.enums.DefectStatus.OPEN, "HIGH", 1, 25))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(
+                        List.of(), org.springframework.data.domain.PageRequest.of(1, 25), 0));
+
+        mockMvc.perform(get("/api/v1/repair-campaigns/{id}/defects", campaignId)
+                        .param("status", "OPEN")
+                        .param("severity", "HIGH")
+                        .param("page", "1")
+                        .param("size", "25"))
+                .andExpect(status().isOk());
+
+        verify(defectService).searchByRepairCampaign(campaignId, com.toir.enums.DefectStatus.OPEN, "HIGH", 1, 25);
     }
 
     @Test

@@ -123,6 +123,9 @@ public class RepairCampaign extends BaseEntity {
     @Column(name = "closed_at")
     private Instant closedAt;
 
+    @Column(name = "closing_notes", columnDefinition = "text")
+    private String closingNotes;
+
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
 

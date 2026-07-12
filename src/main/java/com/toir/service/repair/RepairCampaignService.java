@@ -304,6 +304,11 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignDto close(UUID id) {
+        return close(id, null);
+    }
+
+    @Transactional
+    public RepairCampaignDto close(UUID id, String notes) {
         RepairCampaign c = getLockedOrThrow(id);
         if (c.getStatus() != RepairCampaignStatus.COMPLETED) {
             throw RestException.badRequest("Only COMPLETED campaigns can be closed");
@@ -324,6 +329,7 @@ public class RepairCampaignService {
 
         RepairCampaign before = snapshot(c);
         c.setTotalActual(totals.approvedActual());
+        c.setClosingNotes(normalizeOptionalText(notes));
         c.setStatus(RepairCampaignStatus.CLOSED);
         RepairCampaign saved = repository.save(c);
         logCampaign(saved, AuditAction.UPDATE, "Ремонтная кампания закрыта", before, saved);
@@ -1124,7 +1130,8 @@ public class RepairCampaignService {
                 c.getCancelledAt(),
                 c.getSuspendedFromStatus(),
                 c.getClosureVersion(),
-                c.getScopeVersion()
+                c.getScopeVersion(),
+                c.getClosingNotes()
         );
     }
 
@@ -1316,6 +1323,7 @@ public class RepairCampaignService {
         copy.setCompletedAt(source.getCompletedAt());
         copy.setClosingStartedAt(source.getClosingStartedAt());
         copy.setClosedAt(source.getClosedAt());
+        copy.setClosingNotes(source.getClosingNotes());
         copy.setCancelledAt(source.getCancelledAt());
         copy.setSuspendedFromStatus(source.getSuspendedFromStatus());
         copy.setClosureVersion(source.getClosureVersion());
@@ -1340,6 +1348,10 @@ public class RepairCampaignService {
 
     private static BigDecimal decimal(double value) {
         return BigDecimal.valueOf(value).setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private static String normalizeOptionalText(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private record CampaignCostTotals(BigDecimal approvedActual, BigDecimal pendingActual, BigDecimal rejectedActual) {

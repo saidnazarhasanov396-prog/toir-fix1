@@ -116,6 +116,27 @@ class AttachmentGroupControllerContractTest {
     }
 
     @Test
+    void createGroupAllowsRepairCampaignUpdateTarget() throws Exception {
+        UUID targetId = UUID.randomUUID();
+        UUID groupId = UUID.randomUUID();
+        UUID firstFileId = UUID.randomUUID();
+        UUID secondFileId = UUID.randomUUID();
+        authenticateWithAuthorities(UUID.randomUUID(), "REPAIR_CAMPAIGN_UPDATE");
+        when(service.createGroup(
+                eq("Campaign report"), eq(null), eq("REPAIR_CAMPAIGN"), eq(targetId),
+                eq(null), eq(null), any(), eq(null), any()
+        )).thenReturn(group(groupId, targetId, firstFileId, secondFileId, AttachmentTargetType.REPAIR_CAMPAIGN));
+
+        mockMvc.perform(multipart("/api/v1/attachments/groups")
+                        .file(new MockMultipartFile("files", "report.pdf", "application/pdf", "%PDF".getBytes()))
+                        .param("title", "Campaign report")
+                        .param("targetType", "REPAIR_CAMPAIGN")
+                        .param("targetId", targetId.toString()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.targetType").value("REPAIR_CAMPAIGN"));
+    }
+
+    @Test
     void createGroupAllowsProcurementCreateTarget() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();

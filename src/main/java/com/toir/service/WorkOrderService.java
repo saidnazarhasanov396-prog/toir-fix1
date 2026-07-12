@@ -842,7 +842,8 @@ public class WorkOrderService {
         DefectList linkedDefectList = validateDefectListForWorkOrder(
                 request.type(),
                 request.equipmentId(),
-                request.defectListId());
+                request.defectListId(),
+                false);
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + request.equipmentId()));
         UUID effectiveDepartmentId = resolveEffectiveDepartmentId(request, equipment);
@@ -2304,7 +2305,12 @@ public class WorkOrderService {
     }
 
     private DefectList validateDefectListForWorkOrder(WorkOrderType type, UUID equipmentId, UUID defectListId) {
-        boolean required = requiresApprovedDefectList(type);
+        return validateDefectListForWorkOrder(type, equipmentId, defectListId, true);
+    }
+
+    private DefectList validateDefectListForWorkOrder(
+            WorkOrderType type, UUID equipmentId, UUID defectListId, boolean enforceTypeRequirement) {
+        boolean required = enforceTypeRequirement && requiresApprovedDefectList(type);
         if (defectListId == null) {
             if (required) {
                 throw RestException.badRequest(approvedDefectListRequiredMessage(type));

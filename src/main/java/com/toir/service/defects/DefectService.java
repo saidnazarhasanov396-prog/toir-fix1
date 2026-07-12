@@ -18,6 +18,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.users.BrigadeMember;
 import com.toir.entity.users.User;
 import com.toir.enums.AttachmentTargetType;
@@ -39,6 +40,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.OperationalIssueLifecycleSyncService;
@@ -74,6 +76,7 @@ public class DefectService {
     private final EquipmentRepository equipmentRepository;
     private final EquipmentNodeRepository equipmentNodeRepository;
     private final RepairRequestRepository repairRequestRepository;
+    private final RepairCampaignRepository repairCampaignRepository;
     private final WorkOrderRepository workOrderRepository;
     private final DepartmentRepository departmentRepository;
     private final LocationRepository locationRepository;
@@ -124,6 +127,20 @@ public class DefectService {
             return toResponsePage(new PageImpl<>(scopedContent, pageable, scopedContent.size()));
         }
         return toResponsePage(resultPage);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<DefectResponse> searchByRepairCampaign(
+            UUID campaignId, DefectStatus status, String severity, int page, int size) {
+        RepairCampaign campaign = repairCampaignRepository.findByIdAndIsDeletedFalse(campaignId)
+                .orElseThrow(() -> RestException.notFound("Repair campaign not found: " + campaignId));
+        scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
+        var pageable = PaginationUtils.pageRequest(page, size);
+        return toResponsePage(repository.searchByRepairCampaign(
+                campaignId,
+                status == null ? null : status.name(),
+                severity == null || severity.isBlank() ? null : severity.trim(),
+                pageable));
     }
 
     @Transactional(readOnly = true)

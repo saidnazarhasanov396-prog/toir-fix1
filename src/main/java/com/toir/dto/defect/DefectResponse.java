@@ -36,7 +36,8 @@ public record DefectResponse(
         List<WorkOrderBriefDto> linkedWorkOrders,
         boolean hasLesson,
         int photoCount,
-        String primaryPhotoDownloadUrl
+        String primaryPhotoDownloadUrl,
+        UUID workOrderId
 ) {
     public DefectResponse(UUID id,
                           String code,
@@ -59,7 +60,8 @@ public record DefectResponse(
                           boolean hasLesson) {
         this(id, code, title, description, equipmentId, equipmentName, null, null, null, null,
                 null, repairRequestId, requestId, category, severity, failureReason, rootCause, status, detectedAt,
-                resolvedAt, recurrenceCount, repairRequest, linkedWorkOrders, hasLesson, 0, null);
+                resolvedAt, recurrenceCount, repairRequest, linkedWorkOrders, hasLesson, 0, null,
+                linkedWorkOrders == null || linkedWorkOrders.isEmpty() ? null : linkedWorkOrders.getFirst().id());
     }
 
     public DefectResponse {
@@ -142,7 +144,8 @@ public record DefectResponse(
                 linkedWorkOrders,
                 hasLesson,
                 photoSummary == null ? 0 : photoSummary.photoCount(),
-                photoSummary == null ? null : photoSummary.primaryPhotoDownloadUrl()
+                photoSummary == null ? null : photoSummary.primaryPhotoDownloadUrl(),
+                linkedWorkOrders == null || linkedWorkOrders.isEmpty() ? null : linkedWorkOrders.getFirst().id()
         );
     }
 }

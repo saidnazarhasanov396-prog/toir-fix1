@@ -2,6 +2,7 @@ package com.toir.controller.repair;
 import com.toir.dto.budget.BudgetLineDto;
 import com.toir.dto.repaircampaign.RepairCampaignBudgetSummaryDto;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
+import com.toir.dto.repaircampaign.RepairCampaignCloseRequest;
 import com.toir.dto.repaircampaign.RepairCampaignCancelRequest;
 import com.toir.dto.repaircampaign.RepairCampaignCostSummaryDto;
 import com.toir.dto.repaircampaign.RepairCampaignEquipmentPreviewItemDto;
@@ -17,11 +18,14 @@ import com.toir.dto.repaircampaign.RepairCampaignWorkItemWindowRequest;
 import com.toir.dto.repaircampaign.RepairCampaignWorkItemWindowResponse;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
+import com.toir.dto.defect.DefectResponse;
+import com.toir.enums.DefectStatus;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.RestException;
 import com.toir.service.repair.RepairCampaignService;
 import com.toir.service.repair.RepairCampaignWorkItemService;
 import com.toir.service.repair.RepairCampaignShutdownLinkService;
+import com.toir.service.defects.DefectService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -49,6 +53,7 @@ public class RepairCampaignController {
     private final RepairCampaignShutdownLinkService shutdownLinkService;
     private final com.toir.service.repair.RepairCampaignMaterialService materialService;
     private final com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
+    private final DefectService defectService;
 
     public record WorkItemOrderRequest(@jakarta.validation.constraints.NotNull Long version,
                                        @jakarta.validation.constraints.NotNull List<UUID> itemIds) { }
@@ -73,6 +78,18 @@ public class RepairCampaignController {
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<RepairCampaignDto> get(@PathVariable UUID id) { return ResponseEntity.ok(service.findById(id)); }
+
+    @GetMapping("/{id}/defects")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
+    public ResponseEntity<Page<DefectResponse>> defects(
+            @PathVariable UUID id,
+            @RequestParam(required = false) DefectStatus status,
+            @RequestParam(required = false) String severity,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "200") int size
+    ) {
+        return ResponseEntity.ok(defectService.searchByRepairCampaign(id, status, severity, page, size));
+    }
 
     @PostMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_CREATE')")
@@ -248,7 +265,12 @@ public class RepairCampaignController {
 
     @PostMapping("/{id}/close")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_CLOSE')")
-    public ResponseEntity<RepairCampaignDto> close(@PathVariable UUID id) { return ResponseEntity.ok(service.close(id)); }
+    public ResponseEntity<RepairCampaignDto> close(
+            @PathVariable UUID id,
+            @RequestBody(required = false) RepairCampaignCloseRequest request
+    ) {
+        return ResponseEntity.ok(service.close(id, request == null ? null : request.notes()));
+    }
 
     @PostMapping("/{id}/complete")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_COMPLETE')")

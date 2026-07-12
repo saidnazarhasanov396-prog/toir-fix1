@@ -78,6 +78,29 @@ public interface DefectRepository extends JpaRepository<Defect, UUID>, JpaSpecif
                                  @Param("search") String search,
                                  Pageable pageable);
 
+    @Query(nativeQuery = true, value = """
+            select distinct d.*
+            from defects d
+            join work_orders w on w.defect_id = d.id and w.is_deleted = false
+            where d.is_deleted = false
+              and w.repair_campaign_id = cast(:campaignId as uuid)
+              and (cast(:status as varchar) is null or d.status = cast(:status as varchar))
+              and (cast(:severity as varchar) is null or upper(d.severity) = upper(cast(:severity as varchar)))
+            order by d.updated_at desc
+            """, countQuery = """
+            select count(distinct d.id)
+            from defects d
+            join work_orders w on w.defect_id = d.id and w.is_deleted = false
+            where d.is_deleted = false
+              and w.repair_campaign_id = cast(:campaignId as uuid)
+              and (cast(:status as varchar) is null or d.status = cast(:status as varchar))
+              and (cast(:severity as varchar) is null or upper(d.severity) = upper(cast(:severity as varchar)))
+            """)
+    Page<Defect> searchByRepairCampaign(@Param("campaignId") UUID campaignId,
+                                        @Param("status") String status,
+                                        @Param("severity") String severity,
+                                        Pageable pageable);
+
     @Query(value = "SELECT COUNT(*) > 0 FROM defects WHERE code = :code AND is_deleted = false", nativeQuery = true)
     boolean existsByCodeAndIsDeletedFalse(@Param("code") String code);
 
