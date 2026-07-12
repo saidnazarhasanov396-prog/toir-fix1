@@ -1,11 +1,11 @@
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM stock_movements WHERE quantity::text IN ('NaN','Infinity','-Infinity') OR abs(quantity) >= 1000000000000000)
-       OR EXISTS (SELECT 1 FROM repair_material_usages WHERE quantity::text IN ('NaN','Infinity','-Infinity') OR abs(quantity) >= 1000000000000000)
-       OR EXISTS (SELECT 1 FROM repair_material_returns WHERE quantity::text IN ('NaN','Infinity','-Infinity') OR abs(quantity) >= 1000000000000000)
-       OR EXISTS (SELECT 1 FROM maintenance_template_spare_part_requirements WHERE quantity::text IN ('NaN','Infinity','-Infinity') OR abs(quantity) >= 1000000000000000)
-       OR EXISTS (SELECT 1 FROM maintenance_regulation_spare_part_requirements WHERE quantity::text IN ('NaN','Infinity','-Infinity') OR abs(quantity) >= 1000000000000000)
-       OR EXISTS (SELECT 1 FROM actual_costs WHERE amount::text IN ('NaN','Infinity','-Infinity') OR abs(amount) >= 1000000000000000) THEN
+    IF EXISTS (SELECT 1 FROM warehouse_stock_ledger_metadata WHERE submitted_quantity::text IN ('NaN','Infinity','-Infinity') OR submitted_quantity < 0 OR abs(submitted_quantity) >= 1000000000000000)
+       OR EXISTS (SELECT 1 FROM repair_material_usages WHERE quantity::text IN ('NaN','Infinity','-Infinity') OR quantity < 0 OR abs(quantity) >= 1000000000000000)
+       OR EXISTS (SELECT 1 FROM repair_material_returns WHERE quantity::text IN ('NaN','Infinity','-Infinity') OR quantity < 0 OR abs(quantity) >= 1000000000000000)
+       OR EXISTS (SELECT 1 FROM maintenance_template_spare_part_requirements WHERE quantity::text IN ('NaN','Infinity','-Infinity') OR quantity < 0 OR abs(quantity) >= 1000000000000000)
+       OR EXISTS (SELECT 1 FROM maintenance_regulation_spare_part_requirements WHERE quantity::text IN ('NaN','Infinity','-Infinity') OR quantity < 0 OR abs(quantity) >= 1000000000000000)
+       OR EXISTS (SELECT 1 FROM actual_costs WHERE amount::text IN ('NaN','Infinity','-Infinity') OR amount < 0 OR abs(amount) >= 1000000000000000) THEN
         RAISE EXCEPTION 'RC_V5_1_NUMERIC_OVERFLOW_REMEDIATION_REQUIRED';
     END IF;
 END $$;
@@ -103,7 +103,10 @@ BEGIN
     IF OLD.is_deleted=false AND NEW.is_deleted=true AND EXISTS (
         SELECT 1 FROM work_order_spare_part_requirements r
         WHERE r.campaign_requirement_id=OLD.id AND r.is_deleted=false) THEN
-        RAISE EXCEPTION 'RC_MATERIAL_REQUIREMENT_IN_USE';
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'RC_MATERIAL_REQUIREMENT_IN_USE',
+            CONSTRAINT = 'RC_MATERIAL_REQUIREMENT_IN_USE';
     END IF;
     RETURN NEW;
 END $$ LANGUAGE plpgsql;

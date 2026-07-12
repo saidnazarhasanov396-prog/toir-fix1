@@ -14,6 +14,7 @@ import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.jpa.JpaSystemException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,7 +46,7 @@ public class RepairCampaignMaterialService {
     public RepairCampaignMaterialRequirementResponse update(UUID campaignId,UUID id,RepairCampaignMaterialRequirementRequest request){RepairCampaign c=find(campaignId,true);validateMutation(c,request.version());RepairCampaignMaterialRequirement r=requirements.findByIdAndRepairCampaignIdAndIsDeletedFalse(id,campaignId).orElseThrow(()->RestException.notFound("Material requirement not found"));var before=response(r,c.getVersion(),true);validateRequest(campaignId,request);apply(r,campaignId,request);requirements.saveAndFlush(r);var out=response(r,touch(c),true);audit.log("repair_campaign_material",id.toString(),AuditAction.UPDATE,AuditModule.REPAIR_CAMPAIGN,"Campaign material demand updated",before,out);return out;}
 
     @Transactional
-    public RepairCampaignMaterialRequirementResponse remove(UUID campaignId,UUID id,Long version){RepairCampaign c=find(campaignId,true);validateMutation(c,version);RepairCampaignMaterialRequirement r=requirements.findByIdAndRepairCampaignIdAndIsDeletedFalse(id,campaignId).orElseThrow(()->RestException.notFound("Material requirement not found"));var before=response(r,c.getVersion(),true);r.setDeleted(true);try{requirements.saveAndFlush(r);}catch(DataIntegrityViolationException e){if(messages(e).contains("RC_MATERIAL_REQUIREMENT_IN_USE"))throw RestException.conflict("RC_MATERIAL_REQUIREMENT_IN_USE");throw e;}var out=response(r,touch(c),false);audit.log("repair_campaign_material",id.toString(),AuditAction.DELETE,AuditModule.REPAIR_CAMPAIGN,"Campaign material demand removed",before,out);return out;}
+    public RepairCampaignMaterialRequirementResponse remove(UUID campaignId,UUID id,Long version){RepairCampaign c=find(campaignId,true);validateMutation(c,version);RepairCampaignMaterialRequirement r=requirements.findByIdAndRepairCampaignIdAndIsDeletedFalse(id,campaignId).orElseThrow(()->RestException.notFound("Material requirement not found"));if(!workRequirements.findAllByCampaignRequirementIdInAndIsDeletedFalse(List.of(id)).isEmpty())throw RestException.conflict("RC_MATERIAL_REQUIREMENT_IN_USE");var before=response(r,c.getVersion(),true);r.setDeleted(true);try{requirements.saveAndFlush(r);}catch(RuntimeException e){if(isMaterialRequirementInUseViolation(e))throw RestException.conflict("RC_MATERIAL_REQUIREMENT_IN_USE");throw e;}var out=response(r,touch(c),false);audit.log("repair_campaign_material",id.toString(),AuditAction.DELETE,AuditModule.REPAIR_CAMPAIGN,"Campaign material demand removed",before,out);return out;}
 
     @Transactional(readOnly=true)
     public List<String> blockers(UUID campaignId){
@@ -99,5 +100,6 @@ public class RepairCampaignMaterialService {
     private long touch(RepairCampaign c){c.setUpdatedAt(Instant.now());return campaigns.saveAndFlush(c).getVersion();}
     private List<RepairCampaignMaterialRequirement> rows(UUID id){return requirements.findAllByRepairCampaignIdAndIsDeletedFalseOrderByWorkItemIdAscSparePartIdAsc(id);}
     private static String messages(Throwable e){StringBuilder s=new StringBuilder();for(Throwable x=e;x!=null;x=x.getCause())s.append(' ').append(x.getMessage());return s.toString();}
+    private static boolean isMaterialRequirementInUseViolation(RuntimeException error){if(!(error instanceof DataIntegrityViolationException)&&!(error instanceof JpaSystemException))return false;for(Throwable current=error;current!=null;current=current.getCause())if(current instanceof java.sql.SQLException sql&&"23514".equals(sql.getSQLState())&&String.valueOf(sql.getMessage()).contains("RC_MATERIAL_REQUIREMENT_IN_USE"))return true;return false;}
     private static RepairCampaignMaterialRequirementResponse response(RepairCampaignMaterialRequirement r,long v,boolean active){return new RepairCampaignMaterialRequirementResponse(r.getId(),r.getRepairCampaignId(),r.getWorkItemId(),r.getSparePartId(),r.getWarehouseId(),r.getRequiredQuantity(),r.isCritical(),r.isProcurementRequired(),v,active);}
 }

@@ -44,6 +44,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.mockito.Mockito.never;
@@ -112,6 +113,18 @@ class RepairCampaignControllerContractTest {
         java.util.Map<String,String> expected=java.util.Map.of("listMaterials","REPAIR_CAMPAIGN_READ","addMaterial","REPAIR_CAMPAIGN_UPDATE","updateMaterial","REPAIR_CAMPAIGN_UPDATE","removeMaterial","REPAIR_CAMPAIGN_UPDATE");
         for(var method:RepairCampaignController.class.getDeclaredMethods()){if(!expected.containsKey(method.getName()))continue;assertThat(method.getAnnotation(PreAuthorize.class)).isNotNull();assertThat(method.getAnnotation(PreAuthorize.class).value()).contains(expected.get(method.getName()));}
         assertThat(java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods()).map(java.lang.reflect.Method::getName).filter(expected::containsKey)).hasSize(expected.size());
+    }
+
+    @Test
+    void materialRemovalInUseIsRenderedAsTypedConflict() throws Exception {
+        UUID campaignId=UUID.randomUUID(),materialId=UUID.randomUUID();
+        when(materialService.remove(campaignId,materialId,3L))
+                .thenThrow(RestException.conflict("RC_MATERIAL_REQUIREMENT_IN_USE"));
+        mockMvc.perform(delete("/api/v1/repair-campaigns/{id}/materials/{materialId}",campaignId,materialId)
+                        .param("version","3"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("RC_MATERIAL_REQUIREMENT_IN_USE"))
+                .andExpect(jsonPath("$.code").value(409));
     }
 
     @Test

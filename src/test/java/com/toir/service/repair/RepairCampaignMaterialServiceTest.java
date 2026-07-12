@@ -65,11 +65,39 @@ class RepairCampaignMaterialServiceTest {
     @Test void removalConstraintIsTranslatedToTypedConflict(){
         UUID id=UUID.randomUUID();RepairCampaignMaterialRequirement requirement=critical(id,spareId,warehouseId,"1.0000");
         when(requirements.findByIdAndRepairCampaignIdAndIsDeletedFalse(id,campaignId)).thenReturn(Optional.of(requirement));
-        when(requirements.saveAndFlush(requirement)).thenThrow(new org.springframework.dao.DataIntegrityViolationException("RC_MATERIAL_REQUIREMENT_IN_USE"));
+        when(requirements.saveAndFlush(requirement)).thenThrow(new org.springframework.dao.DataIntegrityViolationException("constraint",new java.sql.SQLException("RC_MATERIAL_REQUIREMENT_IN_USE","23514")));
         assertThatThrownBy(()->service.remove(campaignId,id,1L))
                 .isInstanceOf(com.toir.exception.RestException.class)
                 .hasMessage("RC_MATERIAL_REQUIREMENT_IN_USE")
                 .extracting("status").isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
+    }
+
+    @Test void removalJpaSystemConstraintIsTranslatedButUnrelatedIntegrityIsNotSwallowed(){
+        UUID id=UUID.randomUUID();RepairCampaignMaterialRequirement requirement=critical(id,spareId,warehouseId,"1.0000");
+        when(requirements.findByIdAndRepairCampaignIdAndIsDeletedFalse(id,campaignId)).thenReturn(Optional.of(requirement));
+        when(requirements.saveAndFlush(requirement)).thenThrow(new org.springframework.orm.jpa.JpaSystemException(
+                new RuntimeException(new java.sql.SQLException("RC_MATERIAL_REQUIREMENT_IN_USE","23514"))));
+        assertThatThrownBy(()->service.remove(campaignId,id,1L))
+                .isInstanceOf(com.toir.exception.RestException.class).hasMessage("RC_MATERIAL_REQUIREMENT_IN_USE");
+
+        requirement.setDeleted(false);
+        var unrelated=new org.springframework.dao.DataIntegrityViolationException("other",
+                new java.sql.SQLException("RC_MATERIAL_REQUIREMENT_IN_USE","23505"));
+        org.mockito.Mockito.doThrow(unrelated).when(requirements).saveAndFlush(requirement);
+        assertThatThrownBy(()->service.remove(campaignId,id,1L)).isSameAs(unrelated);
+    }
+
+    @Test void removalPrecheckRejectsActiveCanonicalWorkRequirementBeforeMutation(){
+        UUID id=UUID.randomUUID();RepairCampaignMaterialRequirement requirement=critical(id,spareId,warehouseId,"1.0000");
+        WorkOrderSparePartRequirement linked=workRequirement(id,spareId);
+        when(requirements.findByIdAndRepairCampaignIdAndIsDeletedFalse(id,campaignId)).thenReturn(Optional.of(requirement));
+        when(workRequirements.findAllByCampaignRequirementIdInAndIsDeletedFalse(List.of(id))).thenReturn(List.of(linked));
+        assertThatThrownBy(()->service.remove(campaignId,id,1L))
+                .isInstanceOf(com.toir.exception.RestException.class)
+                .hasMessage("RC_MATERIAL_REQUIREMENT_IN_USE")
+                .extracting("status").isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
+        assertThat(requirement.isDeleted()).isFalse();
+        verify(requirements,never()).saveAndFlush(any());
     }
 
     @Test void assessmentReturnsExactDeterministicMissingDeficitDuplicateAndProcurementBlockers(){UUID missingItem=UUID.randomUUID(),requirementId=UUID.randomUUID(),workRequirementId=UUID.randomUUID();RepairCampaignWorkItem missing=new RepairCampaignWorkItem();missing.setId(missingItem);missing.setPriority(RepairCampaignPriority.CRITICAL);RepairCampaignMaterialRequirement requirement=new RepairCampaignMaterialRequirement();requirement.setId(requirementId);requirement.setRepairCampaignId(campaignId);requirement.setWorkItemId(itemId);requirement.setSparePartId(spareId);requirement.setWarehouseId(warehouseId);requirement.setRequiredQuantity(new BigDecimal("5.0000"));requirement.setCritical(true);requirement.setProcurementRequired(true);WarehouseStockBalance balance=new WarehouseStockBalance();balance.setQtyOnHand(new BigDecimal("3.0000"));balance.setQtyReserved(new BigDecimal("1.0000"));WorkOrderSparePartRequirement workRequirement=new WorkOrderSparePartRequirement();workRequirement.setId(workRequirementId);workRequirement.setWorkOrderId(UUID.randomUUID());workRequirement.setCampaignRequirementId(requirementId);workRequirement.setSparePartId(spareId);when(items.findAllByCampaignIdAndIsDeletedFalseOrderByOrderNumberAsc(campaignId)).thenReturn(List.of(missing));when(requirements.findAllByRepairCampaignIdAndIsDeletedFalseOrderByWorkItemIdAscSparePartIdAsc(campaignId)).thenReturn(List.of(requirement));when(balances.findAllByWarehouseIdAndSparePartIdAndIsDeletedFalse(warehouseId,spareId)).thenReturn(List.of(balance));when(workRequirements.findAllByCampaignRequirementIdInAndIsDeletedFalse(List.of(requirementId))).thenReturn(List.of(workRequirement));when(reservations.findAllByWorkOrderIdAndRequirementIdAndSparePartIdAndStatusAndIsDeletedFalse(any(),any(),any(),any())).thenReturn(List.of(new Reservation(),new Reservation()));assertThat(service.blockers(campaignId)).containsExactly("CRITICAL_MATERIAL_DEFICIT:"+requirementId,"MATERIAL_REQUIREMENT_MISSING:"+missingItem,"PROCUREMENT_REQUIRED:"+requirementId,"RESERVATION_DUPLICATE:"+workRequirementId);}

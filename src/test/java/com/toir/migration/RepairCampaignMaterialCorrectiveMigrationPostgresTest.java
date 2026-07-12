@@ -8,6 +8,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.sql.SQLException;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -18,6 +19,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RepairCampaignMaterialCorrectiveMigrationPostgresTest {
+    @Test void postgres17RejectsEveryNegativeLegacySourceAndPreservesV5ForRemediation() throws Exception {
+        Assumptions.assumeTrue(Boolean.parseBoolean(System.getenv("TOIR_LOCAL_PG17")));
+        String db="task5n_"+UUID.randomUUID().toString().replace("-","");
+        String admin=env("TOIR_LOCAL_PG_URL","jdbc:postgresql://localhost:5432/postgres"),url=dbUrl(admin,db);
+        try(Connection c=conn(admin);Statement s=c.createStatement()){s.execute("CREATE DATABASE "+db);}
+        try{
+            migrate(url,"20260712.5");
+            for(LegacyNegative source:LegacyNegative.values()){
+                source.insert(url);
+                assertThatThrownBy(()->migrate(url,"20260712.5.1"))
+                        .as(source.name()).hasStackTraceContaining("RC_V5_1_NUMERIC_OVERFLOW_REMEDIATION_REQUIRED");
+                assertThat(Flyway.configure().dataSource(url,user(),pass()).locations("classpath:db/migration").load()
+                        .info().current().getVersion().getVersion()).as(source.name()).isEqualTo("20260712.5");
+                source.cleanup(url);
+            }
+            migrate(url,"20260712.5.1");
+        }finally{try(Connection c=conn(admin);Statement s=c.createStatement()){s.execute("DROP DATABASE IF EXISTS "+db+" WITH (FORCE)");}}
+    }
     @Test void postgres17RequiresNamedOverflowRemediationThenAppliesExactQuantityColumns() throws Exception {
         Assumptions.assumeTrue(Boolean.parseBoolean(System.getenv("TOIR_LOCAL_PG17")));
         String db="task5c_"+UUID.randomUUID().toString().replace("-","");
@@ -52,11 +71,43 @@ class RepairCampaignMaterialCorrectiveMigrationPostgresTest {
                 assertThat(r.next()).isTrue();assertThat(r.getInt(1)).isEqualTo(19);assertThat(r.getInt(2)).isEqualTo(4);
             }
             stockMovementCompatibilityViewProbe(url);
+            campaignMaterialRemovalSqlStateProbe(url);
             try(Connection c=conn(url);Statement s=c.createStatement();ResultSet r=s.executeQuery("SELECT count(*) FROM information_schema.table_constraints WHERE constraint_name IN ('uq_wo_spare_req_owner','fk_reservation_requirement_owner')")){
                 assertThat(r.next()).isTrue();assertThat(r.getInt(1)).isEqualTo(2);
             }
             reservationTransitionLockProbe(url);
         }finally{try(Connection c=conn(admin);Statement s=c.createStatement()){s.execute("DROP DATABASE IF EXISTS "+db+" WITH (FORCE)");}}
+    }
+    private void campaignMaterialRemovalSqlStateProbe(String url)throws Exception{
+        UUID campaignRequirement=UUID.randomUUID(),workRequirement=UUID.randomUUID();
+        try(Connection c=conn(url);Statement s=c.createStatement()){
+            s.execute("SET session_replication_role=replica");
+            s.execute("INSERT INTO repair_campaign_material_requirements(id,repair_campaign_id,work_item_id,spare_part_id,warehouse_id,required_quantity,critical,procurement_required,is_deleted,created_at,updated_at) VALUES ('"+campaignRequirement+"','"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','"+UUID.randomUUID()+"',1,false,false,false,now(),now())");
+            s.execute("INSERT INTO work_order_spare_part_requirements(id,work_order_id,source_type,campaign_requirement_id,spare_part_id,warehouse_id,required_qty,unit,status,is_deleted,created_at,updated_at) SELECT '"+workRequirement+"','"+UUID.randomUUID()+"','REPAIR_CAMPAIGN_WORK_ITEM',id,spare_part_id,warehouse_id,1,'pcs','PLANNED',false,now(),now() FROM repair_campaign_material_requirements WHERE id='"+campaignRequirement+"'");
+            s.execute("SET session_replication_role=origin");
+            try{s.execute("UPDATE repair_campaign_material_requirements SET is_deleted=true WHERE id='"+campaignRequirement+"'");throw new AssertionError("expected removal guard");}
+            catch(SQLException e){assertThat(e.getSQLState()).isEqualTo("23514");assertThat(e.getMessage()).contains("RC_MATERIAL_REQUIREMENT_IN_USE");assertThat(((org.postgresql.util.PSQLException)e).getServerErrorMessage().getConstraint()).isEqualTo("RC_MATERIAL_REQUIREMENT_IN_USE");}
+        }
+    }
+    private enum LegacyNegative{
+        STOCK_METADATA("warehouse_stock_ledger_metadata","submitted_quantity"){
+            void insert(String url)throws Exception{sql(url,"INSERT INTO warehouse_stock_ledger_metadata(id,warehouse_id,spare_part_id,legacy_type,submitted_quantity,is_deleted,created_at,updated_at,submitted_occurred_at) VALUES ('"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','ISSUE',-1,false,now(),now(),now())");}},
+        MATERIAL_USAGE("repair_material_usages","quantity"){
+            void insert(String url)throws Exception{replicaSql(url,"INSERT INTO repair_material_usages(id,work_order_id,warehouse_id,spare_part_id,quantity,is_deleted,created_at,updated_at) VALUES ('"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','"+UUID.randomUUID()+"',-1,false,now(),now())");}},
+        MATERIAL_RETURN("repair_material_returns","quantity"){
+            void insert(String url)throws Exception{replicaSql(url,"INSERT INTO repair_material_returns(id,work_order_id,warehouse_id,spare_part_id,stock_status,quantity,reason,status,is_deleted,created_at,updated_at) VALUES ('"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','AVAILABLE',-1,'test','POSTED',false,now(),now())");}},
+        TEMPLATE_REQUIREMENT("maintenance_template_spare_part_requirements","quantity"){
+            void insert(String url)throws Exception{sql(url,"ALTER TABLE maintenance_template_spare_part_requirements DROP CONSTRAINT chk_mt_spare_req_quantity");replicaSql(url,"INSERT INTO maintenance_template_spare_part_requirements(id,template_id,spare_part_id,quantity,unit,is_active,is_deleted,created_at,updated_at) VALUES ('"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','"+UUID.randomUUID()+"',-1,'pcs',true,false,now(),now())");}
+            void cleanup(String url)throws Exception{super.cleanup(url);sql(url,"ALTER TABLE maintenance_template_spare_part_requirements ADD CONSTRAINT chk_mt_spare_req_quantity CHECK (quantity > 0)");}},
+        REGULATION_REQUIREMENT("maintenance_regulation_spare_part_requirements","quantity"){
+            void insert(String url)throws Exception{sql(url,"ALTER TABLE maintenance_regulation_spare_part_requirements DROP CONSTRAINT chk_mr_spare_req_quantity");replicaSql(url,"INSERT INTO maintenance_regulation_spare_part_requirements(id,regulation_id,spare_part_id,quantity,unit,is_active,is_deleted,created_at,updated_at) VALUES ('"+UUID.randomUUID()+"','"+UUID.randomUUID()+"','"+UUID.randomUUID()+"',-1,'pcs',true,false,now(),now())");}
+            void cleanup(String url)throws Exception{super.cleanup(url);sql(url,"ALTER TABLE maintenance_regulation_spare_part_requirements ADD CONSTRAINT chk_mr_spare_req_quantity CHECK (quantity > 0)");}},
+        ACTUAL_COST("actual_costs","amount"){
+            void insert(String url)throws Exception{replicaSql(url,"INSERT INTO actual_costs(id,cost_category_id,amount,status,cost_date,is_deleted,created_at,updated_at) VALUES ('"+UUID.randomUUID()+"','"+UUID.randomUUID()+"',-1,'PENDING',now(),false,now(),now())");}};
+        final String table,column;LegacyNegative(String table,String column){this.table=table;this.column=column;}abstract void insert(String url)throws Exception;
+        void cleanup(String url)throws Exception{sql(url,"DELETE FROM "+table+" WHERE "+column+" < 0");}
+        static void sql(String url,String sql)throws Exception{try(Connection c=conn(url);Statement s=c.createStatement()){s.execute(sql);}}
+        static void replicaSql(String url,String sql)throws Exception{try(Connection c=conn(url);Statement s=c.createStatement()){s.execute("SET session_replication_role=replica");s.execute(sql);}}
     }
     private void stockMovementCompatibilityViewProbe(String url)throws Exception{
         UUID id=UUID.randomUUID(),warehouseId=UUID.randomUUID(),sparePartId=UUID.randomUUID();
