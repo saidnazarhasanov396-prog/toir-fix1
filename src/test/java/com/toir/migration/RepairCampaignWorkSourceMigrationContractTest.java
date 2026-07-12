@@ -10,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.UUID;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -17,6 +19,14 @@ class RepairCampaignWorkSourceMigrationContractTest {
 
     private static final Path MIGRATION = Path.of(
             "src/main/resources/db/migration/V20260712_2__repair_campaign_work_sources.sql");
+    private static final String COMMITTED_V2_SHA256 =
+            "af2e56f670e1a6e04360bdbe9586124d7e520922ceb7e9903698c6fafa6bfd18";
+
+    @Test
+    void committedV2MigrationBytesRemainImmutable() throws Exception {
+        assertThat(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(Files.readAllBytes(MIGRATION)))).isEqualTo(COMMITTED_V2_SHA256);
+    }
 
     @Test
     void migrationCreatesCanonicalWorkItemsWithNamedIdentityConstraints() throws Exception {
@@ -24,7 +34,6 @@ class RepairCampaignWorkSourceMigrationContractTest {
         String sql = Files.readString(MIGRATION).toLowerCase().replaceAll("\\s+", " ");
 
         assertThat(sql)
-                .contains("alter table repair_campaigns add column if not exists version bigint not null default 0")
                 .contains("create table repair_campaign_work_items")
                 .contains("constraint fk_repair_campaign_work_items_campaign")
                 .contains("foreign key (repair_campaign_id) references repair_campaigns(id)")

@@ -1,7 +1,3 @@
--- Forward repair for the optimistic root version introduced by the Stage 3 domain mapping.
-ALTER TABLE repair_campaigns
-    ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 0;
-
 CREATE TABLE repair_campaign_work_items (
     id uuid PRIMARY KEY,
     repair_campaign_id uuid NOT NULL,

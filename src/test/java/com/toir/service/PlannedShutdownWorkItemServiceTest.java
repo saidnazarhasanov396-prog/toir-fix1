@@ -88,6 +88,7 @@ class PlannedShutdownWorkItemServiceTest {
         equipmentId = UUID.randomUUID();
         shutdown = new PlannedShutdown();
         shutdown.setId(shutdownId);
+        shutdown.setDepartmentId(UUID.randomUUID());
         shutdown.setVersion(4L);
         shutdown.setScopeVersion(2L);
         shutdown.setStatus(PlannedShutdownStatus.SCOPE_FORMATION);
@@ -194,6 +195,8 @@ class PlannedShutdownWorkItemServiceTest {
 
     @Test
     void repairRequestAndInspectionRoundUseTheCanonicalResolver() {
+        UUID shutdownDepartmentId = UUID.randomUUID();
+        shutdown.setDepartmentId(shutdownDepartmentId);
         for (PlannedShutdownWorkItemSourceType shutdownType : List.of(
                 PlannedShutdownWorkItemSourceType.REPAIR_REQUEST,
                 PlannedShutdownWorkItemSourceType.INSPECTION_ROUND)) {
@@ -204,7 +207,7 @@ class PlannedShutdownWorkItemServiceTest {
                     : com.toir.enums.RepairCampaignWorkItemSourceType.INSPECTION_ROUND;
             when(canonicalWorkSourceResolver.resolve(canonicalType, sourceId,
                     new com.toir.service.repair.CanonicalWorkSourceResolver.ResolutionScope(
-                            equipmentId, java.util.Set.of())))
+                            equipmentId, java.util.Set.of(shutdownDepartmentId))))
                     .thenReturn(new com.toir.service.repair.CanonicalWorkSourceResolver.CanonicalWorkSource(
                             sourceId, equipmentId, "canonical"));
 
@@ -212,9 +215,25 @@ class PlannedShutdownWorkItemServiceTest {
                     .isEqualTo(3L);
             verify(canonicalWorkSourceResolver).resolve(canonicalType, sourceId,
                     new com.toir.service.repair.CanonicalWorkSourceResolver.ResolutionScope(
-                            equipmentId, java.util.Set.of()));
+                            equipmentId, java.util.Set.of(shutdownDepartmentId)));
             shutdown.setScopeVersion(2L);
         }
+    }
+
+    @Test
+    void repairRequestForeignDepartmentIsRejectedThroughLockedShutdownScope() {
+        UUID shutdownDepartmentId = UUID.randomUUID(); UUID sourceId = UUID.randomUUID();
+        shutdown.setDepartmentId(shutdownDepartmentId);
+        var scope = new com.toir.service.repair.CanonicalWorkSourceResolver.ResolutionScope(
+                equipmentId, java.util.Set.of(shutdownDepartmentId));
+        when(canonicalWorkSourceResolver.resolve(
+                com.toir.enums.RepairCampaignWorkItemSourceType.REPAIR_REQUEST, sourceId, scope))
+                .thenThrow(RestException.badRequest("CAMPAIGN_WORK_SOURCE_FOREIGN_DEPARTMENT"));
+
+        assertThatThrownBy(() -> service.addWorkItem(shutdownId,
+                request(4L, PlannedShutdownWorkItemSourceType.REPAIR_REQUEST, sourceId, 0)))
+                .hasMessageContaining("FOREIGN_DEPARTMENT");
+        verify(itemRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -223,7 +242,7 @@ class PlannedShutdownWorkItemServiceTest {
         when(canonicalWorkSourceResolver.resolve(
                 com.toir.enums.RepairCampaignWorkItemSourceType.REPAIR_REQUEST,
                 sourceId, new com.toir.service.repair.CanonicalWorkSourceResolver.ResolutionScope(
-                        equipmentId, java.util.Set.of())))
+                        equipmentId, java.util.Set.of(shutdown.getDepartmentId()))))
                 .thenThrow(RestException.notFound("Repair request not found: " + sourceId));
 
         assertThatThrownBy(() -> service.addWorkItem(shutdownId,

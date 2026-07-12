@@ -291,7 +291,7 @@ public class PlannedShutdownService {
         requireVersion(shutdown, request.version());
         workItemPolicy.requireScopeMutable(shutdown.getLifecycleStatus());
         workItemPolicy.validate(request);
-        requireScopedSource(id, request);
+        requireScopedSource(shutdown, request);
         requireCanonicalAvailable(id, null, request);
         PlannedShutdownWorkItem item = new PlannedShutdownWorkItem();
         item.setPlannedShutdownId(id);
@@ -313,7 +313,7 @@ public class PlannedShutdownService {
         workItemPolicy.validate(request);
         workItemPolicy.requireIdentityMutable(shutdown.getLifecycleStatus(), item.getSourceType(), item.getSourceId(),
                 request.sourceType(), request.sourceId());
-        requireScopedSource(id, request);
+        requireScopedSource(shutdown, request);
         requireCanonicalAvailable(id, itemId, request);
         WorkItemAuditSnapshot before = WorkItemAuditSnapshot.from(shutdown.getScopeVersion(), item);
         apply(item, request);
@@ -1400,8 +1400,8 @@ public class PlannedShutdownService {
         if (duplicateOrder) throw RestException.conflict("Work item order number is already in use");
     }
 
-    private void requireScopedSource(UUID shutdownId, PlannedShutdownWorkItemRequest request) {
-        boolean scoped = assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdownId)
+    private void requireScopedSource(PlannedShutdown shutdown, PlannedShutdownWorkItemRequest request) {
+        boolean scoped = assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdown.getId())
                 .stream().anyMatch(asset -> request.equipmentId().equals(asset.getEquipmentId()));
         if (!scoped) throw RestException.badRequest("Work item equipment is outside shutdown scope");
         if (request.sourceType() == PlannedShutdownWorkItemSourceType.MANUAL) return;
@@ -1415,11 +1415,11 @@ public class PlannedShutdownService {
             case REPAIR_REQUEST -> canonicalWorkSourceResolver.resolve(
                     com.toir.enums.RepairCampaignWorkItemSourceType.REPAIR_REQUEST,
                     request.sourceId(), new CanonicalWorkSourceResolver.ResolutionScope(
-                            request.equipmentId(), Set.of())).equipmentId();
+                            request.equipmentId(), Set.of(shutdown.getDepartmentId()))).equipmentId();
             case INSPECTION_ROUND -> canonicalWorkSourceResolver.resolve(
                     com.toir.enums.RepairCampaignWorkItemSourceType.INSPECTION_ROUND,
                     request.sourceId(), new CanonicalWorkSourceResolver.ResolutionScope(
-                            request.equipmentId(), Set.of())).equipmentId();
+                            request.equipmentId(), Set.of(shutdown.getDepartmentId()))).equipmentId();
             case WORK_ORDER -> workOrderRepository.findByIdAndIsDeletedFalse(request.sourceId())
                     .orElseThrow(() -> RestException.notFound("Work Order not found: " + request.sourceId()))
                     .getEquipmentId();
