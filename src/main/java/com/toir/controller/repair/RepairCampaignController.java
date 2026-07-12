@@ -47,6 +47,7 @@ public class RepairCampaignController {
     private final RepairCampaignService service;
     private final RepairCampaignWorkItemService workItemService;
     private final RepairCampaignShutdownLinkService shutdownLinkService;
+    private final com.toir.service.repair.RepairCampaignMaterialService materialService;
 
     public record WorkItemOrderRequest(@jakarta.validation.constraints.NotNull Long version,
                                        @jakarta.validation.constraints.NotNull List<UUID> itemIds) { }
@@ -152,6 +153,18 @@ public class RepairCampaignController {
     @GetMapping("/{id}/planning-assessment")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<com.toir.dto.repaircampaign.RepairCampaignPlanningAssessment> assessPlanning(@PathVariable UUID id){return ResponseEntity.ok(workItemService.assessPlanning(id));}
+    @GetMapping("/{id}/materials")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
+    public ResponseEntity<List<com.toir.dto.repaircampaign.RepairCampaignMaterialRequirementResponse>> listMaterials(@PathVariable UUID id){return ResponseEntity.ok(materialService.list(id));}
+    @PostMapping("/{id}/materials")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<com.toir.dto.repaircampaign.RepairCampaignMaterialRequirementResponse> addMaterial(@PathVariable UUID id,@Valid @RequestBody com.toir.dto.repaircampaign.RepairCampaignMaterialRequirementRequest r){return ResponseEntity.status(HttpStatus.CREATED).body(materialService.add(id,r));}
+    @PutMapping("/{id}/materials/{materialId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<com.toir.dto.repaircampaign.RepairCampaignMaterialRequirementResponse> updateMaterial(@PathVariable UUID id,@PathVariable UUID materialId,@Valid @RequestBody com.toir.dto.repaircampaign.RepairCampaignMaterialRequirementRequest r){return ResponseEntity.ok(materialService.update(id,materialId,r));}
+    @DeleteMapping("/{id}/materials/{materialId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<com.toir.dto.repaircampaign.RepairCampaignMaterialRequirementResponse> removeMaterial(@PathVariable UUID id,@PathVariable UUID materialId,@RequestParam Long version){return ResponseEntity.ok(materialService.remove(id,materialId,version));}
 
     @GetMapping("/{id}/planned-shutdowns")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")

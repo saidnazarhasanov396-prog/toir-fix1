@@ -39,4 +39,9 @@ public interface WorkOrderSparePartRequirementRepository
             UUID regulationRequirementId);
 
     Optional<WorkOrderSparePartRequirement> findByIdAndWorkOrderIdAndIsDeletedFalse(UUID id, UUID workOrderId);
+
+    List<WorkOrderSparePartRequirement> findAllByCampaignRequirementIdInAndIsDeletedFalse(List<UUID> campaignRequirementIds);
+
+    Optional<WorkOrderSparePartRequirement> findByWorkOrderIdAndCampaignRequirementIdAndIsDeletedFalse(
+            UUID workOrderId, UUID campaignRequirementId);
 }

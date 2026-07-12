@@ -285,7 +285,7 @@ class WorkOrderMaterialReadinessServiceTest {
         requirement.setWorkOrderId(workOrderId);
         requirement.setSparePart(sparePart);
         requirement.setSparePartId(sparePartId);
-        requirement.setRequiredQty(requiredQty);
+        requirement.setRequiredQty(java.math.BigDecimal.valueOf(requiredQty));
         requirement.setUnit(unit);
         requirement.setNotes(notes);
         return requirement;
@@ -297,7 +297,7 @@ class WorkOrderMaterialReadinessServiceTest {
         reservation.setWorkOrderId(workOrderId);
         reservation.setRequirementId(requirementId);
         reservation.setSparePartId(sparePartId);
-        reservation.setQuantity(quantity);
+        reservation.setQuantity(java.math.BigDecimal.valueOf(quantity));
         reservation.setStatus(ReservationStatus.ACTIVE);
         return reservation;
     }

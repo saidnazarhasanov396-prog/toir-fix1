@@ -5,6 +5,7 @@ import com.toir.enums.ReservationStatus;
 import com.toir.enums.WarehouseStockStatus;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public record ReservationDto(
@@ -21,7 +22,8 @@ public record ReservationDto(
         String serialNumber,
         LocalDate expiryDate,
         WarehouseStockStatus stockStatus,
-        double quantity,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class)
+        BigDecimal quantity,
         ReservationStatus status
 ) {
     public ReservationDto(
@@ -30,7 +32,7 @@ public record ReservationDto(
             UUID workOrderId,
             UUID repairRequestId,
             UUID reservedById,
-            double quantity,
+            BigDecimal quantity,
             ReservationStatus status
     ) {
         this(id, warehouseStockId, null, null, null, workOrderId, repairRequestId,

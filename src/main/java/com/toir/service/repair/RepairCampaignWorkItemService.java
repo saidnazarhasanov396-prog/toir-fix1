@@ -48,6 +48,7 @@ public class RepairCampaignWorkItemService {
     private final AuditBuilderService auditBuilderService;
     private final RepairCampaignDependencyPolicy dependencyPolicy;
     private final RepairCampaignResourcePolicy resourcePolicy;
+    private final RepairCampaignMaterialService materialService;
 
     public List<com.toir.dto.repaircampaign.RepairCampaignDependencyResponse> listDependencies(UUID campaignId) { return dependencyPolicy.list(campaignId); }
     public com.toir.dto.repaircampaign.RepairCampaignDependencyResponse addDependency(UUID campaignId, com.toir.dto.repaircampaign.RepairCampaignDependencyRequest r) { return dependencyPolicy.add(campaignId, r); }
@@ -57,7 +58,7 @@ public class RepairCampaignWorkItemService {
     public com.toir.dto.repaircampaign.RepairCampaignResourceResponse removeResource(UUID campaignId, UUID id, Long version) { return resourcePolicy.remove(campaignId, id, version); }
     public com.toir.dto.repaircampaign.RepairCampaignPlanningAssessment assessPlanning(UUID campaignId) {
         RepairCampaign c = find(campaignId); dependencyPolicy.list(campaignId); List<String> blockers = new ArrayList<>();
-        blockers.addAll(dependencyPolicy.blockers(campaignId)); blockers.addAll(resourcePolicy.blockers(campaignId));
+        blockers.addAll(dependencyPolicy.blockers(campaignId)); blockers.addAll(resourcePolicy.blockers(campaignId)); blockers.addAll(materialService.blockers(campaignId));
         return new com.toir.dto.repaircampaign.RepairCampaignPlanningAssessment(campaignId, c.getVersion(),
                 blockers.stream().sorted().toList(), c.getStatus() == RepairCampaignStatus.PENDING_APPROVAL);
     }
@@ -117,7 +118,8 @@ public class RepairCampaignWorkItemService {
         requireVersion(campaign, version);
         requireMutable(campaign);
         RepairCampaignWorkItem item = findItem(campaignId, itemId);
-        if (dependencyPolicy.assigned(campaignId, itemId) || resourcePolicy.assigned(campaignId, itemId)) {
+        if (dependencyPolicy.assigned(campaignId, itemId) || resourcePolicy.assigned(campaignId, itemId)
+                || materialService.assigned(campaignId, itemId)) {
             throw RestException.conflict("CAMPAIGN_WORK_ITEM_PLANNING_LINKED");
         }
         RepairCampaignWorkItemResponse before = response(item, campaign.getVersion());

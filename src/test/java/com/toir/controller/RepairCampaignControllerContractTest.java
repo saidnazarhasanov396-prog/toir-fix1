@@ -108,6 +108,13 @@ class RepairCampaignControllerContractTest {
     }
 
     @Test
+    void materialEndpointsDeclareReadAndMutationPbac() {
+        java.util.Map<String,String> expected=java.util.Map.of("listMaterials","REPAIR_CAMPAIGN_READ","addMaterial","REPAIR_CAMPAIGN_UPDATE","updateMaterial","REPAIR_CAMPAIGN_UPDATE","removeMaterial","REPAIR_CAMPAIGN_UPDATE");
+        for(var method:RepairCampaignController.class.getDeclaredMethods()){if(!expected.containsKey(method.getName()))continue;assertThat(method.getAnnotation(PreAuthorize.class)).isNotNull();assertThat(method.getAnnotation(PreAuthorize.class).value()).contains(expected.get(method.getName()));}
+        assertThat(java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods()).map(java.lang.reflect.Method::getName).filter(expected::containsKey)).hasSize(expected.size());
+    }
+
+    @Test
     void listShutdownLinksDelegatesVersionAndReturnsPagedTypedRelationships() throws Exception {
         UUID campaignId = UUID.randomUUID(); UUID shutdownId = UUID.randomUUID(); UUID linkId = UUID.randomUUID();
         when(shutdownLinkService.listForCampaign(campaignId, 7L)).thenReturn(List.of(
@@ -154,6 +161,8 @@ class RepairCampaignControllerContractTest {
 
     @Mock
     private RepairCampaignShutdownLinkService shutdownLinkService;
+    @Mock
+    private com.toir.service.repair.RepairCampaignMaterialService materialService;
 
     @Mock
     private ApprovalService approvalService;
@@ -166,7 +175,7 @@ class RepairCampaignControllerContractTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService, shutdownLinkService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService, shutdownLinkService, materialService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();

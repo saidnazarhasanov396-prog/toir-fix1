@@ -84,7 +84,7 @@ public class WorkOrderMaterialReadinessService {
     ) {
         UUID requirementId = requirement.getId();
         UUID sparePartId = sparePartId(requirement);
-        double requiredQty = positive(requirement.getRequiredQty());
+        double requiredQty = positive(requirement.getRequiredQty() == null ? 0 : requirement.getRequiredQty().doubleValue());
         double reservedQty = reservations.stream()
                 .filter(reservation -> matchesRequirementOrFallback(
                         reservation.getRequirementId(),
@@ -92,7 +92,7 @@ public class WorkOrderMaterialReadinessService {
                         reservation.getSparePartId(),
                         requirement
                 ))
-                .mapToDouble(reservation -> positive(reservation.getQuantity()))
+                .mapToDouble(reservation -> positive(reservation.getQuantity() == null ? 0 : reservation.getQuantity().doubleValue()))
                 .sum();
         double issuedQty = usages.stream()
                 .filter(usage -> matchesRequirementOrFallback(

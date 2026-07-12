@@ -38,4 +38,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
 
     @Query(value = "SELECT * FROM reservations WHERE status = cast(:status as varchar) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Reservation> findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("status") ReservationStatus status);
+
+    List<Reservation> findAllByWorkOrderIdAndRequirementIdAndSparePartIdAndStatusAndIsDeletedFalse(
+            UUID workOrderId, UUID requirementId, UUID sparePartId, ReservationStatus status);
 }

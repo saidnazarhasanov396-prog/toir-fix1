@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public record ReservationRequest(
@@ -20,13 +21,14 @@ public record ReservationRequest(
         UUID workOrderId,
         UUID repairRequestId,
         UUID reservedById,
-        @Positive double quantity
+        @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.toir.dto.common.MoneyDecimalStringDeserializer.class)
+        @Positive BigDecimal quantity
 ) {
     public ReservationRequest(@NotNull UUID warehouseStockId,
                               UUID workOrderId,
                               UUID repairRequestId,
                               UUID reservedById,
-                              double quantity) {
+                              BigDecimal quantity) {
         this(warehouseStockId, null, null, null, null, null, null, null, null,
                 workOrderId, repairRequestId, reservedById, quantity);
     }

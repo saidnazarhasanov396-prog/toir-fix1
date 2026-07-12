@@ -312,7 +312,7 @@ class WarehouseStockRepositorySparePartsStatsTest {
         reservation.setWarehouseStockId(stock.getId());
         reservation.setWorkOrderId(UUID.randomUUID());
         reservation.setReservedById(UUID.randomUUID());
-        reservation.setQuantity(1);
+        reservation.setQuantity(java.math.BigDecimal.ONE);
         reservation.setStatus(status);
         reservation.setDeleted(deleted);
         return entityManager.persistAndFlush(reservation);

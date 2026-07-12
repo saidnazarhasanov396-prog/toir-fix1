@@ -39,6 +39,7 @@ class RepairCampaignWorkItemServiceTest {
     @Mock AuditBuilderService auditBuilderService;
     @Mock RepairCampaignDependencyPolicy dependencyPolicy;
     @Mock RepairCampaignResourcePolicy resourcePolicy;
+    @Mock RepairCampaignMaterialService materialService;
     @InjectMocks RepairCampaignWorkItemService service;
 
     @Test

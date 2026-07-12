@@ -14,6 +14,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.ReservationRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
@@ -23,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -37,6 +39,7 @@ public class ReservationService {
     private final LowStockRecommendationService lowStockRecommendationService;
     private final ToirStockService toirStockService;
     private final LegacyStockProjectionService legacyStockProjectionService;
+    private final WorkOrderSparePartRequirementRepository requirementRepository;
 
 
     @Transactional(readOnly = true)
@@ -71,7 +74,17 @@ public class ReservationService {
         reservation.setRepairRequestId(r.repairRequestId());
         reservation.setReservedById(r.reservedById());
         reservation.setQuantity(r.quantity());
-        Reservation saved = repository.save(reservation);
+        validateCanonicalRequirement(reservation);
+        Reservation saved;
+        try {
+            saved = repository.save(reservation);
+            repository.flush();
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            if (messages(e).contains("uq_reservations_active_work_requirement_spare")) {
+                throw RestException.conflict("RESERVATION_DUPLICATE");
+            }
+            throw e;
+        }
         postCoreReserve(saved);
         WarehouseStock stock = legacyStockProjectionService.sync(saved.getWarehouseId(), saved.getSparePartId());
         stockMovementRepository.save(buildMovement(saved, StockMovementType.RESERVATION));
@@ -171,10 +184,46 @@ public class ReservationService {
         reservation.setSparePartId(stock.getSparePartId());
     }
 
-    private void validatePositiveQuantity(double quantity) {
-        if (quantity <= 0) {
+    private void validatePositiveQuantity(BigDecimal quantity) {
+        if (quantity == null || quantity.signum() <= 0) {
             throw RestException.badRequest("Quantity must be greater than 0");
         }
+        if (quantity.stripTrailingZeros().scale() > 4 || quantity.precision() - quantity.scale() > 15) {
+            throw RestException.badRequest("Quantity must fit numeric(19,4)");
+        }
+    }
+
+    private void validateCanonicalRequirement(Reservation reservation) {
+        if (reservation.getRequirementId() == null) {
+            return;
+        }
+        if (reservation.getWorkOrderId() == null || reservation.getSparePartId() == null) {
+            throw RestException.badRequest("RESERVATION_CANONICAL_IDENTITY_REQUIRED");
+        }
+        var requirement = requirementRepository.findByIdAndWorkOrderIdAndIsDeletedFalse(
+                        reservation.getRequirementId(), reservation.getWorkOrderId())
+                .orElseThrow(() -> RestException.badRequest("RESERVATION_REQUIREMENT_INVALID"));
+        UUID requiredSpare = requirement.getSparePartId() != null ? requirement.getSparePartId()
+                : requirement.getSparePart() == null ? null : requirement.getSparePart().getId();
+        if (!Objects.equals(requiredSpare, reservation.getSparePartId())) {
+            throw RestException.badRequest("RESERVATION_SPARE_PART_MISMATCH");
+        }
+        if (reservation.getQuantity().compareTo(requirement.getRequiredQty()) > 0) {
+            throw RestException.badRequest("RESERVATION_EXCEEDS_REQUIREMENT");
+        }
+        if (!repository.findAllByWorkOrderIdAndRequirementIdAndSparePartIdAndStatusAndIsDeletedFalse(
+                reservation.getWorkOrderId(), reservation.getRequirementId(), reservation.getSparePartId(),
+                ReservationStatus.ACTIVE).isEmpty()) {
+            throw RestException.conflict("RESERVATION_DUPLICATE");
+        }
+    }
+
+    private String messages(Throwable error) {
+        StringBuilder result = new StringBuilder();
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            result.append(' ').append(current.getMessage());
+        }
+        return result.toString();
     }
 
     private StockMovement buildMovement(Reservation reservation, StockMovementType type) {
@@ -185,7 +234,7 @@ public class ReservationService {
         movement.setWorkOrderId(reservation.getWorkOrderId());
         movement.setCreatedById(reservation.getReservedById());
         movement.setType(type);
-        movement.setQuantity(reservation.getQuantity());
+        movement.setQuantity(reservation.getQuantity().doubleValue());
         movement.setLotNumber(reservation.getLotNumber());
         movement.setSerialNumber(reservation.getSerialNumber());
         movement.setExpiryDate(reservation.getExpiryDate());
@@ -295,8 +344,8 @@ public class ReservationService {
         return status == null ? WarehouseStockStatus.AVAILABLE : status;
     }
 
-    private BigDecimal quantity(double value) {
-        return BigDecimal.valueOf(value).stripTrailingZeros();
+    private BigDecimal quantity(BigDecimal value) {
+        return value.stripTrailingZeros();
     }
 
     private String trimToNull(String value) {

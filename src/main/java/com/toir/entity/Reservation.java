@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
@@ -54,8 +55,8 @@ public class Reservation extends BaseEntity {
     @Column(name = "stock_status", nullable = false, length = 32)
     private WarehouseStockStatus stockStatus = WarehouseStockStatus.AVAILABLE;
 
-    @Column(nullable = false)
-    private double quantity;
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal quantity;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

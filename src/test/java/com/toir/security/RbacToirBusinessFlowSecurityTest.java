@@ -80,6 +80,8 @@ class RbacToirBusinessFlowSecurityTest {
 
     @MockBean
     RepairCampaignWorkItemService repairCampaignWorkItemService;
+    @org.springframework.boot.test.mock.mockito.MockBean
+    com.toir.service.repair.RepairCampaignMaterialService repairCampaignMaterialService;
 
     @TestConfiguration
     static class SecurityBeans {

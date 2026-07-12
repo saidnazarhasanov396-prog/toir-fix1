@@ -5,12 +5,14 @@ import com.toir.dto.reservation.ReservationRequest;
 import com.toir.entity.Reservation;
 import com.toir.entity.StockMovement;
 import com.toir.entity.warehouse.WarehouseStock;
+import com.toir.entity.maintenance.WorkOrderSparePartRequirement;
 import com.toir.enums.ReservationStatus;
 import com.toir.enums.StockMovementType;
 import com.toir.exception.RestException;
 import com.toir.repository.ReservationRepository;
 import com.toir.repository.StockMovementRepository;
 import com.toir.repository.WarehouseStockRepository;
+import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
 import com.toir.util.AuditBuilderService;
@@ -57,6 +59,9 @@ class ReservationServiceTest {
     @Mock
     LegacyStockProjectionService legacyStockProjectionService;
 
+    @Mock
+    WorkOrderSparePartRequirementRepository requirementRepository;
+
     @InjectMocks
     ReservationService service;
 
@@ -87,11 +92,11 @@ class ReservationServiceTest {
                 workOrderId,
                 null,
                 reservedById,
-                4
+                new java.math.BigDecimal("4.0000")
         ));
 
         assertThat(result.workOrderId()).isEqualTo(workOrderId);
-        assertThat(result.quantity()).isEqualTo(4);
+        assertThat(result.quantity()).isEqualByComparingTo("4.0000");
         assertThat(result.status()).isEqualTo(ReservationStatus.ACTIVE);
         assertThat(stock.getReservedQty()).isEqualTo(7);
         assertThat(stock.getQuantity()).isEqualTo(10);
@@ -139,7 +144,7 @@ class ReservationServiceTest {
                 UUID.randomUUID(),
                 null,
                 null,
-                3
+                new java.math.BigDecimal("3.0000")
         )))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Insufficient available stock");
@@ -156,7 +161,7 @@ class ReservationServiceTest {
                 UUID.randomUUID(),
                 null,
                 null,
-                0
+                java.math.BigDecimal.ZERO
         )))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Quantity must be greater than 0");
@@ -166,12 +171,35 @@ class ReservationServiceTest {
                 UUID.randomUUID(),
                 null,
                 null,
-                -2
+                new java.math.BigDecimal("-2")
         )))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Quantity must be greater than 0");
 
         verifyNoInteractions(stockRepository, repository, stockMovementRepository);
+    }
+
+    @Test
+    void canonicalReservationReplayIsRejectedBeforeStockMutation() {
+        UUID stockId=UUID.randomUUID(),warehouseId=UUID.randomUUID(),sparePartId=UUID.randomUUID(),workOrderId=UUID.randomUUID(),requirementId=UUID.randomUUID();
+        WarehouseStock stock=stock(stockId,warehouseId,sparePartId,10,0);
+        WorkOrderSparePartRequirement requirement=new WorkOrderSparePartRequirement();requirement.setId(requirementId);requirement.setWorkOrderId(workOrderId);requirement.setSparePartId(sparePartId);requirement.setRequiredQty(new java.math.BigDecimal("5.0000"));
+        when(stockRepository.findByIdAndIsDeletedFalse(stockId)).thenReturn(Optional.of(stock));
+        when(requirementRepository.findByIdAndWorkOrderIdAndIsDeletedFalse(requirementId,workOrderId)).thenReturn(Optional.of(requirement));
+        when(repository.findAllByWorkOrderIdAndRequirementIdAndSparePartIdAndStatusAndIsDeletedFalse(workOrderId,requirementId,sparePartId,ReservationStatus.ACTIVE)).thenReturn(java.util.List.of(new Reservation()));
+        assertThatThrownBy(()->service.reserve(canonical(stockId,workOrderId,requirementId,new java.math.BigDecimal("1.0000")))).hasMessageContaining("RESERVATION_DUPLICATE");
+        verify(repository,never()).save(any());verifyNoInteractions(toirStockService);
+    }
+
+    @Test
+    void canonicalReservationCannotExceedWorkOrderRequirement() {
+        UUID stockId=UUID.randomUUID(),warehouseId=UUID.randomUUID(),sparePartId=UUID.randomUUID(),workOrderId=UUID.randomUUID(),requirementId=UUID.randomUUID();
+        WarehouseStock stock=stock(stockId,warehouseId,sparePartId,10,0);
+        WorkOrderSparePartRequirement requirement=new WorkOrderSparePartRequirement();requirement.setId(requirementId);requirement.setWorkOrderId(workOrderId);requirement.setSparePartId(sparePartId);requirement.setRequiredQty(new java.math.BigDecimal("5.0000"));
+        when(stockRepository.findByIdAndIsDeletedFalse(stockId)).thenReturn(Optional.of(stock));
+        when(requirementRepository.findByIdAndWorkOrderIdAndIsDeletedFalse(requirementId,workOrderId)).thenReturn(Optional.of(requirement));
+        assertThatThrownBy(()->service.reserve(canonical(stockId,workOrderId,requirementId,new java.math.BigDecimal("5.0001")))).hasMessageContaining("RESERVATION_EXCEEDS_REQUIREMENT");
+        verify(repository,never()).save(any());verifyNoInteractions(toirStockService);
     }
 
     @Test
@@ -313,8 +341,10 @@ class ReservationServiceTest {
         reservation.setWarehouseStockId(stockId);
         reservation.setWorkOrderId(workOrderId);
         reservation.setReservedById(reservedById);
-        reservation.setQuantity(quantity);
+        reservation.setQuantity(java.math.BigDecimal.valueOf(quantity));
         reservation.setStatus(ReservationStatus.ACTIVE);
         return reservation;
     }
+
+    private ReservationRequest canonical(UUID stockId,UUID workOrderId,UUID requirementId,java.math.BigDecimal quantity){return new ReservationRequest(stockId,null,null,null,requirementId,null,null,null,null,workOrderId,null,null,quantity);}
 }

@@ -118,7 +118,7 @@ class RbacReservationSecurityTest {
                 UUID.randomUUID(),
                 null,
                 UUID.randomUUID(),
-                1,
+                java.math.BigDecimal.ONE,
                 status
         );
     }

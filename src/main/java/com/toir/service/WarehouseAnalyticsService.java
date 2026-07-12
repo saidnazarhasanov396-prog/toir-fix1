@@ -377,7 +377,7 @@ public class WarehouseAnalyticsService {
                             item.getWorkOrderId(),
                             workOrder == null ? null : workOrder.getNumber(),
                             eq == null ? null : eq.getName(),
-                            round(item.getQuantity()),
+                            round(item.getQuantity().doubleValue()),
                             item.getCreatedAt() == null ? null : item.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate(),
                             workOrder == null ? "PLANNED" : statusForWorkOrder(workOrder)
                     );

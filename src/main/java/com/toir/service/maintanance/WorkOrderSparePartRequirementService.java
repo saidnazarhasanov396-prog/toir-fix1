@@ -25,6 +25,7 @@ import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirement
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
 import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
+import com.toir.repository.repair.RepairCampaignMaterialRequirementRepository;
 import com.toir.security.ScopeAccessService;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,33 @@ public class WorkOrderSparePartRequirementService {
     private final RepairMaterialUsageRepository repairMaterialUsageRepository;
     private final SparePartRepository sparePartRepository;
     private final ScopeAccessService scopeAccessService;
+    private final RepairCampaignMaterialRequirementRepository campaignMaterialRequirementRepository;
+
+    @Transactional
+    public void syncFromCampaignWorkItem(UUID workOrderId, UUID campaignId, UUID workItemId) {
+        if (workOrderId == null || campaignId == null || workItemId == null) {
+            return;
+        }
+        WorkOrder workOrder = workOrderOrThrow(workOrderId);
+        for (var campaignRequirement : campaignMaterialRequirementRepository
+                .findAllByRepairCampaignIdAndWorkItemIdAndIsDeletedFalseOrderBySparePartIdAsc(campaignId, workItemId)) {
+            if (repository.findByWorkOrderIdAndCampaignRequirementIdAndIsDeletedFalse(
+                    workOrderId, campaignRequirement.getId()).isPresent()) {
+                continue;
+            }
+            SparePart sparePart = sparePartOrThrow(campaignRequirement.getSparePartId());
+            WorkOrderSparePartRequirement requirement = new WorkOrderSparePartRequirement();
+            requirement.setWorkOrder(workOrder);
+            requirement.setSourceType(WorkOrderSparePartRequirementSourceType.REPAIR_CAMPAIGN_WORK_ITEM);
+            requirement.setCampaignRequirementId(campaignRequirement.getId());
+            requirement.setSparePart(sparePart);
+            requirement.setRequiredQty(campaignRequirement.getRequiredQuantity());
+            requirement.setUnit(sparePart.getUnit());
+            requirement.setCriticality(campaignRequirement.isCritical() ? "CRITICAL" : null);
+            requirement.setStatus(WorkOrderSparePartRequirementStatus.PLANNED);
+            repository.save(requirement);
+        }
+    }
 
     @Transactional(readOnly = true)
     public List<WorkOrderSparePartRequirementDto> findByWorkOrder(UUID workOrderId) {
@@ -114,7 +142,7 @@ public class WorkOrderSparePartRequirementService {
         WorkOrder workOrder = workOrderOrThrow(workOrderId);
         assertCanMutateWorkOrder(workOrder);
         SparePart sparePart = sparePartOrThrow(request.sparePartId());
-        if (request.requiredQty() <= 0) {
+        if (request.requiredQty() == null || request.requiredQty().signum() <= 0) {
             throw RestException.badRequest("requiredQty must be positive");
         }
 
@@ -139,7 +167,7 @@ public class WorkOrderSparePartRequirementService {
         WorkOrderSparePartRequirement requirement = requirementOrThrow(workOrderId, requirementId);
         assertManualRequirement(requirement);
         SparePart sparePart = sparePartOrThrow(request.sparePartId());
-        if (request.requiredQty() <= 0) {
+        if (request.requiredQty() == null || request.requiredQty().signum() <= 0) {
             throw RestException.badRequest("requiredQty must be positive");
         }
 
@@ -227,7 +255,7 @@ public class WorkOrderSparePartRequirementService {
         requirement.setTemplate(templateRequirement.getTemplate());
         requirement.setOperation(templateRequirement.getOperation());
         requirement.setSparePart(templateRequirement.getSparePart());
-        requirement.setRequiredQty(templateRequirement.getQuantity());
+        requirement.setRequiredQty(java.math.BigDecimal.valueOf(templateRequirement.getQuantity()));
         requirement.setUnit(templateRequirement.getUnit());
         requirement.setCriticality(templateRequirement.getCriticality());
         requirement.setNotes(templateRequirement.getNotes());
@@ -244,7 +272,7 @@ public class WorkOrderSparePartRequirementService {
         requirement.setSourceType(WorkOrderSparePartRequirementSourceType.REGULATION_REQUIRED_SPARE_PART);
         requirement.setRegulationRequirement(regulationRequirement);
         requirement.setSparePart(regulationRequirement.getSparePart());
-        requirement.setRequiredQty(regulationRequirement.getQuantity());
+        requirement.setRequiredQty(java.math.BigDecimal.valueOf(regulationRequirement.getQuantity()));
         requirement.setUnit(regulationRequirement.getUnit());
         requirement.setCriticality(regulationRequirement.getCriticality());
         requirement.setNotes(regulationRequirement.getNotes());

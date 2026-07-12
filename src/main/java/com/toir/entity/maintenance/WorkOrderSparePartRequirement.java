@@ -13,6 +13,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.util.UUID;
+import java.math.BigDecimal;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -68,6 +69,9 @@ public class WorkOrderSparePartRequirement extends BaseEntity {
     @Column(name = "operation_id", insertable = false, updatable = false)
     private UUID operationId;
 
+    @Column(name = "campaign_requirement_id")
+    private UUID campaignRequirementId;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "spare_part_id", nullable = false)
     private SparePart sparePart;
@@ -75,8 +79,8 @@ public class WorkOrderSparePartRequirement extends BaseEntity {
     @Column(name = "spare_part_id", nullable = false, insertable = false, updatable = false)
     private UUID sparePartId;
 
-    @Column(name = "required_qty", nullable = false)
-    private double requiredQty;
+    @Column(name = "required_qty", nullable = false, precision = 19, scale = 4)
+    private BigDecimal requiredQty;
 
     @Column(nullable = false)
     private String unit;
