@@ -167,6 +167,18 @@ class RbacToirBusinessFlowSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = PermissionConstants.REPAIR_CAMPAIGN_READ)
+    void campaignReaderCanReadPlanningButCannotMutateIt() throws Exception {
+        UUID id=UUID.randomUUID();
+        mockMvc.perform(get("/api/v1/repair-campaigns/{id}/dependencies",id)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/repair-campaigns/{id}/resources",id)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/repair-campaigns/{id}/planning-assessment",id)).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/dependencies",id).contentType("application/json")
+                .content("{\"version\":1,\"predecessorId\":\""+UUID.randomUUID()+"\",\"successorId\":\""+UUID.randomUUID()+"\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @WithMockUser(authorities = PermissionConstants.PLANNED_SHUTDOWN_CREATE)
     void plannedShutdownCreatorCanCreate() throws Exception {
         when(plannedShutdownService.create(any())).thenReturn(plannedShutdownDetail());

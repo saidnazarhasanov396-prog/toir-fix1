@@ -16,5 +16,15 @@ public record RepairCampaignWorkItemRequest(
         @NotNull UUID equipmentId,
         @Size(max = 500) String title,
         @NotNull @Min(0) Integer orderNumber,
-        String notes
-) { }
+        String notes,
+        com.toir.enums.RepairCampaignPriority priority
+) {
+    public RepairCampaignWorkItemRequest {
+        priority = priority == null ? com.toir.enums.RepairCampaignPriority.MEDIUM : priority;
+    }
+    public RepairCampaignWorkItemRequest(Long version, RepairCampaignWorkItemSourceType sourceType, UUID sourceId,
+            UUID equipmentId, String title, Integer orderNumber, String notes) {
+        this(version, sourceType, sourceId, equipmentId, title, orderNumber, notes,
+                com.toir.enums.RepairCampaignPriority.MEDIUM);
+    }
+}

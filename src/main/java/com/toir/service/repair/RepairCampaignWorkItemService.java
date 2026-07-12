@@ -46,6 +46,21 @@ public class RepairCampaignWorkItemService {
     private final EquipmentRepository equipmentRepository;
     private final CanonicalWorkSourceResolver sourceResolver;
     private final AuditBuilderService auditBuilderService;
+    private final RepairCampaignDependencyPolicy dependencyPolicy;
+    private final RepairCampaignResourcePolicy resourcePolicy;
+
+    public List<com.toir.dto.repaircampaign.RepairCampaignDependencyResponse> listDependencies(UUID campaignId) { return dependencyPolicy.list(campaignId); }
+    public com.toir.dto.repaircampaign.RepairCampaignDependencyResponse addDependency(UUID campaignId, com.toir.dto.repaircampaign.RepairCampaignDependencyRequest r) { return dependencyPolicy.add(campaignId, r); }
+    public com.toir.dto.repaircampaign.RepairCampaignDependencyResponse removeDependency(UUID campaignId, UUID id, Long version) { return dependencyPolicy.remove(campaignId, id, version); }
+    public List<com.toir.dto.repaircampaign.RepairCampaignResourceResponse> listResources(UUID campaignId) { return resourcePolicy.list(campaignId); }
+    public com.toir.dto.repaircampaign.RepairCampaignResourceResponse assignResource(UUID campaignId, com.toir.dto.repaircampaign.RepairCampaignResourceRequest r) { return resourcePolicy.add(campaignId, r); }
+    public com.toir.dto.repaircampaign.RepairCampaignResourceResponse removeResource(UUID campaignId, UUID id, Long version) { return resourcePolicy.remove(campaignId, id, version); }
+    public com.toir.dto.repaircampaign.RepairCampaignPlanningAssessment assessPlanning(UUID campaignId) {
+        RepairCampaign c = find(campaignId); dependencyPolicy.list(campaignId); List<String> blockers = new ArrayList<>();
+        blockers.addAll(dependencyPolicy.blockers(campaignId)); blockers.addAll(resourcePolicy.blockers(campaignId));
+        return new com.toir.dto.repaircampaign.RepairCampaignPlanningAssessment(campaignId, c.getVersion(),
+                blockers.stream().sorted().toList(), c.getStatus() == RepairCampaignStatus.PENDING_APPROVAL);
+    }
 
     @Transactional(readOnly = true)
     public List<RepairCampaignWorkItemResponse> list(UUID campaignId) {
@@ -102,6 +117,9 @@ public class RepairCampaignWorkItemService {
         requireVersion(campaign, version);
         requireMutable(campaign);
         RepairCampaignWorkItem item = findItem(campaignId, itemId);
+        if (dependencyPolicy.assigned(campaignId, itemId) || resourcePolicy.assigned(campaignId, itemId)) {
+            throw RestException.conflict("CAMPAIGN_WORK_ITEM_PLANNING_LINKED");
+        }
         RepairCampaignWorkItemResponse before = response(item, campaign.getVersion());
         item.setDeleted(true);
         repository.saveAndFlush(item);
@@ -196,6 +214,7 @@ public class RepairCampaignWorkItemService {
         item.setTitle(input.title());
         item.setOrderNumber(request.orderNumber());
         item.setNotes(normalize(request.notes()));
+        item.setPriority(request.priority());
     }
 
     private RepairCampaignWorkItem save(RepairCampaignWorkItem item) {
@@ -248,7 +267,8 @@ public class RepairCampaignWorkItemService {
         return item.getSourceType() != request.sourceType()
                 || !Objects.equals(item.getSourceId(), request.sourceId())
                 || !Objects.equals(item.getEquipmentId(), request.equipmentId())
-                || !Objects.equals(item.getOrderNumber(), request.orderNumber());
+                || !Objects.equals(item.getOrderNumber(), request.orderNumber())
+                || !Objects.equals(item.getPriority(), request.priority());
     }
 
     private static String requireManualTitle(String title) {
@@ -260,7 +280,7 @@ public class RepairCampaignWorkItemService {
     private static RepairCampaignWorkItemResponse response(RepairCampaignWorkItem item, Long version) {
         return new RepairCampaignWorkItemResponse(item.getId(), item.getCampaign().getId(), item.getSourceType(),
                 item.getSourceId(), item.getEquipmentId(), item.getTitle(), item.getStatus(),
-                item.getOrderNumber(), item.getNotes(), version);
+                item.getOrderNumber(), item.getNotes(), version, item.getPriority());
     }
 
     private static String normalize(String value) {

@@ -89,6 +89,25 @@ class RepairCampaignControllerContractTest {
     }
 
     @Test
+    void planningEndpointsDeclareReadAndMutationPbac() {
+        java.util.Map<String, String> expected = java.util.Map.of(
+                "listDependencies", "REPAIR_CAMPAIGN_READ",
+                "addDependency", "REPAIR_CAMPAIGN_UPDATE",
+                "removeDependency", "REPAIR_CAMPAIGN_UPDATE",
+                "listResources", "REPAIR_CAMPAIGN_READ",
+                "assignResource", "REPAIR_CAMPAIGN_UPDATE",
+                "removeResource", "REPAIR_CAMPAIGN_UPDATE",
+                "assessPlanning", "REPAIR_CAMPAIGN_READ");
+        for (var method : RepairCampaignController.class.getDeclaredMethods()) {
+            if (!expected.containsKey(method.getName())) continue;
+            assertThat(method.getAnnotation(PreAuthorize.class)).isNotNull();
+            assertThat(method.getAnnotation(PreAuthorize.class).value()).contains(expected.get(method.getName()));
+        }
+        assertThat(java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods())
+                .map(java.lang.reflect.Method::getName).filter(expected::containsKey)).hasSize(expected.size());
+    }
+
+    @Test
     void listShutdownLinksDelegatesVersionAndReturnsPagedTypedRelationships() throws Exception {
         UUID campaignId = UUID.randomUUID(); UUID shutdownId = UUID.randomUUID(); UUID linkId = UUID.randomUUID();
         when(shutdownLinkService.listForCampaign(campaignId, 7L)).thenReturn(List.of(

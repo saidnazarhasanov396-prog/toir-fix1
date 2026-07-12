@@ -131,6 +131,28 @@ public class RepairCampaignController {
         return ResponseEntity.ok(shutdownLinkService.get(id, shutdownId, repairCampaignVersion, plannedShutdownVersion));
     }
 
+    @GetMapping("/{id}/dependencies")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
+    public ResponseEntity<List<com.toir.dto.repaircampaign.RepairCampaignDependencyResponse>> listDependencies(@PathVariable UUID id){return ResponseEntity.ok(workItemService.listDependencies(id));}
+    @PostMapping("/{id}/dependencies")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<com.toir.dto.repaircampaign.RepairCampaignDependencyResponse> addDependency(@PathVariable UUID id,@Valid @RequestBody com.toir.dto.repaircampaign.RepairCampaignDependencyRequest r){return ResponseEntity.status(HttpStatus.CREATED).body(workItemService.addDependency(id,r));}
+    @DeleteMapping("/{id}/dependencies/{dependencyId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<com.toir.dto.repaircampaign.RepairCampaignDependencyResponse> removeDependency(@PathVariable UUID id,@PathVariable UUID dependencyId,@RequestParam Long version){return ResponseEntity.ok(workItemService.removeDependency(id,dependencyId,version));}
+    @GetMapping("/{id}/resources")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
+    public ResponseEntity<List<com.toir.dto.repaircampaign.RepairCampaignResourceResponse>> listResources(@PathVariable UUID id){return ResponseEntity.ok(workItemService.listResources(id));}
+    @PostMapping("/{id}/resources")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<com.toir.dto.repaircampaign.RepairCampaignResourceResponse> assignResource(@PathVariable UUID id,@Valid @RequestBody com.toir.dto.repaircampaign.RepairCampaignResourceRequest r){return ResponseEntity.status(HttpStatus.CREATED).body(workItemService.assignResource(id,r));}
+    @DeleteMapping("/{id}/resources/{assignmentId}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    public ResponseEntity<com.toir.dto.repaircampaign.RepairCampaignResourceResponse> removeResource(@PathVariable UUID id,@PathVariable UUID assignmentId,@RequestParam Long version){return ResponseEntity.ok(workItemService.removeResource(id,assignmentId,version));}
+    @GetMapping("/{id}/planning-assessment")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
+    public ResponseEntity<com.toir.dto.repaircampaign.RepairCampaignPlanningAssessment> assessPlanning(@PathVariable UUID id){return ResponseEntity.ok(workItemService.assessPlanning(id));}
+
     @GetMapping("/{id}/planned-shutdowns")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_READ')")
     public ResponseEntity<Page<RepairCampaignShutdownLinkResponse>> listShutdownLinks(@PathVariable UUID id,

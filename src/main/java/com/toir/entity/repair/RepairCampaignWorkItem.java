@@ -28,6 +28,11 @@ import java.util.UUID;
 @AllArgsConstructor
 public class RepairCampaignWorkItem extends BaseEntity {
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority", nullable = false)
+    @Builder.Default
+    private com.toir.enums.RepairCampaignPriority priority = com.toir.enums.RepairCampaignPriority.MEDIUM;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "repair_campaign_id", nullable = false)
     private RepairCampaign campaign;
