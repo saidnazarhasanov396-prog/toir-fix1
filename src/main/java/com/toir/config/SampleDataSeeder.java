@@ -86,6 +86,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -559,7 +560,7 @@ public class SampleDataSeeder implements CommandLineRunner {
         for (int i = 0; i < 8; i++) {
             ActualCost ac = new ActualCost();
             ac.setCostCategoryId(i % 2 == 0 ? materials.getId() : labor.getId());
-            ac.setAmount(50_000 + (long) (Math.random() * 200_000));
+            ac.setAmount(BigDecimal.valueOf(50_000 + (long) (Math.random() * 200_000)));
             ac.setCostDate(now.minus(i * 3L, ChronoUnit.DAYS));
             ac.setNotes("Фактические затраты по ремонту #" + (i + 1));
             ac.setStatus(i < 5 ? ActualCostStatus.APPROVED : ActualCostStatus.PENDING);
@@ -667,7 +668,7 @@ public class SampleDataSeeder implements CommandLineRunner {
         m.setWarehouseId(warehouseId);
         m.setSparePartId(sparePartId);
         m.setType(type);
-        m.setQuantity(qty);
+        m.setQuantity(BigDecimal.valueOf(qty));
         m.setOccurredAt(occurredAt);
         m.setNotes(notes);
         m.setCreatedById(createdById);

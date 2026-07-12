@@ -25,11 +25,17 @@ import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirement
 import com.toir.repository.maintenance.MaintenanceTemplateSparePartRequirementRepository;
 import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
+import com.toir.repository.repair.RepairCampaignMaterialRequirementRepository;
+import com.toir.repository.repair.RepairCampaignWorkItemRepository;
+import com.toir.repository.ReservationRepository;
+import com.toir.enums.ReservationStatus;
 import com.toir.security.ScopeAccessService;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.UUID;
+import java.math.BigDecimal;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +58,40 @@ public class WorkOrderSparePartRequirementService {
     private final RepairMaterialUsageRepository repairMaterialUsageRepository;
     private final SparePartRepository sparePartRepository;
     private final ScopeAccessService scopeAccessService;
+    private final RepairCampaignMaterialRequirementRepository campaignMaterialRequirementRepository;
+    private final RepairCampaignWorkItemRepository campaignWorkItemRepository;
+    private final ReservationRepository reservationRepository;
+
+    @Transactional
+    public void syncFromCampaignWorkItem(UUID workOrderId, UUID campaignId, UUID workItemId) {
+        if (workOrderId == null || campaignId == null || workItemId == null) {
+            return;
+        }
+        WorkOrder workOrder = workOrderOrThrow(workOrderId);
+        if(!Objects.equals(workOrder.getRepairCampaignId(),campaignId))
+            throw RestException.conflict("CAMPAIGN_WORK_ORDER_MISMATCH");
+        campaignWorkItemRepository.findByIdAndCampaignIdAndIsDeletedFalse(workItemId,campaignId)
+                .orElseThrow(()->RestException.badRequest("CAMPAIGN_WORK_ITEM_MISMATCH"));
+        for (var campaignRequirement : campaignMaterialRequirementRepository
+                .findAllByRepairCampaignIdAndWorkItemIdAndIsDeletedFalseOrderBySparePartIdAsc(campaignId, workItemId)) {
+            if (repository.findByWorkOrderIdAndCampaignRequirementIdAndIsDeletedFalse(
+                    workOrderId, campaignRequirement.getId()).isPresent()) {
+                continue;
+            }
+            SparePart sparePart = sparePartOrThrow(campaignRequirement.getSparePartId());
+            WorkOrderSparePartRequirement requirement = new WorkOrderSparePartRequirement();
+            requirement.setWorkOrder(workOrder);
+            requirement.setSourceType(WorkOrderSparePartRequirementSourceType.REPAIR_CAMPAIGN_WORK_ITEM);
+            requirement.setCampaignRequirementId(campaignRequirement.getId());
+            requirement.setWarehouseId(campaignRequirement.getWarehouseId());
+            requirement.setSparePart(sparePart);
+            requirement.setRequiredQty(campaignRequirement.getRequiredQuantity());
+            requirement.setUnit(sparePart.getUnit());
+            requirement.setCriticality(campaignRequirement.isCritical() ? "CRITICAL" : null);
+            requirement.setStatus(WorkOrderSparePartRequirementStatus.PLANNED);
+            repository.save(requirement);
+        }
+    }
 
     @Transactional(readOnly = true)
     public List<WorkOrderSparePartRequirementDto> findByWorkOrder(UUID workOrderId) {
@@ -114,9 +154,7 @@ public class WorkOrderSparePartRequirementService {
         WorkOrder workOrder = workOrderOrThrow(workOrderId);
         assertCanMutateWorkOrder(workOrder);
         SparePart sparePart = sparePartOrThrow(request.sparePartId());
-        if (request.requiredQty() <= 0) {
-            throw RestException.badRequest("requiredQty must be positive");
-        }
+        validateQuantity(request.requiredQty());
 
         WorkOrderSparePartRequirement requirement = new WorkOrderSparePartRequirement();
         requirement.setWorkOrder(workOrder);
@@ -139,9 +177,8 @@ public class WorkOrderSparePartRequirementService {
         WorkOrderSparePartRequirement requirement = requirementOrThrow(workOrderId, requirementId);
         assertManualRequirement(requirement);
         SparePart sparePart = sparePartOrThrow(request.sparePartId());
-        if (request.requiredQty() <= 0) {
-            throw RestException.badRequest("requiredQty must be positive");
-        }
+        validateQuantity(request.requiredQty());
+        assertReservationFactsAllowUpdate(requirement,request.sparePartId(),request.requiredQty());
 
         requirement.setSparePart(sparePart);
         requirement.setRequiredQty(request.requiredQty());
@@ -151,12 +188,20 @@ public class WorkOrderSparePartRequirementService {
         return WorkOrderSparePartRequirementDto.from(repository.save(requirement));
     }
 
+    private void validateQuantity(BigDecimal quantity) {
+        if (quantity == null || quantity.signum() <= 0 || quantity.stripTrailingZeros().scale() > 4
+                || quantity.precision() - quantity.scale() > 15) {
+            throw RestException.badRequest("MATERIAL_QUANTITY_INVALID");
+        }
+    }
+
     @Transactional
     public void deleteManual(UUID workOrderId, UUID requirementId) {
         WorkOrder workOrder = workOrderOrThrow(workOrderId);
         assertCanMutateWorkOrder(workOrder);
         WorkOrderSparePartRequirement requirement = requirementOrThrow(workOrderId, requirementId);
         assertManualRequirement(requirement);
+        if(!activeReservations(requirementId).isEmpty())throw RestException.conflict("RESERVATION_REQUIREMENT_IN_USE");
         requirement.setDeleted(true);
         repository.save(requirement);
     }
@@ -362,9 +407,23 @@ public class WorkOrderSparePartRequirementService {
     }
 
     private WorkOrderSparePartRequirement requirementOrThrow(UUID workOrderId, UUID requirementId) {
-        return repository.findByIdAndWorkOrderIdAndIsDeletedFalse(requirementId, workOrderId)
+        return repository.findByIdAndWorkOrderIdAndIsDeletedFalseForUpdate(requirementId, workOrderId)
                 .orElseThrow(() -> RestException.notFound(
                         "Work order spare part requirement not found: " + requirementId));
+    }
+
+    private List<com.toir.entity.Reservation> activeReservations(UUID requirementId){
+        return reservationRepository.findAllByRequirementIdAndStatusAndIsDeletedFalse(requirementId,ReservationStatus.ACTIVE);
+    }
+
+    private void assertReservationFactsAllowUpdate(WorkOrderSparePartRequirement requirement,UUID sparePartId,java.math.BigDecimal quantity){
+        List<com.toir.entity.Reservation> facts=activeReservations(requirement.getId());
+        if(facts.isEmpty())return;
+        UUID currentSpare=requirement.getSparePartId()!=null?requirement.getSparePartId():requirement.getSparePart()==null?null:requirement.getSparePart().getId();
+        java.math.BigDecimal reserved=facts.stream().map(com.toir.entity.Reservation::getQuantity).filter(Objects::nonNull)
+                .reduce(java.math.BigDecimal.ZERO,java.math.BigDecimal::add);
+        if(!Objects.equals(currentSpare,sparePartId)||quantity.compareTo(reserved)<0)
+            throw RestException.conflict("RESERVATION_REQUIREMENT_IN_USE");
     }
 
     private SparePart sparePartOrThrow(UUID sparePartId) {

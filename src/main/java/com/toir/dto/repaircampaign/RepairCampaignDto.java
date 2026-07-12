@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.toir.dto.sparepartlifecycle.DecimalStringSerializer;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.enums.RepairCampaignScopeType;
+import com.toir.enums.RepairCampaignPriority;
 import com.toir.enums.RepairCampaignStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,7 +40,26 @@ public record RepairCampaignDto(
         @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal budgetActual,
         @JsonSerialize(using = DecimalStringSerializer.class) BigDecimal budgetRemaining,
         String budgetStatus,
-        String currencyCode
+        String currencyCode,
+        String campaignType,
+        UUID responsibleEmployeeId,
+        RepairCampaignPriority priority,
+        String objective,
+        Long version,
+        Long approvalScopeVersion,
+        String approvalScopeHash,
+        Instant approvedAt,
+        Instant preparationStartedAt,
+        Instant startedAt,
+        Instant suspendedAt,
+        Instant completedAt,
+        Instant closingStartedAt,
+        Instant closedAt,
+        Instant cancelledAt,
+        RepairCampaignStatus suspendedFromStatus,
+        Long closureVersion,
+        Long scopeVersion,
+        String closingNotes
 ) {
     public RepairCampaignDto(
             UUID id,
@@ -59,7 +80,8 @@ public record RepairCampaignDto(
         this(id, code, name, departmentId, departmentName, status, startDate, endDate, totalBudget,
                 totalActual, variance, description, notes, stages, RepairCampaignScopeType.CUSTOM, null, List.of(),
                 0, 0, totalActual, BigDecimal.ZERO, null, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                null, "UZS");
+                null, "UZS", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, 0L, 0L, null);
     }
 
     public RepairCampaignDto(
@@ -71,7 +93,8 @@ public record RepairCampaignDto(
         this(id, code, name, departmentId, departmentName, status, startDate, endDate, totalBudget,
                 totalActual, variance, description, notes, stages, RepairCampaignScopeType.CUSTOM, null, List.of(),
                 0, 0, totalActual, BigDecimal.ZERO, null, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                null, currencyCode);
+                null, currencyCode, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, 0L, 0L, null);
     }
 
     public RepairCampaignDto(
@@ -100,7 +123,9 @@ public record RepairCampaignDto(
         this(id, code, name, departmentId, departmentName, status, startDate, endDate, totalBudget,
                 totalActual, variance, description, notes, stages, scopeType, equipmentTypeId, participantDepartments,
                 workOrderCount, completedWorkOrderCount, approvedActual, pendingActual, null,
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null, "UZS");
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null, "UZS",
+                null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, 0L, 0L, null);
     }
 
     public static RepairCampaignDto from(RepairCampaign c, String departmentName) {
@@ -124,7 +149,26 @@ public record RepairCampaignDto(
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 null,
-                c.getCurrencyCode()
+                c.getCurrencyCode(),
+                c.getCampaignType(),
+                c.getResponsibleEmployeeId(),
+                c.getPriority(),
+                c.getObjective(),
+                c.getVersion(),
+                c.getApprovalScopeVersion(),
+                c.getApprovalScopeHash(),
+                c.getApprovedAt(),
+                c.getPreparationStartedAt(),
+                c.getStartedAt(),
+                c.getSuspendedAt(),
+                c.getCompletedAt(),
+                c.getClosingStartedAt(),
+                c.getClosedAt(),
+                c.getCancelledAt(),
+                c.getSuspendedFromStatus(),
+                c.getClosureVersion(),
+                c.getScopeVersion(),
+                c.getClosingNotes()
         );
     }
 

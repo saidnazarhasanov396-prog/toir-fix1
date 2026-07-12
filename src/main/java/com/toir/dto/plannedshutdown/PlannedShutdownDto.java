@@ -1,7 +1,7 @@
 package com.toir.dto.plannedshutdown;
 
 import com.toir.entity.PlannedShutdown;
-import com.toir.enums.PlanStatus;
+import com.toir.enums.PlannedShutdownStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -15,10 +15,10 @@ public record PlannedShutdownDto(
         @NotNull Instant startAt,
         @NotNull Instant endAt,
         @NotBlank String reason,
-        PlanStatus status
+        PlannedShutdownStatus status
 ) {
     public static PlannedShutdownDto from(PlannedShutdown s) {
         return new PlannedShutdownDto(s.getId(), s.getName(), s.getDepartmentId(),
-                s.getStartAt(), s.getEndAt(), s.getReason(), s.getStatus());
+                s.getStartAt(), s.getEndAt(), s.getReason(), s.getLifecycleStatus());
     }
 }

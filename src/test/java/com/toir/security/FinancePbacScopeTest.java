@@ -119,15 +119,15 @@ class FinancePbacScopeTest {
         ActualCost approved = actualCost(UUID.randomUUID());
         approved.setBudgetLineId(line.getId());
         approved.setStatus(ActualCostStatus.APPROVED);
-        approved.setAmount(600);
+        approved.setAmount(java.math.BigDecimal.valueOf(600));
         ActualCost pending = actualCost(UUID.randomUUID());
         pending.setBudgetLineId(line.getId());
         pending.setStatus(ActualCostStatus.PENDING);
-        pending.setAmount(350);
+        pending.setAmount(java.math.BigDecimal.valueOf(350));
         ActualCost unallocated = actualCost(UUID.randomUUID());
         unallocated.setBudgetLineId(null);
         unallocated.setStatus(ActualCostStatus.PENDING);
-        unallocated.setAmount(25);
+        unallocated.setAmount(java.math.BigDecimal.valueOf(25));
 
         when(budgetRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(budget));
         when(lineRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(line));
@@ -205,7 +205,7 @@ class FinancePbacScopeTest {
         actualCost.setId(id);
         actualCost.setCostCategoryId(UUID.randomUUID());
         actualCost.setStatus(ActualCostStatus.PENDING);
-        actualCost.setAmount(100);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100));
         actualCost.setCostDate(Instant.parse("2026-05-01T00:00:00Z"));
         return actualCost;
     }
@@ -218,7 +218,7 @@ class FinancePbacScopeTest {
                 actualCost.getContractorWorkId(),
                 actualCost.getCostCategoryId(),
                 actualCost.getStatus().name(),
-                actualCost.getAmount(),
+                actualCost.getAmount().doubleValue(),
                 actualCost.getCostDate(),
                 actualCost.getNotes(),
                 actualCost.getReviewedAt(),

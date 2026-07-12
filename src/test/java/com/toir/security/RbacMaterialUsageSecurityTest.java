@@ -153,7 +153,7 @@ class RbacMaterialUsageSecurityTest {
                 workOrderId,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                1,
+                java.math.BigDecimal.ONE,
                 10.0
         );
     }
@@ -163,7 +163,7 @@ class RbacMaterialUsageSecurityTest {
                 {
                   "warehouseId": "%s",
                   "sparePartId": "%s",
-                  "quantity": 1,
+                  "quantity": "1.0000",
                   "unitCost": 10
                 }
                 """.formatted(UUID.randomUUID(), UUID.randomUUID());

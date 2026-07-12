@@ -29,6 +29,7 @@ import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
@@ -50,10 +51,12 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -414,6 +417,134 @@ class ApprovalServiceTest {
         assertThat(result.steps().getFirst().approverRole()).isEqualTo("MAINTENANCE_MANAGER");
         verify(maintenanceRegulationService).validateCanApprove(targetId);
         verify(approvalScopeService).assertCanCreateApproval(any(CreateApprovalRequest.class));
+    }
+
+    @Test
+    void plannedShutdownApprovalCapturesCurrentScopeVersionInCanonicalRequest() {
+        UUID targetId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
+        stubTargetMetadata(ApprovalTargetType.PLANNED_SHUTDOWN, null, "Annual shutdown");
+        when(jdbcTemplate.queryForObject(
+                "select status from planned_shutdowns where id = ? and is_deleted = false",
+                String.class, targetId)).thenReturn("PENDING_APPROVAL");
+        when(jdbcTemplate.queryForObject(
+                "select scope_version from planned_shutdowns where id = ? and is_deleted = false",
+                Long.class, targetId)).thenReturn(8L);
+        when(jdbcTemplate.queryForObject(
+                "select approval_scope_version from planned_shutdowns where id = ? and is_deleted = false",
+                Long.class, targetId)).thenReturn(8L);
+        when(jdbcTemplate.queryForObject(
+                "select approval_scope_hash from planned_shutdowns where id = ? and is_deleted = false",
+                String.class, targetId)).thenReturn("a".repeat(64));
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(List.of(
+                new CreateApprovalRequest.StepInput(null,
+                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE),
+                new CreateApprovalRequest.StepInput(null,
+                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE)));
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        service.requestApproval(new ApprovalStartRequest(ApprovalTargetType.PLANNED_SHUTDOWN, targetId,
+                ApprovalActionType.APPROVE, "Current scope"));
+
+        ArgumentCaptor<ApprovalRequest> request = ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).saveAndFlush(request.capture());
+        assertThat(request.getValue().getPayloadJson()).isEqualTo(
+                "{\"scopeVersion\":8,\"scopeHash\":\"" + "a".repeat(64) + "\"}");
+        assertThat(request.getValue().getSteps()).extracting(ApprovalStep::getApproverRole)
+                .containsExactly(
+                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE,
+                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE);
+    }
+
+    @Test
+    void plannedShutdownApprovalCreationRejectsNonPendingOrIncompleteSnapshot() {
+        UUID targetId = UUID.randomUUID();
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(UUID.randomUUID());
+        stubTargetMetadata(ApprovalTargetType.PLANNED_SHUTDOWN, null, "Annual shutdown");
+        when(jdbcTemplate.queryForObject(
+                "select status from planned_shutdowns where id = ? and is_deleted = false",
+                String.class, targetId)).thenReturn("READINESS_CHECK");
+
+        assertThatThrownBy(() -> service.requestApproval(new ApprovalStartRequest(
+                ApprovalTargetType.PLANNED_SHUTDOWN, targetId, ApprovalActionType.APPROVE, "submit")))
+                .hasMessageContaining("PLANNED_SHUTDOWN_NOT_PENDING_APPROVAL");
+
+        when(jdbcTemplate.queryForObject(
+                "select status from planned_shutdowns where id = ? and is_deleted = false",
+                String.class, targetId)).thenReturn("PENDING_APPROVAL");
+        when(jdbcTemplate.queryForObject(
+                "select scope_version from planned_shutdowns where id = ? and is_deleted = false",
+                Long.class, targetId)).thenReturn(4L);
+        when(jdbcTemplate.queryForObject(
+                "select approval_scope_version from planned_shutdowns where id = ? and is_deleted = false",
+                Long.class, targetId)).thenReturn(3L);
+        assertThatThrownBy(() -> service.requestApproval(new ApprovalStartRequest(
+                ApprovalTargetType.PLANNED_SHUTDOWN, targetId, ApprovalActionType.APPROVE, "submit")))
+                .hasMessageContaining("PLANNED_SHUTDOWN_APPROVAL_SCOPE_STALE");
+        verify(requestRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void plannedShutdownRetryCancelsStalePendingRequestAndCreatesCurrentSnapshot() {
+        UUID targetId = UUID.randomUUID(); UUID requesterId = UUID.randomUUID();
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
+        stubTargetMetadata(ApprovalTargetType.PLANNED_SHUTDOWN, null, "Annual shutdown");
+        when(jdbcTemplate.queryForObject(
+                "select status from planned_shutdowns where id = ? and is_deleted = false",
+                String.class, targetId)).thenReturn("PENDING_APPROVAL");
+        when(jdbcTemplate.queryForObject(
+                "select scope_version from planned_shutdowns where id = ? and is_deleted = false",
+                Long.class, targetId)).thenReturn(9L);
+        when(jdbcTemplate.queryForObject(
+                "select approval_scope_version from planned_shutdowns where id = ? and is_deleted = false",
+                Long.class, targetId)).thenReturn(9L);
+        when(jdbcTemplate.queryForObject(
+                "select approval_scope_hash from planned_shutdowns where id = ? and is_deleted = false",
+                String.class, targetId)).thenReturn("b".repeat(64));
+        ApprovalRequest stale = new ApprovalRequest(); stale.setId(UUID.randomUUID());
+        stale.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN); stale.setTargetId(targetId);
+        stale.setActionType(ApprovalActionType.APPROVE); stale.setRequesterId(requesterId);
+        stale.setTitle("Old"); stale.setStatus(ApprovalStatus.PENDING);
+        stale.setPayloadJson("{\"scopeVersion\":8,\"scopeHash\":\"" + "a".repeat(64) + "\"}");
+        when(requestRepository.findFirstPendingByTargetAndAction(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(Optional.of(stale));
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(List.of(
+                new CreateApprovalRequest.StepInput(null,
+                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE),
+                new CreateApprovalRequest.StepInput(null,
+                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE)));
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(inv -> {
+            ApprovalRequest saved = inv.getArgument(0);
+            if (saved.getId() == null) ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            if (saved.getCreatedAt() == null) ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            if (saved.getUpdatedAt() == null) ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        ApprovalRequestDto result = service.requestApproval(new ApprovalStartRequest(
+                ApprovalTargetType.PLANNED_SHUTDOWN, targetId, ApprovalActionType.APPROVE, "retry"));
+
+        assertThat(stale.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
+        assertThat(result.status()).isEqualTo(ApprovalStatus.PENDING);
+        ArgumentCaptor<ApprovalRequest> saved = ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository, times(2)).saveAndFlush(saved.capture());
+        assertThat(saved.getAllValues().getLast().getPayloadJson())
+                .contains("\"scopeVersion\":9", "b".repeat(64));
+        verify(governanceService).record(stale, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
+                requesterId, "Superseded by a newer planned shutdown scope snapshot");
     }
 
     @Test

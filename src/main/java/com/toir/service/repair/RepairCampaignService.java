@@ -24,6 +24,7 @@ import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignDepartment;
 import com.toir.entity.repair.RepairCampaignStage;
+import com.toir.entity.users.Employee;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -32,6 +33,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.RepairCampaignDepartmentRole;
 import com.toir.enums.RepairCampaignScopeType;
 import com.toir.enums.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignStageStatus;
 import com.toir.enums.RepairAcceptanceStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.enums.WorkOrderType;
@@ -48,12 +50,21 @@ import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairCampaignDepartmentRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.service.WorkOrderService;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.ObjectProvider;
+import com.toir.service.ApprovalService;
+import com.toir.dto.approval.ApprovalStartRequest;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
+import com.toir.entity.ApprovalRequest;
+import com.toir.security.ScopeAccessService;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -97,9 +108,14 @@ public class RepairCampaignService {
     private final MaintenanceBudgetRepository maintenanceBudgetRepository;
     private final BudgetLineRepository budgetLineRepository;
     private final EquipmentRepository equipmentRepository;
+    private final EmployeeRepository employeeRepository;
     private final RepairAcceptanceRepository repairAcceptanceRepository;
     private final WorkOrderService workOrderService;
     private final AuditBuilderService auditBuilderService;
+    private final RepairCampaignApprovalPolicy approvalPolicy;
+    private final ScopeAccessService scopeAccessService;
+    private final ObjectProvider<ApprovalService> approvalServiceProvider;
+    private final RepairCampaignMutationImpactService mutationImpactService;
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findAll() {
@@ -128,12 +144,17 @@ public class RepairCampaignService {
     public RepairCampaignDto create(RepairCampaignRequest r) {
         CodeGenerationUtils.rejectClientProvidedCode(r.code());
         validateCampaignRequest(r);
+        validateResponsibleEmployee(r.departmentId(), r.responsibleEmployeeId());
         validateMaintenanceBudgetLink(r);
 
         RepairCampaign c = new RepairCampaign();
         c.setCode(nextCode());
         c.setName(r.name());
         c.setDepartmentId(r.departmentId());
+        c.setCampaignType(r.campaignType());
+        c.setResponsibleEmployeeId(r.responsibleEmployeeId());
+        c.setPriority(r.priority());
+        c.setObjective(r.objective());
         c.setScopeType(effectiveScopeType(r.scopeType()));
         c.setEquipmentTypeId(r.equipmentTypeId());
         c.setMaintenanceBudgetId(r.maintenanceBudgetId());
@@ -144,6 +165,8 @@ public class RepairCampaignService {
         c.setCurrencyCode(r.currencyCode());
         c.setScope(r.description());
         c.setNotes(r.notes());
+        c.setStatus(RepairCampaignStatus.DRAFT);
+        c.setClosureVersion(0L);
         replaceParticipantDepartments(c, r.participantDepartments());
 
         RepairCampaign saved = repository.save(c);
@@ -154,17 +177,24 @@ public class RepairCampaignService {
     @Transactional
     public RepairCampaignDto update(UUID id, RepairCampaignRequest r) {
         RepairCampaign c = getLockedOrThrow(id);
+        validateExpectedVersion(c, r.version());
         if (c.getStatus() == RepairCampaignStatus.CLOSED || c.getStatus() == RepairCampaignStatus.CANCELLED) {
             throw RestException.badRequest("Closed/cancelled campaign cannot be updated");
         }
         CodeGenerationUtils.rejectClientProvidedCode(r.code());
         validateCampaignRequest(r);
+        validateResponsibleEmployee(r.departmentId(), r.responsibleEmployeeId());
         validateMaintenanceBudgetLink(r);
         validateExistingStageBudgetLines(c, r.maintenanceBudgetId());
+        mutationImpactService.apply(c, com.toir.enums.RepairCampaignMutationType.METADATA);
 
         RepairCampaign before = snapshot(c);
         c.setName(r.name());
         c.setDepartmentId(r.departmentId());
+        c.setCampaignType(r.campaignType());
+        c.setResponsibleEmployeeId(r.responsibleEmployeeId());
+        c.setPriority(r.priority());
+        c.setObjective(r.objective());
         c.setScopeType(effectiveScopeType(r.scopeType()));
         c.setEquipmentTypeId(r.equipmentTypeId());
         c.setMaintenanceBudgetId(r.maintenanceBudgetId());
@@ -176,8 +206,20 @@ public class RepairCampaignService {
         c.setNotes(r.notes());
         replaceParticipantDepartments(c, r.participantDepartments());
 
-        RepairCampaign saved = repository.save(c);
+        RepairCampaign saved = repository.saveAndFlush(c);
         logCampaign(saved, AuditAction.UPDATE, "Ремонтная кампания обновлена", before, saved);
+        return toDto(saved);
+    }
+
+    @Transactional
+    public RepairCampaignDto requestApproval(UUID id, Long expectedVersion, Long expectedScopeVersion, String comment) {
+        RepairCampaign campaign = getLockedOrThrow(id);
+        scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
+        validateExpectedVersion(campaign, expectedVersion);
+        approvalPolicy.prepareRequest(campaign, expectedScopeVersion);
+        RepairCampaign saved = repository.saveAndFlush(campaign);
+        approvalServiceProvider.getObject().requestApproval(new ApprovalStartRequest(
+                ApprovalTargetType.REPAIR_CAMPAIGN, saved.getId(), ApprovalActionType.APPROVE, comment));
         return toDto(saved);
     }
 
@@ -200,6 +242,19 @@ public class RepairCampaignService {
         c.setStatus(RepairCampaignStatus.APPROVED);
         RepairCampaign saved = repository.save(c);
         logCampaign(saved, AuditAction.UPDATE, "Ремонтная кампания обновлена", before, saved);
+        return toDto(saved);
+    }
+
+    @Transactional
+    public RepairCampaignDto finalizeApprovalFromApprovalRequest(ApprovalRequest request) {
+        UUID id = request.getTargetId() == null ? request.getDocumentId() : request.getTargetId();
+        RepairCampaign campaign = getLockedOrThrow(id);
+        approvalPolicy.validateDecision(campaign, request);
+        RepairCampaign before = snapshot(campaign);
+        campaign.setStatus(RepairCampaignStatus.APPROVED);
+        campaign.setApprovedAt(java.time.Instant.now());
+        RepairCampaign saved = repository.save(campaign);
+        logCampaign(saved, AuditAction.UPDATE, "Repair campaign approved", before, saved);
         return toDto(saved);
     }
 
@@ -230,8 +285,8 @@ public class RepairCampaignService {
             throw RestException.badRequest("Only APPROVED/IN_PROGRESS campaigns can be completed");
         }
         List<RepairCampaignStage> stages = safeList(c.getStages());
-        if (stages.stream().filter(stage -> stage.getStatus() != RepairCampaignStatus.CANCELLED)
-                .anyMatch(stage -> stage.getStatus() != RepairCampaignStatus.COMPLETED)) {
+        if (stages.stream().filter(stage -> stage.getStatus() != RepairCampaignStageStatus.CANCELLED)
+                .anyMatch(stage -> stage.getStatus() != RepairCampaignStageStatus.COMPLETED)) {
             throw RestException.badRequest("Cannot complete campaign while mandatory stages are not completed");
         }
         List<WorkOrder> workOrders = campaignWorkOrders(c.getId());
@@ -249,6 +304,11 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignDto close(UUID id) {
+        return close(id, null);
+    }
+
+    @Transactional
+    public RepairCampaignDto close(UUID id, String notes) {
         RepairCampaign c = getLockedOrThrow(id);
         if (c.getStatus() != RepairCampaignStatus.COMPLETED) {
             throw RestException.badRequest("Only COMPLETED campaigns can be closed");
@@ -269,6 +329,7 @@ public class RepairCampaignService {
 
         RepairCampaign before = snapshot(c);
         c.setTotalActual(totals.approvedActual());
+        c.setClosingNotes(normalizeOptionalText(notes));
         c.setStatus(RepairCampaignStatus.CLOSED);
         RepairCampaign saved = repository.save(c);
         logCampaign(saved, AuditAction.UPDATE, "Ремонтная кампания закрыта", before, saved);
@@ -342,7 +403,7 @@ public class RepairCampaignService {
         RepairCampaignStage before = snapshot(stage);
         CampaignCostTotals totals = costTotals(workOrders);
         stage.setActualCost(totals.approvedActual());
-        stage.setStatus(RepairCampaignStatus.COMPLETED);
+        stage.setStatus(RepairCampaignStageStatus.COMPLETED);
         RepairCampaignStage saved = stageRepository.save(stage);
         recalcTotals(campaign);
         repository.save(campaign);
@@ -370,7 +431,7 @@ public class RepairCampaignService {
     @Transactional
     public WorkOrderDto createWorkOrder(UUID campaignId, UUID stageId, WorkOrderRequest request) {
         getStageForCampaign(campaignId, stageId);
-        return workOrderService.create(request.withRepairCampaign(campaignId, stageId));
+        return workOrderService.createCampaignLinked(request, campaignId, stageId);
     }
 
     @Transactional
@@ -506,7 +567,8 @@ public class RepairCampaignService {
         if (existing.isPresent()) {
             return workOrderService.findById(existing.get().getId());
         }
-        WorkOrderDto created = workOrderService.create(generatedWorkOrderRequest(campaign, stage, equipment, request));
+        WorkOrderDto created = workOrderService.createGenerated(
+                generatedWorkOrderRequest(campaign, stage, equipment, request));
         workOrderRepository.flush();
         return created;
     }
@@ -518,7 +580,7 @@ public class RepairCampaignService {
         CampaignCostTotals totals = costTotals(workOrders);
         int stageCount = safeList(campaign.getStages()).size();
         int completedStageCount = (int) safeList(campaign.getStages()).stream()
-                .filter(stage -> stage.getStatus() == RepairCampaignStatus.COMPLETED)
+                .filter(stage -> stage.getStatus() == RepairCampaignStageStatus.COMPLETED)
                 .count();
         Map<WorkOrderStatus, Long> byStatus = new EnumMap<>(WorkOrderStatus.class);
         workOrders.stream()
@@ -589,7 +651,6 @@ public class RepairCampaignService {
                 unallocatedCosts.size(),
                 unallocatedCosts.stream()
                         .map(ActualCost::getAmount)
-                        .map(RepairCampaignService::decimal)
                         .reduce(BigDecimal.ZERO, BigDecimal::add),
                 stages,
                 campaign.getCurrencyCode()
@@ -669,8 +730,8 @@ public class RepairCampaignService {
         if (r.startDate() == null || r.endDate() == null) {
             throw RestException.badRequest("Start date and end date are required");
         }
-        if (!r.endDate().isAfter(r.startDate())) {
-            throw RestException.badRequest("End date must be after start date");
+        if (r.endDate().isBefore(r.startDate())) {
+            throw RestException.badRequest("End date must be on or after start date");
         }
         if (r.totalBudget().compareTo(BigDecimal.ZERO) < 0) {
             throw RestException.badRequest("Total budget must be non-negative");
@@ -693,6 +754,35 @@ public class RepairCampaignService {
         if (scopeType == RepairCampaignScopeType.CROSS_DEPARTMENT
                 && safeList(r.participantDepartments()).isEmpty()) {
             throw RestException.badRequest("At least one participant department is required for CROSS_DEPARTMENT campaigns");
+        }
+    }
+
+    private void validateResponsibleEmployee(UUID departmentId, UUID responsibleEmployeeId) {
+        if (responsibleEmployeeId == null) {
+            return;
+        }
+        if (departmentId == null) {
+            throw RestException.badRequest("Campaign department is required for a responsible employee");
+        }
+        Employee employee = employeeRepository.findByIdAndIsDeletedFalse(responsibleEmployeeId)
+                .orElseThrow(() -> RestException.badRequest(
+                        "Responsible employee not found: " + responsibleEmployeeId));
+        if (!employee.isActive()) {
+            throw RestException.badRequest("Responsible employee must be active");
+        }
+        if (!departmentId.equals(employee.getDepartmentId())) {
+            throw new AccessDeniedException("Access denied by repair campaign scope");
+        }
+    }
+
+    private void validateExpectedVersion(RepairCampaign campaign, Long expectedVersion) {
+        if (expectedVersion == null) {
+            throw RestException.badRequest("Repair campaign version is required for update");
+        }
+        if (!Objects.equals(campaign.getVersion(), expectedVersion)) {
+            throw RestException.conflict(
+                    "Repair campaign version conflict: expected=" + expectedVersion
+                            + ", actual=" + campaign.getVersion());
         }
     }
 
@@ -937,7 +1027,6 @@ public class RepairCampaignService {
         return safeList(costs).stream()
                 .filter(cost -> cost.getStatus() == status)
                 .map(ActualCost::getAmount)
-                .map(RepairCampaignService::decimal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -1023,7 +1112,26 @@ public class RepairCampaignService {
                 budget == null ? BigDecimal.ZERO : decimal(budget.getTotalActual()),
                 budget == null ? BigDecimal.ZERO : decimal(budget.getTotalPlanned()).subtract(decimal(budget.getTotalActual())),
                 budget == null || budget.getStatus() == null ? null : budget.getStatus().name(),
-                c.getCurrencyCode()
+                c.getCurrencyCode(),
+                c.getCampaignType(),
+                c.getResponsibleEmployeeId(),
+                c.getPriority(),
+                c.getObjective(),
+                c.getVersion(),
+                c.getApprovalScopeVersion(),
+                c.getApprovalScopeHash(),
+                c.getApprovedAt(),
+                c.getPreparationStartedAt(),
+                c.getStartedAt(),
+                c.getSuspendedAt(),
+                c.getCompletedAt(),
+                c.getClosingStartedAt(),
+                c.getClosedAt(),
+                c.getCancelledAt(),
+                c.getSuspendedFromStatus(),
+                c.getClosureVersion(),
+                c.getScopeVersion(),
+                c.getClosingNotes()
         );
     }
 
@@ -1190,6 +1298,10 @@ public class RepairCampaignService {
         copy.setCode(source.getCode());
         copy.setName(source.getName());
         copy.setDepartmentId(source.getDepartmentId());
+        copy.setCampaignType(source.getCampaignType());
+        copy.setResponsibleEmployeeId(source.getResponsibleEmployeeId());
+        copy.setPriority(source.getPriority());
+        copy.setObjective(source.getObjective());
         copy.setScopeType(source.getScopeType());
         copy.setEquipmentTypeId(source.getEquipmentTypeId());
         copy.setMaintenanceBudgetId(source.getMaintenanceBudgetId());
@@ -1201,6 +1313,20 @@ public class RepairCampaignService {
         copy.setCurrencyCode(source.getCurrencyCode());
         copy.setScope(source.getScope());
         copy.setNotes(source.getNotes());
+        copy.setVersion(source.getVersion());
+        copy.setApprovalScopeVersion(source.getApprovalScopeVersion());
+        copy.setApprovalScopeHash(source.getApprovalScopeHash());
+        copy.setApprovedAt(source.getApprovedAt());
+        copy.setPreparationStartedAt(source.getPreparationStartedAt());
+        copy.setStartedAt(source.getStartedAt());
+        copy.setSuspendedAt(source.getSuspendedAt());
+        copy.setCompletedAt(source.getCompletedAt());
+        copy.setClosingStartedAt(source.getClosingStartedAt());
+        copy.setClosedAt(source.getClosedAt());
+        copy.setClosingNotes(source.getClosingNotes());
+        copy.setCancelledAt(source.getCancelledAt());
+        copy.setSuspendedFromStatus(source.getSuspendedFromStatus());
+        copy.setClosureVersion(source.getClosureVersion());
         return copy;
     }
 
@@ -1222,6 +1348,10 @@ public class RepairCampaignService {
 
     private static BigDecimal decimal(double value) {
         return BigDecimal.valueOf(value).setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private static String normalizeOptionalText(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private record CampaignCostTotals(BigDecimal approvedActual, BigDecimal pendingActual, BigDecimal rejectedActual) {

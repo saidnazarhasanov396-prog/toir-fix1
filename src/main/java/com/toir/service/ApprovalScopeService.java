@@ -19,9 +19,11 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.PlannedShutdownRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
@@ -40,6 +42,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
+import com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher;
 
 @Service
 @RequiredArgsConstructor
@@ -56,6 +59,8 @@ public class ApprovalScopeService {
     private final FinanceScopeService financeScopeService;
     private final UserRepository userRepository;
     private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
+    private final PlannedShutdownRepository plannedShutdownRepository;
+    private final RepairCampaignRepository repairCampaignRepository;
     private final SecurityAccessService securityAccessService;
 
     public boolean canReadApproval(ApprovalRequest approval) {
@@ -64,6 +69,11 @@ public class ApprovalScopeService {
         }
         if (scopeAccessService.isScopeAdmin()) {
             return true;
+        }
+        if ((effectiveTargetType(approval) == ApprovalTargetType.PLANNED_SHUTDOWN
+                || effectiveTargetType(approval) == ApprovalTargetType.REPAIR_CAMPAIGN)
+                && !canAccessLinkedDocumentScope(effectiveTargetType(approval), effectiveTargetId(approval))) {
+            return false;
         }
         return isRequester(approval)
                 || isCurrentPendingApprover(approval)
@@ -94,6 +104,10 @@ public class ApprovalScopeService {
     }
 
     public void assertCanDecideApproval(ApprovalRequest approval, ApprovalStep currentStep) {
+        assertCanDecideApproval(approval, currentStep, null);
+    }
+
+    public void assertCanDecideApproval(ApprovalRequest approval, ApprovalStep currentStep, UUID delegatedForId) {
         if (approval == null
                 || approval.getStatus() != ApprovalStatus.PENDING
                 || currentStep == null
@@ -101,12 +115,84 @@ public class ApprovalScopeService {
                 || currentStep.getStepNumber() != approval.getCurrentStep()) {
             throw forbidden();
         }
+        if (!scopeAccessService.isScopeAdmin()
+                && (effectiveTargetType(approval) == ApprovalTargetType.PLANNED_SHUTDOWN
+                || effectiveTargetType(approval) == ApprovalTargetType.REPAIR_CAMPAIGN)
+                && !canAccessLinkedDocumentScope(effectiveTargetType(approval), effectiveTargetId(approval))) {
+            throw forbidden();
+        }
+        assertPlannedShutdownSeparationOfDuty(approval, currentStep);
+        assertRepairCampaignSeparationOfDuty(approval, currentStep);
+        if (delegatedForId != null) {
+            if (!Objects.equals(currentStep.getApproverId(), delegatedForId)) {
+                throw forbidden();
+            }
+            return;
+        }
         if (scopeAccessService.isScopeAdmin() && currentStep.getApproverId() != null) {
             return;
         }
         if (!canCurrentPrincipalActOnStep(currentStep)) {
             throw forbidden();
         }
+    }
+
+    private void assertPlannedShutdownSeparationOfDuty(ApprovalRequest approval, ApprovalStep currentStep) {
+        if (effectiveTargetType(approval) != ApprovalTargetType.PLANNED_SHUTDOWN
+                || !isCriticalShutdownApprovalRole(currentStep.getApproverRole())) {
+            return;
+        }
+        Set<UUID> actorIds = currentPrincipalIds();
+        if (actorIds.contains(approval.getRequesterId())) {
+            throw new AccessDeniedException("Planned shutdown approval separation of duty forbids requester self-approval");
+        }
+        boolean alreadyApprovedOtherCriticalStep = approval.getSteps().stream()
+                .filter(step -> step != currentStep)
+                .filter(step -> step.getDecision() == ApprovalDecision.APPROVED)
+                .filter(step -> isCriticalShutdownApprovalRole(step.getApproverRole()))
+                .map(ApprovalStep::getDecidedById)
+                .filter(Objects::nonNull)
+                .anyMatch(actorIds::contains);
+        if (alreadyApprovedOtherCriticalStep) {
+            throw new AccessDeniedException("Planned shutdown approval separation of duty requires distinct production and HSE approvers");
+        }
+    }
+
+    private static boolean isCriticalShutdownApprovalRole(String role) {
+        return PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE.equals(role)
+                || PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE.equals(role);
+    }
+
+    private void assertRepairCampaignSeparationOfDuty(ApprovalRequest approval, ApprovalStep currentStep) {
+        if (effectiveTargetType(approval) != ApprovalTargetType.REPAIR_CAMPAIGN
+                || !isRepairCampaignDisciplineRole(currentStep.getApproverRole())) {
+            return;
+        }
+        Set<UUID> actorIds = currentPrincipalIds();
+        if (actorIds.contains(approval.getRequesterId())) {
+            throw new AccessDeniedException("Repair campaign requester cannot approve their own request");
+        }
+        boolean alreadyApprovedDiscipline = approval.getSteps().stream()
+                .filter(step -> step != currentStep)
+                .filter(step -> step.getDecision() == ApprovalDecision.APPROVED)
+                .filter(step -> isRepairCampaignDisciplineRole(step.getApproverRole()))
+                .map(ApprovalStep::getDecidedById)
+                .filter(Objects::nonNull)
+                .anyMatch(actorIds::contains);
+        if (alreadyApprovedDiscipline) {
+            throw new AccessDeniedException("Repair campaign approval requires a distinct actor per discipline");
+        }
+    }
+
+    private static boolean isRepairCampaignDisciplineRole(String role) {
+        return Set.of(
+                "REPAIR_CAMPAIGN_CHIEF_MECHANIC_APPROVER",
+                "REPAIR_CAMPAIGN_PRODUCTION_APPROVER",
+                "REPAIR_CAMPAIGN_WAREHOUSE_APPROVER",
+                "REPAIR_CAMPAIGN_PROCUREMENT_APPROVER",
+                "REPAIR_CAMPAIGN_FINANCE_APPROVER",
+                "REPAIR_CAMPAIGN_HSE_APPROVER",
+                "REPAIR_CAMPAIGN_CHIEF_ENGINEER_APPROVER").contains(role);
     }
 
     public void assertCanCancelApproval(ApprovalRequest approval) {
@@ -275,6 +361,10 @@ public class ApprovalScopeService {
                     ? Optional.empty()
                     : equipmentCommissioningActRepository.findByIdAndIsDeletedFalse(targetId)
                             .map(com.toir.entity.equipment.EquipmentCommissioningAct::getTargetDepartmentId);
+            case PLANNED_SHUTDOWN -> plannedShutdownRepository.findByIdAndIsDeletedFalse(targetId)
+                    .map(com.toir.entity.PlannedShutdown::getDepartmentId);
+            case REPAIR_CAMPAIGN -> repairCampaignRepository.findByIdAndIsDeletedFalse(targetId)
+                    .map(com.toir.entity.repair.RepairCampaign::getDepartmentId);
             default -> Optional.empty();
         };
     }
@@ -303,7 +393,7 @@ public class ApprovalScopeService {
         return switch (targetType) {
             case PPR_PLAN, PPR_TASK, REPAIR_REQUEST, WORK_ORDER,
                  PROCUREMENT, PROCUREMENT_REQUEST, BUDGET, MAINTENANCE_BUDGET, ACTUAL_COST,
-                 EQUIPMENT_COMMISSIONING -> true;
+                 EQUIPMENT_COMMISSIONING, PLANNED_SHUTDOWN, REPAIR_CAMPAIGN -> true;
             default -> false;
         };
     }

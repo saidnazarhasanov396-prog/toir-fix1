@@ -189,7 +189,7 @@ class LaborEntryServiceTest {
         assertThat(actualCost.getWorkOrderId()).isEqualTo(workOrderId);
         assertThat(actualCost.getBudgetLineId()).isEqualTo(budgetLineId);
         assertThat(actualCost.getCostCategoryId()).isEqualTo(laborCategory.getId());
-        assertThat(actualCost.getAmount()).isEqualTo(375000.0);
+        assertThat(actualCost.getAmount()).isEqualByComparingTo("375000.0");
     }
 
     @Test
@@ -202,7 +202,7 @@ class LaborEntryServiceTest {
         existingCost.setId(UUID.randomUUID());
         existingCost.setSourceType(ActualCostSourceType.LABOR_ENTRY);
         existingCost.setSourceId(laborEntryId);
-        existingCost.setAmount(10);
+        existingCost.setAmount(java.math.BigDecimal.valueOf(10));
         CostCategory laborCategory = costCategory("LABOR");
         when(repository.findByIdAndIsDeletedFalse(laborEntryId)).thenReturn(Optional.of(existingLabor));
         when(repository.save(any(LaborEntry.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -218,7 +218,7 @@ class LaborEntryServiceTest {
         ArgumentCaptor<ActualCost> captor = ArgumentCaptor.forClass(ActualCost.class);
         verify(actualCostRepository).save(captor.capture());
         assertThat(captor.getValue().getId()).isEqualTo(existingCost.getId());
-        assertThat(captor.getValue().getAmount()).isEqualTo(375000.0);
+        assertThat(captor.getValue().getAmount()).isEqualByComparingTo("375000.0");
     }
 
     @Test

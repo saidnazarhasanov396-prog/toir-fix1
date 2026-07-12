@@ -18,6 +18,9 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, UUID>, JpaSpecificationExecutor<Employee> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select e from Employee e where e.id=:id and e.isDeleted=false")
+    Optional<Employee> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
     @Query(value = "SELECT * FROM hr_employees WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<Employee> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 

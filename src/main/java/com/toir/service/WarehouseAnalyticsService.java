@@ -39,6 +39,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -164,33 +165,33 @@ public class WarehouseAnalyticsService {
                 continue;
             }
             if (movement.getType() == StockMovementType.RECEIPT || movement.getType() == StockMovementType.RETURN) {
-                bucket.receipt += movement.getQuantity();
+                bucket.receipt= bucket.receipt.add(movement.getQuantity());
             }
             if (movement.getType() == StockMovementType.ISSUE) {
-                bucket.issue += movement.getQuantity();
+                bucket.issue= bucket.issue.add(movement.getQuantity());
             }
             if (movement.getType() == StockMovementType.RESERVATION) {
-                bucket.reserved += movement.getQuantity();
+                bucket.reserved= bucket.reserved.add(movement.getQuantity());
             }
         }
-        double currentStock = stocks.stream().mapToDouble(WarehouseStock::getQuantity).sum();
-        double currentReserved = stocks.stream().mapToDouble(WarehouseStock::getReservedQty).sum();
+        BigDecimal currentStock = stocks.stream().map(s->new BigDecimal(Double.toString(s.getQuantity()))).reduce(BigDecimal.ZERO,BigDecimal::add);
+        BigDecimal currentReserved = stocks.stream().map(s->new BigDecimal(Double.toString(s.getReservedQty()))).reduce(BigDecimal.ZERO,BigDecimal::add);
         return buckets.entrySet().stream()
                 .map(entry -> new WarehouseMovementPointDto(
                         entry.getKey(),
-                        round(Math.max(currentStock - reverseDeltaAfter(entry.getKey(), buckets), 0)),
-                        round(entry.getValue().receipt),
-                        round(entry.getValue().issue),
-                        round(Math.max(currentReserved + entry.getValue().reserved, 0))
+                        currentStock.subtract(reverseDeltaAfter(entry.getKey(), buckets)).max(BigDecimal.ZERO).setScale(2,RoundingMode.HALF_UP),
+                        entry.getValue().receipt.setScale(2,RoundingMode.HALF_UP),
+                        entry.getValue().issue.setScale(2,RoundingMode.HALF_UP),
+                        currentReserved.add(entry.getValue().reserved).max(BigDecimal.ZERO).setScale(2,RoundingMode.HALF_UP)
                 ))
                 .toList();
     }
 
-    private double reverseDeltaAfter(LocalDate bucket, Map<LocalDate, MovementBucket> buckets) {
+    private BigDecimal reverseDeltaAfter(LocalDate bucket, Map<LocalDate, MovementBucket> buckets) {
         return buckets.entrySet().stream()
                 .filter(entry -> entry.getKey().isAfter(bucket))
-                .mapToDouble(entry -> entry.getValue().receipt - entry.getValue().issue)
-                .sum();
+                .map(entry -> entry.getValue().receipt.subtract(entry.getValue().issue))
+                .reduce(BigDecimal.ZERO,BigDecimal::add);
     }
 
     private List<WarehouseDistributionRowDto> distribution(List<WarehouseStock> stocks,
@@ -307,7 +308,7 @@ public class WarehouseAnalyticsService {
                 .forEach(item -> risks.add(new WarehouseRiskDto(
                         "WARNING",
                         "Резерв под работу",
-                        item.sparePartName() + " — " + format(item.quantity()) + " шт. под " + item.workOrderNumber(),
+                        item.sparePartName() + " — " + item.quantity().stripTrailingZeros().toPlainString() + " шт. под " + item.workOrderNumber(),
                         "OPEN_WORK_ORDER",
                         item.workOrderId(),
                         "Открыть работу"
@@ -324,14 +325,15 @@ public class WarehouseAnalyticsService {
                 .stream()
                 .map(entry -> {
                     SparePart part = parts.get(entry.getKey());
-                    double issued = entry.getValue().stream().mapToDouble(StockMovement::getQuantity).sum();
+                    BigDecimal issued = entry.getValue().stream().map(StockMovement::getQuantity)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
                     long operations = entry.getValue().size();
                     return new WarehouseConsumptionRowDto(
                             entry.getKey(),
                             part == null ? null : part.getCode(),
                             part == null ? entry.getKey().toString() : part.getName(),
                             operations,
-                            round(issued),
+                            issued.setScale(2,RoundingMode.HALF_UP),
                             round(Math.min(99, operations * 6.5)),
                             dominantReason(entry.getValue())
                     );
@@ -377,7 +379,7 @@ public class WarehouseAnalyticsService {
                             item.getWorkOrderId(),
                             workOrder == null ? null : workOrder.getNumber(),
                             eq == null ? null : eq.getName(),
-                            round(item.getQuantity()),
+                            item.getQuantity(),
                             item.getCreatedAt() == null ? null : item.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate(),
                             workOrder == null ? "PLANNED" : statusForWorkOrder(workOrder)
                     );
@@ -701,9 +703,9 @@ public class WarehouseAnalyticsService {
     }
 
     private static class MovementBucket {
-        double receipt;
-        double issue;
-        double reserved;
+        BigDecimal receipt=BigDecimal.ZERO;
+        BigDecimal issue=BigDecimal.ZERO;
+        BigDecimal reserved=BigDecimal.ZERO;
     }
 
     private static class AbcXyzAccumulator {

@@ -344,7 +344,7 @@ class ActualCostPbacScopeTest {
         actualCost.setBudgetLineId(budgetLineId);
         actualCost.setCostCategoryId(UUID.randomUUID());
         actualCost.setStatus(status);
-        actualCost.setAmount(100);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100));
         actualCost.setCostDate(Instant.parse("2026-05-01T00:00:00Z"));
         return actualCost;
     }
@@ -361,7 +361,7 @@ class ActualCostPbacScopeTest {
                 null,
                 null,
                 null,
-                100,
+                java.math.BigDecimal.valueOf(100),
                 Instant.parse("2026-05-01T00:00:00Z"),
                 null
         );

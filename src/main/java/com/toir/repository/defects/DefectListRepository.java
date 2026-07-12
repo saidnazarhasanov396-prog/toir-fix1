@@ -38,6 +38,7 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
             select * from defect_lists d where
             d.is_deleted = false
             and (:equipmentId is null or d.equipment_id = cast(:equipmentId as uuid))
+            and (cast(:status as varchar) is null or d.status = cast(:status as varchar))
             and (:search is null or lower(d.code) like lower(concat('%', :search, '%'))
             or lower(d.title) like lower(concat('%', :search, '%'))
             or lower(d.notes) like lower(concat('%', :search, '%')))
@@ -46,11 +47,13 @@ public interface DefectListRepository extends JpaRepository<DefectList, UUID> {
             select count(*) from defect_lists d where
             d.is_deleted = false
             and (:equipmentId is null or d.equipment_id = cast(:equipmentId as uuid))
+            and (cast(:status as varchar) is null or d.status = cast(:status as varchar))
             and (:search is null or lower(d.code) like lower(concat('%', :search, '%'))
             or lower(d.title) like lower(concat('%', :search, '%'))
             or lower(d.notes) like lower(concat('%', :search, '%')))
             """)
     Page<DefectList> searchPaginated(@Param("equipmentId") UUID equipmentId,
+                                     @Param("status") DefectListStatus status,
                                      @Param("search") String search,
                                      Pageable pageable);
 

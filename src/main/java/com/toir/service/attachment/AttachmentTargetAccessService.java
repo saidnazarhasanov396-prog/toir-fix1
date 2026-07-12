@@ -9,6 +9,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.projects.ProcurementRequest;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.users.Employee;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.AttachmentTargetType;
@@ -26,6 +27,7 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
@@ -54,6 +56,7 @@ public class AttachmentTargetAccessService {
     private final EquipmentCommissioningActRepository equipmentCommissioningActRepository;
     private final DefectRepository defectRepository;
     private final EmployeeRepository employeeRepository;
+    private final RepairCampaignRepository repairCampaignRepository;
 
     public AttachmentTargetType assertCanAccess(AttachmentTargetType targetType, UUID targetId) {
         if (targetType == null) {
@@ -73,6 +76,7 @@ public class AttachmentTargetAccessService {
             case PROCUREMENT_REQUEST -> assertCanAccessProcurementRequest(targetId);
             case PURCHASE_ORDER -> assertCanAccessPurchaseOrder(targetId);
             case STOCK_MOVEMENT -> assertCanAccessStockMovement(targetId);
+            case REPAIR_CAMPAIGN -> assertCanAccessRepairCampaign(targetId);
             case EQUIPMENT_COMMISSIONING -> assertCanAccessEquipmentCommissioning(targetId);
             case HR_EMPLOYEE -> assertCanAccessHrEmployee(targetId);
         }
@@ -86,6 +90,7 @@ public class AttachmentTargetAccessService {
             case WORK_ORDER -> FileCategory.WORK_ORDER_DOCUMENT;
             case STOCK_MOVEMENT -> FileCategory.STOCK_MOVEMENT_DOCUMENT;
             case HR_EMPLOYEE -> FileCategory.PASSPORT;
+            case REPAIR_CAMPAIGN -> FileCategory.DOCUMENT;
             case REPAIR_REQUEST, DEFECT, COMPLETION_ACT, APPROVAL, PROCUREMENT_REQUEST, PURCHASE_ORDER,
                  EQUIPMENT_COMMISSIONING -> FileCategory.DOCUMENT;
         };
@@ -130,6 +135,12 @@ public class AttachmentTargetAccessService {
             return;
         }
         throw new AccessDeniedException("Access denied by repair request scope");
+    }
+
+    private void assertCanAccessRepairCampaign(UUID campaignId) {
+        RepairCampaign campaign = repairCampaignRepository.findByIdAndIsDeletedFalse(campaignId)
+                .orElseThrow(() -> RestException.notFound("Repair campaign not found: " + campaignId));
+        scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
     }
 
     private void assertCanAccessHrEmployee(UUID employeeId) {

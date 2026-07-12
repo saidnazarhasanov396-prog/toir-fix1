@@ -4,6 +4,7 @@ import com.toir.entity.maintenance.WorkOrderSparePartRequirement;
 import com.toir.enums.WorkOrderSparePartRequirementSourceType;
 import com.toir.enums.WorkOrderSparePartRequirementStatus;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 public record WorkOrderSparePartRequirementDto(
         UUID id,
@@ -12,17 +13,20 @@ public record WorkOrderSparePartRequirementDto(
         UUID sourceRequirementId,
         UUID templateId,
         UUID operationId,
+        UUID campaignRequirementId,
+        UUID warehouseId,
         String operationName,
         UUID sparePartId,
         String sparePartCode,
         String sparePartName,
-        double requiredQty,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class)
+        BigDecimal requiredQty,
         String unit,
         String criticality,
         String notes,
         WorkOrderSparePartRequirementStatus status,
         // Faktik bajarilish ma'lumotlari
-        Double issuedQty,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal issuedQty,
         UUID issuedSparePartId,
         String issuedSparePartCode,
         String issuedSparePartName,
@@ -48,6 +52,8 @@ public record WorkOrderSparePartRequirementDto(
                 requirement.getOperationId() != null
                         ? requirement.getOperationId()
                         : operation == null ? null : operation.getId(),
+                requirement.getCampaignRequirementId(),
+                requirement.getWarehouseId(),
                 operation == null ? null : operation.getName(),
                 requirement.getSparePartId() != null
                         ? requirement.getSparePartId()
@@ -65,7 +71,7 @@ public record WorkOrderSparePartRequirementDto(
 
     public static WorkOrderSparePartRequirementDto withUsage(
             WorkOrderSparePartRequirement requirement,
-            Double issuedQty,
+            BigDecimal issuedQty,
             UUID issuedSparePartId,
             String issuedSparePartCode,
             String issuedSparePartName
@@ -75,7 +81,7 @@ public record WorkOrderSparePartRequirementDto(
                 && !issuedSparePartId.equals(requirement.getSparePartId());
         return new WorkOrderSparePartRequirementDto(
                 base.id(), base.workOrderId(), base.sourceType(), base.sourceRequirementId(),
-                base.templateId(), base.operationId(), base.operationName(),
+                base.templateId(), base.operationId(), base.campaignRequirementId(), base.warehouseId(), base.operationName(),
                 base.sparePartId(), base.sparePartCode(), base.sparePartName(),
                 base.requiredQty(), base.unit(), base.criticality(), base.notes(), base.status(),
                 issuedQty, issuedSparePartId, issuedSparePartCode, issuedSparePartName, isReplacement

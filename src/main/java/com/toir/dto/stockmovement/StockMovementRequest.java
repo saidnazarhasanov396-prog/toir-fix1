@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public record StockMovementRequest(
@@ -13,7 +14,7 @@ public record StockMovementRequest(
         @NotNull UUID sparePartId,
         UUID workOrderId,
         @NotNull StockMovementType type,
-        @Positive double quantity,
+        @Positive @jakarta.validation.constraints.Digits(integer=15,fraction=4) @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using=com.toir.dto.common.MoneyDecimalStringDeserializer.class) BigDecimal quantity,
         Double unitCost,
         String documentNumber,
         UUID createdById,
@@ -28,7 +29,7 @@ public record StockMovementRequest(
                                 UUID sparePartId,
                                 UUID workOrderId,
                                 StockMovementType type,
-                                double quantity,
+                                BigDecimal quantity,
                                 Double unitCost,
                                 String documentNumber,
                                 UUID createdById,

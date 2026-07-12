@@ -14,10 +14,13 @@ import com.toir.entity.projects.BudgetLine;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignStage;
+import com.toir.entity.users.Employee;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignScopeType;
+import com.toir.enums.RepairCampaignPriority;
 import com.toir.enums.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignStageStatus;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
@@ -31,6 +34,7 @@ import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.repair.RepairCampaignDepartmentRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.service.repair.RepairCampaignService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -41,6 +45,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -52,10 +57,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class RepairCampaignServiceTest {
@@ -91,6 +99,9 @@ class RepairCampaignServiceTest {
     private EquipmentRepository equipmentRepository;
 
     @Mock
+    private EmployeeRepository employeeRepository;
+
+    @Mock
     private RepairAcceptanceRepository repairAcceptanceRepository;
 
     @Mock
@@ -99,8 +110,161 @@ class RepairCampaignServiceTest {
     @Mock
     private AuditBuilderService auditBuilderService;
 
+    @Mock
+    private com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
+
     @InjectMocks
     private RepairCampaignService service;
+
+    @Test
+    void createRequiresActiveResponsibleEmployeeInCampaignDepartment() {
+        UUID campaignDepartmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        Employee employee = new Employee();
+        employee.setId(employeeId);
+        employee.setDepartmentId(UUID.randomUUID());
+        employee.setActive(true);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+
+        assertThatThrownBy(() -> service.create(taskOneRequest(
+                campaignDepartmentId, employeeId, LocalDate.of(2026, 2, 1))))
+                .isInstanceOfSatisfying(AccessDeniedException.class,
+                        ex -> assertThat(ex.getMessage()).isEqualTo("Access denied by repair campaign scope"));
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsInactiveResponsibleEmployee() {
+        UUID departmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        Employee employee = new Employee();
+        employee.setId(employeeId);
+        employee.setDepartmentId(departmentId);
+        employee.setActive(false);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+
+        assertThatThrownBy(() -> service.create(taskOneRequest(
+                departmentId, employeeId, LocalDate.of(2026, 2, 1))))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("must be active");
+                });
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createStoresLifecycleMetadataAndAllowsSingleDayWindow() {
+        UUID departmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        Employee employee = new Employee();
+        employee.setId(employeeId);
+        employee.setDepartmentId(departmentId);
+        employee.setActive(true);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
+        when(repository.save(any(RepairCampaign.class))).thenAnswer(invocation -> {
+            RepairCampaign campaign = invocation.getArgument(0);
+            campaign.setId(UUID.randomUUID());
+            campaign.setVersion(0L);
+            return campaign;
+        });
+
+        RepairCampaignDto result = service.create(taskOneRequest(
+                departmentId, employeeId, LocalDate.of(2026, 1, 1)));
+
+        assertThat(result.campaignType()).isEqualTo("MAJOR_OVERHAUL");
+        assertThat(result.responsibleEmployeeId()).isEqualTo(employeeId);
+        assertThat(result.priority()).isEqualTo(RepairCampaignPriority.HIGH);
+        assertThat(result.objective()).isEqualTo("Restore design capacity");
+        assertThat(result.version()).isZero();
+        assertThat(result.status()).isEqualTo(RepairCampaignStatus.DRAFT);
+        assertThat(result.closureVersion()).isZero();
+    }
+
+    @Test
+    void updateRejectsStaleOptimisticVersion() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setVersion(4L);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+
+        RepairCampaignRequest request = taskOneRequest(null, null, LocalDate.of(2026, 2, 1));
+
+        assertThatThrownBy(() -> service.update(campaignId, request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).contains("version");
+                });
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateRejectsMissingOptimisticVersion() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setVersion(4L);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+
+        assertThatThrownBy(() -> service.update(campaignId,
+                taskOneRequest(null, null, LocalDate.of(2026, 2, 1), null)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("version is required");
+                });
+    }
+
+    @Test
+    void updateReturnsVersionAdvancedByFlushExactlyOnce() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setVersion(3L);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.saveAndFlush(campaign)).thenAnswer(invocation -> {
+            campaign.setVersion(4L);
+            return campaign;
+        });
+
+        RepairCampaignDto result = service.update(campaignId,
+                taskOneRequest(null, null, LocalDate.of(2026, 2, 1), 3L));
+
+        assertThat(result.version()).isEqualTo(4L);
+        verify(repository).saveAndFlush(campaign);
+        verify(repository, never()).save(campaign);
+    }
+
+    @Test
+    void addStageCannotAcceptAggregateOnlyStatus() {
+        assertThatThrownBy(() -> new RepairCampaignStageDto(
+                null, 1, "Invalid", LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 2),
+                BigDecimal.ONE, BigDecimal.ZERO, RepairCampaignStatus.SUSPENDED, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Aggregate-only status");
+    }
+
+    @Test
+    void addStageKeepsServerOwnedDedicatedDraftStatus() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(stageRepository.save(any())).thenAnswer(invocation -> {
+            RepairCampaignStage stage = invocation.getArgument(0);
+            stage.setId(UUID.randomUUID());
+            return stage;
+        });
+        when(repository.save(campaign)).thenReturn(campaign);
+
+        RepairCampaignStageDto result = service.addStage(campaignId, new RepairCampaignStageDto(
+                null, 1, "Valid", LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 2),
+                BigDecimal.ONE, BigDecimal.ZERO, RepairCampaignStageStatus.APPROVED, null,
+                0, 0, BigDecimal.ZERO, BigDecimal.ZERO, null,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+
+        assertThat(result.status()).isEqualTo(RepairCampaignStageStatus.DRAFT);
+    }
 
     @Test
     void createPreservesFourDecimalBudgetAndCurrency() {
@@ -230,16 +394,43 @@ class RepairCampaignServiceTest {
         equipment.setDepartmentId(UUID.randomUUID());
         when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
-        when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
+        lenient().when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
                 .thenReturn(List.of(equipment));
 
         service.generateWorkOrders(campaignId, generateRequest(stageId), "generation-1");
 
         ArgumentCaptor<WorkOrderRequest> requestCaptor = ArgumentCaptor.forClass(WorkOrderRequest.class);
-        verify(workOrderService).create(requestCaptor.capture());
+        verify(workOrderService).createGenerated(requestCaptor.capture());
         Object generationKey = WorkOrderRequest.class.getMethod("generationKey")
                 .invoke(requestCaptor.getValue());
         assertThat(generationKey).isEqualTo("RC:" + campaignId + ":" + stageId + ":" + equipmentId);
+    }
+
+    @Test
+    void manualCampaignCreatePassesUntouchedPublicRequestAndServerIdentity() {
+        GenerationFixture fixture = generationFixture();
+        WorkOrderRequest publicRequest = publicCampaignRequest(fixture.equipmentId());
+        var expected = workOrderDto(UUID.randomUUID());
+        when(workOrderService.createCampaignLinked(same(publicRequest), eq(fixture.campaignId()), eq(fixture.stageId())))
+                .thenReturn(expected);
+
+        assertThat(service.createWorkOrder(fixture.campaignId(), fixture.stageId(), publicRequest)).isSameAs(expected);
+        verify(workOrderService).createCampaignLinked(same(publicRequest), eq(fixture.campaignId()), eq(fixture.stageId()));
+    }
+
+    @Test
+    void manualCampaignCreatePropagatesCanonicalFieldRejectionWithoutFallbackCreate() {
+        GenerationFixture fixture = generationFixture();
+        WorkOrderRequest poisoned = publicCampaignRequest(fixture.equipmentId())
+                .withGenerationKey("PS:forged")
+                .withSafetyRequirements(false, false)
+                .withPlannedShutdown(UUID.randomUUID(), UUID.randomUUID());
+        when(workOrderService.createCampaignLinked(same(poisoned), eq(fixture.campaignId()), eq(fixture.stageId())))
+                .thenThrow(RestException.badRequest("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED"));
+
+        assertThatThrownBy(() -> service.createWorkOrder(fixture.campaignId(), fixture.stageId(), poisoned))
+                .hasMessageContaining("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED");
+        verify(workOrderService, never()).createGenerated(any());
     }
 
     @Test
@@ -261,21 +452,21 @@ class RepairCampaignServiceTest {
         order.verify(workOrderRepository).lockGenerationKey(key);
         order.verify(workOrderRepository).findByGenerationKeyAndIsDeletedFalse(key);
         order.verify(workOrderService).findById(existing.getId());
-        verify(workOrderService, never()).create(any());
+        verify(workOrderService, never()).createGenerated(any());
     }
 
     @Test
     void generateWorkOrdersLocksBeforeCanonicalLookupAndCreate() {
         GenerationFixture fixture = generationFixture();
         String key = "RC:" + fixture.campaignId() + ":" + fixture.stageId() + ":" + fixture.equipmentId();
-        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID()));
+        when(workOrderService.createGenerated(any())).thenReturn(workOrderDto(UUID.randomUUID()));
 
         service.generateWorkOrders(fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1");
 
         InOrder order = inOrder(workOrderRepository, workOrderService);
         order.verify(workOrderRepository).lockGenerationKey(key);
         order.verify(workOrderRepository).findByGenerationKeyAndIsDeletedFalse(key);
-        order.verify(workOrderService).create(any());
+        order.verify(workOrderService).createGenerated(any());
     }
 
     @Test
@@ -290,7 +481,7 @@ class RepairCampaignServiceTest {
         second.setDepartmentId(UUID.randomUUID());
         when(equipmentRepository.findAllForMaintenanceRegulations(fixture.campaign().getEquipmentTypeId()))
                 .thenReturn(List.of(second, first));
-        when(workOrderService.create(any())).thenReturn(workOrderDto(UUID.randomUUID()));
+        when(workOrderService.createGenerated(any())).thenReturn(workOrderDto(UUID.randomUUID()));
 
         service.generateWorkOrders(fixture.campaignId(), generateRequest(fixture.stageId()), "generation-1");
 
@@ -312,7 +503,7 @@ class RepairCampaignServiceTest {
         second.setDepartmentId(UUID.randomUUID());
         when(equipmentRepository.findAllForMaintenanceRegulations(fixture.campaign().getEquipmentTypeId()))
                 .thenReturn(List.of(fixture.equipment(), second));
-        when(workOrderService.create(any()))
+        when(workOrderService.createGenerated(any()))
                 .thenReturn(workOrderDto(UUID.randomUUID()))
                 .thenThrow(new IllegalStateException("second create failed"));
 
@@ -321,7 +512,7 @@ class RepairCampaignServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("second create failed");
 
-        verify(workOrderService, org.mockito.Mockito.times(2)).create(any());
+        verify(workOrderService, org.mockito.Mockito.times(2)).createGenerated(any());
     }
 
     @Test
@@ -370,9 +561,9 @@ class RepairCampaignServiceTest {
         equipment.setCode("P-1");
         equipment.setName("Pump");
         equipment.setDepartmentId(UUID.randomUUID());
-        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        lenient().when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
-        when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
+        lenient().when(equipmentRepository.findAllForMaintenanceRegulations(campaign.getEquipmentTypeId()))
                 .thenReturn(List.of(equipment));
         return new GenerationFixture(campaignId, stageId, equipmentId, campaign, equipment);
     }
@@ -385,6 +576,13 @@ class RepairCampaignServiceTest {
                 com.toir.enums.PriorityLevel.MEDIUM, null, null, null, null, null, null, null,
                 null, null, null, null, null, List.of(), null, null, 0, 0
         );
+    }
+
+    private WorkOrderRequest publicCampaignRequest(UUID equipmentId) {
+        return new WorkOrderRequest(null, "Campaign work", equipmentId, UUID.randomUUID(),
+                null, null, null, null, com.toir.enums.WorkOrderType.OVERHAUL,
+                com.toir.enums.WorkType.REPAIR, null, null, com.toir.enums.PriorityLevel.MEDIUM,
+                null, null, null, "manual campaign work");
     }
 
     private record GenerationFixture(
@@ -609,7 +807,7 @@ class RepairCampaignServiceTest {
                 LocalDate.of(2026, 1, 10),
                 BigDecimal.valueOf(700),
                 BigDecimal.ZERO,
-                RepairCampaignStatus.DRAFT,
+                RepairCampaignStageStatus.DRAFT,
                 null,
                 0,
                 0,
@@ -643,7 +841,7 @@ class RepairCampaignServiceTest {
                 LocalDate.of(2026, 1, 10),
                 BigDecimal.valueOf(700),
                 BigDecimal.ZERO,
-                RepairCampaignStatus.DRAFT,
+                RepairCampaignStageStatus.DRAFT,
                 null,
                 0,
                 0,
@@ -732,7 +930,7 @@ class RepairCampaignServiceTest {
         approvedUnallocated.setWorkOrderId(closedOrder.getId());
         approvedUnallocated.setStatus(ActualCostStatus.APPROVED);
         approvedUnallocated.setCostCategoryId(UUID.randomUUID());
-        approvedUnallocated.setAmount(100);
+        approvedUnallocated.setAmount(java.math.BigDecimal.valueOf(100));
 
         when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(workOrderRepository.findAllByRepairCampaignIdAndIsDeletedFalseOrderByUpdatedAtDesc(campaignId))
@@ -749,6 +947,58 @@ class RepairCampaignServiceTest {
                 });
 
         verify(repository, never()).save(campaign);
+    }
+
+    @Test
+    void closePersistsTrimmedClosingNotes() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setStatus(RepairCampaignStatus.COMPLETED);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(workOrderRepository.findAllByRepairCampaignIdAndIsDeletedFalseOrderByUpdatedAtDesc(campaignId))
+                .thenReturn(List.of());
+        when(repository.save(campaign)).thenReturn(campaign);
+
+        service.close(campaignId, "  completed on schedule  ");
+
+        assertThat(campaign.getClosingNotes()).isEqualTo("completed on schedule");
+        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.CLOSED);
+    }
+
+    private RepairCampaignRequest taskOneRequest(
+            UUID departmentId,
+            UUID responsibleEmployeeId,
+            LocalDate endDate
+    ) {
+        return taskOneRequest(departmentId, responsibleEmployeeId, endDate, 3L);
+    }
+
+    private RepairCampaignRequest taskOneRequest(
+            UUID departmentId,
+            UUID responsibleEmployeeId,
+            LocalDate endDate,
+            Long version
+    ) {
+        return new RepairCampaignRequest(
+                null,
+                "Task 1 campaign",
+                departmentId,
+                LocalDate.of(2026, 1, 1),
+                endDate,
+                new BigDecimal("1000.0000"),
+                RepairCampaignScopeType.CUSTOM,
+                null,
+                List.of(),
+                "Legacy description",
+                null,
+                null,
+                "UZS",
+                "MAJOR_OVERHAUL",
+                responsibleEmployeeId,
+                RepairCampaignPriority.HIGH,
+                "Restore design capacity",
+                version
+        );
     }
 
     private RepairCampaign campaign(UUID id, UUID maintenanceBudgetId) {

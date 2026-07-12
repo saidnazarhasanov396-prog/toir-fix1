@@ -22,6 +22,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.stream.Collectors;
 
@@ -29,7 +30,12 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(RestException.class)
-    public ResponseEntity<ErrorResponse> handleRestException(RestException ex, HttpServletRequest request) {
+    public ResponseEntity<?> handleRestException(RestException ex, HttpServletRequest request) {
+        if (ex instanceof PlannedShutdownBlockerException blocker) {
+            return ResponseEntity.status(ex.getStatus()).body(new PlannedShutdownBlockerResponse(
+                    ex.getMessage(), request.getRequestURI(), LocalDateTime.now(), ex.getStatus().value(),
+                    blocker.getVersion(), blocker.getBlockers()));
+        }
         return build(ex.getStatus(), ex.getMessage(), request);
     }
 

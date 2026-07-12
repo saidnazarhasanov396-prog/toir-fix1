@@ -230,7 +230,7 @@ public class EquipmentCostDrilldownService {
 
         return new EquipmentCostDrilldownResponse.Row(
                 cost.getId(),
-                cost.getAmount(),
+                cost.getAmount().doubleValue(),
                 DEFAULT_CURRENCY,
                 cost.getStatus(),
                 category == null ? null : new EquipmentCostDrilldownResponse.CategoryRef(

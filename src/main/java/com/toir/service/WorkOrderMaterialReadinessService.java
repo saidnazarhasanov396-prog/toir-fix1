@@ -84,35 +84,32 @@ public class WorkOrderMaterialReadinessService {
     ) {
         UUID requirementId = requirement.getId();
         UUID sparePartId = sparePartId(requirement);
-        double requiredQty = positive(requirement.getRequiredQty());
-        double reservedQty = reservations.stream()
+        BigDecimal requiredQty = positive(requirement.getRequiredQty());
+        BigDecimal reservedQty = reservations.stream()
                 .filter(reservation -> matchesRequirementOrFallback(
                         reservation.getRequirementId(),
                         reservation.getWorkOrderId(),
                         reservation.getSparePartId(),
                         requirement
                 ))
-                .mapToDouble(reservation -> positive(reservation.getQuantity()))
-                .sum();
-        double issuedQty = usages.stream()
+                .map(Reservation::getQuantity).map(this::positive).reduce(BigDecimal.ZERO,BigDecimal::add);
+        BigDecimal issuedQty = usages.stream()
                 .filter(usage -> matchesRequirementOrFallback(
                         usage.getRequirementId(),
                         usage.getWorkOrderId(),
                         usage.getSparePartId(),
                         requirement
                 ))
-                .mapToDouble(usage -> positive(usage.getQuantity()))
-                .sum();
-        double returnedQty = returns.stream()
+                .map(RepairMaterialUsage::getQuantity).map(this::positive).reduce(BigDecimal.ZERO,BigDecimal::add);
+        BigDecimal returnedQty = returns.stream()
                 .filter(returned -> returned.getStatus() == null
                         || returned.getStatus() == RepairMaterialReturnStatus.POSTED)
                 .filter(returned -> matchesReturn(returned, requirement, usageById))
-                .mapToDouble(returned -> positive(returned.getQuantity()))
-                .sum();
+                .map(RepairMaterialReturn::getQuantity).map(this::positive).reduce(BigDecimal.ZERO,BigDecimal::add);
 
-        double netIssued = Math.max(issuedQty - returnedQty, 0);
-        double coveredQty = reservedQty + netIssued;
-        double shortageQty = Math.max(requiredQty - coveredQty, 0);
+        BigDecimal netIssued = issuedQty.subtract(returnedQty).max(BigDecimal.ZERO);
+        BigDecimal coveredQty = reservedQty.add(netIssued);
+        BigDecimal shortageQty = requiredQty.subtract(coveredQty).max(BigDecimal.ZERO);
         MaterialReadinessStatus status = rowStatus(requiredQty, reservedQty, netIssued, shortageQty, coveredQty);
         boolean blocking = status == MaterialReadinessStatus.SHORTAGE || status == MaterialReadinessStatus.PARTIAL;
         SparePart sparePart = requirement.getSparePart();
@@ -170,25 +167,25 @@ public class WorkOrderMaterialReadinessService {
     }
 
     private MaterialReadinessStatus rowStatus(
-            double requiredQty,
-            double reservedQty,
-            double netIssued,
-            double shortageQty,
-            double coveredQty
+            BigDecimal requiredQty,
+            BigDecimal reservedQty,
+            BigDecimal netIssued,
+            BigDecimal shortageQty,
+            BigDecimal coveredQty
     ) {
-        if (requiredQty <= 0) {
+        if (requiredQty.signum() <= 0) {
             return MaterialReadinessStatus.NOT_REQUIRED;
         }
-        if (netIssued >= requiredQty) {
+        if (netIssued.compareTo(requiredQty)>=0) {
             return MaterialReadinessStatus.ISSUED;
         }
-        if (reservedQty >= requiredQty || coveredQty >= requiredQty) {
+        if (reservedQty.compareTo(requiredQty)>=0 || coveredQty.compareTo(requiredQty)>=0) {
             return MaterialReadinessStatus.READY;
         }
-        if (shortageQty > 0 && coveredQty > 0) {
+        if (shortageQty.signum()>0 && coveredQty.signum()>0) {
             return MaterialReadinessStatus.PARTIAL;
         }
-        if (shortageQty > 0) {
+        if (shortageQty.signum()>0) {
             return MaterialReadinessStatus.SHORTAGE;
         }
         return MaterialReadinessStatus.UNKNOWN;
@@ -235,11 +232,7 @@ public class WorkOrderMaterialReadinessService {
         return requirement.getSparePart() == null ? null : requirement.getSparePart().getId();
     }
 
-    private double positive(double value) {
-        return Math.max(value, 0);
-    }
-
-    private double positive(BigDecimal value) {
-        return value == null ? 0 : Math.max(value.doubleValue(), 0);
+    private BigDecimal positive(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value.max(BigDecimal.ZERO);
     }
 }

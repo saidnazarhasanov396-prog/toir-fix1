@@ -13,6 +13,7 @@ import com.toir.entity.defects.DefectList;
 import com.toir.entity.defects.DefectListLine;
 import com.toir.enums.DefectListStatus;
 import com.toir.entity.repair.RepairRequest;
+import com.toir.entity.repair.RepairCampaign;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.EquipmentNodeType;
 import com.toir.enums.PriorityLevel;
@@ -30,6 +31,7 @@ import com.toir.repository.equipment.EquipmentNodeRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projection.DefectStatsProjection;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.OperationalIssueLifecycleSyncService;
 import com.toir.service.attachment.AttachmentGroupService;
@@ -91,6 +93,9 @@ class DefectServiceTest {
     RepairRequestRepository repairRequestRepository;
 
     @Mock
+    RepairCampaignRepository repairCampaignRepository;
+
+    @Mock
     WorkOrderRepository workOrderRepository;
 
     @Mock
@@ -148,6 +153,26 @@ class DefectServiceTest {
         assertThat(result).isNotNull();
         assertThat(result.getContent()).isEmpty();
         verify(repository).searchPaginated(eq(null), eq(null), eq(null), eq(null), eq(null), eq(null), eq(pageRequest));
+    }
+
+    @Test
+    void searchByRepairCampaignAppliesCampaignStatusAndSeverity() {
+        UUID campaignId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        RepairCampaign campaign = new RepairCampaign();
+        campaign.setId(campaignId);
+        campaign.setDepartmentId(departmentId);
+        PageRequest pageRequest = PageRequest.of(0, 200);
+        when(repairCampaignRepository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.searchByRepairCampaign(campaignId, "OPEN", "HIGH", pageRequest))
+                .thenReturn(new PageImpl<>(List.of(), pageRequest, 0));
+
+        Page<DefectResponse> result = service.searchByRepairCampaign(
+                campaignId, DefectStatus.OPEN, "HIGH", 0, 200);
+
+        assertThat(result).isEmpty();
+        verify(scopeAccessService).assertCanAccessDepartment(departmentId);
+        verify(repository).searchByRepairCampaign(campaignId, "OPEN", "HIGH", pageRequest);
     }
 
     @Test
@@ -707,6 +732,7 @@ class DefectServiceTest {
 
         assertThat(response.linkedWorkOrders()).hasSize(1);
         assertThat(response.linkedWorkOrders().getFirst().id()).isEqualTo(linkedWorkOrder.getId());
+        assertThat(response.workOrderId()).isEqualTo(linkedWorkOrder.getId());
         assertThat(response.linkedWorkOrders().getFirst().number()).isEqualTo(linkedWorkOrder.getNumber());
     }
 

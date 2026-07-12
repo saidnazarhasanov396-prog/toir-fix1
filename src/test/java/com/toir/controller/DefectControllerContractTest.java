@@ -531,7 +531,7 @@ class DefectControllerContractTest {
                                 Instant.now().plusSeconds(7200),
                                 null
                         )
-                ), false, 0, null
+                ), false, 0, null, null
         );
     }
 

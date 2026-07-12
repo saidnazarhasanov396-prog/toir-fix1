@@ -175,7 +175,8 @@ class RbacStockMovementSecurityTest {
         mockMvc.perform(post("/api/v1/stock-movements")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(stockMovementPayload(StockMovementType.RECEIPT)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.quantity").value("1.0000"));
     }
 
     @Test
@@ -249,7 +250,7 @@ class RbacStockMovementSecurityTest {
                 "WO-42",
                 "Pump repair",
                 type,
-                1,
+                new java.math.BigDecimal("1.0000"),
                 10.0,
                 "DOC-1",
                 UUID.randomUUID(),
@@ -265,7 +266,7 @@ class RbacStockMovementSecurityTest {
                   "warehouseId": "%s",
                   "sparePartId": "%s",
                   "type": "%s",
-                  "quantity": 1
+                  "quantity": "1.0000"
                 }
                 """.formatted(UUID.randomUUID(), UUID.randomUUID(), type.name());
     }

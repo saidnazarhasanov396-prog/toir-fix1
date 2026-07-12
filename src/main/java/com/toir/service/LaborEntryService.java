@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -179,7 +180,7 @@ public class LaborEntryService {
         cost.setWorkOrderId(workOrder.getId());
         cost.setBudgetLineId(repairCampaignBudgetLineResolver.resolveForWorkOrder(workOrder));
         cost.setCostCategoryId(category.getId());
-        cost.setAmount(laborEntry.getHours() * laborEntry.getRate());
+        cost.setAmount(BigDecimal.valueOf(laborEntry.getHours()).multiply(BigDecimal.valueOf(laborEntry.getRate())));
         cost.setStatus(ActualCostStatus.PENDING);
         cost.setNotes("Generated from labor entry " + laborEntry.getId());
         actualCostRepository.save(cost);

@@ -26,6 +26,8 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
 
     Optional<WorkOrder> findByGenerationKeyAndIsDeletedFalse(String generationKey);
 
+    Optional<WorkOrder> findByShutdownWorkItemIdAndIsDeletedFalse(UUID shutdownWorkItemId);
+
     @Query(value = "SELECT pg_advisory_xact_lock(hashtextextended(:generationKey, 0))", nativeQuery = true)
     void lockGenerationKey(@Param("generationKey") String generationKey);
 
@@ -37,6 +39,24 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM work_orders WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
+
+    @Query(value = """
+            SELECT EXISTS(SELECT 1 FROM work_orders
+              WHERE shutdown_work_item_id = cast(:itemId as uuid)
+                AND status NOT IN ('COMPLETED', 'CLOSED', 'CANCELLED')
+                AND is_deleted = false)
+            """, nativeQuery = true)
+    boolean existsActiveByShutdownWorkItemId(@Param("itemId") UUID itemId);
+
+    @Query(value = """
+            SELECT EXISTS(SELECT 1 FROM work_orders
+              WHERE planned_shutdown_id = cast(:shutdownId as uuid)
+                AND status NOT IN ('COMPLETED', 'CLOSED', 'CANCELLED')
+                AND is_deleted = false)
+            """, nativeQuery = true)
+    boolean existsActiveByPlannedShutdownId(@Param("shutdownId") UUID shutdownId);
+
+    List<WorkOrder> findAllByPlannedShutdownIdAndIsDeletedFalseOrderByUpdatedAtDesc(UUID shutdownId);
 
     @Query(value = "SELECT COUNT(*) FROM work_orders WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
@@ -168,6 +188,11 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
                 nullif(to_jsonb(w)->>'repair_campaign_stage_id', '')::uuid as repair_campaign_stage_id,
                 nullif(to_jsonb(w)->>'budget_line_id', '')::uuid as budget_line_id,
                 to_jsonb(w)->>'cycle_key' as cycle_key,
+                coalesce(nullif(to_jsonb(w)->>'requires_shutdown', '')::boolean, false) as requires_shutdown,
+                coalesce(nullif(to_jsonb(w)->>'requires_isolation', '')::boolean, false) as requires_isolation,
+                to_jsonb(w)->>'generation_key' as generation_key,
+                nullif(to_jsonb(w)->>'planned_shutdown_id', '')::uuid as planned_shutdown_id,
+                nullif(to_jsonb(w)->>'shutdown_work_item_id', '')::uuid as shutdown_work_item_id,
                 coalesce(
                     nullif(to_jsonb(w)->>'counteragent_id', '')::uuid,
                     nullif(to_jsonb(w)->>'contractor_id', '')::uuid

@@ -14,6 +14,7 @@ public final class RolePermissionDefaults {
             PermissionConstants.PLANNED_SHUTDOWN_READ,
             PermissionConstants.PLANNED_SHUTDOWN_CREATE,
             PermissionConstants.PLANNED_SHUTDOWN_UPDATE,
+            PermissionConstants.PLANNED_SHUTDOWN_REQUEST_APPROVAL,
             PermissionConstants.PLANNED_SHUTDOWN_APPROVE,
             PermissionConstants.PLANNED_SHUTDOWN_PREPARE,
             PermissionConstants.PLANNED_SHUTDOWN_CONFIRM_SAFE_STATE,
@@ -33,7 +34,22 @@ public final class RolePermissionDefaults {
             PermissionConstants.REPAIR_CAMPAIGN_COMPLETE,
             PermissionConstants.REPAIR_CAMPAIGN_CLOSE,
             PermissionConstants.REPAIR_CAMPAIGN_CANCEL,
-            PermissionConstants.REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS
+            PermissionConstants.REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS,
+            PermissionConstants.REPAIR_CAMPAIGN_MANAGE_WORK,
+            PermissionConstants.REPAIR_CAMPAIGN_MANAGE_SCOPE,
+            PermissionConstants.REPAIR_CAMPAIGN_MANAGE_SHUTDOWN_LINKS,
+            PermissionConstants.REPAIR_CAMPAIGN_MANAGE_RESOURCES,
+            PermissionConstants.REPAIR_CAMPAIGN_MANAGE_MATERIALS,
+            PermissionConstants.REPAIR_CAMPAIGN_MANAGE_DEPENDENCIES,
+            PermissionConstants.REPAIR_CAMPAIGN_MANAGE_FINANCE,
+            PermissionConstants.REPAIR_CAMPAIGN_REQUEST_APPROVAL,
+            PermissionConstants.REPAIR_CAMPAIGN_RESUME,
+            PermissionConstants.REPAIR_CAMPAIGN_BEGIN_CLOSING,
+            PermissionConstants.REPAIR_CAMPAIGN_ARCHIVE,
+            PermissionConstants.REPAIR_CAMPAIGN_CONFIRM_DEFECT,
+            PermissionConstants.REPAIR_CAMPAIGN_APPROVE_FX,
+            PermissionConstants.REPAIR_CAMPAIGN_APPROVE_BUDGET_OVERRUN,
+            PermissionConstants.REPAIR_CAMPAIGN_APPROVE_CLOSURE
     );
 
     private static final Map<String, List<String>> DEFAULTS = buildDefaults();
@@ -287,6 +303,22 @@ public final class RolePermissionDefaults {
                 chiefMaintenancePermissions,
                 FULL_TOIR_BUSINESS_FLOW_PERMISSIONS
         ));
+        defaults.put("MAINTENANCE_MANAGER", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.REPAIR_CAMPAIGN_READ,
+                PermissionConstants.REPAIR_CAMPAIGN_CREATE,
+                PermissionConstants.REPAIR_CAMPAIGN_MANAGE_WORK,
+                PermissionConstants.REPAIR_CAMPAIGN_MANAGE_SCOPE,
+                PermissionConstants.REPAIR_CAMPAIGN_MANAGE_SHUTDOWN_LINKS,
+                PermissionConstants.REPAIR_CAMPAIGN_MANAGE_RESOURCES,
+                PermissionConstants.REPAIR_CAMPAIGN_MANAGE_MATERIALS,
+                PermissionConstants.REPAIR_CAMPAIGN_MANAGE_DEPENDENCIES,
+                PermissionConstants.REPAIR_CAMPAIGN_REQUEST_APPROVAL,
+                PermissionConstants.REPAIR_CAMPAIGN_GENERATE_WORK_ORDERS));
+        defaults.put("WAREHOUSE_MANAGER", List.of(
+                PermissionConstants.READ_LEGACY,
+                PermissionConstants.REPAIR_CAMPAIGN_READ,
+                PermissionConstants.REPAIR_CAMPAIGN_MANAGE_MATERIALS));
         defaults.put("CHIEF_POWER_ENGINEER", chiefMaintenancePermissions);
         defaults.put("CHIEF_INSTRUMENT_ENGINEER", chiefMaintenancePermissions);
         List<String> shopLeadPermissions = List.of(
@@ -439,7 +471,11 @@ public final class RolePermissionDefaults {
                 PermissionConstants.APPROVAL_UPDATE,
                 PermissionConstants.APPROVAL_APPROVE,
                 PermissionConstants.APPROVAL_REJECT,
-                PermissionConstants.APPROVAL_RETURN
+                PermissionConstants.APPROVAL_RETURN,
+                PermissionConstants.REPAIR_CAMPAIGN_READ,
+                PermissionConstants.REPAIR_CAMPAIGN_MANAGE_FINANCE,
+                PermissionConstants.REPAIR_CAMPAIGN_APPROVE_FX,
+                PermissionConstants.REPAIR_CAMPAIGN_APPROVE_BUDGET_OVERRUN
         ));
         defaults.put("VIEWER", List.of(
                 PermissionConstants.READ_LEGACY,

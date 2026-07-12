@@ -3,6 +3,7 @@ package com.toir.dto.maintenancetemplate;
 import com.toir.entity.maintenance.MaintenanceTemplateSparePartRequirement;
 
 import java.util.UUID;
+import java.math.BigDecimal;
 
 public record MaintenanceTemplateSparePartRequirementDto(
         UUID id,
@@ -12,7 +13,7 @@ public record MaintenanceTemplateSparePartRequirementDto(
         UUID sparePartId,
         String sparePartCode,
         String sparePartName,
-        double quantity,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal quantity,
         String unit,
         String criticality,
         String notes,

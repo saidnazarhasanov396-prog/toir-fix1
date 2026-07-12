@@ -92,7 +92,7 @@ class ActualCostReviewRouteOverrideResponseMapperTest {
         actualCost.setReviewedAt(null);
         actualCost.setReviewComment(null);
         actualCost.setNotes(null);
-        actualCost.setAmount(42.0);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(42.0));
         actualCost.setCostDate(Instant.now());
 
         ActualCostReviewRouteOverrideResponseDto response = mapper.toResponse(override, actualCost);

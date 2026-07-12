@@ -5,6 +5,7 @@ import com.toir.entity.ApprovalStep;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.projects.ProcurementRequest;
+import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.users.Employee;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.ApprovalTargetType;
@@ -21,6 +22,7 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentCommissioningActRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,6 +87,9 @@ class AttachmentTargetAccessServiceTest {
     @Mock
     EmployeeRepository employeeRepository;
 
+    @Mock
+    RepairCampaignRepository repairCampaignRepository;
+
     private AttachmentTargetAccessService service;
 
     @BeforeEach
@@ -102,8 +107,30 @@ class AttachmentTargetAccessServiceTest {
                 scopeAccessService,
                 equipmentCommissioningActRepository,
                 defectRepository,
-                employeeRepository
+                employeeRepository,
+                repairCampaignRepository
         );
+    }
+
+    @Test
+    void departmentScopedUserCanAccessRepairCampaignAttachments() {
+        UUID campaignId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        RepairCampaign campaign = new RepairCampaign();
+        campaign.setId(campaignId);
+        campaign.setDepartmentId(departmentId);
+        when(repairCampaignRepository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+
+        assertThatCode(() -> service.assertCanAccess(AttachmentTargetType.REPAIR_CAMPAIGN, campaignId))
+                .doesNotThrowAnyException();
+
+        verify(scopeAccessService).assertCanAccessDepartment(departmentId);
+    }
+
+    @Test
+    void repairCampaignAttachmentsUseGenericDocumentCategory() {
+        org.assertj.core.api.Assertions.assertThat(service.fileCategoryFor(AttachmentTargetType.REPAIR_CAMPAIGN))
+                .isEqualTo(FileCategory.DOCUMENT);
     }
 
     @Test

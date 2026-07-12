@@ -151,7 +151,7 @@ class FinanceRouteOverridePbacScopeTest {
         actualCost.setId(id);
         actualCost.setWorkOrderId(workOrderId);
         actualCost.setCostCategoryId(UUID.randomUUID());
-        actualCost.setAmount(100);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100));
         return actualCost;
     }
 

@@ -7,6 +7,7 @@ import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.service.PprPlanService;
 import com.toir.service.WorkOrderService;
+import com.toir.service.PlannedShutdownService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.service.repair.RepairRequestService;
 import org.junit.jupiter.api.Test;
@@ -82,6 +83,18 @@ class ApprovalActionHandlerTest {
 
         verify(maintenanceRegulationService).finalizeApprovalFromApprovalRequest(targetId);
         verify(maintenanceRegulationService).finalizeRejectionFromApprovalRequest(targetId);
+    }
+
+    @Test
+    void plannedShutdownPassesCanonicalApprovalRequestToFinalizer() {
+        PlannedShutdownService plannedShutdownService = mock(PlannedShutdownService.class);
+        UUID targetId = UUID.randomUUID();
+        ApprovalRequest request = request(ApprovalTargetType.PLANNED_SHUTDOWN, ApprovalActionType.APPROVE, targetId,
+                approvedStep(1, UUID.randomUUID()), approvedStep(2, UUID.randomUUID()));
+
+        new PlannedShutdownApprovalHandler(plannedShutdownService).execute(request);
+
+        verify(plannedShutdownService).finalizeApprovalFromApprovalRequest(targetId, request);
     }
 
     private ApprovalRequest request(ApprovalTargetType targetType,

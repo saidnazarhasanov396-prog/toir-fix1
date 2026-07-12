@@ -30,7 +30,7 @@ public interface StockMovementListRow {
 
     String getType();
 
-    double getQuantity();
+    BigDecimal getQuantity();
 
     String getUnit();
 

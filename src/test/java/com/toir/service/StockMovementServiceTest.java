@@ -132,11 +132,11 @@ class StockMovementServiceTest {
 
         assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.ISSUE, 0)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("STOCK_QUANTITY_INVALID");
 
         assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.ISSUE, -1)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("STOCK_QUANTITY_INVALID");
 
         verifyNoInteractions(stockRepository, repository, sparePartRepository);
     }
@@ -148,11 +148,11 @@ class StockMovementServiceTest {
 
         assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.RESERVATION, 0)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("STOCK_QUANTITY_INVALID");
 
         assertThatThrownBy(() -> service.create(request(warehouseId, sparePartId, StockMovementType.RESERVATION, -2)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("STOCK_QUANTITY_INVALID");
 
         verifyNoInteractions(stockRepository, repository, sparePartRepository);
     }
@@ -222,7 +222,7 @@ class StockMovementServiceTest {
         ArgumentCaptor<StockMovement> movementCaptor = ArgumentCaptor.forClass(StockMovement.class);
         verify(repository).save(movementCaptor.capture());
         assertThat(movementCaptor.getValue().getType()).isEqualTo(StockMovementType.ADJUSTMENT);
-        assertThat(movementCaptor.getValue().getQuantity()).isEqualTo(6);
+        assertThat(movementCaptor.getValue().getQuantity()).isEqualByComparingTo("6");
 
         ArgumentCaptor<StockIssueCommand> stockCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
         verify(toirStockService).postDecrease(stockCommandCaptor.capture(), eq(StockLedgerMovementType.ADJUSTMENT_DEC));
@@ -332,7 +332,7 @@ class StockMovementServiceTest {
         StockMovementDto result = service.receipt(new StockMovementReceiptRequest(
                 sparePartId,
                 warehouseId,
-                20,
+                BigDecimal.valueOf(20),
                 "LITER",
                 BigDecimal.valueOf(45000),
                 receivedAt,
@@ -383,7 +383,7 @@ class StockMovementServiceTest {
         service.receipt(new StockMovementReceiptRequest(
                 sparePartId,
                 warehouseId,
-                5,
+                BigDecimal.valueOf(5),
                 "PCS",
                 BigDecimal.valueOf(100),
                 LocalDate.of(2026, 6, 13),
@@ -424,7 +424,7 @@ class StockMovementServiceTest {
                 sparePartId,
                 null,
                 StockMovementType.RECEIPT,
-                5,
+                BigDecimal.valueOf(5),
                 null,
                 "PR-2026-00005",
                 null,
@@ -461,7 +461,7 @@ class StockMovementServiceTest {
         StockMovementDto result = service.issue(new StockMovementIssueRequest(
                 sparePartId,
                 warehouseId,
-                5,
+                BigDecimal.valueOf(5),
                 "LITER",
                 issuedAt,
                 takenById,
@@ -778,7 +778,7 @@ class StockMovementServiceTest {
                 sparePartId,
                 null,
                 StockMovementType.ADJUSTMENT,
-                10,
+                BigDecimal.TEN,
                 null,
                 null,
                 UUID.randomUUID(),
@@ -805,7 +805,7 @@ class StockMovementServiceTest {
                 sparePartId,
                 workOrderId,
                 type,
-                quantity,
+                BigDecimal.valueOf(quantity),
                 null,
                 "DOC-1",
                 null,
@@ -909,8 +909,8 @@ class StockMovementServiceTest {
             }
 
             @Override
-            public double getQuantity() {
-                return 2;
+            public BigDecimal getQuantity() {
+                return BigDecimal.valueOf(2);
             }
 
             @Override
@@ -1026,7 +1026,7 @@ class StockMovementServiceTest {
         movement.setWarehouseId(warehouseId);
         movement.setSparePartId(UUID.randomUUID());
         movement.setType(type);
-        movement.setQuantity(1);
+        movement.setQuantity(BigDecimal.ONE);
         return movement;
     }
 

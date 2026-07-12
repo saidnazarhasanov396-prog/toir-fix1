@@ -212,8 +212,7 @@ public class DashboardService {
                 .toList();
         long dueSoonActualCosts = dueSoonPendingCosts.size();
         BigDecimal dueSoonActualCostAmount = dueSoonPendingCosts.stream()
-                .mapToDouble(ActualCost::getAmount)
-                .mapToObj(BigDecimal::valueOf)
+                .map(ActualCost::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
@@ -227,8 +226,7 @@ public class DashboardService {
                 .toList();
         long overdueActualCosts = overduePendingCosts.size();
         BigDecimal overdueActualCostAmount = overduePendingCosts.stream()
-                .mapToDouble(ActualCost::getAmount)
-                .mapToObj(BigDecimal::valueOf)
+                .map(ActualCost::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
@@ -244,7 +242,7 @@ public class DashboardService {
                 .map(entry -> {
                     String roleCode = entry.getKey();
                     List<ActualCost> costs = entry.getValue();
-                    double totalAmount = costs.stream().mapToDouble(ActualCost::getAmount).sum();
+                    double totalAmount = costs.stream().map(ActualCost::getAmount).reduce(BigDecimal.ZERO,BigDecimal::add).doubleValue();
                     long dueSoon = costs.stream()
                             .filter(ac -> {
                                 ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
@@ -296,7 +294,7 @@ public class DashboardService {
                     DepartmentRef deptRef = dept != null
                             ? new DepartmentRef(dept.getId(), dept.getCode(), dept.getName())
                             : new DepartmentRef(deptId, "—", "—");
-                    double totalAmount = costs.stream().mapToDouble(ActualCost::getAmount).sum();
+                    double totalAmount = costs.stream().map(ActualCost::getAmount).reduce(BigDecimal.ZERO,BigDecimal::add).doubleValue();
                     long dueSoon = costs.stream()
                             .filter(ac -> {
                                 ActualCostReviewEvent ev = latestEventByCostId.get(ac.getId());
@@ -369,7 +367,7 @@ public class DashboardService {
                 .toList();
         long materialIssuedThisMonth = issuedMovements.stream()
                 .filter(m -> isMovementInCurrentMonth(m, currentMonthStartDate, currentMonthStart))
-                .mapToLong(m -> (long) m.getQuantity())
+                .mapToLong(m -> m.getQuantity().longValue())
                 .sum();
         BigDecimal totalSparePartsCost = issuedMovements.stream()
                 .map(m -> IndustrialKpiAggregations.stockIssueCost(m, partById.get(m.getSparePartId())))
@@ -383,8 +381,7 @@ public class DashboardService {
 
         long pendingActualCosts = scopedPendingCosts.size();
         BigDecimal pendingActualCostAmount = scopedPendingCosts.stream()
-                .mapToDouble(ActualCost::getAmount)
-                .mapToObj(BigDecimal::valueOf)
+                .map(ActualCost::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
@@ -659,7 +656,7 @@ public class DashboardService {
         for (RepairMaterialUsage usage : materialUsages) {
             if (usage.getSparePartId() == null) continue;
             double[] agg = spareUsageAgg.computeIfAbsent(usage.getSparePartId(), id -> new double[2]);
-            agg[0] += usage.getQuantity();
+            agg[0] += usage.getQuantity().doubleValue();
             agg[1] += 1;
             Instant issuedAt = usage.getIssuedAt() != null ? usage.getIssuedAt() : usage.getCreatedAt();
             if (issuedAt != null) {
@@ -767,7 +764,7 @@ public class DashboardService {
                             null,
                             w != null ? new WarehouseRef(w.getId(), w.getCode(), w.getName()) : null,
                             m.getType().name(),
-                            m.getQuantity(),
+                            m.getQuantity().doubleValue(),
                             m.getOccurredAt());
                 })
                 .toList();
@@ -820,7 +817,7 @@ public class DashboardService {
                     double expected = w.getCost() != null ? w.getCost() : 0.0;
                     double reflected = allActualCosts.stream()
                             .filter(ac -> w.getId().equals(ac.getContractorWorkId()))
-                            .mapToDouble(ActualCost::getAmount)
+                            .mapToDouble(ac->ac.getAmount().doubleValue())
                             .sum();
                     double remaining = Math.max(0, expected - reflected);
                     String status = reflected >= expected ? "FULLY_REFLECTED"

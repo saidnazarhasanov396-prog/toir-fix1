@@ -14,6 +14,9 @@ import java.util.UUID;
 
 @Repository
 public interface CounteragentRepository extends JpaRepository<Counteragent, UUID> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Counteragent c where c.id=:id and c.isDeleted=false")
+    Optional<Counteragent> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
 
     Optional<Counteragent> findByIdAndIsDeletedFalse(UUID id);
 

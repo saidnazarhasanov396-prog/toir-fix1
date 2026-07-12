@@ -131,7 +131,7 @@ class ActualCostReviewFacadeServiceTest {
                 null,
                 null,
                 null,
-                100.0,
+                java.math.BigDecimal.valueOf(100.0),
                 Instant.now(),
                 null,
                 null,
@@ -155,7 +155,7 @@ class ActualCostReviewFacadeServiceTest {
         actualCost.setContractorWorkId(contractorWorkId);
         actualCost.setCostCategoryId(costCategoryId);
         actualCost.setStatus(ActualCostStatus.PENDING);
-        actualCost.setAmount(100.0);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100.0));
         actualCost.setCostDate(Instant.parse("2026-05-26T09:00:00Z"));
         actualCost.setNotes("pump");
 
@@ -601,7 +601,7 @@ class ActualCostReviewFacadeServiceTest {
         actualCost.setWorkOrderId(workOrderId);
         actualCost.setCostCategoryId(UUID.randomUUID());
         actualCost.setStatus(ActualCostStatus.PENDING);
-        actualCost.setAmount(amount);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(amount));
         actualCost.setCostDate(createdAt);
         return actualCost;
     }
@@ -611,7 +611,7 @@ class ActualCostReviewFacadeServiceTest {
         ReflectionTestUtils.setField(actualCost, "id", actualCostId);
         ReflectionTestUtils.setField(actualCost, "createdAt", Instant.now());
         actualCost.setStatus(ActualCostStatus.PENDING);
-        actualCost.setAmount(100.0);
+        actualCost.setAmount(java.math.BigDecimal.valueOf(100.0));
         actualCost.setCostDate(Instant.parse("2026-05-26T09:00:00Z"));
         return actualCost;
     }

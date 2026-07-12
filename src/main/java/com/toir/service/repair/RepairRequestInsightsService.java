@@ -558,7 +558,7 @@ public class RepairRequestInsightsService {
                 cost.getWorkOrderId(),
                 workOrder == null ? null : workOrder.getNumber(),
                 cost.getStatus(),
-                cost.getAmount(),
+                cost.getAmount().doubleValue(),
                 effectiveCostDate(cost)
         );
     }
@@ -641,6 +641,10 @@ public class RepairRequestInsightsService {
 
     private String formatNumber(Double value) {
         return value == null ? "0" : formatNumber(value.doubleValue());
+    }
+
+    private String formatNumber(java.math.BigDecimal value) {
+        return value == null ? "0" : value.stripTrailingZeros().toPlainString();
     }
 
     private String formatNumber(double value) {

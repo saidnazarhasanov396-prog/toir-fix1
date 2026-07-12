@@ -166,6 +166,31 @@ import static org.mockito.Mockito.when;
 class WorkOrderServiceTest {
 
     @Mock
+    com.toir.service.plannedshutdown.PlannedShutdownWorkOrderStartPolicy plannedShutdownStartPolicy;
+
+    @Test
+    void campaignCreateRejectsForgedShutdownIdentityAndKeyBeforeMutation() {
+        WorkOrderRequest poisoned = request(WorkOrderType.OVERHAUL, null, null, null)
+                .withGenerationKey("PS:forged")
+                .withSafetyRequirements(false, false)
+                .withPlannedShutdown(UUID.randomUUID(), UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.createCampaignLinked(poisoned, UUID.randomUUID(), UUID.randomUUID()))
+                .hasMessageContaining("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED");
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void campaignCreateRejectsClientSuppliedCampaignIdentityInsteadOfOverwritingIt() {
+        WorkOrderRequest poisoned = request(WorkOrderType.OVERHAUL, null, null, null)
+                .withRepairCampaign(UUID.randomUUID(), UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.createCampaignLinked(poisoned, UUID.randomUUID(), UUID.randomUUID()))
+                .hasMessageContaining("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED");
+        verifyNoInteractions(repository);
+    }
+
+    @Mock
     WorkOrderRepository repository;
 
     @Mock
@@ -759,6 +784,8 @@ class WorkOrderServiceTest {
 
     @Test
     void createPersistsAndReturnsShutdownAndIsolationRequirements() throws Exception {
+        UUID plannedShutdownId = UUID.randomUUID();
+        UUID shutdownWorkItemId = UUID.randomUUID();
         WorkOrderRequest request = new ObjectMapper().readValue("""
                 {
                   "number": "WO-SAFETY-FLAGS",
@@ -769,9 +796,11 @@ class WorkOrderServiceTest {
                   "workType": "REPAIR",
                   "priority": "MEDIUM",
                   "requiresShutdown": true,
-                  "requiresIsolation": true
+                  "requiresIsolation": true,
+                  "plannedShutdownId": "%s",
+                  "shutdownWorkItemId": "%s"
                 }
-                """.formatted(UUID.randomUUID(), UUID.randomUUID()), WorkOrderRequest.class);
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), plannedShutdownId, shutdownWorkItemId), WorkOrderRequest.class);
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
             WorkOrder workOrder = invocation.getArgument(0);
             ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
@@ -779,14 +808,19 @@ class WorkOrderServiceTest {
         });
         mockSuccessfulCreateDependencies(request);
 
-        WorkOrderDto result = service.create(request);
+        WorkOrderDto result = service.createGenerated(request.withGenerationKey(
+                "PS:" + plannedShutdownId + ":" + shutdownWorkItemId + ":1"));
 
         ArgumentCaptor<WorkOrder> captor = ArgumentCaptor.forClass(WorkOrder.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().isRequiresShutdown()).isTrue();
         assertThat(captor.getValue().isRequiresIsolation()).isTrue();
+        assertThat(captor.getValue().getPlannedShutdownId()).isEqualTo(plannedShutdownId);
+        assertThat(captor.getValue().getShutdownWorkItemId()).isEqualTo(shutdownWorkItemId);
         assertThat(result.requiresShutdown()).isTrue();
         assertThat(result.requiresIsolation()).isTrue();
+        assertThat(result.plannedShutdownId()).isEqualTo(plannedShutdownId);
+        assertThat(result.shutdownWorkItemId()).isEqualTo(shutdownWorkItemId);
     }
 
     @Test
@@ -855,31 +889,35 @@ class WorkOrderServiceTest {
     }
 
     @Test
-    void createMediumRepairWithoutDefectListReturns400() {
+    void createMediumRepairWithoutDefectListSucceeds() {
         WorkOrderRequest request = requestWithDefectList(WorkOrderType.MEDIUM_REPAIR, null, UUID.randomUUID());
-        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            return workOrder;
+        });
+        mockSuccessfulCreateDependencies(request);
 
-        assertThatThrownBy(() -> service.create(request))
-                .isInstanceOfSatisfying(RestException.class, ex -> {
-                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("Approved DefectList is required for MEDIUM_REPAIR");
-                });
+        WorkOrderDto result = service.create(request);
 
-        verify(repository, never()).save(any(WorkOrder.class));
+        assertThat(result.type()).isEqualTo(WorkOrderType.MEDIUM_REPAIR);
+        assertThat(result.defectListId()).isNull();
     }
 
     @Test
-    void createCapitalRepairWithoutDefectListReturns400() {
+    void createCapitalRepairWithoutDefectListSucceeds() {
         WorkOrderRequest request = requestWithDefectList(WorkOrderType.CAPITAL_REPAIR, null, UUID.randomUUID());
-        when(repository.existsByNumberAndIsDeletedFalse(request.number())).thenReturn(false);
+        when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> {
+            WorkOrder workOrder = invocation.getArgument(0);
+            ReflectionTestUtils.setField(workOrder, "id", UUID.randomUUID());
+            return workOrder;
+        });
+        mockSuccessfulCreateDependencies(request);
 
-        assertThatThrownBy(() -> service.create(request))
-                .isInstanceOfSatisfying(RestException.class, ex -> {
-                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("Approved DefectList is required for CAPITAL_REPAIR");
-                });
+        WorkOrderDto result = service.create(request);
 
-        verify(repository, never()).save(any(WorkOrder.class));
+        assertThat(result.type()).isEqualTo(WorkOrderType.CAPITAL_REPAIR);
+        assertThat(result.defectListId()).isNull();
     }
 
     @Test
@@ -937,7 +975,7 @@ class WorkOrderServiceTest {
         assertThatThrownBy(() -> service.create(request))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("Approved DefectList is required for CAPITAL_REPAIR");
+                    assertThat(ex.getMessage()).contains("DefectList must be APPROVED");
                 });
 
         verify(repository, never()).save(any(WorkOrder.class));
@@ -1940,9 +1978,9 @@ class WorkOrderServiceTest {
                 "Bearing",
                 "BRG-1",
                 null,
-                2,
+                java.math.BigDecimal.valueOf(2),
                 15.0,
-                30.0,
+                java.math.BigDecimal.valueOf(30.0),
                 java.time.Instant.parse("2026-06-04T09:00:00Z"),
                 UUID.randomUUID(),
                 "Technician",
@@ -3307,7 +3345,7 @@ class WorkOrderServiceTest {
                 null,
                 warehouseId,
                 sparePartId,
-                2,
+                java.math.BigDecimal.valueOf(2),
                 12.5
         );
 
@@ -3376,7 +3414,7 @@ class WorkOrderServiceTest {
                 null,
                 warehouseId,
                 sparePartId,
-                99,
+                java.math.BigDecimal.valueOf(99),
                 12.5
         );
 

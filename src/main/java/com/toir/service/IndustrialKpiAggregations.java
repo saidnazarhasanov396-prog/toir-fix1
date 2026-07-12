@@ -88,6 +88,6 @@ final class IndustrialKpiAggregations {
                 : sparePart != null && sparePart.getAverageCost() != null
                 ? sparePart.getAverageCost()
                 : BigDecimal.ZERO;
-        return BigDecimal.valueOf(movement.getQuantity()).multiply(unitCost);
+        return movement.getQuantity().multiply(unitCost);
     }
 }

@@ -68,7 +68,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         var dto = service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 operationId,
                 sparePartId,
-                2.5,
+                new java.math.BigDecimal("2.5"),
                 "pcs",
                 "CRITICAL",
                 "keep ready",
@@ -81,7 +81,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         assertThat(dto.sparePartId()).isEqualTo(sparePartId);
         assertThat(dto.sparePartCode()).isEqualTo("BRG-001");
         assertThat(dto.sparePartName()).isEqualTo("Bearing");
-        assertThat(dto.quantity()).isEqualTo(2.5);
+        assertThat(dto.quantity()).isEqualByComparingTo("2.5");
         assertThat(dto.unit()).isEqualTo("pcs");
         assertThat(dto.criticality()).isEqualTo("CRITICAL");
         assertThat(dto.active()).isTrue();
@@ -94,13 +94,13 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
                 UUID.randomUUID(),
-                0,
+                java.math.BigDecimal.ZERO,
                 "pcs",
                 null,
                 null,
                 true
         ))).isInstanceOf(RestException.class)
-                .hasMessageContaining("quantity must be positive");
+                .hasMessageContaining("MATERIAL_QUANTITY_INVALID");
 
         verify(repository, never()).save(any());
     }
@@ -119,7 +119,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
                 sparePartId,
-                1,
+                java.math.BigDecimal.ONE,
                 "pcs",
                 null,
                 null,
@@ -145,7 +145,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 operationId,
                 sparePartId,
-                1,
+                java.math.BigDecimal.ONE,
                 "pcs",
                 null,
                 null,
@@ -170,7 +170,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 actionId,
                 sparePartId,
-                1,
+                java.math.BigDecimal.ONE,
                 "pcs",
                 null,
                 null,
@@ -198,7 +198,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         var dto = service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
                 sparePartId,
-                1,
+                java.math.BigDecimal.ONE,
                 " ",
                 null,
                 null,
@@ -227,7 +227,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         var dto = service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
                 sparePartId,
-                1,
+                java.math.BigDecimal.ONE,
                 "NAV-PC",
                 null,
                 null,
@@ -251,7 +251,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
                 sparePartId,
-                1,
+                java.math.BigDecimal.ONE,
                 "kg",
                 null,
                 null,
@@ -280,7 +280,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         var dto = service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
                 sparePartId,
-                1,
+                java.math.BigDecimal.ONE,
                 "PCS",
                 null,
                 null,
@@ -302,7 +302,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         assertThatThrownBy(() -> service.create(templateId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
                 sparePartId,
-                1,
+                java.math.BigDecimal.ONE,
                 null,
                 null,
                 null,
@@ -340,14 +340,14 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         var dto = service.update(templateId, requirementId, new MaintenanceTemplateSparePartRequirementRequest(
                 null,
                 sparePartId,
-                3,
+                java.math.BigDecimal.valueOf(3),
                 null,
                 "CRITICAL",
                 "updated qty",
                 true
         ));
 
-        assertThat(dto.quantity()).isEqualTo(3);
+        assertThat(dto.quantity()).isEqualByComparingTo("3");
         assertThat(dto.unit()).isEqualTo("pcs");
         assertThat(entity.getUnit()).isEqualTo("pcs");
     }
@@ -417,7 +417,7 @@ class MaintenanceTemplateSparePartRequirementServiceTest {
         requirement.setOperationId(operation == null ? null : operation.getId());
         requirement.setSparePart(sparePart);
         requirement.setSparePartId(sparePart.getId());
-        requirement.setQuantity(quantity);
+        requirement.setQuantity(new java.math.BigDecimal(Double.toString(quantity)));
         requirement.setUnit(sparePart.getUnit());
         requirement.setCriticality("CRITICAL");
         requirement.setNotes("keep ready");

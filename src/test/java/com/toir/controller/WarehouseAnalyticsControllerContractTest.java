@@ -61,7 +61,7 @@ class WarehouseAnalyticsControllerContractTest {
                         "info",
                         "Активная номенклатура на 5 складах"
                 )),
-                List.of(new WarehouseMovementPointDto(LocalDate.of(2026, 6, 1), 184720, 1200, 820, 32380)),
+                List.of(new WarehouseMovementPointDto(LocalDate.of(2026, 6, 1), java.math.BigDecimal.valueOf(184720), java.math.BigDecimal.valueOf(1200), java.math.BigDecimal.valueOf(820), java.math.BigDecimal.valueOf(32380))),
                 List.of(new WarehouseRiskDto(
                         "CRITICAL",
                         "Риск остановки компрессора К-101",
@@ -105,7 +105,7 @@ class WarehouseAnalyticsControllerContractTest {
                         workOrderId,
                         "WO-2026-0412",
                         "Компрессор К-101",
-                        2,
+                        java.math.BigDecimal.valueOf(2),
                         LocalDate.of(2026, 6, 21),
                         "IN_WORK"
                 )),

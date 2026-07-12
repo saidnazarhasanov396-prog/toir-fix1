@@ -96,8 +96,8 @@ class WorkOrderMaterialReadinessServiceTest {
         assertThat(result.blocking()).isFalse();
         assertThat(result.rows()).singleElement().satisfies(row -> {
             assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.READY);
-            assertThat(row.requiredQty()).isEqualTo(10);
-            assertThat(row.reservedQty()).isEqualTo(10);
+            assertThat(row.requiredQty()).isEqualByComparingTo("10");
+            assertThat(row.reservedQty()).isEqualByComparingTo("10");
             assertThat(row.shortageQty()).isZero();
             assertThat(row.blocking()).isFalse();
             assertThat(row.sparePartName()).isEqualTo("Bearing");
@@ -120,7 +120,7 @@ class WorkOrderMaterialReadinessServiceTest {
         assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.ISSUED);
         assertThat(result.rows()).singleElement().satisfies(row -> {
             assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.ISSUED);
-            assertThat(row.issuedQty()).isEqualTo(5);
+            assertThat(row.issuedQty()).isEqualByComparingTo("5");
             assertThat(row.shortageQty()).isZero();
         });
     }
@@ -141,7 +141,7 @@ class WorkOrderMaterialReadinessServiceTest {
         assertThat(result.blocking()).isTrue();
         assertThat(result.rows()).singleElement().satisfies(row -> {
             assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.PARTIAL);
-            assertThat(row.shortageQty()).isEqualTo(3);
+            assertThat(row.shortageQty()).isEqualByComparingTo("3");
             assertThat(row.blocking()).isTrue();
         });
     }
@@ -156,7 +156,7 @@ class WorkOrderMaterialReadinessServiceTest {
         assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.SHORTAGE);
         assertThat(result.rows()).singleElement().satisfies(row -> {
             assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.SHORTAGE);
-            assertThat(row.shortageQty()).isEqualTo(4);
+            assertThat(row.shortageQty()).isEqualByComparingTo("4");
             assertThat(row.blocking()).isTrue();
         });
     }
@@ -172,9 +172,9 @@ class WorkOrderMaterialReadinessServiceTest {
 
         assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.PARTIAL);
         assertThat(result.rows()).singleElement().satisfies(row -> {
-            assertThat(row.issuedQty()).isEqualTo(5);
-            assertThat(row.returnedQty()).isEqualTo(2);
-            assertThat(row.shortageQty()).isEqualTo(2);
+            assertThat(row.issuedQty()).isEqualByComparingTo("5");
+            assertThat(row.returnedQty()).isEqualByComparingTo("2");
+            assertThat(row.shortageQty()).isEqualByComparingTo("2");
             assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.PARTIAL);
         });
     }
@@ -233,8 +233,8 @@ class WorkOrderMaterialReadinessServiceTest {
 
         assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.READY);
         assertThat(result.rows()).singleElement().satisfies(row -> {
-            assertThat(row.reservedQty()).isEqualTo(2);
-            assertThat(row.issuedQty()).isEqualTo(4);
+            assertThat(row.reservedQty()).isEqualByComparingTo("2");
+            assertThat(row.issuedQty()).isEqualByComparingTo("4");
             assertThat(row.shortageQty()).isZero();
             assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.READY);
         });
@@ -285,7 +285,7 @@ class WorkOrderMaterialReadinessServiceTest {
         requirement.setWorkOrderId(workOrderId);
         requirement.setSparePart(sparePart);
         requirement.setSparePartId(sparePartId);
-        requirement.setRequiredQty(requiredQty);
+        requirement.setRequiredQty(java.math.BigDecimal.valueOf(requiredQty));
         requirement.setUnit(unit);
         requirement.setNotes(notes);
         return requirement;
@@ -297,7 +297,7 @@ class WorkOrderMaterialReadinessServiceTest {
         reservation.setWorkOrderId(workOrderId);
         reservation.setRequirementId(requirementId);
         reservation.setSparePartId(sparePartId);
-        reservation.setQuantity(quantity);
+        reservation.setQuantity(java.math.BigDecimal.valueOf(quantity));
         reservation.setStatus(ReservationStatus.ACTIVE);
         return reservation;
     }
@@ -308,7 +308,7 @@ class WorkOrderMaterialReadinessServiceTest {
         usage.setWorkOrderId(workOrderId);
         usage.setRequirementId(requirementId);
         usage.setSparePartId(sparePartId);
-        usage.setQuantity(quantity);
+        usage.setQuantity(new java.math.BigDecimal(Double.toString(quantity)));
         return usage;
     }
 

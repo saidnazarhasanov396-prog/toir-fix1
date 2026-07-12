@@ -799,8 +799,10 @@ public class MaintenanceRegulationService {
             if (request.sparePartId() == null) {
                 throw RestException.badRequest("sparePartId is required");
             }
-            if (request.quantity() <= 0) {
-                throw RestException.badRequest("quantity must be positive");
+            if (request.quantity()==null||request.quantity().signum() <= 0
+                    || request.quantity().stripTrailingZeros().scale()>4
+                    || request.quantity().precision()-request.quantity().scale()>15) {
+                throw RestException.badRequest("MATERIAL_QUANTITY_INVALID");
             }
             SparePart sparePart = sparePartRepository.findByIdAndIsDeletedFalse(request.sparePartId())
                     .orElseThrow(() -> RestException.notFound("Spare part not found: " + request.sparePartId()));

@@ -211,7 +211,7 @@ class RepairRequestInsightsServiceTest {
         RepairMaterialUsage materialUsage = new RepairMaterialUsage();
         materialUsage.setId(materialUsageId);
         materialUsage.setSparePartId(sparePartId);
-        materialUsage.setQuantity(2);
+        materialUsage.setQuantity(java.math.BigDecimal.valueOf(2));
         SparePart sparePart = new SparePart();
         sparePart.setId(sparePartId);
         sparePart.setName("Bearing 6205");
@@ -525,7 +525,7 @@ class RepairRequestInsightsServiceTest {
         cost.setSourceType(sourceType);
         cost.setSourceId(UUID.randomUUID());
         cost.setStatus(status);
-        cost.setAmount(amount);
+        cost.setAmount(java.math.BigDecimal.valueOf(amount));
         cost.setNotes(notes);
         cost.setCostDate(costDate);
         return cost;

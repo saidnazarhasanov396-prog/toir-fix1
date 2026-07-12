@@ -40,6 +40,7 @@ public final class ApprovalSecurityExpressions {
       + " or hasAuthority('ACTUAL_COST_APPROVE')"
       + " or hasAuthority('BUDGET_APPROVE')"
       + " or hasAuthority('PLANNED_SHUTDOWN_APPROVE')"
+      + " or hasAuthority('PLANNED_SHUTDOWN_REQUEST_APPROVAL')"
       + " or hasAuthority('REPAIR_CAMPAIGN_APPROVE')";
 
   public static final String CAN_APPROVE = ADMIN

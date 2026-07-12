@@ -2,6 +2,7 @@ package com.toir.dto.warehouseanalytics;
 
 import java.time.LocalDate;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 public record WarehouseReservationRowDto(
         UUID reservationId,
@@ -12,7 +13,7 @@ public record WarehouseReservationRowDto(
         UUID workOrderId,
         String workOrderNumber,
         String equipmentName,
-        double quantity,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal quantity,
         LocalDate reservedAt,
         String status
 ) {

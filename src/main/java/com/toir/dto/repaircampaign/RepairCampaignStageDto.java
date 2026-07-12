@@ -6,6 +6,7 @@ import com.toir.dto.common.MoneyDecimalStringDeserializer;
 import com.toir.dto.sparepartlifecycle.DecimalStringSerializer;
 import com.toir.entity.repair.RepairCampaignStage;
 import com.toir.enums.RepairCampaignStatus;
+import com.toir.enums.RepairCampaignStageStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
@@ -26,7 +27,7 @@ public record RepairCampaignStageDto(
         @JsonDeserialize(using = MoneyDecimalStringDeserializer.class) BigDecimal plannedCost,
         @PositiveOrZero @Digits(integer = 15, fraction = 4) @JsonSerialize(using = DecimalStringSerializer.class)
         @JsonDeserialize(using = MoneyDecimalStringDeserializer.class) BigDecimal actualCost,
-        RepairCampaignStatus status,
+        RepairCampaignStageStatus status,
         String notes,
         int workOrderCount,
         int completedWorkOrderCount,
@@ -45,6 +46,7 @@ public record RepairCampaignStageDto(
         budgetLinePlanned = budgetLinePlanned == null ? BigDecimal.ZERO : budgetLinePlanned;
         budgetLineActual = budgetLineActual == null ? BigDecimal.ZERO : budgetLineActual;
         budgetLineRemaining = budgetLineRemaining == null ? BigDecimal.ZERO : budgetLineRemaining;
+        status = status == null ? RepairCampaignStageStatus.DRAFT : status;
     }
 
     public RepairCampaignStageDto(
@@ -58,7 +60,7 @@ public record RepairCampaignStageDto(
             RepairCampaignStatus status,
             String notes
     ) {
-        this(id, sequence, name, startDate, endDate, plannedCost, actualCost, status, notes, 0, 0, actualCost,
+        this(id, sequence, name, startDate, endDate, plannedCost, actualCost, stageStatus(status), notes, 0, 0, actualCost,
                 BigDecimal.ZERO, null, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 
@@ -77,7 +79,7 @@ public record RepairCampaignStageDto(
             BigDecimal approvedActual,
             BigDecimal pendingActual
     ) {
-        this(id, sequence, name, startDate, endDate, plannedCost, actualCost, status, notes, workOrderCount,
+        this(id, sequence, name, startDate, endDate, plannedCost, actualCost, stageStatus(status), notes, workOrderCount,
                 completedWorkOrderCount, approvedActual, pendingActual, null,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
     }
@@ -91,5 +93,16 @@ public record RepairCampaignStageDto(
                 0, 0, s.getActualCost(), BigDecimal.ZERO,
                 s.getBudgetLineId(), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO
         );
+    }
+
+    private static RepairCampaignStageStatus stageStatus(RepairCampaignStatus status) {
+        if (status == null) {
+            return RepairCampaignStageStatus.DRAFT;
+        }
+        try {
+            return RepairCampaignStageStatus.valueOf(status.name());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Aggregate-only status cannot be used for a campaign stage", ex);
+        }
     }
 }

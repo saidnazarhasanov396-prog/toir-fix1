@@ -127,8 +127,10 @@ public class RepairMaterialUsageService {
         assertWorkOrderAllowsMaterialIssue(workOrder);
         equipmentStatusLifecycleService.assertOperationallyAllowed(workOrder.getEquipmentId(), "add material usage");
         assertCanAccessWarehouseId(r.warehouseId());
-        if (r.quantity() <= 0) {
-            throw RestException.badRequest("Quantity must be greater than 0");
+        if (r.quantity()==null||r.quantity().signum() <= 0
+                || r.quantity().stripTrailingZeros().scale()>4
+                || r.quantity().precision()-r.quantity().scale()>15) {
+            throw RestException.badRequest("MATERIAL_QUANTITY_INVALID");
         }
 
         WarehouseStock stock = stockRepository.findByWarehouseIdAndSparePartIdAndIsDeletedFalse(r.warehouseId(), r.sparePartId())
@@ -207,7 +209,7 @@ public class RepairMaterialUsageService {
                 movement.getWarehouseId(),
                 movement.getSparePartId(),
                 movement.getBinId(),
-                BigDecimal.valueOf(movement.getQuantity()),
+                movement.getQuantity(),
                 movement.getLotNumber(),
                 movement.getSerialNumber(),
                 movement.getExpiryDate(),
@@ -314,7 +316,7 @@ public class RepairMaterialUsageService {
     }
 
     private void syncMaterialActualCost(RepairMaterialUsage usage) {
-        if (usage.getUnitCost() == null || usage.getUnitCost() <= 0 || usage.getQuantity() <= 0 || usage.getId() == null) {
+        if (usage.getUnitCost() == null || usage.getUnitCost() <= 0 || usage.getQuantity()==null||usage.getQuantity().signum() <= 0 || usage.getId() == null) {
             return;
         }
         Optional<CostCategory> category = costCategoryRepository.findFirstByCodeAndIsDeletedFalse("MATERIALS");
@@ -332,7 +334,7 @@ public class RepairMaterialUsageService {
         cost.setWorkOrderId(usage.getWorkOrderId());
         cost.setBudgetLineId(repairCampaignBudgetLineResolver.resolveForWorkOrderId(usage.getWorkOrderId()));
         cost.setCostCategoryId(category.get().getId());
-        cost.setAmount(usage.getQuantity() * usage.getUnitCost());
+        cost.setAmount(usage.getQuantity().multiply(new BigDecimal(usage.getUnitCost().toString())));
         cost.setStatus(ActualCostStatus.PENDING);
         cost.setCostDate(usage.getIssuedAt() == null ? java.time.Instant.now() : usage.getIssuedAt());
         cost.setNotes("Generated from material issue %s".formatted(usage.getId()));

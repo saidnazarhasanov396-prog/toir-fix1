@@ -98,7 +98,7 @@ class InventoryAnalyticsServiceTest {
         movement.setWarehouseId(UUID.randomUUID());
         movement.setSparePartId(sparePartId);
         movement.setType(StockMovementType.ISSUE);
-        movement.setQuantity(quantity);
+        movement.setQuantity(BigDecimal.valueOf(quantity));
         movement.setMovementDate(date);
         return movement;
     }

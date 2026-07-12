@@ -312,7 +312,7 @@ class WarehouseStockRepositorySparePartsStatsTest {
         reservation.setWarehouseStockId(stock.getId());
         reservation.setWorkOrderId(UUID.randomUUID());
         reservation.setReservedById(UUID.randomUUID());
-        reservation.setQuantity(1);
+        reservation.setQuantity(java.math.BigDecimal.ONE);
         reservation.setStatus(status);
         reservation.setDeleted(deleted);
         return entityManager.persistAndFlush(reservation);
@@ -328,7 +328,7 @@ class WarehouseStockRepositorySparePartsStatsTest {
         movement.setWarehouseId(warehouseId);
         movement.setSparePartId(sparePartId);
         movement.setType(type);
-        movement.setQuantity(quantity);
+        movement.setQuantity(java.math.BigDecimal.valueOf(quantity));
         movement.setWorkOrderId(workOrderId);
         movement.setDeleted(deleted);
         return entityManager.persistAndFlush(movement);
@@ -339,7 +339,7 @@ class WarehouseStockRepositorySparePartsStatsTest {
         usage.setWorkOrderId(workOrderId);
         usage.setWarehouseId(warehouseId);
         usage.setSparePartId(sparePartId);
-        usage.setQuantity(quantity);
+        usage.setQuantity(new java.math.BigDecimal(Double.toString(quantity)));
         return entityManager.persistAndFlush(usage);
     }
 }

@@ -214,14 +214,14 @@ public class FinanceReportService {
     private void addActualCost(MutableTotals totals, ActualCost cost) {
         totals.actualCostCount += 1;
         if (cost.getBudgetLineId() == null) {
-            totals.unallocatedAmount += cost.getAmount();
+            totals.unallocatedAmount += cost.getAmount().doubleValue();
         }
         if (cost.getStatus() == ActualCostStatus.APPROVED) {
-            totals.approvedActualAmount += cost.getAmount();
+            totals.approvedActualAmount += cost.getAmount().doubleValue();
         } else if (cost.getStatus() == ActualCostStatus.PENDING) {
-            totals.pendingActualAmount += cost.getAmount();
+            totals.pendingActualAmount += cost.getAmount().doubleValue();
         } else if (cost.getStatus() == ActualCostStatus.REJECTED) {
-            totals.rejectedActualAmount += cost.getAmount();
+            totals.rejectedActualAmount += cost.getAmount().doubleValue();
         }
     }
 

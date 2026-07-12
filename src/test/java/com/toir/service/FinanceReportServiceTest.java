@@ -177,7 +177,7 @@ class FinanceReportServiceTest {
         cost.setBudgetLineId(budgetLineId);
         cost.setCostCategoryId(categoryId);
         cost.setStatus(status);
-        cost.setAmount(amount);
+        cost.setAmount(java.math.BigDecimal.valueOf(amount));
         cost.setCostDate(Instant.parse("2026-06-15T00:00:00Z"));
         return cost;
     }

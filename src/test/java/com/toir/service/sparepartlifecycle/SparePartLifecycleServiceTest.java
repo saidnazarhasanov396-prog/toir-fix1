@@ -128,7 +128,7 @@ class SparePartLifecycleServiceTest {
         usage.setId(usageId);
         usage.setWorkOrderId(workOrderId);
         usage.setSparePartId(partId);
-        usage.setQuantity(1);
+        usage.setQuantity(java.math.BigDecimal.ONE);
         usage.setSerialNumber("SER-100");
         usage.setLotNumber("LOT-2026-07");
         SparePartLifeRule rule = new SparePartLifeRule();

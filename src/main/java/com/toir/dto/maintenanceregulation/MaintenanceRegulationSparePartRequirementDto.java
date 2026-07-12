@@ -2,6 +2,7 @@ package com.toir.dto.maintenanceregulation;
 
 import com.toir.entity.maintenance.MaintenanceRegulationSparePartRequirement;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 public record MaintenanceRegulationSparePartRequirementDto(
         UUID id,
@@ -9,7 +10,7 @@ public record MaintenanceRegulationSparePartRequirementDto(
         UUID sparePartId,
         String sparePartCode,
         String sparePartName,
-        double quantity,
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using=com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal quantity,
         String unit,
         String criticality,
         String notes,

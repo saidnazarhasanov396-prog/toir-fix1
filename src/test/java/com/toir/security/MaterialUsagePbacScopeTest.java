@@ -166,7 +166,7 @@ class MaterialUsagePbacScopeTest {
         when(scopeAccessService.canAccessDepartment(warehouseDepartmentId)).thenReturn(false);
 
         assertThatThrownBy(() -> service.register(workOrderId,
-                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 1, null)))
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, java.math.BigDecimal.ONE, null)))
                 .isInstanceOf(AccessDeniedException.class);
 
         verify(stockRepository, never()).findByWarehouseIdAndSparePartIdAndIsDeletedFalse(any(), any());
@@ -198,7 +198,7 @@ class MaterialUsagePbacScopeTest {
         when(stockMovementRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         var result = service.register(workOrderId,
-                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 2, null));
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, java.math.BigDecimal.valueOf(2), null));
 
         assertThat(result.warehouseId()).isEqualTo(warehouseId);
         assertThat(stock.getQuantity()).isEqualTo(3);
@@ -227,7 +227,7 @@ class MaterialUsagePbacScopeTest {
         usage.setWorkOrderId(workOrderId);
         usage.setWarehouseId(warehouseId);
         usage.setSparePartId(UUID.randomUUID());
-        usage.setQuantity(1);
+        usage.setQuantity(java.math.BigDecimal.ONE);
         return usage;
     }
 

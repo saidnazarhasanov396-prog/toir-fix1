@@ -226,6 +226,7 @@ public class WorkOrderService {
     private final MaintenanceDueEventService maintenanceDueEventService;
     private final WorkOrderSparePartRequirementService workOrderSparePartRequirementService;
     private final SafetyChecklistService safetyChecklistService;
+    private final com.toir.service.plannedshutdown.PlannedShutdownWorkOrderStartPolicy plannedShutdownStartPolicy;
     private final ScopeAccessService scopeAccessService;
     private final WorkOrderNumberService workOrderNumberService;
     private final NotificationService notificationService;
@@ -257,6 +258,12 @@ public class WorkOrderService {
     @Transactional(readOnly = true)
     public List<WorkOrderDto> search(WorkOrderStatus status, UUID departmentId, UUID equipmentId) {
         return toDtos(repository.search(status, departmentId, equipmentId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<WorkOrderDto> findByPlannedShutdown(UUID shutdownId, UUID departmentId) {
+        scopeAccessService.assertCanAccessDepartment(departmentId);
+        return toDtos(repository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByUpdatedAtDesc(shutdownId));
     }
 
     @Transactional(readOnly = true)
@@ -771,11 +778,53 @@ public class WorkOrderService {
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request) {
-        return create(request, null);
+        return createPublic(request, null);
     }
 
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request, UUID createdById) {
+        return createPublic(request, createdById);
+    }
+
+    @Transactional
+    public WorkOrderDto createPublic(WorkOrderRequest request, UUID createdById) {
+        assertNoServerOwnedCreateFields(request);
+        return createInternal(request, createdById);
+    }
+
+    @Transactional
+    public WorkOrderDto createGenerated(WorkOrderRequest request) {
+        if (request.generationKey() == null || request.generationKey().isBlank()) {
+            throw RestException.badRequest("Generated work order requires a server generation key");
+        }
+        WorkOrderDto created = createInternal(request, null);
+        repository.flush();
+        return created;
+    }
+
+    @Transactional
+    public WorkOrderDto createCampaignLinked(WorkOrderRequest publicRequest, UUID campaignId, UUID stageId) {
+        assertNoServerOwnedCreateFields(publicRequest);
+        if (campaignId == null || stageId == null) {
+            throw RestException.badRequest("Campaign-linked work order requires campaign and stage");
+        }
+        if (publicRequest.requiresShutdown() || publicRequest.requiresIsolation()) {
+            throw RestException.badRequest("CAMPAIGN_WORK_ORDER_SAFETY_FLAGS_ARE_SERVER_OWNED");
+        }
+        WorkOrderRequest canonical = publicRequest.withSafetyRequirements(false, false)
+                .withRepairCampaign(campaignId, stageId);
+        return createInternal(canonical, null);
+    }
+
+    private void assertNoServerOwnedCreateFields(WorkOrderRequest request) {
+        if (request.generationKey() != null || request.plannedShutdownId() != null
+                || request.shutdownWorkItemId() != null || request.repairCampaignId() != null
+                || request.repairCampaignStageId() != null) {
+            throw RestException.badRequest("SERVER_OWNED_WORK_ORDER_FIELDS_NOT_ALLOWED");
+        }
+    }
+
+    private WorkOrderDto createInternal(WorkOrderRequest request, UUID createdById) {
         if (request.equipmentId() == null) {
             throw RestException.badRequest("Equipment is required to create a work order");
         }
@@ -793,7 +842,8 @@ public class WorkOrderService {
         DefectList linkedDefectList = validateDefectListForWorkOrder(
                 request.type(),
                 request.equipmentId(),
-                request.defectListId());
+                request.defectListId(),
+                false);
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(request.equipmentId())
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + request.equipmentId()));
         UUID effectiveDepartmentId = resolveEffectiveDepartmentId(request, equipment);
@@ -825,6 +875,8 @@ public class WorkOrderService {
         entity.setBudgetLineId(effectiveBudgetLineId);
         entity.setCycleKey(request.cycleKey());
         entity.setGenerationKey(request.generationKey());
+        entity.setPlannedShutdownId(request.plannedShutdownId());
+        entity.setShutdownWorkItemId(request.shutdownWorkItemId());
         entity.setCounteragentId(request.counteragentId());
         entity.setPerformer(performer);
         entity.setType(request.type());
@@ -978,6 +1030,7 @@ public class WorkOrderService {
         }
         assertDefectListGate(entity);
         validatePerformerSkillsForWorkOrder(entity);
+        plannedShutdownStartPolicy.assertCanStart(entity);
         safetyChecklistService.assertCanStart(entity);
         entity.setStatus(WorkOrderStatus.IN_PROGRESS);
         entity.setStartedAt(Instant.now());
@@ -2252,7 +2305,12 @@ public class WorkOrderService {
     }
 
     private DefectList validateDefectListForWorkOrder(WorkOrderType type, UUID equipmentId, UUID defectListId) {
-        boolean required = requiresApprovedDefectList(type);
+        return validateDefectListForWorkOrder(type, equipmentId, defectListId, true);
+    }
+
+    private DefectList validateDefectListForWorkOrder(
+            WorkOrderType type, UUID equipmentId, UUID defectListId, boolean enforceTypeRequirement) {
+        boolean required = enforceTypeRequirement && requiresApprovedDefectList(type);
         if (defectListId == null) {
             if (required) {
                 throw RestException.badRequest(approvedDefectListRequiredMessage(type));
@@ -2323,6 +2381,17 @@ public class WorkOrderService {
             if (result == SkillMatchResult.MISSING) {
                 throw RestException.badRequest("Assigned performer does not have required skill: " + requiredSkill);
             }
+        }
+    }
+
+    /** Canonical reusable skill eligibility used by readiness policies without duplicating certification rules. */
+    @Transactional(readOnly = true)
+    public boolean hasEligiblePerformerSkills(WorkOrder workOrder) {
+        try {
+            validatePerformerSkillsForWorkOrder(workOrder);
+            return true;
+        } catch (RestException ex) {
+            return false;
         }
     }
 
@@ -2991,7 +3060,9 @@ public class WorkOrderService {
                 null,
                 entity.getBudgetLineId(),
                 entity.isRequiresShutdown(),
-                entity.isRequiresIsolation());
+                entity.isRequiresIsolation(),
+                entity.getPlannedShutdownId(),
+                entity.getShutdownWorkItemId());
     }
 
     private WorkOrderDto.CounteragentRef counteragentRef(UUID counteragentId) {

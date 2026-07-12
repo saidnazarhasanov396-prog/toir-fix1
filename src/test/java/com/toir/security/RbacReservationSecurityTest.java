@@ -105,10 +105,11 @@ class RbacReservationSecurityTest {
                 {
                   "warehouseStockId": "%s",
                   "workOrderId": "%s",
+                  "requirementId": "%s",
                   "reservedById": "%s",
-                  "quantity": 1
+                  "quantity": "1.0000"
                 }
-                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+                """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
     }
 
     private ReservationDto reservationDto(ReservationStatus status) {
@@ -118,7 +119,7 @@ class RbacReservationSecurityTest {
                 UUID.randomUUID(),
                 null,
                 UUID.randomUUID(),
-                1,
+                java.math.BigDecimal.ONE,
                 status
         );
     }

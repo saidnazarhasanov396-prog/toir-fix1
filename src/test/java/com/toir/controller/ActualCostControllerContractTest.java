@@ -96,7 +96,7 @@ class ActualCostControllerContractTest {
                 reviewerId,
                 Instant.now(),
                 "Reason",
-                100,
+                java.math.BigDecimal.valueOf(100),
                 Instant.now(),
                 null
         );
@@ -128,7 +128,7 @@ class ActualCostControllerContractTest {
                 null,
                 null,
                 null,
-                100,
+                java.math.BigDecimal.valueOf(100),
                 Instant.now(),
                 null
         );
@@ -161,7 +161,7 @@ class ActualCostControllerContractTest {
                 actorId,
                 Instant.now(),
                 "Fix source document",
-                100,
+                java.math.BigDecimal.valueOf(100),
                 Instant.now(),
                 null
         );
@@ -191,7 +191,7 @@ class ActualCostControllerContractTest {
                 null,
                 null,
                 null,
-                250.0,
+                java.math.BigDecimal.valueOf(250.0),
                 Instant.now(),
                 "WO-2026-10"
         );

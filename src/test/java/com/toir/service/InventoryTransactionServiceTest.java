@@ -453,8 +453,8 @@ class InventoryTransactionServiceTest {
         assertThat(movementCaptor.getAllValues())
                 .extracting(StockMovement::getWarehouseId, StockMovement::getQuantity)
                 .containsExactlyInAnyOrder(
-                        org.assertj.core.groups.Tuple.tuple(sourceWarehouseId, -20.0),
-                        org.assertj.core.groups.Tuple.tuple(destinationWarehouseId, 20.0)
+                        org.assertj.core.groups.Tuple.tuple(sourceWarehouseId, java.math.BigDecimal.valueOf(-20.0)),
+                        org.assertj.core.groups.Tuple.tuple(destinationWarehouseId, java.math.BigDecimal.valueOf(20.0))
                 );
 
         ArgumentCaptor<StockIssueCommand> issueCommandCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
@@ -936,7 +936,7 @@ class InventoryTransactionServiceTest {
         movement.setSparePartId(sparePartId);
         movement.setWorkOrderId(workOrderId);
         movement.setType(type);
-        movement.setQuantity(quantity);
+        movement.setQuantity(BigDecimal.valueOf(quantity));
         return movement;
     }
 

@@ -201,7 +201,7 @@ class FinanceScopeServiceTest {
     private ActualCost actualCost(UUID id) {
         ActualCost cost = new ActualCost();
         cost.setId(id);
-        cost.setAmount(100);
+        cost.setAmount(java.math.BigDecimal.valueOf(100));
         return cost;
     }
 

@@ -229,7 +229,6 @@ public class InventoryAnalyticsService {
                 .filter(movement -> movement.getType() == StockMovementType.ISSUE)
                 .filter(movement -> !movementDate(movement).isBefore(since))
                 .map(StockMovement::getQuantity)
-                .map(BigDecimal::valueOf)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return annualQty.multiply(zero(part.getAverageCost())).setScale(2, RoundingMode.HALF_UP);
     }
@@ -244,17 +243,16 @@ public class InventoryAnalyticsService {
                 .filter(movement -> part.getId().equals(movement.getSparePartId()))
                 .filter(movement -> movement.getType() == StockMovementType.ISSUE)
                 .filter(movement -> !movementDate(movement).isBefore(since))
-                .forEach(movement -> months.merge(movementDate(movement).getMonthValue(), BigDecimal.valueOf(movement.getQuantity()), BigDecimal::add));
+                .forEach(movement -> months.merge(movementDate(movement).getMonthValue(), movement.getQuantity(), BigDecimal::add));
         BigDecimal average = months.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add)
                 .divide(BigDecimal.valueOf(12), 4, RoundingMode.HALF_UP);
-        double avg = average.doubleValue();
-        double variance = months.values().stream()
-                .mapToDouble(value -> Math.pow(value.doubleValue() - avg, 2))
-                .average()
-                .orElse(0);
-        BigDecimal stdDev = BigDecimal.valueOf(Math.sqrt(variance)).setScale(4, RoundingMode.HALF_UP);
-        BigDecimal coefficient = avg == 0 ? BigDecimal.ZERO : stdDev.divide(average, 4, RoundingMode.HALF_UP);
-        String classification = coefficient.compareTo(BigDecimal.valueOf(0.50)) <= 0 ? "X"
+        BigDecimal variance = months.values().stream()
+                .map(value -> value.subtract(average).pow(2))
+                .reduce(BigDecimal.ZERO,BigDecimal::add)
+                .divide(BigDecimal.valueOf(12),12,RoundingMode.HALF_UP);
+        BigDecimal stdDev = variance.sqrt(java.math.MathContext.DECIMAL128).setScale(4, RoundingMode.HALF_UP);
+        BigDecimal coefficient = average.signum()==0 ? BigDecimal.ZERO : stdDev.divide(average, 4, RoundingMode.HALF_UP);
+        String classification = coefficient.compareTo(new BigDecimal("0.50")) <= 0 ? "X"
                 : coefficient.compareTo(BigDecimal.ONE) <= 0 ? "Y" : "Z";
         return new InventoryXyzAnalysisDto(part.getId(), part.getCode(), part.getName(), classification, average, stdDev, coefficient);
     }
@@ -287,7 +285,6 @@ public class InventoryAnalyticsService {
                 .filter(movement -> movement.getType() == StockMovementType.ISSUE)
                 .filter(movement -> !movementDate(movement).isBefore(since))
                 .map(StockMovement::getQuantity)
-                .map(BigDecimal::valueOf)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return issued.divide(BigDecimal.valueOf(90), 4, RoundingMode.HALF_UP);
     }
@@ -303,7 +300,7 @@ public class InventoryAnalyticsService {
     }
 
     private BigDecimal quantity(List<StockMovement> movements) {
-        return movements.stream().map(StockMovement::getQuantity).map(BigDecimal::valueOf).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return movements.stream().map(StockMovement::getQuantity).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private BigDecimal amount(List<StockMovement> movements, SparePart part) {

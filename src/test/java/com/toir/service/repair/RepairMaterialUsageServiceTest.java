@@ -157,7 +157,7 @@ class RepairMaterialUsageServiceTest {
 
         assertThatThrownBy(() -> service.register(
                 workOrderId,
-                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 7, 10.0)
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, java.math.BigDecimal.valueOf(7), 10.0)
                 ))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Insufficient available stock");
@@ -175,11 +175,11 @@ class RepairMaterialUsageServiceTest {
 
         assertThatThrownBy(() -> service.register(workOrderId, usageDto(0)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("MATERIAL_QUANTITY_INVALID");
 
         assertThatThrownBy(() -> service.register(workOrderId, usageDto(-1)))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("Quantity must be greater than 0");
+                .hasMessageContaining("MATERIAL_QUANTITY_INVALID");
 
         verifyNoInteractions(stockRepository, repository, stockMovementRepository);
     }
@@ -218,13 +218,13 @@ class RepairMaterialUsageServiceTest {
 
         RepairMaterialUsageDto result = service.register(
                 workOrderId,
-                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 7, 12.5)
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, java.math.BigDecimal.valueOf(7), 12.5)
         );
 
         assertThat(result.workOrderId()).isEqualTo(workOrderId);
         assertThat(result.warehouseId()).isEqualTo(warehouseId);
         assertThat(result.sparePartId()).isEqualTo(sparePartId);
-        assertThat(result.quantity()).isEqualTo(7);
+        assertThat(result.quantity()).isEqualByComparingTo("7");
         assertThat(result.unitCost()).isEqualTo(12.5);
         assertThat(stock.getQuantity()).isEqualTo(3);
         assertThat(stock.getReservedQty()).isEqualTo(3);
@@ -236,7 +236,7 @@ class RepairMaterialUsageServiceTest {
         assertThat(movement.getWorkOrderId()).isEqualTo(workOrderId);
         assertThat(movement.getWarehouseId()).isEqualTo(warehouseId);
         assertThat(movement.getSparePartId()).isEqualTo(sparePartId);
-        assertThat(movement.getQuantity()).isEqualTo(7);
+        assertThat(movement.getQuantity()).isEqualByComparingTo("7");
         assertThat(movement.getUnitCost()).isEqualTo(12.5);
         ArgumentCaptor<StockIssueCommand> coreIssueCaptor = ArgumentCaptor.forClass(StockIssueCommand.class);
         verify(toirStockService).postIssueAutoAllocate(coreIssueCaptor.capture());
@@ -284,7 +284,7 @@ class RepairMaterialUsageServiceTest {
 
         RepairMaterialUsageDto result = service.register(
                 workOrderId,
-                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 2, 15.0)
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, java.math.BigDecimal.valueOf(2), 15.0)
         );
 
         assertThat(result.costWarning()).isNull();
@@ -297,7 +297,7 @@ class RepairMaterialUsageServiceTest {
         assertThat(cost.getBudgetLineId()).isEqualTo(budgetLineId);
         assertThat(cost.getCostCategoryId()).isEqualTo(categoryId);
         assertThat(cost.getStatus()).isEqualTo(ActualCostStatus.PENDING);
-        assertThat(cost.getAmount()).isEqualTo(30.0);
+        assertThat(cost.getAmount()).isEqualByComparingTo("30.0");
     }
 
     @Test
@@ -316,7 +316,7 @@ class RepairMaterialUsageServiceTest {
         existingCost.setId(existingCostId);
         existingCost.setSourceType(ActualCostSourceType.MATERIAL_ISSUE);
         existingCost.setSourceId(usageId);
-        existingCost.setAmount(10.0);
+        existingCost.setAmount(java.math.BigDecimal.valueOf(10.0));
 
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId))
                 .thenReturn(Optional.of(workOrder(workOrderId, WorkOrderStatus.APPROVED)));
@@ -339,7 +339,7 @@ class RepairMaterialUsageServiceTest {
 
         service.register(
                 workOrderId,
-                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 3, 20.0)
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, java.math.BigDecimal.valueOf(3), 20.0)
         );
 
         ArgumentCaptor<ActualCost> costCaptor = ArgumentCaptor.forClass(ActualCost.class);
@@ -348,7 +348,7 @@ class RepairMaterialUsageServiceTest {
         assertThat(cost.getId()).isEqualTo(existingCostId);
         assertThat(cost.getSourceType()).isEqualTo(ActualCostSourceType.MATERIAL_ISSUE);
         assertThat(cost.getSourceId()).isEqualTo(usageId);
-        assertThat(cost.getAmount()).isEqualTo(60.0);
+        assertThat(cost.getAmount()).isEqualByComparingTo("60.0");
     }
 
     @Test
@@ -375,7 +375,7 @@ class RepairMaterialUsageServiceTest {
 
         RepairMaterialUsageDto result = service.register(
                 workOrderId,
-                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 2, null)
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, java.math.BigDecimal.valueOf(2), null)
         );
 
         assertThat(result.costWarning()).contains("unit cost");
@@ -465,7 +465,7 @@ class RepairMaterialUsageServiceTest {
 
         RepairMaterialUsageDto result = service.register(
                 workOrderId,
-                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 3, null)
+                new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, java.math.BigDecimal.valueOf(3), null)
         );
 
         assertThat(result.workOrderId()).isEqualTo(workOrderId);
@@ -626,7 +626,7 @@ class RepairMaterialUsageServiceTest {
 
         mockSuccessfulRegister(workOrderId, warehouseId, sparePartId);
 
-        service.register(workOrderId, new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, 2, 10.0));
+        service.register(workOrderId, new RepairMaterialUsageDto(null, null, warehouseId, sparePartId, java.math.BigDecimal.valueOf(2), 10.0));
 
         verifyNoInteractions(requirementRepository);
     }
@@ -668,7 +668,7 @@ class RepairMaterialUsageServiceTest {
 
     private RepairMaterialUsageDto usageDto(double quantity) {
         return new RepairMaterialUsageDto(
-                null, null, UUID.randomUUID(), UUID.randomUUID(), quantity, 10.0
+                null, null, UUID.randomUUID(), UUID.randomUUID(), new java.math.BigDecimal(Double.toString(quantity)), 10.0
         );
     }
 
@@ -678,7 +678,7 @@ class RepairMaterialUsageServiceTest {
                 null, null, null, null,
                 warehouseId, null,
                 sparePartId, null, null, null,
-                quantity, 10.0, null, null, null, null, null, null, null,
+                new java.math.BigDecimal(Double.toString(quantity)), 10.0, null, null, null, null, null, null, null,
                 requirementId, null, null, null
         );
     }
@@ -706,7 +706,7 @@ class RepairMaterialUsageServiceTest {
         usage.setWorkOrderId(workOrderId);
         usage.setWarehouseId(warehouseId);
         usage.setSparePartId(UUID.randomUUID());
-        usage.setQuantity(2);
+        usage.setQuantity(java.math.BigDecimal.valueOf(2));
         usage.setUnitCost(4.5);
         return usage;
     }

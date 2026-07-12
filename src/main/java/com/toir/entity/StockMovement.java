@@ -37,8 +37,8 @@ public class StockMovement extends ActorStampedEntity {
     @Column(nullable = false)
     private StockMovementType type;
 
-    @Column(nullable = false)
-    private double quantity;
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal quantity;
 
     @Column(name = "unit")
     private String unit;
