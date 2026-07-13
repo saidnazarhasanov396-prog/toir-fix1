@@ -207,6 +207,14 @@ public class PlannedShutdownController {
         return ResponseEntity.ok(service.removeReadinessItem(id, itemId, version));
     }
 
+    @PostMapping("/{id}/readiness/{itemId}/start")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_PREPARE')")
+    public ResponseEntity<PlannedShutdownReadinessScopeResponse> startReadiness(
+            @PathVariable UUID id, @PathVariable UUID itemId,
+            @Valid @RequestBody PlannedShutdownReadinessActionRequest request) {
+        return ResponseEntity.ok(service.startReadinessItem(id, itemId, request));
+    }
+
     @PostMapping("/{id}/readiness/{itemId}/complete")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('PLANNED_SHUTDOWN_PREPARE')")
     public ResponseEntity<PlannedShutdownReadinessScopeResponse> completeReadiness(

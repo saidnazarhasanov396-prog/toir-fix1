@@ -445,6 +445,31 @@ public class PlannedShutdownService {
     }
 
     @Transactional
+    public PlannedShutdownReadinessScopeResponse startReadinessItem(
+            UUID id, UUID itemId, PlannedShutdownReadinessActionRequest request) {
+        PlannedShutdown shutdown = findLocked(id);
+        requireVersion(shutdown, request.version());
+        requireLifecycle(readinessLifecyclePolicy.canActOnReadiness(shutdown.getLifecycleStatus()),
+                "Readiness start", shutdown);
+        PlannedShutdownReadinessItem item = findReadiness(id, itemId);
+        if (item.getStatus() == PlannedShutdownItemStatus.PASSED || item.getCompletedAt() != null) {
+            throw RestException.conflict("Completed readiness item must be reopened before starting");
+        }
+        if (item.getStatus() == PlannedShutdownItemStatus.IN_PROGRESS) {
+            throw RestException.conflict("Readiness item is already in progress");
+        }
+        requireUserActor();
+        var before = PlannedShutdownReadinessItemResponse.from(item);
+        item.setStatus(PlannedShutdownItemStatus.IN_PROGRESS);
+        item.setEvidence(trimToNull(request.evidence()));
+        item.setComment(trimToNull(request.comment()));
+        readinessItemRepository.saveAndFlush(item);
+        audit("planned_shutdown_readiness", itemId, AuditAction.UPDATE,
+                "Готовность взята в работу", before, PlannedShutdownReadinessItemResponse.from(item));
+        return readinessScope(shutdown);
+    }
+
+    @Transactional
     public PlannedShutdownReadinessScopeResponse completeReadinessItem(
             UUID id, UUID itemId, PlannedShutdownReadinessActionRequest request) {
         PlannedShutdown shutdown = findLocked(id);
