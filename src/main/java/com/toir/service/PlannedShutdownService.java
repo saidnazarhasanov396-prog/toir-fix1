@@ -153,8 +153,7 @@ public class PlannedShutdownService {
         assetRepository.saveAllAndFlush(initialAssets);
         saved.setScopeVersion(1L);
         saved = saveRoot(saved, code);
-        List<PlannedShutdownAssetResponse> assetResponses = initialAssets.stream()
-                .map(PlannedShutdownAssetResponse::from).toList();
+        List<PlannedShutdownAssetResponse> assetResponses = assetResponses(initialAssets);
 
         auditBuilderService.log(
                 "planned_shutdown",
@@ -272,9 +271,8 @@ public class PlannedShutdownService {
         });
         assetRepository.saveAllAndFlush(changed);
         PlannedShutdown saved = incrementScope(shutdown);
-        List<PlannedShutdownAssetResponse> active = changed.stream().filter(asset -> !asset.isDeleted())
-                .sorted(Comparator.comparing(PlannedShutdownAsset::getOrderNumber))
-                .map(PlannedShutdownAssetResponse::from).toList();
+        List<PlannedShutdownAssetResponse> active = assetResponses(changed.stream().filter(asset -> !asset.isDeleted())
+                .sorted(Comparator.comparing(PlannedShutdownAsset::getOrderNumber)).toList());
         ScopeAuditSnapshot after = new ScopeAuditSnapshot(saved.getScopeVersion(), active);
         auditBuilderService.log("planned_shutdown_scope", id.toString(), AuditAction.UPDATE,
                 AuditModule.PLANNED_SHUTDOWN, "Граница плановой остановки обновлена", before, after);
@@ -373,8 +371,8 @@ public class PlannedShutdownService {
         for (int i = 0; i < request.itemIds().size(); i++) byId.get(request.itemIds().get(i)).setOrderNumber(i);
         workItemRepository.saveAllAndFlush(items);
         PlannedShutdown saved = incrementScope(shutdown);
-        List<PlannedShutdownWorkItemResponse> afterItems = request.itemIds().stream()
-                .map(byId::get).map(PlannedShutdownWorkItemResponse::from).toList();
+        List<PlannedShutdownWorkItemResponse> afterItems = workItemResponses(request.itemIds().stream()
+                .map(byId::get).toList());
         auditBuilderService.log("planned_shutdown_work_items", id.toString(), AuditAction.UPDATE,
                 AuditModule.PLANNED_SHUTDOWN, "Порядок работ плановой остановки изменён", before,
                 new PlannedShutdownWorkItemAuditSnapshot(saved.getScopeVersion(), afterItems));
@@ -950,11 +948,23 @@ public class PlannedShutdownService {
     }
 
     private PlannedShutdownIsolationScopeResponse isolationScope(PlannedShutdown shutdown) {
-        List<PlannedShutdownIsolationPointResponse> points = isolationPointRepository
-                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdown.getId()).stream()
-                .map(PlannedShutdownIsolationPointResponse::from).toList();
+        List<PlannedShutdownIsolationPoint> isolationPoints = isolationPointRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdown.getId());
+        Map<UUID, String> equipmentNames = equipmentNamesById(isolationPoints.stream()
+                .map(PlannedShutdownIsolationPoint::getEquipmentId).toList());
+        List<PlannedShutdownIsolationPointResponse> points = isolationPoints.stream()
+                .map(point -> PlannedShutdownIsolationPointResponse.from(
+                        point, equipmentNames.get(point.getEquipmentId())))
+                .toList();
         return new PlannedShutdownIsolationScopeResponse(shutdown.getId(), shutdown.getVersion(),
                 shutdown.getScopeVersion(), points);
+    }
+
+    private Map<UUID, String> equipmentNamesById(Collection<UUID> equipmentIds) {
+        List<UUID> ids = equipmentIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        return equipmentRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(Equipment::getId, Equipment::getName));
     }
 
     private PlannedShutdownReadinessItem findReadiness(UUID shutdownId, UUID itemId) {
@@ -1158,13 +1168,27 @@ public class PlannedShutdownService {
     }
 
     private List<PlannedShutdownAssetResponse> assetResponses(UUID id) {
-        return assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id).stream()
-                .map(PlannedShutdownAssetResponse::from).toList();
+        return assetResponses(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id));
+    }
+
+    private List<PlannedShutdownAssetResponse> assetResponses(List<PlannedShutdownAsset> assets) {
+        Map<UUID, String> equipmentNames = equipmentNamesById(assets.stream()
+                .map(PlannedShutdownAsset::getEquipmentId).toList());
+        return assets.stream()
+                .map(asset -> PlannedShutdownAssetResponse.from(asset, equipmentNames.get(asset.getEquipmentId())))
+                .toList();
     }
 
     private List<PlannedShutdownWorkItemResponse> workItemResponses(UUID id) {
-        return workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id).stream()
-                .map(PlannedShutdownWorkItemResponse::from).toList();
+        return workItemResponses(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id));
+    }
+
+    private List<PlannedShutdownWorkItemResponse> workItemResponses(List<PlannedShutdownWorkItem> items) {
+        Map<UUID, String> equipmentNames = equipmentNamesById(items.stream()
+                .map(PlannedShutdownWorkItem::getEquipmentId).toList());
+        return items.stream()
+                .map(item -> PlannedShutdownWorkItemResponse.from(item, equipmentNames.get(item.getEquipmentId())))
+                .toList();
     }
 
     private PlannedShutdownWorkItemScopeResponse workItemScope(PlannedShutdown shutdown) {

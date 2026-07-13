@@ -257,6 +257,38 @@ class PlannedShutdownServiceTest {
         assertThat(point.getReleasedAt()).isNotNull();
     }
 
+
+    @Test
+    void listIsolationReturnsEquipmentNameFromBackend() {
+        UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, departmentId, 4L, PlannedShutdownStatus.SAFE_STATE);
+        var point = new com.toir.entity.plannedshutdown.PlannedShutdownIsolationPoint();
+        point.setId(UUID.randomUUID());
+        point.setPlannedShutdownId(id);
+        point.setEquipmentId(equipmentId);
+        point.setIsolationMethod("Electrical disconnect");
+        point.setLockTagIdentifier("LOTO-44");
+        point.setResponsibleEmployeeId(UUID.randomUUID());
+        point.setStatus(com.toir.enums.PlannedShutdownItemStatus.PENDING);
+        point.setOrderNumber(0);
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setName("Main compressor");
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(point));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId))).thenReturn(List.of(equipment));
+
+        var response = service.listIsolation(id);
+
+        assertThat(response.points()).hasSize(1);
+        assertThat(response.points().get(0).equipmentId()).isEqualTo(equipmentId);
+        assertThat(response.points().get(0).equipmentName()).isEqualTo("Main compressor");
+    }
+
     @Test
     void isolationRejectsUnrelatedNotIssuedFutureAndExpiredPermits() {
         UUID id = UUID.randomUUID(); UUID equipmentId = UUID.randomUUID(); UUID employeeId = UUID.randomUUID();

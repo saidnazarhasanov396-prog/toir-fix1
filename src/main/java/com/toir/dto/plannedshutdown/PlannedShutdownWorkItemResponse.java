@@ -9,11 +9,15 @@ import java.util.UUID;
 
 public record PlannedShutdownWorkItemResponse(
         UUID id, PlannedShutdownWorkItemSourceType sourceType, UUID sourceId, UUID equipmentId,
-        String title, PriorityLevel priority, boolean requiresShutdown, boolean requiresIsolation,
+        String equipmentName, String title, PriorityLevel priority, boolean requiresShutdown, boolean requiresIsolation,
         Integer plannedDurationMinutes, String criticality, Integer orderNumber, PlannedShutdownItemStatus status) {
     public static PlannedShutdownWorkItemResponse from(PlannedShutdownWorkItem item) {
+        return from(item, null);
+    }
+
+    public static PlannedShutdownWorkItemResponse from(PlannedShutdownWorkItem item, String equipmentName) {
         return new PlannedShutdownWorkItemResponse(item.getId(), item.getSourceType(), item.getSourceId(),
-                item.getEquipmentId(), item.getTitle(), item.getPriority(), item.isRequiresShutdown(),
+                item.getEquipmentId(), equipmentName, item.getTitle(), item.getPriority(), item.isRequiresShutdown(),
                 item.isRequiresIsolation(), item.getPlannedDurationMinutes(), item.getCriticality(),
                 item.getOrderNumber(), item.getStatus());
     }
