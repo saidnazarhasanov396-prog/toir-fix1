@@ -10,6 +10,7 @@ import com.toir.entity.Department;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.users.Employee;
 import com.toir.enums.PlannedShutdownAssetDisposition;
+import com.toir.enums.PlannedShutdownReadinessSeverity;
 import com.toir.enums.PlannedShutdownStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.PlannedShutdownRepository;
@@ -528,7 +529,7 @@ class PlannedShutdownServiceTest {
         workItem.setId(UUID.randomUUID()); workItem.setPlannedShutdownId(id); workItem.setEquipmentId(equipmentId);
         workItem.setTitle("Replace seal"); workItem.setStatus(com.toir.enums.PlannedShutdownItemStatus.PENDING);
         var readinessPassed = new com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem();
-        readinessPassed.setSeverity(com.toir.enums.PlannedShutdownReadinessSeverity.NORMAL);
+        readinessPassed.setSeverity(PlannedShutdownReadinessSeverity.CRITICAL);
         readinessPassed.setStatus(com.toir.enums.PlannedShutdownItemStatus.PASSED);
         var readinessCritical = new com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem();
         readinessCritical.setSeverity(com.toir.enums.PlannedShutdownReadinessSeverity.CRITICAL);

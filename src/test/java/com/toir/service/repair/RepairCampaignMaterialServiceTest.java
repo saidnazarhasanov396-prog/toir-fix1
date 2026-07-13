@@ -61,6 +61,33 @@ class RepairCampaignMaterialServiceTest {
 
     @BeforeEach void setup(){campaign=new RepairCampaign();campaign.setId(campaignId);campaign.setVersion(1L);campaign.setStatus(RepairCampaignStatus.DRAFT);campaign.setDepartmentId(UUID.randomUUID());org.mockito.Mockito.lenient().when(campaigns.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));org.mockito.Mockito.lenient().when(campaigns.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));RepairCampaignWorkItem item=new RepairCampaignWorkItem();item.setId(itemId);org.mockito.Mockito.lenient().when(items.findByIdAndCampaignIdAndIsDeletedFalse(itemId,campaignId)).thenReturn(Optional.of(item));SparePart spare=new SparePart();spare.setId(spareId);org.mockito.Mockito.lenient().when(spareParts.findByIdAndIsDeletedFalse(spareId)).thenReturn(Optional.of(spare));Warehouse warehouse=new Warehouse();warehouse.setId(warehouseId);warehouse.setActive(true);org.mockito.Mockito.lenient().when(warehouses.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));}
 
+    @Test void listReturnsHumanReadableSparePartAndWarehouseLabels(){
+        UUID requirementId=UUID.randomUUID();
+        RepairCampaignMaterialRequirement requirement=critical(requirementId,spareId,warehouseId,"2.5000");
+        SparePart spare=new SparePart();
+        spare.setId(spareId);
+        spare.setCode("SP-77");
+        spare.setName("Bearing 6205");
+        spare.setUnit("pcs");
+        Warehouse warehouse=new Warehouse();
+        warehouse.setId(warehouseId);
+        warehouse.setCode("WH-1");
+        warehouse.setName("Main warehouse");
+        when(requirements.findAllByRepairCampaignIdAndIsDeletedFalseOrderByWorkItemIdAscSparePartIdAsc(campaignId)).thenReturn(List.of(requirement));
+        when(spareParts.findAllByIdInAndIsDeletedFalse(List.of(spareId))).thenReturn(List.of(spare));
+        when(warehouses.findAllByIdInAndIsDeletedFalse(List.of(warehouseId))).thenReturn(List.of(warehouse));
+
+        var result=service.list(campaignId);
+
+        assertThat(result).singleElement().satisfies(row->{
+            assertThat(row.sparePartCode()).isEqualTo("SP-77");
+            assertThat(row.sparePartName()).isEqualTo("Bearing 6205");
+            assertThat(row.sparePartUnit()).isEqualTo("pcs");
+            assertThat(row.warehouseCode()).isEqualTo("WH-1");
+            assertThat(row.warehouseName()).isEqualTo("Main warehouse");
+        });
+    }
+
     @Test void demandPreservesFourDecimalPrecisionAndNeverReserves(){when(requirements.saveAndFlush(any())).thenAnswer(i->{RepairCampaignMaterialRequirement r=i.getArgument(0);r.setId(UUID.randomUUID());return r;});when(campaigns.saveAndFlush(campaign)).thenAnswer(i->{campaign.setVersion(2L);return campaign;});var result=service.add(campaignId,new RepairCampaignMaterialRequirementRequest(1L,itemId,spareId,warehouseId,new BigDecimal("0.1234"),true,false));assertThat(result.requiredQuantity()).isEqualByComparingTo("0.1234");ArgumentCaptor<RepairCampaignMaterialRequirement> saved=ArgumentCaptor.forClass(RepairCampaignMaterialRequirement.class);verify(requirements).saveAndFlush(saved.capture());assertThat(saved.getValue().getRequiredQuantity()).isEqualByComparingTo("0.1234");verify(reservations,never()).save(any());}
 
     @Test void removalConstraintIsTranslatedToTypedConflict(){
