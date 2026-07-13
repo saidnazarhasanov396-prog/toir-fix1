@@ -17,6 +17,8 @@ import com.toir.repository.repair.RepairCampaignResourceAssignmentRepository;
 import com.toir.repository.repair.RepairCampaignWorkDependencyRepository;
 import com.toir.repository.repair.RepairCampaignWorkItemRepository;
 import com.toir.repository.repair.RepairCampaignWorkItemWindowRepository;
+import com.toir.repository.repair.RepairCampaignStageRepository;
+import com.toir.repository.WorkOrderRepository;
 import lombok.RequiredArgsConstructor;
 
 import java.math.BigDecimal;
@@ -36,6 +38,8 @@ public class RepairCampaignApprovalScopeHasher {
     private final PlannedShutdownCampaignLinkRepository shutdownLinkRepository;
     private final RepairCampaignWorkItemWindowRepository windowRepository;
     private final PlannedShutdownRepository plannedShutdownRepository;
+    private final RepairCampaignStageRepository stageRepository;
+    private final WorkOrderRepository workOrderRepository;
 
     public String hash(RepairCampaign campaign) {
         ArrayList<String> facts = new ArrayList<>();
@@ -51,6 +55,14 @@ public class RepairCampaignApprovalScopeHasher {
                 .sorted(Comparator.comparing(item -> item.getDepartmentId().toString()))
                 .forEach(item -> facts.add(fact("participantDepartment", item.getDepartmentId(), item.getRole(),
                         decimal(item.getPlannedBudget()), item.getNotes())));
+        stageRepository.findAllByCampaignIdOrderBySequenceAscIdAsc(campaign.getId()).forEach(stage ->
+                facts.add(fact("stage", stage.getId(), stage.getSequence(), stage.getName(), stage.getStartDate(),
+                        stage.getEndDate(), stage.getStatus(), decimal(stage.getPlannedCost()),
+                        stage.getBudgetLineId(), stage.getUpdatedAt(), stage.isDeleted())));
+        workOrderRepository.findAllByRepairCampaignIdAndIsDeletedFalseOrderByUpdatedAtDesc(campaign.getId()).stream()
+                .sorted(Comparator.comparing(item -> item.getId().toString()))
+                .forEach(item -> facts.add(fact("attachedWorkOrder", item.getId(), item.getRepairCampaignStageId(),
+                        item.getEquipmentId(), item.getBudgetLineId(), item.getStatus(), item.getNumber())));
 
         workItemRepository.findAllByCampaignIdAndIsDeletedFalseOrderByOrderNumberAsc(campaign.getId())
                 .forEach(item -> facts.add(fact("work", item.getId(), item.getSourceType(), item.getSourceId(),

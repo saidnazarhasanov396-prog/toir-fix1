@@ -7,8 +7,6 @@ import com.toir.service.repair.RepairCampaignService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.util.UUID;
-
 @Component
 @RequiredArgsConstructor
 public class RepairCampaignApprovalHandler implements ApprovalActionHandler {
@@ -28,9 +26,5 @@ public class RepairCampaignApprovalHandler implements ApprovalActionHandler {
         }
         repairCampaignService.finalizeApprovalFromApprovalRequest(request);
         return "{\"status\":\"APPROVED\"}";
-    }
-
-    private UUID targetId(ApprovalRequest request) {
-        return request.getTargetId() == null ? request.getDocumentId() : request.getTargetId();
     }
 }

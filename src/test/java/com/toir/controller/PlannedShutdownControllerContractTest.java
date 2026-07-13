@@ -103,14 +103,20 @@ class PlannedShutdownControllerContractTest {
     void listShutdownsWithFiltersReturnsFilteredPage() throws Exception {
         UUID shutdownId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
+        UUID responsibleEmployeeId = UUID.randomUUID();
         
         PlannedShutdownDto dto = new PlannedShutdownDto(
                 shutdownId,
+                "PS-2026-0001",
                 "Annual Maintenance",
+                "FULL_PRODUCTION",
                 departmentId,
+                responsibleEmployeeId,
                 Instant.parse("2026-05-19T10:00:00Z"),
                 Instant.parse("2026-05-19T18:00:00Z"),
                 "Routine check",
+                "HIGH",
+                new java.math.BigDecimal("8.5000"),
                 PlannedShutdownStatus.DRAFT
         );
 
@@ -123,6 +129,11 @@ class PlannedShutdownControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].id").value(shutdownId.toString()))
                 .andExpect(jsonPath("$.content[0].name").value("Annual Maintenance"))
+                .andExpect(jsonPath("$.content[0].code").value("PS-2026-0001"))
+                .andExpect(jsonPath("$.content[0].shutdownType").value("FULL_PRODUCTION"))
+                .andExpect(jsonPath("$.content[0].responsibleEmployeeId").value(responsibleEmployeeId.toString()))
+                .andExpect(jsonPath("$.content[0].riskLevel").value("HIGH"))
+                .andExpect(jsonPath("$.content[0].riskScore").value(8.5))
                 .andExpect(jsonPath("$.content[0].status").value("DRAFT"))
                 .andExpect(jsonPath("$.content[0].departmentId").value(departmentId.toString()));
     }

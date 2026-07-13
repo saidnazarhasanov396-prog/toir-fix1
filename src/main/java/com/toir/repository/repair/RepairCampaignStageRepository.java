@@ -27,5 +27,6 @@ public interface RepairCampaignStageRepository extends JpaRepository<RepairCampa
 
     @Query(value = "SELECT COUNT(*) FROM repair_campaign_stages WHERE is_deleted = false", nativeQuery = true)
     long countByIsDeletedFalse();
+    List<RepairCampaignStage> findAllByCampaignIdOrderBySequenceAscIdAsc(UUID campaignId);
 
 }

@@ -54,6 +54,23 @@ import static org.mockito.Mockito.never;
 class RepairCampaignControllerContractTest {
 
     @Test
+    void aggregateUpdateAllowsScopeOrFinanceEntryAndDefersExactClassificationToService() {
+        var method = java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods())
+                .filter(candidate -> candidate.getName().equals("update")).findFirst().orElseThrow();
+        assertThat(method.getAnnotation(PreAuthorize.class).value())
+                .contains("REPAIR_CAMPAIGN_MANAGE_SCOPE", "REPAIR_CAMPAIGN_MANAGE_FINANCE");
+    }
+
+    @Test
+    void stageAndLegacyWorkOrderMutationsRequireManageWork() {
+        for (String name : java.util.List.of("addStage", "updateStage", "attachWorkOrder", "detachWorkOrder")) {
+            var method = java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods())
+                    .filter(candidate -> candidate.getName().equals(name)).findFirst().orElseThrow();
+            assertThat(method.getAnnotation(PreAuthorize.class).value()).contains("REPAIR_CAMPAIGN_MANAGE_WORK");
+        }
+    }
+
+    @Test
     void workItemEndpointsDeclareReadAndMutationPbac() {
         java.util.Map<String, String> expected = java.util.Map.of(
                 "listWorkItems", "REPAIR_CAMPAIGN_READ",
@@ -178,9 +195,6 @@ class RepairCampaignControllerContractTest {
     @Mock
     private com.toir.service.repair.RepairCampaignMaterialService materialService;
     @Mock
-    private com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
-
-    @Mock
     private DefectService defectService;
 
     @Mock
@@ -194,7 +208,7 @@ class RepairCampaignControllerContractTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService, shutdownLinkService, materialService, mutationImpactService, defectService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(service, workItemService, shutdownLinkService, materialService, defectService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
@@ -252,6 +266,32 @@ class RepairCampaignControllerContractTest {
                 .andExpect(status().isOk());
 
         verify(defectService).searchByRepairCampaign(campaignId, com.toir.enums.DefectStatus.OPEN, "HIGH", 1, 25);
+    }
+
+    @Test
+    void mutationImpactAcceptsTheProposedUpdateInsteadOfCallerSelectedMutationType() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+        var impact = new com.toir.dto.repaircampaign.CampaignMutationImpact(false,
+                RepairCampaignStatus.DRAFT, 7L, 3L, RepairCampaignStatus.DRAFT,
+                "REPAIR_CAMPAIGN_SCOPE_CHANGED", List.of());
+        when(service.previewUpdateImpact(eq(campaignId), any(), eq(7L))).thenReturn(impact);
+
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/mutation-impact", campaignId)
+                        .param("scopeVersion", "7")
+                        .contentType("application/json")
+                        .content("""
+                                {"name":"Proposed","startDate":"2026-01-01","endDate":"2026-02-01",
+                                 "totalBudget":"2000.0000","currencyCode":"USD","version":3}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentVersion").value(3));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.toir.dto.repaircampaign.RepairCampaignRequest.class);
+        verify(service).previewUpdateImpact(eq(campaignId), captor.capture(), eq(7L));
+        assertThat(captor.getValue().totalBudget()).isEqualByComparingTo("2000.0000");
+        assertThat(captor.getValue().currencyCode()).isEqualTo("USD");
+        assertThat(captor.getValue().version()).isEqualTo(3L);
     }
 
     @Test

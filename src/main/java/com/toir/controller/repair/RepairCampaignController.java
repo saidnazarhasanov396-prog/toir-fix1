@@ -52,7 +52,6 @@ public class RepairCampaignController {
     private final RepairCampaignWorkItemService workItemService;
     private final RepairCampaignShutdownLinkService shutdownLinkService;
     private final com.toir.service.repair.RepairCampaignMaterialService materialService;
-    private final com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
     private final DefectService defectService;
 
     public record WorkItemOrderRequest(@jakarta.validation.constraints.NotNull Long version,
@@ -98,7 +97,9 @@ public class RepairCampaignController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_MANAGE_SCOPE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') " +
+            "or hasAuthority('REPAIR_CAMPAIGN_MANAGE_SCOPE') " +
+            "or hasAuthority('REPAIR_CAMPAIGN_MANAGE_FINANCE')")
     public ResponseEntity<RepairCampaignDto> update(@PathVariable UUID id, @Valid @RequestBody RepairCampaignRequest r) {
         if (r.version() == null) {
             throw RestException.badRequest("Repair campaign version is required for update");
@@ -106,17 +107,16 @@ public class RepairCampaignController {
         return ResponseEntity.ok(service.update(id, r));
     }
 
-    @GetMapping("/{id}/mutation-impact")
+    @PostMapping("/{id}/mutation-impact")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAnyAuthority(" +
             "'REPAIR_CAMPAIGN_MANAGE_WORK','REPAIR_CAMPAIGN_MANAGE_SCOPE','REPAIR_CAMPAIGN_MANAGE_SHUTDOWN_LINKS'," +
             "'REPAIR_CAMPAIGN_MANAGE_RESOURCES','REPAIR_CAMPAIGN_MANAGE_MATERIALS'," +
             "'REPAIR_CAMPAIGN_MANAGE_DEPENDENCIES','REPAIR_CAMPAIGN_MANAGE_FINANCE')")
     public ResponseEntity<com.toir.dto.repaircampaign.CampaignMutationImpact> mutationImpact(
             @PathVariable UUID id,
-            @RequestParam com.toir.enums.RepairCampaignMutationType mutationType,
-            @RequestParam Long version,
-            @RequestParam Long scopeVersion) {
-        return ResponseEntity.ok(mutationImpactService.preview(id, mutationType, version, scopeVersion));
+            @RequestParam Long scopeVersion,
+            @Valid @RequestBody RepairCampaignRequest proposed) {
+        return ResponseEntity.ok(service.previewUpdateImpact(id, proposed, scopeVersion));
     }
 
     @PostMapping("/{id}/request-approval")
@@ -320,13 +320,13 @@ public class RepairCampaignController {
     }
 
     @PostMapping("/{id}/stages")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_MANAGE_WORK')")
     public ResponseEntity<RepairCampaignStageDto> addStage(@PathVariable UUID id, @Valid @RequestBody RepairCampaignStageDto r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addStage(id, r));
     }
 
     @PutMapping("/{id}/stages/{stageId}")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_MANAGE_WORK')")
     public ResponseEntity<RepairCampaignStageDto> updateStage(
             @PathVariable UUID id,
             @PathVariable UUID stageId,
@@ -361,7 +361,7 @@ public class RepairCampaignController {
     }
 
     @PostMapping("/{id}/stages/{stageId}/work-orders/{workOrderId}/attach")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_MANAGE_WORK')")
     public ResponseEntity<WorkOrderDto> attachWorkOrder(
             @PathVariable UUID id,
             @PathVariable UUID stageId,
@@ -371,7 +371,7 @@ public class RepairCampaignController {
     }
 
     @PostMapping("/{id}/work-orders/{workOrderId}/detach")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_UPDATE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_MANAGE_WORK')")
     public ResponseEntity<WorkOrderDto> detachWorkOrder(
             @PathVariable UUID id,
             @PathVariable UUID workOrderId
