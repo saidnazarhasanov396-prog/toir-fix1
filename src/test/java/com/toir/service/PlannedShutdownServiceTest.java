@@ -490,6 +490,52 @@ class PlannedShutdownServiceTest {
     }
 
     @Test
+    void getReturnsSummaryAndNextActionForDetailHeader() {
+        UUID id = UUID.randomUUID(); UUID departmentId = UUID.randomUUID(); UUID equipmentId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, departmentId, 5L, PlannedShutdownStatus.SCOPE_FORMATION);
+        var workItem = new com.toir.entity.plannedshutdown.PlannedShutdownWorkItem();
+        workItem.setId(UUID.randomUUID()); workItem.setPlannedShutdownId(id); workItem.setEquipmentId(equipmentId);
+        workItem.setTitle("Replace seal"); workItem.setStatus(com.toir.enums.PlannedShutdownItemStatus.PENDING);
+        var readinessPassed = new com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem();
+        readinessPassed.setSeverity(com.toir.enums.PlannedShutdownReadinessSeverity.NORMAL);
+        readinessPassed.setStatus(com.toir.enums.PlannedShutdownItemStatus.PASSED);
+        var readinessCritical = new com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem();
+        readinessCritical.setSeverity(com.toir.enums.PlannedShutdownReadinessSeverity.CRITICAL);
+        readinessCritical.setStatus(com.toir.enums.PlannedShutdownItemStatus.PENDING);
+        var isolation = new com.toir.entity.plannedshutdown.PlannedShutdownIsolationPoint();
+        isolation.setVerifiedAt(Instant.parse("2026-08-01T01:00:00Z"));
+        var workOrder = new com.toir.entity.maintenance.WorkOrder();
+        workOrder.setId(UUID.randomUUID()); workOrder.setPlannedShutdownId(id);
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(asset(id, equipmentId, PlannedShutdownAssetDisposition.STOPPED, 0)));
+        when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(workItem));
+        when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(readinessPassed, readinessCritical));
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(isolation));
+        when(workOrderRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByUpdatedAtDesc(id))
+                .thenReturn(List.of(workOrder));
+
+        var response = service.get(id);
+
+        assertThat(response.summary().equipmentCount()).isEqualTo(1);
+        assertThat(response.summary().workItemCount()).isEqualTo(1);
+        assertThat(response.summary().workOrderCount()).isEqualTo(1);
+        assertThat(response.summary().readinessItemCount()).isEqualTo(2);
+        assertThat(response.summary().readinessPassedCount()).isEqualTo(1);
+        assertThat(response.summary().readinessCriticalOpenCount()).isEqualTo(1);
+        assertThat(response.summary().isolationPointCount()).isEqualTo(1);
+        assertThat(response.summary().isolationVerifiedCount()).isEqualTo(1);
+        assertThat(response.nextAction().code()).isEqualTo("BEGIN_READINESS");
+        assertThat(response.nextAction().commandEndpoint()).isEqualTo("begin-readiness");
+        assertThat(response.nextAction().targetTab()).isEqualTo("readiness");
+        assertThat(response.nextAction().blocked()).isFalse();
+    }
+
+    @Test
     void updateUsesLockedAggregateAndRejectsStaleVersion() {
         UUID id = UUID.randomUUID();
         PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 4L, PlannedShutdownStatus.DRAFT);
