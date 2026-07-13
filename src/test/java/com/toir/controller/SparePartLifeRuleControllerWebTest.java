@@ -2,8 +2,10 @@ package com.toir.controller;
 
 import com.toir.controller.sparepartlifecycle.SparePartLifeRuleController;
 import com.toir.dto.sparepartlifecycle.SparePartLifeLimitDto;
+import com.toir.dto.sparepartlifecycle.SparePartLifeLimitListDto;
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleDto;
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleFilter;
+import com.toir.dto.sparepartlifecycle.SparePartLifeRuleListDto;
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleRequest;
 import com.toir.enums.sparepartlifecycle.SparePartCalendarUnit;
 import com.toir.enums.sparepartlifecycle.SparePartDueAction;
@@ -44,6 +46,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -141,16 +144,117 @@ class SparePartLifeRuleControllerWebTest {
 
     @Test
     @WithMockUser(authorities = "SPARE_PART_LIFE_RULE_READ")
-    void listSerializesDecimalLimitsAsStrings() throws Exception {
+    void listIncludesEquipmentAndSparePartNames() throws Exception {
         UUID partId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
         when(service.list(any(), any())).thenReturn(new PageImpl<>(
-                List.of(ruleDto(partId, new BigDecimal(PROOF_LIMIT), new BigDecimal(PROOF_WARNING))),
+                List.of(listRuleDto(
+                        partId,
+                        "Podshipnik 6205",
+                        equipmentId,
+                        "Kompressor K-101",
+                        new BigDecimal("1000.000000"),
+                        new BigDecimal("900.000000"))),
                 PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/spare-part-life-rules"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].limits[0].limitValue").value(PROOF_LIMIT))
-                .andExpect(jsonPath("$.content[0].limits[0].warningBeforeValue").value(PROOF_WARNING));
+                .andExpect(jsonPath("$.content[0].sparePartName").value("Podshipnik 6205"))
+                .andExpect(jsonPath("$.content[0].equipmentName").value("Kompressor K-101"));
+    }
+
+    @Test
+    @WithMockUser(authorities = "SPARE_PART_LIFE_RULE_READ")
+    void listSerializesIntegralLimitsAsJsonNumbersWithoutScale() throws Exception {
+        when(service.list(any(), any())).thenReturn(new PageImpl<>(
+                List.of(listRuleDto(
+                        UUID.randomUUID(),
+                        "Podshipnik 6205",
+                        UUID.randomUUID(),
+                        "Kompressor K-101",
+                        new BigDecimal("1000.000000"),
+                        new BigDecimal("900.000000"))),
+                PageRequest.of(0, 20), 1));
+
+        String response = mockMvc.perform(get("/api/v1/spare-part-life-rules"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].limits[0].limitValue").value(1000))
+                .andExpect(jsonPath("$.content[0].limits[0].warningBeforeValue").value(900))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(response).contains("\"limitValue\":1000", "\"warningBeforeValue\":900");
+        assertThat(response).doesNotContain(
+                "\"limitValue\":\"1000.000000\"",
+                "\"limitValue\":1000.000000",
+                "\"warningBeforeValue\":\"900.000000\"",
+                "\"warningBeforeValue\":900.000000");
+    }
+
+    @Test
+    @WithMockUser(authorities = "SPARE_PART_LIFE_RULE_READ")
+    void listPreservesFractionalMeterLimitAsJsonNumber() throws Exception {
+        when(service.list(any(), any())).thenReturn(new PageImpl<>(
+                List.of(listRuleDto(
+                        UUID.randomUUID(),
+                        "Podshipnik 6205",
+                        UUID.randomUUID(),
+                        "Kompressor K-101",
+                        new BigDecimal("500.500000"),
+                        new BigDecimal("450.250000"))),
+                PageRequest.of(0, 20), 1));
+
+        String response = mockMvc.perform(get("/api/v1/spare-part-life-rules"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].limits[0].limitValue").value(500.5))
+                .andExpect(jsonPath("$.content[0].limits[0].warningBeforeValue").value(450.25))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(response).contains("\"limitValue\":500.5", "\"warningBeforeValue\":450.25");
+        assertThat(response).doesNotContain("5.005E+2", "4.5025E+2");
+    }
+
+    @Test
+    @WithMockUser(authorities = "SPARE_PART_LIFE_RULE_READ")
+    void listReturnsNullEquipmentNameForCatalogScope() throws Exception {
+        when(service.list(any(), any())).thenReturn(new PageImpl<>(
+                List.of(listRuleDto(
+                        UUID.randomUUID(),
+                        "Podshipnik 6205",
+                        null,
+                        null,
+                        new BigDecimal("1000.000000"),
+                        null)),
+                PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/spare-part-life-rules"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].equipmentId").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].equipmentName").value(nullValue()));
+    }
+
+    @Test
+    @WithMockUser(authorities = "SPARE_PART_LIFE_RULE_READ")
+    void listKeepsPaginationMetadata() throws Exception {
+        when(service.list(any(), any())).thenReturn(new PageImpl<>(
+                List.of(listRuleDto(
+                        UUID.randomUUID(),
+                        "Podshipnik 6205",
+                        null,
+                        null,
+                        new BigDecimal("1000"),
+                        null)),
+                PageRequest.of(1, 1), 3));
+
+        mockMvc.perform(get("/api/v1/spare-part-life-rules").param("page", "1").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.number").value(1))
+                .andExpect(jsonPath("$.size").value(1))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(3));
     }
 
     // ---- B2: decimal-safe JSON contract ----
@@ -231,8 +335,50 @@ class SparePartLifeRuleControllerWebTest {
         verify(service, never()).create(any());
     }
 
-    private static Page<SparePartLifeRuleDto> emptyPage() {
+    private static Page<SparePartLifeRuleListDto> emptyPage() {
         return new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+    }
+
+    private static SparePartLifeRuleListDto listRuleDto(
+            UUID partId,
+            String sparePartName,
+            UUID equipmentId,
+            String equipmentName,
+            BigDecimal limitValue,
+            BigDecimal warningBeforeValue
+    ) {
+        SparePartLifeLimitListDto limit = new SparePartLifeLimitListDto(
+                UUID.randomUUID(),
+                SparePartLifeLimitKind.METER,
+                null,
+                null,
+                null,
+                limitValue,
+                warningBeforeValue,
+                0
+        );
+        Instant now = Instant.parse("2026-07-01T00:00:00Z");
+        return new SparePartLifeRuleListDto(
+                UUID.randomUUID(),
+                partId,
+                sparePartName,
+                equipmentId,
+                equipmentName,
+                null,
+                null,
+                equipmentId == null ? SparePartLifeRuleScope.CATALOG : SparePartLifeRuleScope.EQUIPMENT,
+                SparePartLifeCombinationMode.ANY,
+                SparePartDueAction.WARNING_ONLY,
+                true,
+                null,
+                null,
+                1,
+                "Proof rule",
+                null,
+                List.of(limit),
+                now,
+                now
+        );
     }
 
     private static SparePartLifeRuleDto ruleDto(UUID partId, BigDecimal limitValue, BigDecimal warningBeforeValue) {
