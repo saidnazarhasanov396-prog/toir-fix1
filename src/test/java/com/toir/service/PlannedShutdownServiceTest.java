@@ -316,11 +316,17 @@ class PlannedShutdownServiceTest {
 
         PlannedShutdown s1 = new PlannedShutdown();
         s1.setId(UUID.randomUUID());
+        s1.setCode("PS-2026-0001");
         s1.setName("Annual Maintenance");
+        s1.setShutdownType("FULL_PRODUCTION");
         s1.setDepartmentId(departmentId);
+        UUID responsibleEmployeeId = UUID.randomUUID();
+        s1.setResponsibleEmployeeId(responsibleEmployeeId);
         s1.setStartAt(Instant.parse("2026-05-19T10:00:00Z"));
         s1.setEndAt(Instant.parse("2026-05-19T18:00:00Z"));
         s1.setReason("Routine check");
+        s1.setRiskLevel("HIGH");
+        s1.setRiskScore(new java.math.BigDecimal("8.5000"));
         s1.setStatus(PlannedShutdownStatus.DRAFT);
 
         when(repository.findAllFiltered(departmentId, "DRAFT", "%annual%")).thenReturn(List.of(s1));
@@ -329,6 +335,11 @@ class PlannedShutdownServiceTest {
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).name()).isEqualTo("Annual Maintenance");
+        assertThat(results.get(0).code()).isEqualTo("PS-2026-0001");
+        assertThat(results.get(0).shutdownType()).isEqualTo("FULL_PRODUCTION");
+        assertThat(results.get(0).responsibleEmployeeId()).isEqualTo(responsibleEmployeeId);
+        assertThat(results.get(0).riskLevel()).isEqualTo("HIGH");
+        assertThat(results.get(0).riskScore()).isEqualByComparingTo("8.5000");
         assertThat(results.get(0).status()).isEqualTo(PlannedShutdownStatus.DRAFT);
     }
 

@@ -177,16 +177,9 @@ public class RepairCampaignService {
     @Transactional
     public RepairCampaignDto update(UUID id, RepairCampaignRequest r) {
         RepairCampaign c = getLockedOrThrow(id);
-        validateExpectedVersion(c, r.version());
-        if (c.getStatus() == RepairCampaignStatus.CLOSED || c.getStatus() == RepairCampaignStatus.CANCELLED) {
-            throw RestException.badRequest("Closed/cancelled campaign cannot be updated");
-        }
-        CodeGenerationUtils.rejectClientProvidedCode(r.code());
-        validateCampaignRequest(r);
-        validateResponsibleEmployee(r.departmentId(), r.responsibleEmployeeId());
-        validateMaintenanceBudgetLink(r);
-        validateExistingStageBudgetLines(c, r.maintenanceBudgetId());
-        mutationImpactService.apply(c, com.toir.enums.RepairCampaignMutationType.METADATA);
+        com.toir.enums.RepairCampaignMutationType mutationType = classifyValidatedUpdate(c, r);
+        mutationImpactService.assertMutationPermission(mutationType);
+        mutationImpactService.apply(c, mutationType);
 
         RepairCampaign before = snapshot(c);
         c.setName(r.name());
@@ -209,6 +202,30 @@ public class RepairCampaignService {
         RepairCampaign saved = repository.saveAndFlush(c);
         logCampaign(saved, AuditAction.UPDATE, "Ремонтная кампания обновлена", before, saved);
         return toDto(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public com.toir.dto.repaircampaign.CampaignMutationImpact previewUpdateImpact(
+            UUID id, RepairCampaignRequest proposed, Long expectedScopeVersion) {
+        RepairCampaign current = getLockedOrThrow(id);
+        com.toir.enums.RepairCampaignMutationType mutationType = classifyValidatedUpdate(current, proposed);
+        return mutationImpactService.preview(current, mutationType, proposed.version(), expectedScopeVersion);
+    }
+
+    private com.toir.enums.RepairCampaignMutationType classifyValidatedUpdate(
+            RepairCampaign current, RepairCampaignRequest proposed) {
+        validateExpectedVersion(current, proposed.version());
+        if (current.getStatus() == RepairCampaignStatus.CLOSED
+                || current.getStatus() == RepairCampaignStatus.CANCELLED) {
+            throw RestException.badRequest("Closed/cancelled campaign cannot be updated");
+        }
+        CodeGenerationUtils.rejectClientProvidedCode(proposed.code());
+        validateCampaignRequest(proposed);
+        validateResponsibleEmployee(proposed.departmentId(), proposed.responsibleEmployeeId());
+        validateMaintenanceBudgetLink(proposed);
+        validateExistingStageBudgetLines(current, proposed.maintenanceBudgetId());
+        return RepairCampaignMutationClassifier.classify(current, proposed.maintenanceBudgetId(),
+                proposed.totalBudget(), proposed.currencyCode());
     }
 
     @Transactional
@@ -234,15 +251,7 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignDto finalizeApprovalFromApprovalRequest(UUID id) {
-        RepairCampaign c = getLockedOrThrow(id);
-        if (c.getStatus() != RepairCampaignStatus.DRAFT) {
-            throw RestException.badRequest("Only DRAFT campaigns can be approved");
-        }
-        RepairCampaign before = snapshot(c);
-        c.setStatus(RepairCampaignStatus.APPROVED);
-        RepairCampaign saved = repository.save(c);
-        logCampaign(saved, AuditAction.UPDATE, "Ремонтная кампания обновлена", before, saved);
-        return toDto(saved);
+        throw RestException.conflict("Use a validated approval request to approve a repair campaign");
     }
 
     @Transactional
@@ -355,10 +364,11 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignStageDto addStage(UUID campaignId, RepairCampaignStageDto r) {
-        RepairCampaign c = getOrThrow(campaignId);
+        RepairCampaign c = getLockedOrThrow(campaignId);
         assertCampaignMutableForStructure(c);
         validateStageRequest(r);
         validateStageBudgetLine(c, r.budgetLineId());
+        applyStageMutation(c, null, r);
 
         RepairCampaignStage s = new RepairCampaignStage();
         s.setCampaign(c);
@@ -375,10 +385,12 @@ public class RepairCampaignService {
 
     @Transactional
     public RepairCampaignStageDto updateStage(UUID campaignId, UUID stageId, RepairCampaignStageDto r) {
+        RepairCampaign campaign = getLockedOrThrow(campaignId);
         RepairCampaignStage stage = getStageForCampaign(campaignId, stageId);
-        assertCampaignMutableForStructure(stage.getCampaign());
+        assertCampaignMutableForStructure(campaign);
         validateStageRequest(r);
-        validateStageBudgetLine(stage.getCampaign(), r.budgetLineId());
+        validateStageBudgetLine(campaign, r.budgetLineId());
+        applyStageMutation(campaign, stage, r);
         RepairCampaignStage before = snapshot(stage);
         applyStageRequest(stage, r);
         RepairCampaignStage saved = stageRepository.save(stage);
@@ -436,12 +448,14 @@ public class RepairCampaignService {
 
     @Transactional
     public WorkOrderDto attachWorkOrder(UUID campaignId, UUID stageId, UUID workOrderId) {
+        RepairCampaign campaign = getLockedOrThrow(campaignId);
         RepairCampaignStage stage = getStageForCampaign(campaignId, stageId);
-        RepairCampaign campaign = stage.getCampaign();
         assertCampaignAcceptsWorkOrders(campaign);
         WorkOrder workOrder = workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + workOrderId));
         validateWorkOrderCampaignCompatibility(campaign, stage, workOrder);
+        mutationImpactService.assertMutationPermission(com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
+        mutationImpactService.apply(campaign, com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
 
         workOrder.setRepairCampaignId(campaignId);
         workOrder.setRepairCampaignStageId(stageId);
@@ -456,7 +470,7 @@ public class RepairCampaignService {
 
     @Transactional
     public WorkOrderDto detachWorkOrder(UUID campaignId, UUID workOrderId) {
-        RepairCampaign campaign = getOrThrow(campaignId);
+        RepairCampaign campaign = getLockedOrThrow(campaignId);
         if (campaign.getStatus() == RepairCampaignStatus.CLOSED) {
             throw RestException.badRequest("Cannot detach work orders from closed campaign");
         }
@@ -476,6 +490,8 @@ public class RepairCampaignService {
         if (totals.approvedActual().compareTo(BigDecimal.ZERO) > 0) {
             throw RestException.badRequest("Cannot detach work order with approved actual costs");
         }
+        mutationImpactService.assertMutationPermission(com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
+        mutationImpactService.apply(campaign, com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
 
         UUID inheritedBudgetLineId = inheritedStageBudgetLine(workOrder.getRepairCampaignStageId());
         workOrder.setRepairCampaignId(null);
@@ -485,6 +501,19 @@ public class RepairCampaignService {
         }
         WorkOrder saved = workOrderRepository.save(workOrder);
         return workOrderService.findById(saved.getId());
+    }
+
+    private void applyStageMutation(RepairCampaign campaign, RepairCampaignStage current, RepairCampaignStageDto requested) {
+        mutationImpactService.assertMutationPermission(com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
+        boolean finance = current == null
+                ? requested.budgetLineId() != null || requested.plannedCost().compareTo(BigDecimal.ZERO) != 0
+                : !Objects.equals(current.getBudgetLineId(), requested.budgetLineId())
+                    || current.getPlannedCost().compareTo(requested.plannedCost()) != 0;
+        com.toir.enums.RepairCampaignMutationType type = finance
+                ? com.toir.enums.RepairCampaignMutationType.BUDGET
+                : com.toir.enums.RepairCampaignMutationType.WORK_ITEMS;
+        mutationImpactService.assertMutationPermission(type);
+        mutationImpactService.apply(campaign, type);
     }
 
     @Transactional(readOnly = true)
