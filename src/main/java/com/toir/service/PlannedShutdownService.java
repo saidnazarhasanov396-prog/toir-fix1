@@ -171,13 +171,14 @@ public class PlannedShutdownService {
                 AuditModule.PLANNED_SHUTDOWN, "Граница плановой остановки создана",
                 new ScopeAuditSnapshot(0L, List.of()), new ScopeAuditSnapshot(1L, assetResponses));
 
-        return PlannedShutdownDetailResponse.from(saved, assetResponses);
+        PlannedShutdownNextActionResponse nextAction = nextAction(saved);
+        return PlannedShutdownDetailResponse.from(saved, assetResponses, List.of(),
+                detailSummary(saved, assetResponses, List.of(), nextAction), nextAction);
     }
 
     @Transactional(readOnly = true)
     public PlannedShutdownDetailResponse get(UUID id) {
-        PlannedShutdown shutdown = find(id);
-        return PlannedShutdownDetailResponse.from(shutdown, assetResponses(id), workItemResponses(id));
+        return detail(find(id));
     }
 
     @Transactional
@@ -1223,9 +1224,138 @@ public class PlannedShutdownService {
     }
 
     private PlannedShutdownDetailResponse detail(PlannedShutdown shutdown) {
-        return PlannedShutdownDetailResponse.from(shutdown, assetResponses(shutdown.getId()),
-                workItemResponses(shutdown.getId()));
+        List<PlannedShutdownAssetResponse> assets = assetResponses(shutdown.getId());
+        List<PlannedShutdownWorkItemResponse> workItems = workItemResponses(shutdown.getId());
+        PlannedShutdownNextActionResponse nextAction = nextAction(shutdown);
+        return PlannedShutdownDetailResponse.from(shutdown, assets, workItems,
+                detailSummary(shutdown, assets, workItems, nextAction), nextAction);
     }
+
+    private PlannedShutdownSummaryResponse detailSummary(PlannedShutdown shutdown,
+            List<PlannedShutdownAssetResponse> assets, List<PlannedShutdownWorkItemResponse> workItems,
+            PlannedShutdownNextActionResponse nextAction) {
+        UUID id = shutdown.getId();
+        List<PlannedShutdownReadinessItem> readiness = safeList(readinessItemRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id));
+        List<PlannedShutdownIsolationPoint> isolation = safeList(isolationPointRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id));
+        List<WorkOrder> workOrders = safeList(workOrderRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByUpdatedAtDesc(id));
+        return new PlannedShutdownSummaryResponse(
+                safeList(assets).size(),
+                safeList(workItems).size(),
+                workOrders.size(),
+                readiness.size(),
+                (int) readiness.stream().filter(item -> item.getStatus() == PlannedShutdownItemStatus.PASSED).count(),
+                (int) readiness.stream().filter(item -> item.getSeverity() == PlannedShutdownReadinessSeverity.CRITICAL)
+                        .filter(item -> item.getStatus() != PlannedShutdownItemStatus.PASSED
+                                && item.getStatus() != PlannedShutdownItemStatus.WAIVED)
+                        .count(),
+                isolation.size(),
+                (int) isolation.stream().filter(point -> point.getVerifiedAt() != null && point.getReleasedAt() == null)
+                        .count(),
+                nextAction == null ? 0 : nextAction.blockerCodes().size());
+    }
+
+    private PlannedShutdownNextActionResponse nextAction(PlannedShutdown shutdown) {
+        NextActionDescriptor descriptor = nextActionDescriptor(shutdown.getLifecycleStatus());
+        if (descriptor == null) return null;
+        List<String> blockerCodes = nextActionBlockerCodes(shutdown, descriptor.code());
+        return new PlannedShutdownNextActionResponse(descriptor.code(), descriptor.commandEndpoint(),
+                descriptor.targetTab(), !blockerCodes.isEmpty(), blockerCodes);
+    }
+
+    private NextActionDescriptor nextActionDescriptor(PlannedShutdownStatus status) {
+        if (status == null) return null;
+        return switch (status) {
+            case DRAFT -> new NextActionDescriptor("FORM_SCOPE", "form-scope", "work");
+            case SCOPE_FORMATION -> new NextActionDescriptor("BEGIN_READINESS", "begin-readiness", "readiness");
+            case READINESS_CHECK -> new NextActionDescriptor("REQUEST_APPROVAL", "request-approval", "readiness");
+            case PENDING_APPROVAL -> new NextActionDescriptor("WAIT_APPROVAL", null, "approvals");
+            case APPROVED -> new NextActionDescriptor("PREPARE", "prepare", "readiness");
+            case PREPARATION -> new NextActionDescriptor("START_SHUTDOWN", "start-shutdown", "safety");
+            case SHUTDOWN_STARTED -> new NextActionDescriptor("CONFIRM_SAFE_STATE", "confirm-safe-state", "safety");
+            case SAFE_STATE -> new NextActionDescriptor("START_REPAIR", "start-repair", "workOrders");
+            case REPAIR_IN_PROGRESS -> new NextActionDescriptor("START_TESTING", "start-testing", "workOrders");
+            case TESTING -> new NextActionDescriptor("START_STARTUP", "start-startup", "testing");
+            case STARTUP -> new NextActionDescriptor("COMPLETE", "complete", "closure");
+            case COMPLETED -> new NextActionDescriptor("CLOSE", "close", "closure");
+            case CLOSED, CANCELLED, RESCHEDULED, EMERGENCY_EXTENDED -> null;
+        };
+    }
+
+    private List<String> nextActionBlockerCodes(PlannedShutdown shutdown, String code) {
+        return switch (code) {
+            case "REQUEST_APPROVAL" -> blockerCodes(assessReadinessFacts(shutdown, Instant.now()).blockers().stream()
+                    .filter(blocker -> !blocker.code().startsWith("APPROVAL_"))
+                    .filter(blocker -> !blocker.code().equals("WINDOW_OUTSIDE_APPROVED"))
+                    .toList());
+            case "PREPARE" -> approvalBlockerCodes(shutdown);
+            case "START_SHUTDOWN" -> blockerCodes(assessReadinessFacts(shutdown, Instant.now()).blockers());
+            case "CONFIRM_SAFE_STATE", "START_REPAIR" -> blockerCodes(assessSafeStateFacts(shutdown, Instant.now()).blockers());
+            case "START_TESTING" -> workOrderRepository.existsActiveByPlannedShutdownId(shutdown.getId())
+                    ? List.of("TESTING_ACTIVE_WORK_ORDERS") : List.of();
+            case "START_STARTUP" -> blockerCodes(evidenceService.startupBlockers(shutdown.getId()));
+            case "COMPLETE" -> completionBlockerCodes(shutdown);
+            case "CLOSE" -> closeBlockerCodes(shutdown);
+            default -> List.of();
+        };
+    }
+
+    private List<String> completionBlockerCodes(PlannedShutdown shutdown) {
+        List<String> codes = new ArrayList<>();
+        if (workOrderRepository.existsActiveByPlannedShutdownId(shutdown.getId())) codes.add("COMPLETION_ACTIVE_WORK_ORDERS");
+        if (hasUnreleasedIsolation(shutdown)) codes.add("COMPLETION_ISOLATION_UNRELEASED");
+        codes.addAll(blockerCodes(evidenceService.startupBlockers(shutdown.getId())));
+        codes.addAll(blockerCodes(evidenceService.productionReturnBlockers(
+                shutdown.getId(), shutdown.getScopeVersion(), shutdown.getWindowVersion())));
+        return distinctSorted(codes);
+    }
+
+    private List<String> closeBlockerCodes(PlannedShutdown shutdown) {
+        List<String> codes = new ArrayList<>();
+        if (workOrderRepository.existsActiveByPlannedShutdownId(shutdown.getId())) codes.add("CLOSE_ACTIVE_WORK_ORDERS");
+        if (hasUnreleasedIsolation(shutdown)) codes.add("CLOSE_ISOLATION_UNRELEASED");
+        codes.addAll(blockerCodes(evidenceService.startupBlockers(shutdown.getId())));
+        codes.addAll(blockerCodes(evidenceService.productionReturnBlockers(
+                shutdown.getId(), shutdown.getScopeVersion(), shutdown.getWindowVersion())));
+        codes.addAll(blockerCodes(reportService.closureBlockers(shutdown.getId())));
+        return distinctSorted(codes);
+    }
+
+    private List<String> approvalBlockerCodes(PlannedShutdown shutdown) {
+        ApprovalEvidence evidence = currentApprovalEvidence(shutdown);
+        List<String> codes = new ArrayList<>();
+        if (!evidence.currentScope()) codes.add("APPROVAL_SCOPE_STALE");
+        if (!evidence.productionApproved()) codes.add("APPROVAL_PRODUCTION_MISSING");
+        if (!evidence.hseApproved()) codes.add("APPROVAL_HSE_MISSING");
+        if (Objects.equals(evidence.productionActor(), evidence.hseActor())) {
+            codes.add("APPROVAL_SEPARATION_OF_DUTY_REQUIRED");
+        }
+        return codes;
+    }
+
+    private boolean hasUnreleasedIsolation(PlannedShutdown shutdown) {
+        return safeList(isolationPointRepository
+                .findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdown.getId())).stream()
+                .anyMatch(point -> point.getReleasedAt() == null);
+    }
+
+    private static List<String> blockerCodes(List<PlannedShutdownBlocker> blockers) {
+        if (blockers == null || blockers.isEmpty()) return List.of();
+        return distinctSorted(blockers.stream().map(PlannedShutdownBlocker::code).toList());
+    }
+
+    private static List<String> distinctSorted(List<String> codes) {
+        if (codes == null || codes.isEmpty()) return List.of();
+        return codes.stream().filter(Objects::nonNull).distinct().sorted().toList();
+    }
+
+    private static <T> List<T> safeList(List<T> values) {
+        return values == null ? List.of() : values;
+    }
+
+    private record NextActionDescriptor(String code, String commandEndpoint, String targetTab) {}
 
     private PlannedShutdownReadinessAssessment assessReadinessFacts(PlannedShutdown shutdown, Instant at) {
         return enrichBlockers(readinessPolicy.evaluateReadiness(readinessFacts(shutdown, at)), shutdown);
