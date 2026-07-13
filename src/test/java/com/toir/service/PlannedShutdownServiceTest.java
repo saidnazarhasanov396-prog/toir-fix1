@@ -698,6 +698,43 @@ class PlannedShutdownServiceTest {
                 new PlannedShutdownAssetRequest(UUID.randomUUID(), PlannedShutdownAssetDisposition.STOPPED, null, 0)));
     }
 
+    @Test
+    void assessReadinessEnrichesBlockersWithLabelsUrlsAndActionHints() {
+        UUID id = UUID.randomUUID();
+        UUID workItemId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 4L, PlannedShutdownStatus.READINESS_CHECK);
+        shutdown.setResponsibleEmployeeId(null);
+        var workItem = new com.toir.entity.plannedshutdown.PlannedShutdownWorkItem();
+        workItem.setId(workItemId);
+        workItem.setPlannedShutdownId(id);
+        workItem.setTitle("Replace compressor seal");
+
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of());
+        when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of());
+        when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of());
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of());
+        when(readinessPolicy.evaluateReadiness(any())).thenReturn(new com.toir.dto.plannedshutdown.PlannedShutdownReadinessAssessment(
+                false, List.of(new com.toir.dto.plannedshutdown.PlannedShutdownBlocker(
+                        "PERFORMER_OR_CONTRACTOR_MISSING", "Work has no eligible performer or contractor",
+                        "WORK_ITEM", workItemId))));
+        when(workItemRepository.findByIdAndPlannedShutdownIdAndIsDeletedFalse(workItemId, id))
+                .thenReturn(java.util.Optional.of(workItem));
+
+        var assessment = service.assessReadiness(id, Instant.parse("2026-08-01T00:00:00Z"));
+
+        assertThat(assessment.blockers()).hasSize(1);
+        var blocker = assessment.blockers().get(0);
+        assertThat(blocker.entityLabel()).isEqualTo("Replace compressor seal");
+        assertThat(blocker.entityUrl()).isEqualTo("/planned-shutdowns/" + id + "?tab=work");
+        assertThat(blocker.actionHintCode()).isEqualTo("PERFORMER_OR_CONTRACTOR_MISSING");
+        assertThat(blocker.entityId()).isEqualTo(workItemId);
+    }
+
     private static PlannedShutdownCreateRequest createRequest(String code, UUID departmentId, UUID employeeId,
             UUID equipmentId) {
         return new PlannedShutdownCreateRequest(code, "Annual", "PLANNED", departmentId, employeeId,

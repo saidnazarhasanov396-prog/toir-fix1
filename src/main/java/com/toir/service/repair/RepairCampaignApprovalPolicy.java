@@ -32,8 +32,9 @@ public class RepairCampaignApprovalPolicy {
         if (campaign.getStatus() != RepairCampaignStatus.RESOURCE_CHECK) {
             throw RestException.conflict("REPAIR_CAMPAIGN_NOT_READY_FOR_APPROVAL");
         }
+        String scopeHash = scopeHasher.hash(campaign);
         campaign.setApprovalScopeVersion(scopeVersion);
-        campaign.setApprovalScopeHash(scopeHasher.hash(campaign));
+        campaign.setApprovalScopeHash(scopeHash);
         campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
     }
 

@@ -7,6 +7,7 @@ import com.toir.entity.PlannedShutdown;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.plannedshutdown.PlannedShutdownAsset;
 import com.toir.entity.plannedshutdown.PlannedShutdownWorkItem;
 import com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem;
@@ -619,12 +620,14 @@ public class PlannedShutdownService {
 
     @Transactional(readOnly = true)
     public PlannedShutdownReadinessAssessment assessReadiness(UUID id, java.time.Instant evaluatedAt) {
-        return readinessPolicy.evaluateReadiness(readinessFacts(find(id), evaluatedAt));
+        PlannedShutdown shutdown = find(id);
+        return enrichBlockers(readinessPolicy.evaluateReadiness(readinessFacts(shutdown, evaluatedAt)), shutdown);
     }
 
     @Transactional(readOnly = true)
     public PlannedShutdownReadinessAssessment assessSafeState(UUID id, java.time.Instant evaluatedAt) {
-        return readinessPolicy.evaluateSafeState(readinessFacts(find(id), evaluatedAt));
+        PlannedShutdown shutdown = find(id);
+        return enrichBlockers(readinessPolicy.evaluateSafeState(readinessFacts(shutdown, evaluatedAt)), shutdown);
     }
 
     @Transactional
@@ -728,7 +731,7 @@ public class PlannedShutdownService {
         PlannedShutdown shutdown = findLocked(id);
         requireVersion(shutdown, request.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.SAFE_STATE);
-        requireProceed(readinessPolicy.evaluateSafeState(readinessFacts(shutdown, Instant.now())),
+        requireProceed(assessSafeStateFacts(shutdown, Instant.now()),
                 "SAFE_STATE_BLOCKED", shutdown.getVersion());
         return detail(executeTransition(shutdown, PlannedShutdownStatus.SAFE_STATE, requireUserActor(),
                 request.reason(), request.correlationKey(), null));
@@ -738,7 +741,7 @@ public class PlannedShutdownService {
         PlannedShutdown shutdown = findLocked(id);
         requireVersion(shutdown, r.version());
         requireAllowedTransition(shutdown, PlannedShutdownStatus.REPAIR_IN_PROGRESS);
-        requireProceed(readinessPolicy.evaluateSafeState(readinessFacts(shutdown, Instant.now())),
+        requireProceed(assessSafeStateFacts(shutdown, Instant.now()),
                 "REPAIR_START_BLOCKED", shutdown.getVersion());
         return detail(executeTransition(shutdown, PlannedShutdownStatus.REPAIR_IN_PROGRESS, requireUserActor(),
                 r.reason(), r.correlationKey(), null));
@@ -1225,7 +1228,80 @@ public class PlannedShutdownService {
     }
 
     private PlannedShutdownReadinessAssessment assessReadinessFacts(PlannedShutdown shutdown, Instant at) {
-        return readinessPolicy.evaluateReadiness(readinessFacts(shutdown, at));
+        return enrichBlockers(readinessPolicy.evaluateReadiness(readinessFacts(shutdown, at)), shutdown);
+    }
+
+    private PlannedShutdownReadinessAssessment assessSafeStateFacts(PlannedShutdown shutdown, Instant at) {
+        return enrichBlockers(readinessPolicy.evaluateSafeState(readinessFacts(shutdown, at)), shutdown);
+    }
+
+    private PlannedShutdownReadinessAssessment enrichBlockers(PlannedShutdownReadinessAssessment assessment,
+            PlannedShutdown shutdown) {
+        if (assessment == null || assessment.blockers().isEmpty()) return assessment;
+        return new PlannedShutdownReadinessAssessment(assessment.canProceed(), assessment.blockers().stream()
+                .map(blocker -> enrichBlocker(blocker, shutdown)).toList());
+    }
+
+    private PlannedShutdownBlocker enrichBlocker(PlannedShutdownBlocker blocker, PlannedShutdown shutdown) {
+        String label = trimToNull(blocker.entityLabel());
+        String url = trimToNull(blocker.entityUrl());
+        if (label == null) label = resolveBlockerEntityLabel(blocker, shutdown);
+        if (url == null) url = resolveBlockerEntityUrl(blocker, shutdown);
+        String hint = trimToNull(blocker.actionHintCode());
+        return new PlannedShutdownBlocker(blocker.code(), blocker.message(), blocker.entityType(),
+                blocker.entityId(), label, url, hint == null ? blocker.code() : hint);
+    }
+
+    private String resolveBlockerEntityLabel(PlannedShutdownBlocker blocker, PlannedShutdown shutdown) {
+        if (blocker.entityType() == null || blocker.entityId() == null) return null;
+        return switch (blocker.entityType()) {
+            case "PLANNED_SHUTDOWN" -> Objects.equals(blocker.entityId(), shutdown.getId())
+                    ? plannedShutdownLabel(shutdown)
+                    : repository.findByIdAndIsDeletedFalse(blocker.entityId()).map(PlannedShutdownService::plannedShutdownLabel)
+                            .orElse(null);
+            case "WORK_ITEM" -> workItemRepository
+                    .findByIdAndPlannedShutdownIdAndIsDeletedFalse(blocker.entityId(), shutdown.getId())
+                    .map(PlannedShutdownWorkItem::getTitle).map(PlannedShutdownService::trimToNull).orElse(null);
+            case "ISOLATION_POINT" -> isolationPointRepository
+                    .findByIdAndPlannedShutdownIdAndIsDeletedFalse(blocker.entityId(), shutdown.getId())
+                    .map(point -> trimToNull(point.getLockTagIdentifier()) != null
+                            ? point.getLockTagIdentifier() : point.getIsolationMethod())
+                    .or(() -> workItemRepository
+                            .findByIdAndPlannedShutdownIdAndIsDeletedFalse(blocker.entityId(), shutdown.getId())
+                            .map(item -> item.getTitle()))
+                    .map(PlannedShutdownService::trimToNull).orElse(null);
+            case "WORK_ORDER" -> workOrderRepository.findByIdAndIsDeletedFalse(blocker.entityId())
+                    .map(PlannedShutdownService::workOrderLabel).orElse(null);
+            case "EQUIPMENT" -> equipmentRepository.findByIdAndIsDeletedFalse(blocker.entityId())
+                    .map(PlannedShutdownService::equipmentLabel).orElse(null);
+            default -> null;
+        };
+    }
+
+    private String resolveBlockerEntityUrl(PlannedShutdownBlocker blocker, PlannedShutdown shutdown) {
+        if (blocker.entityType() == null || blocker.entityId() == null) return null;
+        return switch (blocker.entityType()) {
+            case "WORK_ITEM" -> "/planned-shutdowns/" + shutdown.getId() + "?tab=work";
+            case "ISOLATION_POINT" -> "/planned-shutdowns/" + shutdown.getId() + "?tab=safety";
+            case "WORK_ORDER" -> "/work-orders/" + blocker.entityId();
+            case "EQUIPMENT" -> "/equipment/" + blocker.entityId();
+            default -> null;
+        };
+    }
+
+    private static String plannedShutdownLabel(PlannedShutdown shutdown) {
+        return java.util.stream.Stream.of(shutdown.getCode(), shutdown.getName()).map(PlannedShutdownService::trimToNull)
+                .filter(Objects::nonNull).collect(java.util.stream.Collectors.joining(" · "));
+    }
+
+    private static String workOrderLabel(WorkOrder order) {
+        return java.util.stream.Stream.of(order.getNumber(), order.getTitle()).map(PlannedShutdownService::trimToNull)
+                .filter(Objects::nonNull).collect(java.util.stream.Collectors.joining(" · "));
+    }
+
+    private static String equipmentLabel(Equipment equipment) {
+        return java.util.stream.Stream.of(equipment.getCode(), equipment.getName()).map(PlannedShutdownService::trimToNull)
+                .filter(Objects::nonNull).collect(java.util.stream.Collectors.joining(" · "));
     }
 
     private static void requireProceed(PlannedShutdownReadinessAssessment assessment, String prefix, Long version) {
@@ -1350,7 +1426,8 @@ public class PlannedShutdownService {
     private static PlannedShutdownBlockerException blocker(org.springframework.http.HttpStatus status,
             PlannedShutdown shutdown, String code) {
         return new PlannedShutdownBlockerException(status, code, shutdown.getVersion(), List.of(
-                new PlannedShutdownBlocker(code, code, "PLANNED_SHUTDOWN", shutdown.getId())));
+                new PlannedShutdownBlocker(code, code, "PLANNED_SHUTDOWN", shutdown.getId(),
+                        plannedShutdownLabel(shutdown), null, code)));
     }
 
     private static void requireEvidence(PlannedShutdown shutdown, List<PlannedShutdownBlocker> blockers) {
