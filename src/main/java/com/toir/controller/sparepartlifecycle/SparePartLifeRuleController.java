@@ -2,6 +2,7 @@ package com.toir.controller.sparepartlifecycle;
 
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleDto;
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleFilter;
+import com.toir.dto.sparepartlifecycle.SparePartLifeRuleListDto;
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleRequest;
 import com.toir.enums.sparepartlifecycle.SparePartLifeRuleScope;
 import com.toir.exception.RestException;
@@ -46,7 +47,7 @@ public class SparePartLifeRuleController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_LIFE_RULE_READ')")
-    public ResponseEntity<Page<SparePartLifeRuleDto>> list(
+    public ResponseEntity<Page<SparePartLifeRuleListDto>> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) UUID sparePartId,
