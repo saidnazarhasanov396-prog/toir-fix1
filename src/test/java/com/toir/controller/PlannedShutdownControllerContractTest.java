@@ -164,7 +164,7 @@ class PlannedShutdownControllerContractTest {
         when(service.get(id)).thenReturn(detail(id, departmentId, employeeId, PlannedShutdownStatus.DRAFT));
         when(service.update(eq(id), any())).thenReturn(detail(id, departmentId, employeeId, PlannedShutdownStatus.DRAFT));
         var scope = new PlannedShutdownAssetScopeResponse(id, 4L, 2L, List.of(
-                new PlannedShutdownAssetResponse(assetId, equipmentId, PlannedShutdownAssetDisposition.STOPPED, "main", 0)));
+                new PlannedShutdownAssetResponse(assetId, equipmentId, "Main compressor", PlannedShutdownAssetDisposition.STOPPED, "main", 0)));
         when(service.getAssets(id)).thenReturn(scope);
         when(service.replaceAssets(eq(id), any())).thenReturn(scope);
 
@@ -212,7 +212,7 @@ class PlannedShutdownControllerContractTest {
         UUID equipmentId = UUID.randomUUID();
         var response = new PlannedShutdownWorkItemScopeResponse(id, 5L, 3L, List.of(
                 new PlannedShutdownWorkItemResponse(itemId, PlannedShutdownWorkItemSourceType.MANUAL, null,
-                        equipmentId, "Inspect bearing", PriorityLevel.HIGH, true, true, 45, "A", 0,
+                        equipmentId, "Main compressor", "Inspect bearing", PriorityLevel.HIGH, true, true, 45, "A", 0,
                         PlannedShutdownItemStatus.PENDING)));
         when(service.listWorkItems(id)).thenReturn(response);
         when(service.addWorkItem(eq(id), any())).thenReturn(response);

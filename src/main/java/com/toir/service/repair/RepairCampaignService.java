@@ -827,7 +827,7 @@ public class RepairCampaignService {
         if (!employee.isActive()) {
             throw RestException.badRequest("Responsible employee must be active");
         }
-        if (!departmentId.equals(employee.getDepartmentId())) {
+        if (!departmentId.equals(employee.getDepartmentId()) && !scopeAccessService.isScopeAdmin()) {
             throw new AccessDeniedException("Access denied by repair campaign scope");
         }
     }
