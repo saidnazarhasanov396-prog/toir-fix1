@@ -2,9 +2,11 @@ package com.toir.service.repair;
 
 import com.toir.dto.repaircampaign.RepairCampaignMaterialRequirementRequest;
 import com.toir.dto.repaircampaign.RepairCampaignMaterialRequirementResponse;
+import com.toir.entity.SparePart;
 import com.toir.entity.maintenance.WorkOrderSparePartRequirement;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignMaterialRequirement;
+import com.toir.entity.warehouse.Warehouse;
 import com.toir.enums.*;
 import com.toir.exception.RestException;
 import com.toir.repository.*;
@@ -38,7 +40,31 @@ public class RepairCampaignMaterialService {
     private final RepairCampaignMutationImpactService mutationImpactService;
 
     @Transactional(readOnly=true)
-    public List<RepairCampaignMaterialRequirementResponse> list(UUID campaignId){RepairCampaign c=find(campaignId,false);return rows(campaignId).stream().map(r->response(r,c.getVersion(),true)).toList();}
+    public List<RepairCampaignMaterialRequirementResponse> list(UUID campaignId){
+        RepairCampaign c=find(campaignId,false);
+        List<RepairCampaignMaterialRequirement> rows=rows(campaignId);
+        if(rows.isEmpty())return List.of();
+
+        List<UUID> sparePartIds=rows.stream()
+                .map(RepairCampaignMaterialRequirement::getSparePartId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID,SparePart> sparePartById=spareParts.findAllByIdInAndIsDeletedFalse(sparePartIds).stream()
+                .collect(java.util.stream.Collectors.toMap(SparePart::getId,java.util.function.Function.identity()));
+
+        List<UUID> warehouseIds=rows.stream()
+                .map(RepairCampaignMaterialRequirement::getWarehouseId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID,Warehouse> warehouseById=warehouses.findAllByIdInAndIsDeletedFalse(warehouseIds).stream()
+                .collect(java.util.stream.Collectors.toMap(Warehouse::getId,java.util.function.Function.identity()));
+
+        return rows.stream()
+                .map(r->response(r,c.getVersion(),true,sparePartById.get(r.getSparePartId()),warehouseById.get(r.getWarehouseId())))
+                .toList();
+    }
 
     @Transactional
     public RepairCampaignMaterialRequirementResponse add(UUID campaignId,RepairCampaignMaterialRequirementRequest request){RepairCampaign c=find(campaignId,true);validateMutation(c,request.version());validateRequest(campaignId,request);mutationImpactService.apply(c,RepairCampaignMutationType.MATERIALS);RepairCampaignMaterialRequirement r=new RepairCampaignMaterialRequirement();apply(r,campaignId,request);try{requirements.saveAndFlush(r);}catch(DataIntegrityViolationException e){if(messages(e).contains("uq_rc_material_active_identity"))throw RestException.conflict("MATERIAL_REQUIREMENT_DUPLICATE");throw e;}long version=touch(c);var out=response(r,version,true);audit.log("repair_campaign_material",r.getId().toString(),AuditAction.CREATE,AuditModule.REPAIR_CAMPAIGN,"Campaign material demand created",null,out);return out;}
@@ -102,5 +128,35 @@ public class RepairCampaignMaterialService {
     private List<RepairCampaignMaterialRequirement> rows(UUID id){return requirements.findAllByRepairCampaignIdAndIsDeletedFalseOrderByWorkItemIdAscSparePartIdAsc(id);}
     private static String messages(Throwable e){StringBuilder s=new StringBuilder();for(Throwable x=e;x!=null;x=x.getCause())s.append(' ').append(x.getMessage());return s.toString();}
     private static boolean isMaterialRequirementInUseViolation(RuntimeException error){if(!(error instanceof DataIntegrityViolationException)&&!(error instanceof JpaSystemException))return false;for(Throwable current=error;current!=null;current=current.getCause())if(current instanceof java.sql.SQLException sql&&"23514".equals(sql.getSQLState())&&String.valueOf(sql.getMessage()).contains("RC_MATERIAL_REQUIREMENT_IN_USE"))return true;return false;}
-    private static RepairCampaignMaterialRequirementResponse response(RepairCampaignMaterialRequirement r,long v,boolean active){return new RepairCampaignMaterialRequirementResponse(r.getId(),r.getRepairCampaignId(),r.getWorkItemId(),r.getSparePartId(),r.getWarehouseId(),r.getRequiredQuantity(),r.isCritical(),r.isProcurementRequired(),v,active);}
+    private RepairCampaignMaterialRequirementResponse response(RepairCampaignMaterialRequirement r,long v,boolean active){
+        SparePart spare=spareParts.findByIdAndIsDeletedFalse(r.getSparePartId()).orElse(null);
+        Warehouse warehouse=warehouses.findByIdAndIsDeletedFalse(r.getWarehouseId()).orElse(null);
+        return response(r,v,active,spare,warehouse);
+    }
+
+    private static RepairCampaignMaterialRequirementResponse response(
+            RepairCampaignMaterialRequirement r,
+            long v,
+            boolean active,
+            SparePart spare,
+            Warehouse warehouse
+    ){
+        return new RepairCampaignMaterialRequirementResponse(
+                r.getId(),
+                r.getRepairCampaignId(),
+                r.getWorkItemId(),
+                r.getSparePartId(),
+                r.getWarehouseId(),
+                r.getRequiredQuantity(),
+                r.isCritical(),
+                r.isProcurementRequired(),
+                v,
+                active,
+                spare==null?null:spare.getCode(),
+                spare==null?null:spare.getName(),
+                spare==null?null:spare.getUnit(),
+                warehouse==null?null:warehouse.getCode(),
+                warehouse==null?null:warehouse.getName()
+        );
+    }
 }
