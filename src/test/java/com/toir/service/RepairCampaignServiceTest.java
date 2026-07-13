@@ -791,7 +791,6 @@ class RepairCampaignServiceTest {
     }
 
     @Test
-    @Test
     void createRejectsUnapprovedMaintenanceBudget() {
         UUID budgetId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();

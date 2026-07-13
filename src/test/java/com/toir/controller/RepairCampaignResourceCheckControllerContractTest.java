@@ -43,7 +43,6 @@ class RepairCampaignResourceCheckControllerContractTest {
     @Mock private RepairCampaignWorkItemService workItemService;
     @Mock private RepairCampaignShutdownLinkService shutdownLinkService;
     @Mock private RepairCampaignMaterialService materialService;
-    @Mock private RepairCampaignMutationImpactService mutationImpactService;
     @Mock private DefectService defectService;
 
     private MockMvc mockMvc;
@@ -55,7 +54,7 @@ class RepairCampaignResourceCheckControllerContractTest {
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         mockMvc = MockMvcBuilders.standaloneSetup(new RepairCampaignController(
                         service, workItemService, shutdownLinkService, materialService,
-                        mutationImpactService, defectService))
+                        defectService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
