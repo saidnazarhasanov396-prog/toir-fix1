@@ -37,6 +37,8 @@ import com.toir.repository.repair.RepairCampaignDepartmentRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
 import com.toir.repository.users.EmployeeRepository;
+import com.toir.security.ScopeAccessService;
+import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.service.repair.RepairCampaignService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 
@@ -114,6 +117,15 @@ class RepairCampaignServiceTest {
     private AuditBuilderService auditBuilderService;
 
     @Mock
+    private RepairCampaignApprovalPolicy approvalPolicy;
+
+    @Mock
+    private ScopeAccessService scopeAccessService;
+
+    @Mock
+    private ObjectProvider<ApprovalService> approvalServiceProvider;
+
+    @Mock
     private com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
 
     @InjectMocks
@@ -135,6 +147,33 @@ class RepairCampaignServiceTest {
                         ex -> assertThat(ex.getMessage()).isEqualTo("Access denied by repair campaign scope"));
 
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createAllowsSystemAdminToAssignResponsibleEmployeeOutsideCampaignDepartment() {
+        UUID campaignDepartmentId = UUID.randomUUID();
+        UUID employeeId = UUID.randomUUID();
+        Employee employee = new Employee();
+        employee.setId(employeeId);
+        employee.setDepartmentId(UUID.randomUUID());
+        employee.setActive(true);
+        when(employeeRepository.findByIdAndIsDeletedFalse(employeeId)).thenReturn(Optional.of(employee));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
+        when(repository.save(any(RepairCampaign.class))).thenAnswer(invocation -> {
+            RepairCampaign campaign = invocation.getArgument(0);
+            campaign.setId(UUID.randomUUID());
+            campaign.setVersion(0L);
+            return campaign;
+        });
+
+        RepairCampaignDto result = service.create(taskOneRequest(
+                campaignDepartmentId, employeeId, LocalDate.of(2026, 2, 1)));
+
+        assertThat(result.responsibleEmployeeId()).isEqualTo(employeeId);
+        assertThat(result.departmentId()).isEqualTo(campaignDepartmentId);
+        verify(repository).save(any(RepairCampaign.class));
     }
 
     @Test
