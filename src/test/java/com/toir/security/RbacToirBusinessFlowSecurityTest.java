@@ -252,6 +252,10 @@ class RbacToirBusinessFlowSecurityTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"Cancelled\"}"))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/start-resource-check", id)
+                        .param("version", "0")
+                        .param("scopeVersion", "0"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -327,6 +331,17 @@ class RbacToirBusinessFlowSecurityTest {
         mockMvc.perform(post("/api/v1/repair-campaigns/{id}/cancel", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"Cancelled\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.REPAIR_CAMPAIGN_REQUEST_APPROVAL)
+    void campaignRequestApprovalPermissionCanStartResourceCheck() throws Exception {
+        when(repairCampaignService.startResourceCheck(any(), any(), any())).thenReturn(campaignDto());
+
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/start-resource-check", UUID.randomUUID())
+                        .param("version", "0")
+                        .param("scopeVersion", "0"))
                 .andExpect(status().isOk());
     }
 
@@ -425,6 +440,9 @@ class RbacToirBusinessFlowSecurityTest {
                 Arguments.of(RepairCampaignController.class, "cancel",
                         new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignCancelRequest.class},
                         PermissionConstants.REPAIR_CAMPAIGN_CANCEL),
+                Arguments.of(RepairCampaignController.class, "startResourceCheck",
+                        new Class<?>[]{UUID.class, Long.class, Long.class},
+                        PermissionConstants.REPAIR_CAMPAIGN_REQUEST_APPROVAL),
                 Arguments.of(RepairCampaignController.class, "generateWorkOrders",
                         new Class<?>[]{UUID.class, com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest.class,
                                 String.class},

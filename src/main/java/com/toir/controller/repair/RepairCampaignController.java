@@ -119,6 +119,15 @@ public class RepairCampaignController {
         return ResponseEntity.ok(service.previewUpdateImpact(id, proposed, scopeVersion));
     }
 
+    @PostMapping("/{id}/start-resource-check")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_REQUEST_APPROVAL')")
+    public ResponseEntity<RepairCampaignDto> startResourceCheck(
+            @PathVariable UUID id,
+            @RequestParam Long version,
+            @RequestParam Long scopeVersion) {
+        return ResponseEntity.ok(service.startResourceCheck(id, version, scopeVersion));
+    }
+
     @PostMapping("/{id}/request-approval")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_REQUEST_APPROVAL')")
     public ResponseEntity<RepairCampaignDto> requestApproval(
