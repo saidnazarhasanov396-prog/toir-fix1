@@ -741,7 +741,7 @@ class RepairCampaignServiceTest {
     void createStoresLinkedMaintenanceBudgetWhenCompatible() {
         UUID budgetId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
-        MaintenanceBudget budget = budget(budgetId, 2026, departmentId, BudgetStatus.DRAFT, 10_000, 0);
+        MaintenanceBudget budget = budget(budgetId, 2026, departmentId, BudgetStatus.APPROVED, 10_000, 0);
         when(maintenanceBudgetRepository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(budget));
         when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
         when(repository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
@@ -791,6 +791,127 @@ class RepairCampaignServiceTest {
     }
 
     @Test
+    @Test
+    void createRejectsUnapprovedMaintenanceBudget() {
+        UUID budgetId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        MaintenanceBudget budget = budget(budgetId, 2026, departmentId, BudgetStatus.SUBMITTED, 10_000, 0);
+        when(maintenanceBudgetRepository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(budget));
+
+        assertThatThrownBy(() -> service.create(new RepairCampaignRequest(
+                null,
+                "Annual Repair",
+                departmentId,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 2, 1),
+                BigDecimal.valueOf(1000),
+                RepairCampaignScopeType.DEPARTMENT,
+                null,
+                List.of(),
+                null,
+                null,
+                budgetId,
+                "UZS"
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("approved");
+                });
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsCampaignBudgetAboveRemainingMaintenanceBudget() {
+        UUID budgetId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        MaintenanceBudget budget = budget(budgetId, 2026, departmentId, BudgetStatus.APPROVED, 10_000, 9_500);
+        when(maintenanceBudgetRepository.findByIdAndIsDeletedFalse(budgetId)).thenReturn(Optional.of(budget));
+
+        assertThatThrownBy(() -> service.create(new RepairCampaignRequest(
+                null,
+                "Annual Repair",
+                departmentId,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 2, 1),
+                BigDecimal.valueOf(501),
+                RepairCampaignScopeType.DEPARTMENT,
+                null,
+                List.of(),
+                null,
+                null,
+                budgetId,
+                "UZS"
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("must not exceed");
+                });
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void createPersistsInitialStagesFromWizard() {
+        UUID departmentId = UUID.randomUUID();
+        when(repository.maxSequenceByCodePrefix(anyString())).thenReturn(0L);
+        when(repository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(false);
+        when(repository.save(any(RepairCampaign.class))).thenAnswer(invocation -> {
+            RepairCampaign campaign = invocation.getArgument(0);
+            if (campaign.getId() == null) campaign.setId(UUID.randomUUID());
+            return campaign;
+        });
+        when(stageRepository.save(any(RepairCampaignStage.class))).thenAnswer(invocation -> {
+            RepairCampaignStage stage = invocation.getArgument(0);
+            stage.setId(UUID.randomUUID());
+            return stage;
+        });
+
+        RepairCampaignDto result = service.create(new RepairCampaignRequest(
+                null,
+                "Annual Repair",
+                departmentId,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 2, 1),
+                BigDecimal.valueOf(1000),
+                RepairCampaignScopeType.DEPARTMENT,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                "UZS",
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(new RepairCampaignStageDto(
+                        null,
+                        1,
+                        "Preparation",
+                        LocalDate.of(2026, 1, 1),
+                        LocalDate.of(2026, 1, 5),
+                        BigDecimal.valueOf(250),
+                        BigDecimal.ZERO,
+                        RepairCampaignStageStatus.DRAFT,
+                        null,
+                        0,
+                        0,
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        null,
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO
+                ))
+        ));
+
+        assertThat(result.stages()).hasSize(1);
+        assertThat(result.stages().get(0).name()).isEqualTo("Preparation");
+        verify(stageRepository).save(any(RepairCampaignStage.class));
+    }
+
     void createRejectsMaintenanceBudgetFromDifferentDepartment() {
         UUID budgetId = UUID.randomUUID();
         MaintenanceBudget budget = budget(budgetId, 2026, UUID.randomUUID(), BudgetStatus.DRAFT, 10_000, 0);

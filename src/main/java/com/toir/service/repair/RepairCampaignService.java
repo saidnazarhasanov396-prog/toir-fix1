@@ -170,8 +170,19 @@ public class RepairCampaignService {
         replaceParticipantDepartments(c, r.participantDepartments());
 
         RepairCampaign saved = repository.save(c);
-        logCampaign(saved, AuditAction.CREATE, "Ремонтная кампания создана", null, saved);
-        return toDto(saved);
+        for (RepairCampaignStageDto stageRequest : safeList(r.stages())) {
+            validateStageRequest(stageRequest);
+            validateStageBudgetLine(saved, stageRequest.budgetLineId());
+            RepairCampaignStage stage = new RepairCampaignStage();
+            stage.setCampaign(saved);
+            applyStageRequest(stage, stageRequest);
+            stage.setActualCost(BigDecimal.ZERO);
+            saved.getStages().add(stageRepository.save(stage));
+        }
+        recalcTotals(saved);
+        RepairCampaign savedWithStages = repository.save(saved);
+        logCampaign(savedWithStages, AuditAction.CREATE, "Ремонтная кампания создана", null, savedWithStages);
+        return toDto(savedWithStages);
     }
 
     @Transactional
@@ -851,6 +862,13 @@ public class RepairCampaignService {
         }
         MaintenanceBudget budget = maintenanceBudgetRepository.findByIdAndIsDeletedFalse(request.maintenanceBudgetId())
                 .orElseThrow(() -> RestException.notFound("Maintenance budget not found: " + request.maintenanceBudgetId()));
+        if (budget.getStatus() != com.toir.enums.BudgetStatus.APPROVED) {
+            throw RestException.badRequest("Maintenance budget must be approved");
+        }
+        BigDecimal remainingBudget = decimal(budget.getTotalPlanned()).subtract(decimal(budget.getTotalActual()));
+        if (request.totalBudget().compareTo(remainingBudget) > 0) {
+            throw RestException.badRequest("Repair campaign budget must not exceed department budget remaining amount");
+        }
         if (request.startDate() == null
                 || request.endDate() == null
                 || budget.getYear() < request.startDate().getYear()
