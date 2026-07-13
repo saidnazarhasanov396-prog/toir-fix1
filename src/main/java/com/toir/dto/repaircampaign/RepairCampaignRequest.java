@@ -41,8 +41,35 @@ public record RepairCampaignRequest(
         UUID responsibleEmployeeId,
         RepairCampaignPriority priority,
         String objective,
-        Long version
+        Long version,
+        List<@Valid RepairCampaignStageDto> stages
 ) {
+    public RepairCampaignRequest(
+            String code,
+            @NotBlank String name,
+            UUID departmentId,
+            @NotNull LocalDate startDate,
+            @NotNull LocalDate endDate,
+            @PositiveOrZero BigDecimal totalBudget,
+            RepairCampaignScopeType scopeType,
+            UUID equipmentTypeId,
+            List<RepairCampaignDepartmentDto> participantDepartments,
+            String description,
+            String notes,
+            UUID maintenanceBudgetId,
+            String currencyCode,
+            String campaignType,
+            UUID responsibleEmployeeId,
+            RepairCampaignPriority priority,
+            String objective,
+            Long version
+    ) {
+        this(code, name, departmentId, startDate, endDate, totalBudget,
+                scopeType, equipmentTypeId, participantDepartments, description, notes,
+                maintenanceBudgetId, currencyCode, campaignType, responsibleEmployeeId, priority, objective,
+                version, List.of());
+    }
+
     public RepairCampaignRequest(
             String code,
             @NotBlank String name,
@@ -55,7 +82,7 @@ public record RepairCampaignRequest(
     ) {
         this(code, name, departmentId, startDate, endDate, totalBudget,
                 null, null, List.of(), description, notes, null, "UZS",
-                null, null, null, null, null);
+                null, null, null, null, null, List.of());
     }
 
     public RepairCampaignRequest(
@@ -73,7 +100,7 @@ public record RepairCampaignRequest(
     ) {
         this(code, name, departmentId, startDate, endDate, totalBudget,
                 scopeType, equipmentTypeId, participantDepartments, description, notes, null, "UZS",
-                null, null, null, null, null);
+                null, null, null, null, null, List.of());
     }
 
     public RepairCampaignRequest(
@@ -93,7 +120,7 @@ public record RepairCampaignRequest(
     ) {
         this(code, name, departmentId, startDate, endDate, totalBudget,
                 scopeType, equipmentTypeId, participantDepartments, description, notes,
-                maintenanceBudgetId, currencyCode, null, null, null, null, null);
+                maintenanceBudgetId, currencyCode, null, null, null, null, null, List.of());
     }
 
     public RepairCampaignRequest {
@@ -102,5 +129,6 @@ public record RepairCampaignRequest(
         campaignType = campaignType == null || campaignType.isBlank() ? "REPAIR" : campaignType.trim();
         priority = priority == null ? RepairCampaignPriority.MEDIUM : priority;
         objective = objective == null || objective.isBlank() ? null : objective.trim();
+        stages = stages == null ? List.of() : stages;
     }
 }
