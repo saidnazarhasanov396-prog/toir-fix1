@@ -375,7 +375,7 @@ class RbacToirBusinessFlowSecurityTest {
                 Instant.parse("2026-08-02T00:00:00Z"), "Maintenance", null, null, null, null,
                 PlannedShutdownStatus.DRAFT, 0L, 1L, null, null,
                 null, null, null, null, null, null, null, null, null,
-                null, null, 0L, null, null, List.of(), List.of());
+                null, null, 0L, null, null, null,null,List.of(), List.of());
     }
 
     private static String campaignPayload() {

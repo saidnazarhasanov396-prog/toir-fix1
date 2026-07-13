@@ -104,6 +104,8 @@ class PlannedShutdownLifecycleServiceTest {
                 .thenReturn(List.of());
         lenient().when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
                 .thenReturn(List.of());
+        lenient().when(readinessPolicy.evaluateReadiness(any())).thenReturn(
+                new com.toir.dto.plannedshutdown.PlannedShutdownReadinessAssessment(true, List.of()));
         lenient().when(readinessPolicy.evaluateSafeState(any())).thenReturn(
                 new com.toir.dto.plannedshutdown.PlannedShutdownReadinessAssessment(true, List.of()));
     }
@@ -257,7 +259,7 @@ class PlannedShutdownLifecycleServiceTest {
         service.startRepair(id, command());
 
         assertThat(shutdown.getLifecycleStatus()).isEqualTo(PlannedShutdownStatus.REPAIR_IN_PROGRESS);
-        verify(readinessPolicy, times(2)).evaluateSafeState(any());
+        verify(readinessPolicy, times(4)).evaluateSafeState(any());
     }
 
     @Test
@@ -355,9 +357,9 @@ class PlannedShutdownLifecycleServiceTest {
         assertThat(service.startStartup(id, command()).status()).isEqualTo(PlannedShutdownStatus.STARTUP);
         assertThat(service.complete(id, command()).status()).isEqualTo(PlannedShutdownStatus.COMPLETED);
         assertThat(service.close(id, command()).status()).isEqualTo(PlannedShutdownStatus.CLOSED);
-        verify(evidenceService, times(3)).startupBlockers(id);
-        verify(evidenceService, times(2)).productionReturnBlockers(id, 3L, 2L);
-        verify(reportService).closureBlockers(id);
+        verify(evidenceService, times(5)).startupBlockers(id);
+        verify(evidenceService, times(4)).productionReturnBlockers(id, 3L, 2L);
+        verify(reportService, times(2)).closureBlockers(id);
         verify(reportService).createSnapshot(shutdown, actor);
         assertThatThrownBy(() -> service.close(id, command())).hasMessageContaining("TRANSITION_NOT_ALLOWED");
     }

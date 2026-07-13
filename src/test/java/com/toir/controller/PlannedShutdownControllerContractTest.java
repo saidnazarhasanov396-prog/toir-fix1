@@ -385,10 +385,38 @@ class PlannedShutdownControllerContractTest {
 
     private static PlannedShutdownDetailResponse detail(UUID id, UUID departmentId, UUID employeeId,
             PlannedShutdownStatus status) {
-        return new PlannedShutdownDetailResponse(id, 3L, "PS-1", "Annual", "PLANNED", departmentId, employeeId,
-                Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"), "Maintenance",
-                "Objective", null, "HIGH", new java.math.BigDecimal("7.5000"), status, 1L, 1L, null, null,
-                null, null, null, null, null, null, null, null, null,
-                null, null, 0L, null, null, List.of(), List.of());
+        return new PlannedShutdownDetailResponse(
+                id,
+                3L,
+                "PS-1",
+                "Annual",
+                "PLANNED",
+                departmentId,
+                employeeId,
+                Instant.parse("2026-08-01T00:00:00Z"),
+                Instant.parse("2026-08-02T00:00:00Z"),
+                "Maintenance",
+                "Objective",
+                null,
+                "HIGH",
+                new java.math.BigDecimal("7.5000"), status, 1L, 1L, null, null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                0L,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of());
     }
 }
