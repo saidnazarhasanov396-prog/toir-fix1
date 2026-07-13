@@ -190,6 +190,37 @@ class PlannedShutdownServiceTest {
     }
 
     @Test
+    void startReadinessMovesPendingItemToInProgress() {
+        UUID id = UUID.randomUUID(); UUID itemId = UUID.randomUUID(); UUID actorId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 4L, PlannedShutdownStatus.READINESS_CHECK);
+        var item = new com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem();
+        item.setId(itemId); item.setPlannedShutdownId(id); item.setReadinessKey("OPS-CHECK");
+        item.setTitle("Operations check"); item.setSeverity(com.toir.enums.PlannedShutdownReadinessSeverity.WARNING);
+        item.setStatus(com.toir.enums.PlannedShutdownItemStatus.PENDING); item.setOrderNumber(0);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(readinessItemRepository.findByIdAndPlannedShutdownIdAndIsDeletedFalse(itemId, id))
+                .thenReturn(java.util.Optional.of(item));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of(item));
+
+        var response = service.startReadinessItem(id, itemId,
+                new com.toir.dto.plannedshutdown.PlannedShutdownReadinessActionRequest(4L, "photo:start", "started"));
+
+        assertThat(response.items().get(0).status()).isEqualTo(com.toir.enums.PlannedShutdownItemStatus.IN_PROGRESS);
+        assertThat(item.getStatus()).isEqualTo(com.toir.enums.PlannedShutdownItemStatus.IN_PROGRESS);
+        assertThat(item.getEvidence()).isEqualTo("photo:start");
+        assertThat(item.getComment()).isEqualTo("started");
+        assertThat(item.getCompletedAt()).isNull();
+        assertThat(item.getCompletedById()).isNull();
+
+        assertThatThrownBy(() -> service.startReadinessItem(id, itemId,
+                new com.toir.dto.plannedshutdown.PlannedShutdownReadinessActionRequest(4L, null, "again")))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
     void isolationApplyVerifyReleaseRequiresOrderedServerStampedActions() {
         UUID id = UUID.randomUUID(); UUID pointId = UUID.randomUUID(); UUID actor = UUID.randomUUID();
         PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 2L, PlannedShutdownStatus.PREPARATION);

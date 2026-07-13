@@ -21,6 +21,7 @@ public enum ApprovalTargetType {
     REPAIR_CAMPAIGN,
     EQUIPMENT_COMMISSIONING,
     MAINTENANCE_DUE_EVENT,
+    WAREHOUSE_WRITEOFF,
     OTHER;
 
     public static ApprovalTargetType fromDocumentType(String documentType) {

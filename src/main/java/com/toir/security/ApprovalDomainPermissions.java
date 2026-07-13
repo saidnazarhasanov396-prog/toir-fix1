@@ -33,7 +33,7 @@ public final class ApprovalDomainPermissions {
             case EQUIPMENT_COMMISSIONING -> optional(PermissionConstants.EQUIPMENT_COMMISSIONING_UPDATE);
             case PLANNED_SHUTDOWN -> optional(PermissionConstants.PLANNED_SHUTDOWN_APPROVE);
             case REPAIR_CAMPAIGN -> optional(PermissionConstants.REPAIR_CAMPAIGN_APPROVE);
-            case OTHER -> Optional.empty();
+            case WAREHOUSE_WRITEOFF, OTHER -> Optional.empty();
         };
     }
 
