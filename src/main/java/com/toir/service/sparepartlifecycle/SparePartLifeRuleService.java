@@ -3,7 +3,10 @@ package com.toir.service.sparepartlifecycle;
 import com.toir.dto.sparepartlifecycle.SparePartLifeLimitRequest;
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleDto;
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleFilter;
+import com.toir.dto.sparepartlifecycle.SparePartLifeRuleListDto;
 import com.toir.dto.sparepartlifecycle.SparePartLifeRuleRequest;
+import com.toir.entity.SparePart;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentNode;
 import com.toir.entity.sparepartlifecycle.SparePartLifeLimit;
 import com.toir.entity.sparepartlifecycle.SparePartLifeRule;
@@ -23,6 +26,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -45,12 +49,12 @@ public class SparePartLifeRuleService {
     private final AuditBuilderService auditBuilderService;
 
     @Transactional(readOnly = true)
-    public Page<SparePartLifeRuleDto> list(SparePartLifeRuleFilter filter, Pageable pageable) {
+    public Page<SparePartLifeRuleListDto> list(SparePartLifeRuleFilter filter, Pageable pageable) {
         Page<SparePartLifeRule> page = ruleRepository.findAll(
                 SparePartLifeRuleSpecifications.byFilter(filter), pageable);
         List<SparePartLifeRule> rules = page.getContent();
         if (rules.isEmpty()) {
-            return page.map(rule -> SparePartLifeRuleDto.from(rule, List.of()));
+            return page.map(rule -> SparePartLifeRuleListDto.from(rule, null, null, List.of()));
         }
         // N+1 dan qochish uchun barcha limitlarni bitta so'rovda olib, rule bo'yicha guruhlaymiz.
         List<UUID> ruleIds = rules.stream().map(SparePartLifeRule::getId).toList();
@@ -58,8 +62,30 @@ public class SparePartLifeRuleService {
                 .findAllByRuleIdInAndIsDeletedFalseOrderBySequenceAsc(ruleIds)
                 .stream()
                 .collect(Collectors.groupingBy(SparePartLifeLimit::getRuleId));
-        return page.map(rule -> SparePartLifeRuleDto.from(
+
+        Set<UUID> sparePartIds = rules.stream()
+                .map(SparePartLifeRule::getSparePartId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<UUID> equipmentIds = rules.stream()
+                .map(SparePartLifeRule::getEquipmentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> sparePartNames = sparePartIds.isEmpty()
+                ? Map.of()
+                : sparePartRepository.findAllByIdInAndIsDeletedFalse(sparePartIds).stream()
+                        .filter(sparePart -> sparePart.getName() != null)
+                        .collect(Collectors.toMap(SparePart::getId, SparePart::getName));
+        Map<UUID, String> equipmentNames = equipmentIds.isEmpty()
+                ? Map.of()
+                : equipmentRepository.findAllByIdInAndIsDeletedFalse(equipmentIds).stream()
+                        .filter(equipment -> equipment.getName() != null)
+                        .collect(Collectors.toMap(Equipment::getId, Equipment::getName));
+
+        return page.map(rule -> SparePartLifeRuleListDto.from(
                 rule,
+                sparePartNames.get(rule.getSparePartId()),
+                rule.getEquipmentId() == null ? null : equipmentNames.get(rule.getEquipmentId()),
                 limitsByRule.getOrDefault(rule.getId(), List.of())));
     }
 
