@@ -29,6 +29,26 @@ class RepairCampaignApprovalPolicyTest {
     }
 
     @Test
+    void requestApprovalComputesHashBeforeMutatingSnapshotFields() {
+        RepairCampaignApprovalScopeHasher hasher = mock(RepairCampaignApprovalScopeHasher.class);
+        RepairCampaign campaign = new RepairCampaign();
+        campaign.setStatus(RepairCampaignStatus.RESOURCE_CHECK);
+        campaign.setScopeVersion(4L);
+        when(hasher.hash(campaign)).thenAnswer(invocation -> {
+            assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.RESOURCE_CHECK);
+            assertThat(campaign.getApprovalScopeVersion()).isNull();
+            assertThat(campaign.getApprovalScopeHash()).isNull();
+            return "c".repeat(64);
+        });
+
+        new RepairCampaignApprovalPolicy(hasher).prepareRequest(campaign, 4L);
+
+        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.PENDING_APPROVAL);
+        assertThat(campaign.getApprovalScopeVersion()).isEqualTo(4L);
+        assertThat(campaign.getApprovalScopeHash()).isEqualTo("c".repeat(64));
+    }
+
+    @Test
     void decisionRejectsStaleHashVersionOrPayload() {
         RepairCampaignApprovalScopeHasher hasher = mock(RepairCampaignApprovalScopeHasher.class);
         RepairCampaign campaign = new RepairCampaign();
