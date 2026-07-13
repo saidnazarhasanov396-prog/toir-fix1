@@ -229,6 +229,23 @@ public class RepairCampaignService {
     }
 
     @Transactional
+    public RepairCampaignDto startResourceCheck(UUID id, Long expectedVersion, Long expectedScopeVersion) {
+        RepairCampaign campaign = getLockedOrThrow(id);
+        scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
+        validateExpectedVersion(campaign, expectedVersion);
+        validateExpectedScopeVersion(campaign, expectedScopeVersion);
+        if (campaign.getStatus() != RepairCampaignStatus.DRAFT
+                && campaign.getStatus() != RepairCampaignStatus.SCOPE_FORMATION) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_NOT_READY_FOR_RESOURCE_CHECK");
+        }
+        RepairCampaign before = snapshot(campaign);
+        campaign.setStatus(RepairCampaignStatus.RESOURCE_CHECK);
+        RepairCampaign saved = repository.saveAndFlush(campaign);
+        logCampaign(saved, AuditAction.UPDATE, "Ремонтная кампания переведена на проверку ресурсов", before, saved);
+        return toDto(saved);
+    }
+
+    @Transactional
     public RepairCampaignDto requestApproval(UUID id, Long expectedVersion, Long expectedScopeVersion, String comment) {
         RepairCampaign campaign = getLockedOrThrow(id);
         scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
@@ -812,6 +829,13 @@ public class RepairCampaignService {
             throw RestException.conflict(
                     "Repair campaign version conflict: expected=" + expectedVersion
                             + ", actual=" + campaign.getVersion());
+        }
+    }
+
+    private void validateExpectedScopeVersion(RepairCampaign campaign, Long expectedScopeVersion) {
+        long scopeVersion = campaign.getScopeVersion() == null ? 0L : campaign.getScopeVersion();
+        if (expectedScopeVersion == null || !Objects.equals(expectedScopeVersion, scopeVersion)) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_STALE_SCOPE_VERSION");
         }
     }
 
