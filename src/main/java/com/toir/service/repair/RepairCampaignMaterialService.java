@@ -61,8 +61,12 @@ public class RepairCampaignMaterialService {
         Map<UUID,Warehouse> warehouseById=warehouses.findAllByIdInAndIsDeletedFalse(warehouseIds).stream()
                 .collect(java.util.stream.Collectors.toMap(Warehouse::getId,java.util.function.Function.identity()));
 
+        Map<UUID,BigDecimal> reservedByRequirement=reservedByCampaignRequirement(
+                rows.stream().map(RepairCampaignMaterialRequirement::getId).filter(Objects::nonNull).toList()
+        );
+
         return rows.stream()
-                .map(r->response(r,c.getVersion(),true,sparePartById.get(r.getSparePartId()),warehouseById.get(r.getWarehouseId())))
+                .map(r->response(r,c.getVersion(),true,sparePartById.get(r.getSparePartId()),warehouseById.get(r.getWarehouseId()),reservedByRequirement.getOrDefault(r.getId(),BigDecimal.ZERO)))
                 .toList();
     }
 
@@ -118,6 +122,22 @@ public class RepairCampaignMaterialService {
     }
 
     public boolean assigned(UUID campaignId,UUID itemId){return requirements.existsByRepairCampaignIdAndWorkItemIdAndIsDeletedFalse(campaignId,itemId);}
+    private Map<UUID,BigDecimal> reservedByCampaignRequirement(List<UUID> requirementIds){
+        if(requirementIds==null||requirementIds.isEmpty())return Map.of();
+        List<WorkOrderSparePartRequirement> canonicalRequirements=workRequirements.findAllByCampaignRequirementIdInAndIsDeletedFalse(requirementIds);
+        Map<UUID,BigDecimal> reservedByRequirement=new HashMap<>();
+        for(WorkOrderSparePartRequirement wr:canonicalRequirements){
+            if(wr.getCampaignRequirementId()==null)continue;
+            BigDecimal reserved=reservations.findAllByWorkOrderIdAndRequirementIdAndSparePartIdAndStatusAndIsDeletedFalse(
+                            wr.getWorkOrderId(),wr.getId(),wr.getSparePartId(),ReservationStatus.ACTIVE)
+                    .stream()
+                    .map(com.toir.entity.Reservation::getQuantity)
+                    .filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO,BigDecimal::add);
+            reservedByRequirement.merge(wr.getCampaignRequirementId(),reserved,BigDecimal::add);
+        }
+        return reservedByRequirement;
+    }
     private BigDecimal available(MaterialPoolKey key){return balances.findAllByWarehouseIdAndSparePartIdAndIsDeletedFalse(key.warehouseId(),key.sparePartId()).stream().map(b->b.getAvailableQty()).reduce(BigDecimal.ZERO,BigDecimal::add);}
     private record MaterialPoolKey(UUID warehouseId,UUID sparePartId){}
     private void validateRequest(UUID campaignId,RepairCampaignMaterialRequirementRequest r){if(r==null||r.requiredQuantity()==null||r.requiredQuantity().signum()<=0||r.requiredQuantity().stripTrailingZeros().scale()>4||r.requiredQuantity().precision()-r.requiredQuantity().scale()>15)throw RestException.badRequest("MATERIAL_QUANTITY_INVALID");items.findByIdAndCampaignIdAndIsDeletedFalse(r.workItemId(),campaignId).orElseThrow(()->RestException.badRequest("MATERIAL_FOREIGN_ITEM"));spareParts.findByIdAndIsDeletedFalse(r.sparePartId()).orElseThrow(()->RestException.badRequest("MATERIAL_SPARE_PART_INVALID"));var warehouse=warehouses.findByIdAndIsDeletedFalse(r.warehouseId()).filter(w->w.isActive()).orElseThrow(()->RestException.badRequest("MATERIAL_WAREHOUSE_INVALID"));if(warehouse.getDepartmentId()!=null)scope.assertCanAccessDepartment(warehouse.getDepartmentId());}
@@ -131,7 +151,7 @@ public class RepairCampaignMaterialService {
     private RepairCampaignMaterialRequirementResponse response(RepairCampaignMaterialRequirement r,long v,boolean active){
         SparePart spare=spareParts.findByIdAndIsDeletedFalse(r.getSparePartId()).orElse(null);
         Warehouse warehouse=warehouses.findByIdAndIsDeletedFalse(r.getWarehouseId()).orElse(null);
-        return response(r,v,active,spare,warehouse);
+        return response(r,v,active,spare,warehouse,BigDecimal.ZERO);
     }
 
     private static RepairCampaignMaterialRequirementResponse response(
@@ -139,7 +159,8 @@ public class RepairCampaignMaterialService {
             long v,
             boolean active,
             SparePart spare,
-            Warehouse warehouse
+            Warehouse warehouse,
+            BigDecimal reservedQuantity
     ){
         return new RepairCampaignMaterialRequirementResponse(
                 r.getId(),
@@ -148,6 +169,7 @@ public class RepairCampaignMaterialService {
                 r.getSparePartId(),
                 r.getWarehouseId(),
                 r.getRequiredQuantity(),
+                reservedQuantity==null?BigDecimal.ZERO:reservedQuantity,
                 r.isCritical(),
                 r.isProcurementRequired(),
                 v,

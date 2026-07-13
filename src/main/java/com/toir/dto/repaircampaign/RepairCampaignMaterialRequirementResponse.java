@@ -11,6 +11,7 @@ public record RepairCampaignMaterialRequirementResponse(
         UUID sparePartId,
         UUID warehouseId,
         @JsonSerialize(using = com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal requiredQuantity,
+        @JsonSerialize(using = com.toir.dto.sparepartlifecycle.DecimalStringSerializer.class) BigDecimal reservedQuantity,
         boolean critical,
         boolean procurementRequired,
         long campaignVersion,

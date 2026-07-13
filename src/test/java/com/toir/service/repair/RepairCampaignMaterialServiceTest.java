@@ -59,7 +59,7 @@ class RepairCampaignMaterialServiceTest {
     UUID campaignId=UUID.randomUUID(),itemId=UUID.randomUUID(),spareId=UUID.randomUUID(),warehouseId=UUID.randomUUID();
     RepairCampaign campaign;
 
-    @BeforeEach void setup(){campaign=new RepairCampaign();campaign.setId(campaignId);campaign.setVersion(1L);campaign.setStatus(RepairCampaignStatus.DRAFT);campaign.setDepartmentId(UUID.randomUUID());org.mockito.Mockito.lenient().when(campaigns.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));org.mockito.Mockito.lenient().when(campaigns.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));RepairCampaignWorkItem item=new RepairCampaignWorkItem();item.setId(itemId);org.mockito.Mockito.lenient().when(items.findByIdAndCampaignIdAndIsDeletedFalse(itemId,campaignId)).thenReturn(Optional.of(item));SparePart spare=new SparePart();spare.setId(spareId);org.mockito.Mockito.lenient().when(spareParts.findByIdAndIsDeletedFalse(spareId)).thenReturn(Optional.of(spare));Warehouse warehouse=new Warehouse();warehouse.setId(warehouseId);warehouse.setActive(true);org.mockito.Mockito.lenient().when(warehouses.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));}
+    @BeforeEach void setup(){campaign=new RepairCampaign();campaign.setId(campaignId);campaign.setVersion(1L);campaign.setStatus(RepairCampaignStatus.DRAFT);campaign.setDepartmentId(UUID.randomUUID());org.mockito.Mockito.lenient().when(campaigns.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));org.mockito.Mockito.lenient().when(campaigns.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));RepairCampaignWorkItem item=new RepairCampaignWorkItem();item.setId(itemId);org.mockito.Mockito.lenient().when(items.findByIdAndCampaignIdAndIsDeletedFalse(itemId,campaignId)).thenReturn(Optional.of(item));SparePart spare=new SparePart();spare.setId(spareId);org.mockito.Mockito.lenient().when(spareParts.findByIdAndIsDeletedFalse(spareId)).thenReturn(Optional.of(spare));Warehouse warehouse=new Warehouse();warehouse.setId(warehouseId);warehouse.setActive(true);org.mockito.Mockito.lenient().when(warehouses.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.of(warehouse));org.mockito.Mockito.lenient().when(workRequirements.findAllByCampaignRequirementIdInAndIsDeletedFalse(any())).thenReturn(List.of());}
 
     @Test void listReturnsHumanReadableSparePartAndWarehouseLabels(){
         UUID requirementId=UUID.randomUUID();
@@ -73,9 +73,14 @@ class RepairCampaignMaterialServiceTest {
         warehouse.setId(warehouseId);
         warehouse.setCode("WH-1");
         warehouse.setName("Main warehouse");
+        WorkOrderSparePartRequirement workRequirement=workRequirement(requirementId,spareId);
+        Reservation reservation=new Reservation();
+        reservation.setQuantity(new BigDecimal("1.2500"));
         when(requirements.findAllByRepairCampaignIdAndIsDeletedFalseOrderByWorkItemIdAscSparePartIdAsc(campaignId)).thenReturn(List.of(requirement));
         when(spareParts.findAllByIdInAndIsDeletedFalse(List.of(spareId))).thenReturn(List.of(spare));
         when(warehouses.findAllByIdInAndIsDeletedFalse(List.of(warehouseId))).thenReturn(List.of(warehouse));
+        when(workRequirements.findAllByCampaignRequirementIdInAndIsDeletedFalse(List.of(requirementId))).thenReturn(List.of(workRequirement));
+        when(reservations.findAllByWorkOrderIdAndRequirementIdAndSparePartIdAndStatusAndIsDeletedFalse(workRequirement.getWorkOrderId(),workRequirement.getId(),spareId,com.toir.enums.ReservationStatus.ACTIVE)).thenReturn(List.of(reservation));
 
         var result=service.list(campaignId);
 
@@ -83,6 +88,7 @@ class RepairCampaignMaterialServiceTest {
             assertThat(row.sparePartCode()).isEqualTo("SP-77");
             assertThat(row.sparePartName()).isEqualTo("Bearing 6205");
             assertThat(row.sparePartUnit()).isEqualTo("pcs");
+            assertThat(row.reservedQuantity()).isEqualByComparingTo("1.2500");
             assertThat(row.warehouseCode()).isEqualTo("WH-1");
             assertThat(row.warehouseName()).isEqualTo("Main warehouse");
         });
