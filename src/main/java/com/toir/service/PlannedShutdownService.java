@@ -963,8 +963,13 @@ public class PlannedShutdownService {
     private Map<UUID, String> equipmentNamesById(Collection<UUID> equipmentIds) {
         List<UUID> ids = equipmentIds.stream().filter(Objects::nonNull).distinct().toList();
         if (ids.isEmpty()) return Map.of();
-        return equipmentRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
-                .collect(java.util.stream.Collectors.toMap(Equipment::getId, Equipment::getName));
+        Map<UUID, String> names = new LinkedHashMap<>();
+        for (Equipment equipment : safeList(equipmentRepository.findAllByIdInAndIsDeletedFalse(ids))) {
+            if (equipment.getId() != null) {
+                names.put(equipment.getId(), equipment.getName());
+            }
+        }
+        return names;
     }
 
     private PlannedShutdownReadinessItem findReadiness(UUID shutdownId, UUID itemId) {

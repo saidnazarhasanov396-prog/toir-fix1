@@ -173,7 +173,7 @@ class RepairCampaignServiceTest {
 
         assertThat(result.responsibleEmployeeId()).isEqualTo(employeeId);
         assertThat(result.departmentId()).isEqualTo(campaignDepartmentId);
-        verify(repository).save(any(RepairCampaign.class));
+        verify(repository, times(2)).save(any(RepairCampaign.class));
     }
 
     @Test
