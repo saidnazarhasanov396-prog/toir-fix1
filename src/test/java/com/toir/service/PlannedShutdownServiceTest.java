@@ -74,6 +74,8 @@ class PlannedShutdownServiceTest {
     @Mock private PlannedShutdownReadinessPolicy readinessPolicy;
     @Mock private WorkOrderAssignmentEligibilityService workOrderAssignmentEligibilityService;
     @Mock private WorkOrderMaterialReadinessService workOrderMaterialReadinessService;
+    @Mock private com.toir.service.plannedshutdown.PlannedShutdownEvidenceService evidenceService;
+    @Mock private com.toir.service.plannedshutdown.PlannedShutdownReportService reportService;
     @Spy private com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy readinessLifecyclePolicy =
             new com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy();
     @Spy private com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy transitionPolicy =
