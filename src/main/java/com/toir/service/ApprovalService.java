@@ -34,8 +34,11 @@ import com.toir.service.approval.ApprovalOrchestrator;
 import com.toir.service.approval.ApprovalRouteResolver;
 import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.repair.RepairRequestService;
+import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import jakarta.persistence.PersistenceException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataAccessException;
@@ -63,6 +66,8 @@ import java.util.stream.Stream;
 @Transactional
 @RequiredArgsConstructor
 public class ApprovalService implements ApprovalOrchestrator {
+
+    private static final Logger log = LoggerFactory.getLogger(ApprovalService.class);
 
     private static final Set<String> INTEGRATED_DOCUMENT_TYPES = Set.of(
             "WORK_ORDER",
@@ -92,6 +97,7 @@ public class ApprovalService implements ApprovalOrchestrator {
     private final ScopeAccessService scopeAccessService;
     private final NotificationService notificationService;
     private final UserRepository userRepository;
+    private final RepairCampaignApprovalRouteValidator repairCampaignApprovalRouteValidator;
     private final ObjectProvider<WorkOrderService> workOrderServiceProvider;
     private final ObjectProvider<PprPlanService> pprPlanServiceProvider;
     private final ObjectProvider<ProcurementRequestService> procurementRequestServiceProvider;
@@ -473,10 +479,14 @@ public class ApprovalService implements ApprovalOrchestrator {
             Long scopeVersion = rs.getLong("scope_version");
             Long approvalVersion = rs.getLong("approval_scope_version");
             String scopeHash = rs.getString("approval_scope_hash");
-            if (!"PENDING_APPROVAL".equals(rs.getString("status"))
-                    || !Objects.equals(scopeVersion, approvalVersion)
-                    || scopeHash == null || !scopeHash.matches("[0-9a-f]{64}")) {
-                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_STALE");
+            if (!"PENDING_APPROVAL".equals(rs.getString("status"))) {
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_CAMPAIGN_STATUS_MISMATCH");
+            }
+            if (!Objects.equals(scopeVersion, approvalVersion)) {
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_VERSION_MISMATCH");
+            }
+            if (scopeHash == null || !scopeHash.matches("[0-9a-f]{64}")) {
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_HASH_MISMATCH");
             }
             return new RepairCampaignApprovalSnapshot(scopeVersion, scopeHash, rs.getLong("version"));
         }, targetId);
@@ -594,14 +604,22 @@ public class ApprovalService implements ApprovalOrchestrator {
                 effectiveActionType);
         if (pending.isPresent()) {
             String currentPayload = currentScopePayload(targetType, documentId);
-            if ((currentPayload != null && !Objects.equals(pending.get().getPayloadJson(), currentPayload))
-                    || hasStaleApprovalRoute(targetType, pending.get())) {
+            RepairCampaignApprovalRouteValidator.ValidationResult routeValidation = routeValidation(targetType, pending.get());
+            boolean payloadStale = currentPayload != null && !Objects.equals(pending.get().getPayloadJson(), currentPayload);
+            boolean routeStale = routeValidation != null && !routeValidation.valid();
+            if (payloadStale || routeStale) {
+                boolean routeStaleOnly = !payloadStale && routeStale;
                 ApprovalRequest stale = pending.get();
                 stale.setStatus(ApprovalStatus.CANCELLED);
                 stale.setCompletedAt(Instant.now());
+                if (routeStaleOnly) {
+                    stale.setFailureReason("NONCANONICAL_REPAIR_CAMPAIGN_ROUTE");
+                    log.warn("Cancelling noncanonical repair campaign approval id={} reason={} detail={}",
+                            stale.getId(), routeValidation.reason(), routeValidation.detail());
+                }
                 requestRepository.saveAndFlush(stale);
                 governanceService.record(stale, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
-                        effectiveRequesterId, supersededScopeMessage(targetType));
+                        effectiveRequesterId, routeStaleOnly ? "NONCANONICAL_REPAIR_CAMPAIGN_ROUTE" : supersededScopeMessage(targetType));
                 pending = java.util.Optional.empty();
             }
         }
@@ -630,9 +648,21 @@ public class ApprovalService implements ApprovalOrchestrator {
         return null;
     }
 
-    private boolean hasStaleApprovalRoute(ApprovalTargetType targetType, ApprovalRequest request) {
-        return targetType == ApprovalTargetType.REPAIR_CAMPAIGN
-                && !RepairCampaignApprovalPolicy.hasCanonicalDisciplineRoute(request);
+    private RepairCampaignApprovalRouteValidator.ValidationResult routeValidation(ApprovalTargetType targetType, ApprovalRequest request) {
+        if (targetType != ApprovalTargetType.REPAIR_CAMPAIGN) {
+            return null;
+        }
+        ApprovalActionType actionType = request == null ? null : request.getActionType();
+        if (actionType != null && actionType != ApprovalActionType.APPROVE) {
+            return null;
+        }
+        return repairCampaignApprovalRouteValidator.validate(request);
+    }
+
+    private boolean hasActionableRoute(ApprovalRequest request) {
+        ApprovalTargetType targetType = effectiveTargetType(request);
+        RepairCampaignApprovalRouteValidator.ValidationResult validation = routeValidation(targetType, request);
+        return validation == null || validation.valid();
     }
 
     private String supersededScopeMessage(ApprovalTargetType targetType) {
@@ -1212,6 +1242,29 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (effectiveSteps.isEmpty()) {
             throw RestException.badRequest("At least one approval step is required");
         }
+        if (targetType == ApprovalTargetType.REPAIR_CAMPAIGN
+                && (actionType == null || actionType == ApprovalActionType.APPROVE)) {
+            ApprovalRequest routeProbe = new ApprovalRequest();
+            routeProbe.setTargetType(targetType);
+            routeProbe.setTargetId(targetId);
+            routeProbe.setActionType(ApprovalActionType.APPROVE);
+            int probeIndex = 1;
+            for (CreateApprovalRequest.StepInput input : effectiveSteps) {
+                ApprovalStep step = new ApprovalStep();
+                step.setRequest(routeProbe);
+                step.setStepNumber(probeIndex++);
+                step.setApproverId(input.approverId());
+                step.setApproverRole(input.approverRole());
+                step.setDecision(ApprovalDecision.PENDING);
+                routeProbe.getSteps().add(step);
+            }
+            RepairCampaignApprovalRouteValidator.ValidationResult validation = repairCampaignApprovalRouteValidator.validate(routeProbe);
+            if (!validation.valid()) {
+                log.warn("Repair campaign approval route is not configured: targetId={} reason={} detail={}",
+                        targetId, validation.reason(), validation.detail());
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_NOT_CONFIGURED");
+            }
+        }
 
         int idx = 1;
         for (CreateApprovalRequest.StepInput input : effectiveSteps) {
@@ -1451,6 +1504,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         boolean canDecide = request.getStatus() == ApprovalStatus.PENDING
                 && currentStep != null
                 && currentStep.getDecision() == ApprovalDecision.PENDING
+                && hasActionableRoute(request)
                 && canCurrentPrincipalActOnStep(currentStep);
         boolean canCancel = request.getStatus() == ApprovalStatus.PENDING
                 && (scopeAccessService.isScopeAdmin() || matchesCurrentPrincipal(request.getRequesterId()));

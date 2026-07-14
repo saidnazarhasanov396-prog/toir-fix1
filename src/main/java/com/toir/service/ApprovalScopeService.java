@@ -43,6 +43,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 import com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher;
+import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
 
 @Service
 @RequiredArgsConstructor
@@ -185,14 +186,7 @@ public class ApprovalScopeService {
     }
 
     private static boolean isRepairCampaignDisciplineRole(String role) {
-        return Set.of(
-                "REPAIR_CAMPAIGN_CHIEF_MECHANIC_APPROVER",
-                "REPAIR_CAMPAIGN_PRODUCTION_APPROVER",
-                "REPAIR_CAMPAIGN_WAREHOUSE_APPROVER",
-                "REPAIR_CAMPAIGN_PROCUREMENT_APPROVER",
-                "REPAIR_CAMPAIGN_FINANCE_APPROVER",
-                "REPAIR_CAMPAIGN_HSE_APPROVER",
-                "REPAIR_CAMPAIGN_CHIEF_ENGINEER_APPROVER").contains(role);
+        return RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.contains(role);
     }
 
     public void assertCanCancelApproval(ApprovalRequest approval) {
