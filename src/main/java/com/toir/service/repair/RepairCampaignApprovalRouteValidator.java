@@ -43,7 +43,7 @@ public class RepairCampaignApprovalRouteValidator {
             String code,
             String detail
     ) {
-        public static ValidationResult valid() {
+        public static ValidationResult validResult() {
             return new ValidationResult(true, RouteValidationReason.VALID, "VALID", null);
         }
 
@@ -93,7 +93,7 @@ public class RepairCampaignApprovalRouteValidator {
             return ValidationResult.invalid(RouteValidationReason.SEPARATION_OF_DUTY_FAILURE,
                     "discipline approvals require distinct non-requester actors");
         }
-        return ValidationResult.valid();
+        return ValidationResult.validResult();
     }
 
     public boolean isDisciplineRole(String role) {
@@ -137,7 +137,7 @@ public class RepairCampaignApprovalRouteValidator {
                         "expected " + expectedRole + " at step " + expectedStepNumber);
             }
         }
-        return ValidationResult.valid();
+        return ValidationResult.validResult();
     }
 
     private static List<ApprovalStep> activeSteps(ApprovalRequest request) {
