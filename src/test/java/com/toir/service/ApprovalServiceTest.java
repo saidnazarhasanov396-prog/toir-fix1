@@ -41,6 +41,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.UnexpectedRollbackException;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -738,6 +739,30 @@ class ApprovalServiceTest {
                 approverId,
                 "retry"
         );
+    }
+
+    @Test
+    void terminalTransactionFailureIsPropagatedInsteadOfBeingSavedAsFailedApproval() {
+        UUID approvalId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(
+                approvalId,
+                UUID.randomUUID(),
+                1,
+                approverId
+        );
+
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(approvalActionExecutor.execute(approval))
+                .thenThrow(new UnexpectedRollbackException("domain finalizer transaction rolled back"));
+
+        assertThatThrownBy(() -> service.approve(approvalId, new DecisionRequest(approverId, "ok")))
+                .isInstanceOf(UnexpectedRollbackException.class)
+                .hasMessageContaining("domain finalizer transaction rolled back");
+
+        verify(requestRepository, never()).save(approval);
+        assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(approval.getFailureReason()).isNull();
     }
 
     private ApprovalRequest pendingApproval(UUID id, UUID workOrderId, UUID requesterId) {
