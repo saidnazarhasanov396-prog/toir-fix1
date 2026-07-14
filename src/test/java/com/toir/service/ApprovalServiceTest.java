@@ -21,12 +21,14 @@ import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalRouteResolver;
 import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
+import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -96,6 +98,9 @@ class ApprovalServiceTest {
 
     @Mock
     UserRepository userRepository;
+
+    @Spy
+    RepairCampaignApprovalRouteValidator repairCampaignApprovalRouteValidator = new RepairCampaignApprovalRouteValidator();
 
     @Mock
     ObjectProvider<MaintenanceRegulationService> maintenanceRegulationServiceProvider;
@@ -307,6 +312,27 @@ class ApprovalServiceTest {
 
         assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
         assertThat(approval.getSteps().getFirst().getDecidedById()).isEqualTo(actorId);
+    }
+
+
+    @Test
+    void oneStepSystemAdminRepairCampaignApprovalIsNotActionable() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, UUID.randomUUID(), "SYSTEM_ADMIN");
+        approval.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
+        approval.setTargetId(UUID.randomUUID());
+        approval.setActionType(ApprovalActionType.APPROVE);
+        User actor = activeUserWithRole(actorId, "SYSTEM_ADMIN");
+
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(userRepository.findByIdAndIsDeletedFalse(actorId)).thenReturn(Optional.of(actor));
+
+        ApprovalRequestDto result = service.findById(approvalId);
+
+        assertThat(result.canApprove()).isFalse();
+        assertThat(result.canReject()).isFalse();
     }
 
     @Test
@@ -643,6 +669,9 @@ class ApprovalServiceTest {
         assertThat(result.steps()).extracting(ApprovalStepDto::approverRole)
                 .containsExactlyElementsOf(com.toir.service.repair.RepairCampaignApprovalPolicy.DISCIPLINE_ROLES);
         verify(requestRepository, times(2)).saveAndFlush(any(ApprovalRequest.class));
+        assertThat(stale.getFailureReason()).isEqualTo("NONCANONICAL_REPAIR_CAMPAIGN_ROUTE");
+        verify(governanceService).record(stale, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
+                requesterId, "NONCANONICAL_REPAIR_CAMPAIGN_ROUTE");
     }
 
     @Test
