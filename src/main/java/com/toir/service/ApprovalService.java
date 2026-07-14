@@ -36,14 +36,19 @@ import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.repair.RepairRequestService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
+import jakarta.persistence.PersistenceException;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.NoTransactionException;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -938,10 +943,26 @@ public class ApprovalService implements ApprovalOrchestrator {
             request.setResultJson(executeOnce(request));
             request.setFailureReason(null);
         } catch (RuntimeException ex) {
+            if (shouldPropagateFinalizerFailure(ex)) {
+                throw ex;
+            }
             request.setStatus(ApprovalStatus.FAILED);
             request.setCompletedAt(Instant.now());
             request.setFailureReason(ex.getMessage());
             request.setResultJson(null);
+        }
+    }
+
+    private boolean shouldPropagateFinalizerFailure(RuntimeException ex) {
+        if (ex instanceof TransactionException
+                || ex instanceof DataAccessException
+                || ex instanceof PersistenceException) {
+            return true;
+        }
+        try {
+            return TransactionAspectSupport.currentTransactionStatus().isRollbackOnly();
+        } catch (NoTransactionException ignored) {
+            return false;
         }
     }
 
