@@ -55,7 +55,7 @@ public class RepairCampaignRiskService {
         risk.setDueDate(request.dueDate());
         RepairCampaignRisk saved = repository.save(risk);
         RepairCampaignRiskResponse response = RepairCampaignRiskResponse.from(
-                saved, owner == null ? null : owner.getFullName());
+                saved, owner == null ? null : displayName(owner));
         auditBuilderService.log("repair_campaign_risk", response.id().toString(), AuditAction.CREATE,
                 AuditModule.REPAIR_CAMPAIGN, "Риск ремонтной кампании создан", null, response);
         return response;

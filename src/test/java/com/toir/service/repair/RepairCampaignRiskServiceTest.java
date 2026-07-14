@@ -59,6 +59,51 @@ class RepairCampaignRiskServiceTest {
     }
 
     @Test
+    void listReturnsEmptyCollectionWhenCampaignHasNoRisks() {
+        UUID campaignId = UUID.randomUUID();
+        when(campaignRepository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign(campaignId)));
+        when(repository.findAllByCampaignIdAndIsDeletedFalseOrderByCreatedAtDesc(campaignId))
+                .thenReturn(List.of());
+
+        var result = service.list(campaignId);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void createThenListReturnsRiskWithoutOwnerAndNullableFields() {
+        UUID campaignId = UUID.randomUUID();
+        when(campaignRepository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign(campaignId)));
+        when(repository.save(any())).thenAnswer(invocation -> persisted(invocation.getArgument(0)));
+
+        var created = service.create(campaignId, new RepairCampaignRiskCreateRequest(
+                "Schedule risk", "", RepairCampaignRiskLevel.LOW,
+                RepairCampaignRiskLevel.CRITICAL, null, "", null));
+
+        RepairCampaignRisk stored = risk(created.id(), campaignId, created.status());
+        stored.setTitle(created.title());
+        stored.setDescription(created.description());
+        stored.setLikelihood(created.likelihood());
+        stored.setImpact(created.impact());
+        stored.setMitigationPlan(created.mitigationPlan());
+        stored.setDueDate(created.dueDate());
+        when(repository.findAllByCampaignIdAndIsDeletedFalseOrderByCreatedAtDesc(campaignId))
+                .thenReturn(List.of(stored));
+
+        var listed = service.list(campaignId);
+
+        assertThat(listed).hasSize(1);
+        assertThat(listed.get(0).id()).isEqualTo(created.id());
+        assertThat(listed.get(0).ownerId()).isNull();
+        assertThat(listed.get(0).ownerName()).isNull();
+        assertThat(listed.get(0).description()).isNull();
+        assertThat(listed.get(0).mitigationPlan()).isNull();
+        assertThat(listed.get(0).likelihood()).isEqualTo(RepairCampaignRiskLevel.LOW);
+        assertThat(listed.get(0).impact()).isEqualTo(RepairCampaignRiskLevel.CRITICAL);
+        assertThat(listed.get(0).status()).isEqualTo(RepairCampaignRiskStatus.OPEN);
+    }
+
+    @Test
     void createForcesOpenAndResolvesOwnerName() {
         UUID campaignId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
@@ -73,6 +118,21 @@ class RepairCampaignRiskServiceTest {
         assertThat(result.status()).isEqualTo(RepairCampaignRiskStatus.OPEN);
         assertThat(result.title()).isEqualTo("Supplier delay");
         assertThat(result.ownerName()).isEqualTo("Ivanov I.");
+    }
+
+    @Test
+    void createUsesUsernameWhenOwnerFullNameIsMissing() {
+        UUID campaignId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        when(campaignRepository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign(campaignId)));
+        when(userRepository.findByIdAndIsDeletedFalse(ownerId)).thenReturn(Optional.of(user(ownerId, null)));
+        when(repository.save(any())).thenAnswer(invocation -> persisted(invocation.getArgument(0)));
+
+        var result = service.create(campaignId, new RepairCampaignRiskCreateRequest(
+                "Owner fallback", null, RepairCampaignRiskLevel.MEDIUM,
+                RepairCampaignRiskLevel.HIGH, ownerId, null, null));
+
+        assertThat(result.ownerName()).isEqualTo("user-" + ownerId);
     }
 
     @Test
