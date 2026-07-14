@@ -59,6 +59,32 @@ class RepairCampaignRiskServiceTest {
     }
 
     @Test
+    void createAssignsIdentifierBeforeAuditWhenRepositoryReturnsSameEntity() {
+        UUID campaignId = UUID.randomUUID();
+        when(campaignRepository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign(campaignId)));
+        when(repository.save(any())).thenAnswer(invocation -> {
+            RepairCampaignRisk risk = invocation.getArgument(0);
+            risk.setCreatedAt(Instant.now());
+            risk.setUpdatedAt(Instant.now());
+            return risk;
+        });
+
+        var result = service.create(campaignId, new RepairCampaignRiskCreateRequest(
+                "Delivery risk", null, RepairCampaignRiskLevel.MEDIUM,
+                RepairCampaignRiskLevel.HIGH, null, null, null));
+
+        assertThat(result.id()).isNotNull();
+        verify(auditBuilderService).log(
+                org.mockito.ArgumentMatchers.eq("repair_campaign_risk"),
+                org.mockito.ArgumentMatchers.eq(result.id().toString()),
+                org.mockito.ArgumentMatchers.eq(com.toir.enums.AuditAction.CREATE),
+                org.mockito.ArgumentMatchers.eq(com.toir.enums.AuditModule.REPAIR_CAMPAIGN),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void rejectsOpenToClosedTransition() {
         UUID campaignId = UUID.randomUUID();
         UUID riskId = UUID.randomUUID();
