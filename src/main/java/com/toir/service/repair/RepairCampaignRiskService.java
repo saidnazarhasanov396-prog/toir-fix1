@@ -45,6 +45,7 @@ public class RepairCampaignRiskService {
         requireCampaign(campaignId);
         User owner = owner(request.ownerId());
         RepairCampaignRisk risk = new RepairCampaignRisk();
+        risk.setId(UUID.randomUUID());
         risk.setCampaignId(campaignId);
         risk.setTitle(requiredTitle(request.title()));
         risk.setDescription(text(request.description()));
@@ -55,9 +56,11 @@ public class RepairCampaignRiskService {
         risk.setMitigationPlan(text(request.mitigationPlan()));
         risk.setDueDate(request.dueDate());
         RepairCampaignRisk saved = repository.save(risk);
-        auditBuilderService.log("repair_campaign_risk", saved.getId().toString(), AuditAction.CREATE,
-                AuditModule.REPAIR_CAMPAIGN, "Риск ремонтной кампании создан", null, saved);
-        return RepairCampaignRiskResponse.from(saved, owner == null ? null : owner.getFullName());
+        RepairCampaignRiskResponse response = RepairCampaignRiskResponse.from(
+                saved, owner == null ? null : owner.getFullName());
+        auditBuilderService.log("repair_campaign_risk", response.id().toString(), AuditAction.CREATE,
+                AuditModule.REPAIR_CAMPAIGN, "Риск ремонтной кампании создан", null, response);
+        return response;
     }
 
     @Transactional
