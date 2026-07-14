@@ -30,12 +30,10 @@ public class RepairCampaignRiskService {
     @Transactional(readOnly = true)
     public List<RepairCampaignRiskResponse> list(UUID campaignId) {
         requireCampaign(campaignId);
-        List<RepairCampaignRisk> risks = repository.findAllByCampaignIdAndIsDeletedFalse(campaignId);
+        List<RepairCampaignRisk> risks = repository.findAllByCampaignIdAndIsDeletedFalseOrderByCreatedAtDesc(campaignId);
         Set<UUID> ownerIds = risks.stream().map(RepairCampaignRisk::getOwnerId)
                 .filter(Objects::nonNull).collect(Collectors.toSet());
-        Map<UUID, String> ownerNames = ownerIds.isEmpty() ? Map.of() : userRepository
-                .findAllByIdInAndIsDeletedFalse(ownerIds).stream()
-                .collect(Collectors.toMap(User::getId, User::getFullName));
+        Map<UUID, String> ownerNames = resolveOwnerNames(ownerIds);
         return risks.stream().map(risk -> RepairCampaignRiskResponse.from(
                 risk, ownerNames.get(risk.getOwnerId()))).toList();
     }
@@ -107,6 +105,22 @@ public class RepairCampaignRiskService {
     private RepairCampaignRisk get(UUID campaignId, UUID riskId) {
         return repository.findByIdAndCampaignIdAndIsDeletedFalse(riskId, campaignId)
                 .orElseThrow(() -> RestException.notFound("Repair campaign risk not found: " + riskId));
+    }
+
+
+    private Map<UUID, String> resolveOwnerNames(Set<UUID> ownerIds) {
+        if (ownerIds.isEmpty()) return Map.of();
+        Map<UUID, String> ownerNames = new HashMap<>();
+        userRepository.findAllById(ownerIds).stream()
+                .filter(user -> !user.isDeleted())
+                .forEach(user -> ownerNames.put(user.getId(), displayName(user)));
+        return ownerNames;
+    }
+
+    private static String displayName(User user) {
+        if (user.getFullName() != null && !user.getFullName().isBlank()) return user.getFullName();
+        if (user.getUsername() != null && !user.getUsername().isBlank()) return user.getUsername();
+        return user.getId() == null ? null : user.getId().toString();
     }
 
     private User owner(UUID ownerId) {

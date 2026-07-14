@@ -42,6 +42,23 @@ class RepairCampaignRiskServiceTest {
     @InjectMocks RepairCampaignRiskService service;
 
     @Test
+    void listReturnsCreatedRisksWhenOwnerFullNameIsMissing() {
+        UUID campaignId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        RepairCampaignRisk risk = risk(UUID.randomUUID(), campaignId, RepairCampaignRiskStatus.OPEN);
+        risk.setOwnerId(ownerId);
+        when(campaignRepository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign(campaignId)));
+        when(repository.findAllByCampaignIdAndIsDeletedFalseOrderByCreatedAtDesc(campaignId))
+                .thenReturn(List.of(risk));
+        when(userRepository.findAllById(any())).thenReturn(List.of(user(ownerId, null)));
+
+        var result = service.list(campaignId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).ownerName()).isEqualTo("user-" + ownerId);
+    }
+
+    @Test
     void createForcesOpenAndResolvesOwnerName() {
         UUID campaignId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
@@ -139,6 +156,7 @@ class RepairCampaignRiskServiceTest {
     private User user(UUID id, String name) {
         User user = new User();
         user.setId(id);
+        user.setUsername("user-" + id);
         user.setFullName(name);
         return user;
     }
