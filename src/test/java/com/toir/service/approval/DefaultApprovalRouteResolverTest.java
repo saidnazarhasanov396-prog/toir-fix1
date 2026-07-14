@@ -1,6 +1,7 @@
 package com.toir.service.approval;
 
 import com.toir.entity.ApprovalRequest;
+import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.entity.ApprovalTemplate;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalRoutePolicy;
@@ -62,6 +63,25 @@ class DefaultApprovalRouteResolverTest {
         assertThat(steps).hasSize(1);
         assertThat(steps.getFirst().approverId()).isNull();
         assertThat(steps.getFirst().approverRole()).isEqualTo("USTA");
+    }
+
+    @Test
+    void repairCampaignApproveAlwaysUsesCanonicalSevenDisciplineRoute() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
+        template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
+        template.setApproverRole("REPAIR_CAMPAIGN_APPROVE");
+        ApprovalRequest request = new ApprovalRequest();
+        request.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
+        request.setActionType(ApprovalActionType.APPROVE);
+
+        var steps = resolver.resolveRoute(request);
+
+        assertThat(steps).hasSize(7);
+        assertThat(steps).extracting(CreateApprovalRequest.StepInput::approverRole)
+                .containsExactlyElementsOf(com.toir.service.repair.RepairCampaignApprovalPolicy.DISCIPLINE_ROLES);
     }
 
     @Test

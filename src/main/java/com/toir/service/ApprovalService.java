@@ -594,7 +594,8 @@ public class ApprovalService implements ApprovalOrchestrator {
                 effectiveActionType);
         if (pending.isPresent()) {
             String currentPayload = currentScopePayload(targetType, documentId);
-            if (currentPayload != null && !Objects.equals(pending.get().getPayloadJson(), currentPayload)) {
+            if ((currentPayload != null && !Objects.equals(pending.get().getPayloadJson(), currentPayload))
+                    || hasStaleApprovalRoute(targetType, pending.get())) {
                 ApprovalRequest stale = pending.get();
                 stale.setStatus(ApprovalStatus.CANCELLED);
                 stale.setCompletedAt(Instant.now());
@@ -627,6 +628,11 @@ public class ApprovalService implements ApprovalOrchestrator {
             return repairCampaignApprovalPayload(loadRepairCampaignApprovalSnapshot(documentId));
         }
         return null;
+    }
+
+    private boolean hasStaleApprovalRoute(ApprovalTargetType targetType, ApprovalRequest request) {
+        return targetType == ApprovalTargetType.REPAIR_CAMPAIGN
+                && !RepairCampaignApprovalPolicy.hasCanonicalDisciplineRoute(request);
     }
 
     private String supersededScopeMessage(ApprovalTargetType targetType) {
