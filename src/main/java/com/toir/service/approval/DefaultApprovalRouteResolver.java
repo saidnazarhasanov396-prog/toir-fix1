@@ -5,7 +5,9 @@ import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.repository.ApprovalTemplateRepository;
+import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.security.ApprovalDomainPermissions;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,12 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
         ApprovalActionType actionType = request.getActionType() == null
                 ? ApprovalActionType.APPROVE
                 : request.getActionType();
+        if (request.getTargetType() == ApprovalTargetType.REPAIR_CAMPAIGN
+                && actionType == ApprovalActionType.APPROVE) {
+            return RepairCampaignApprovalPolicy.DISCIPLINE_ROLES.stream()
+                    .map(role -> new CreateApprovalRequest.StepInput(null, role))
+                    .toList();
+        }
         return templateRepository
                 .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
                         request.getTargetType(),

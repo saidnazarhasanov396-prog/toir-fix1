@@ -567,8 +567,10 @@ class ApprovalServiceTest {
                 ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
                 .thenReturn(Optional.of(stale));
         when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
-        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(List.of(
-                new CreateApprovalRequest.StepInput(null, "REPAIR_CAMPAIGN_CHIEF_MECHANIC_APPROVER")));
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(
+                com.toir.service.repair.RepairCampaignApprovalPolicy.DISCIPLINE_ROLES.stream()
+                        .map(role -> new CreateApprovalRequest.StepInput(null, role))
+                        .toList());
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
         when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(inv -> {
             ApprovalRequest saved = inv.getArgument(0);
@@ -590,6 +592,57 @@ class ApprovalServiceTest {
                         + "\",\"campaignVersion\":12}");
         verify(governanceService).record(stale, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
                 requesterId, "Superseded by a newer repair campaign scope snapshot");
+    }
+
+    @Test
+    void repairCampaignRetryCancelsPendingRequestWithNonCanonicalRoute() {
+        UUID targetId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
+        stubTargetMetadata(ApprovalTargetType.REPAIR_CAMPAIGN, "RCMP-2026-002", "Pump overhaul");
+        stubRepairCampaignApprovalSnapshot("PENDING_APPROVAL", 9L, 9L, "b".repeat(64), 12L);
+        ApprovalRequest stale = new ApprovalRequest();
+        stale.setId(UUID.randomUUID());
+        stale.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
+        stale.setTargetId(targetId);
+        stale.setActionType(ApprovalActionType.APPROVE);
+        stale.setRequesterId(requesterId);
+        stale.setTitle("Old");
+        stale.setStatus(ApprovalStatus.PENDING);
+        stale.setPayloadJson("{\"scopeVersion\":9,\"scopeHash\":\"" + "b".repeat(64)
+                + "\",\"campaignVersion\":12}");
+        ApprovalStep wrongStep = new ApprovalStep();
+        wrongStep.setRequest(stale);
+        wrongStep.setStepNumber(1);
+        wrongStep.setApproverRole("REPAIR_CAMPAIGN_APPROVE");
+        wrongStep.setDecision(ApprovalDecision.PENDING);
+        stale.getSteps().add(wrongStep);
+        when(requestRepository.findFirstPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(Optional.of(stale));
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(
+                com.toir.service.repair.RepairCampaignApprovalPolicy.DISCIPLINE_ROLES.stream()
+                        .map(role -> new CreateApprovalRequest.StepInput(null, role))
+                        .toList());
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(inv -> {
+            ApprovalRequest saved = inv.getArgument(0);
+            if (saved.getId() == null) ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            if (saved.getCreatedAt() == null) ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            if (saved.getUpdatedAt() == null) ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        ApprovalRequestDto result = service.requestApproval(new ApprovalStartRequest(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, "retry"));
+
+        assertThat(stale.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
+        assertThat(result.steps()).hasSize(7);
+        assertThat(result.steps()).extracting(ApprovalStepDto::approverRole)
+                .containsExactlyElementsOf(com.toir.service.repair.RepairCampaignApprovalPolicy.DISCIPLINE_ROLES);
+        verify(requestRepository, times(2)).saveAndFlush(any(ApprovalRequest.class));
     }
 
     @Test

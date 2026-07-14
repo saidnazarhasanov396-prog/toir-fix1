@@ -16,7 +16,7 @@ import java.util.stream.IntStream;
 @RequiredArgsConstructor
 public class RepairCampaignApprovalPolicy {
 
-    private static final List<String> DISCIPLINE_ROLES = List.of(
+    public static final List<String> DISCIPLINE_ROLES = List.of(
             "REPAIR_CAMPAIGN_CHIEF_MECHANIC_APPROVER", "REPAIR_CAMPAIGN_PRODUCTION_APPROVER",
             "REPAIR_CAMPAIGN_WAREHOUSE_APPROVER", "REPAIR_CAMPAIGN_PROCUREMENT_APPROVER",
             "REPAIR_CAMPAIGN_FINANCE_APPROVER", "REPAIR_CAMPAIGN_HSE_APPROVER",
@@ -53,18 +53,25 @@ public class RepairCampaignApprovalPolicy {
     private boolean completedSevenDisciplineRoute(ApprovalRequest request) {
         if (request == null || request.getStatus() != com.toir.enums.ApprovalStatus.APPROVED
                 || request.getActionType() != com.toir.enums.ApprovalActionType.APPROVE
-                || request.getSteps() == null || request.getSteps().size() != DISCIPLINE_ROLES.size()) return false;
-        boolean ordered = IntStream.range(0, DISCIPLINE_ROLES.size()).allMatch(index -> {
-            var step = request.getSteps().get(index);
-            return step.getStepNumber() == index + 1
-                    && DISCIPLINE_ROLES.get(index).equals(step.getApproverRole())
-                    && step.getDecision() == com.toir.enums.ApprovalDecision.APPROVED
-                    && step.getDecidedById() != null;
-        });
-        if (!ordered) return false;
+                || !hasCanonicalDisciplineRoute(request)) return false;
+        boolean approved = request.getSteps().stream().allMatch(step ->
+                step.getDecision() == com.toir.enums.ApprovalDecision.APPROVED
+                        && step.getDecidedById() != null);
+        if (!approved) return false;
         Set<java.util.UUID> actors = request.getSteps().stream()
                 .map(com.toir.entity.ApprovalStep::getDecidedById).collect(java.util.stream.Collectors.toSet());
         return actors.size() == DISCIPLINE_ROLES.size() && !actors.contains(request.getRequesterId());
+    }
+
+    public static boolean hasCanonicalDisciplineRoute(ApprovalRequest request) {
+        return request != null
+                && request.getSteps() != null
+                && request.getSteps().size() == DISCIPLINE_ROLES.size()
+                && IntStream.range(0, DISCIPLINE_ROLES.size()).allMatch(index -> {
+            var step = request.getSteps().get(index);
+            return step.getStepNumber() == index + 1
+                    && DISCIPLINE_ROLES.get(index).equals(step.getApproverRole());
+        });
     }
 
     public static String payload(RepairCampaign campaign) {
