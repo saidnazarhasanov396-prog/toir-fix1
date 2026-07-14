@@ -592,15 +592,15 @@ public class ApprovalService implements ApprovalOrchestrator {
         lockApprovalTargetAction(normalizedType, documentId, effectiveActionType);
         java.util.Optional<ApprovalRequest> pending = findPendingApproval(normalizedType, documentId,
                 effectiveActionType);
-        if (pending.isPresent() && targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
-            PlannedShutdownApprovalSnapshot snapshot = loadPlannedShutdownApprovalSnapshot(documentId);
-            if (!Objects.equals(pending.get().getPayloadJson(), plannedShutdownApprovalPayload(snapshot))) {
+        if (pending.isPresent()) {
+            String currentPayload = currentScopePayload(targetType, documentId);
+            if (currentPayload != null && !Objects.equals(pending.get().getPayloadJson(), currentPayload)) {
                 ApprovalRequest stale = pending.get();
                 stale.setStatus(ApprovalStatus.CANCELLED);
                 stale.setCompletedAt(Instant.now());
                 requestRepository.saveAndFlush(stale);
                 governanceService.record(stale, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
-                        effectiveRequesterId, "Superseded by a newer planned shutdown scope snapshot");
+                        effectiveRequesterId, supersededScopeMessage(targetType));
                 pending = java.util.Optional.empty();
             }
         }
@@ -617,6 +617,23 @@ public class ApprovalService implements ApprovalOrchestrator {
                 effectiveActionType,
                 true
         );
+    }
+
+    private String currentScopePayload(ApprovalTargetType targetType, UUID documentId) {
+        if (targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
+            return plannedShutdownApprovalPayload(loadPlannedShutdownApprovalSnapshot(documentId));
+        }
+        if (targetType == ApprovalTargetType.REPAIR_CAMPAIGN) {
+            return repairCampaignApprovalPayload(loadRepairCampaignApprovalSnapshot(documentId));
+        }
+        return null;
+    }
+
+    private String supersededScopeMessage(ApprovalTargetType targetType) {
+        if (targetType == ApprovalTargetType.REPAIR_CAMPAIGN) {
+            return "Superseded by a newer repair campaign scope snapshot";
+        }
+        return "Superseded by a newer planned shutdown scope snapshot";
     }
 
     private void lockApprovalTargetAction(String normalizedType, UUID documentId, ApprovalActionType actionType) {

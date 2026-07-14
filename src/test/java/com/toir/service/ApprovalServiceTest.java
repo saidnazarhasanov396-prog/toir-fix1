@@ -36,6 +36,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.ResultSetExtractor;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.UnexpectedRollbackException;
 
@@ -545,6 +546,53 @@ class ApprovalServiceTest {
     }
 
     @Test
+    void repairCampaignRetryCancelsStalePendingRequestAndCreatesCurrentSnapshot() {
+        UUID targetId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
+        stubTargetMetadata(ApprovalTargetType.REPAIR_CAMPAIGN, "RCMP-2026-001", "Pump overhaul");
+        stubRepairCampaignApprovalSnapshot("PENDING_APPROVAL", 9L, 9L, "b".repeat(64), 12L);
+        ApprovalRequest stale = new ApprovalRequest();
+        stale.setId(UUID.randomUUID());
+        stale.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
+        stale.setTargetId(targetId);
+        stale.setActionType(ApprovalActionType.APPROVE);
+        stale.setRequesterId(requesterId);
+        stale.setTitle("Old");
+        stale.setStatus(ApprovalStatus.PENDING);
+        stale.setPayloadJson("{\"scopeVersion\":8,\"scopeHash\":\"" + "a".repeat(64)
+                + "\",\"campaignVersion\":11}");
+        when(requestRepository.findFirstPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(Optional.of(stale));
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(List.of(
+                new CreateApprovalRequest.StepInput(null, "REPAIR_CAMPAIGN_CHIEF_MECHANIC_APPROVER")));
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(inv -> {
+            ApprovalRequest saved = inv.getArgument(0);
+            if (saved.getId() == null) ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            if (saved.getCreatedAt() == null) ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            if (saved.getUpdatedAt() == null) ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        ApprovalRequestDto result = service.requestApproval(new ApprovalStartRequest(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, "retry"));
+
+        assertThat(stale.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
+        assertThat(result.status()).isEqualTo(ApprovalStatus.PENDING);
+        ArgumentCaptor<ApprovalRequest> saved = ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository, times(2)).saveAndFlush(saved.capture());
+        assertThat(saved.getAllValues().getLast().getPayloadJson())
+                .isEqualTo("{\"scopeVersion\":9,\"scopeHash\":\"" + "b".repeat(64)
+                        + "\",\"campaignVersion\":12}");
+        verify(governanceService).record(stale, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
+                requesterId, "Superseded by a newer repair campaign scope snapshot");
+    }
+
+    @Test
     void step2CanReturnToStep1AndReopenSteps() {
         UUID approvalId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
@@ -853,6 +901,31 @@ class ApprovalServiceTest {
             when(rs.getString("title")).thenReturn(title);
             when(rs.getString("code")).thenReturn(code);
             return extractor.extractData(rs);
+        });
+    }
+
+    private void stubRepairCampaignApprovalSnapshot(String status,
+                                                    Long scopeVersion,
+                                                    Long approvalScopeVersion,
+                                                    String scopeHash,
+                                                    Long campaignVersion) {
+        when(jdbcTemplate.queryForObject(
+                eq("""
+                select status, scope_version, approval_scope_version, approval_scope_hash, version
+                from repair_campaigns where id = ? and is_deleted = false
+                """),
+                any(RowMapper.class),
+                any(UUID.class)
+        )).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            RowMapper<Object> mapper = invocation.getArgument(1);
+            java.sql.ResultSet rs = org.mockito.Mockito.mock(java.sql.ResultSet.class);
+            when(rs.getString("status")).thenReturn(status);
+            when(rs.getLong("scope_version")).thenReturn(scopeVersion);
+            when(rs.getLong("approval_scope_version")).thenReturn(approvalScopeVersion);
+            when(rs.getString("approval_scope_hash")).thenReturn(scopeHash);
+            when(rs.getLong("version")).thenReturn(campaignVersion);
+            return mapper.mapRow(rs, 0);
         });
     }
 
