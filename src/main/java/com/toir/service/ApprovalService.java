@@ -601,30 +601,45 @@ public class ApprovalService implements ApprovalOrchestrator {
 
         ApprovalActionType effectiveActionType = actionType == null ? ApprovalActionType.APPROVE : actionType;
         lockApprovalTargetAction(normalizedType, documentId, effectiveActionType);
-        java.util.Optional<ApprovalRequest> pending = findPendingApproval(normalizedType, documentId,
-                effectiveActionType);
-        if (pending.isPresent()) {
+        List<ApprovalRequest> pendingApprovals = findPendingApprovals(
+                targetType, normalizedType, documentId, effectiveActionType);
+        ApprovalRequest reusable = null;
+        if (!pendingApprovals.isEmpty()) {
             String currentPayload = currentScopePayload(targetType, documentId);
-            RepairCampaignApprovalRouteValidator.ValidationResult routeValidation = routeValidation(targetType, pending.get());
-            boolean payloadStale = currentPayload != null && !Objects.equals(pending.get().getPayloadJson(), currentPayload);
-            boolean routeStale = routeValidation != null && !routeValidation.valid();
-            if (payloadStale || routeStale) {
-                boolean routeStaleOnly = !payloadStale && routeStale;
-                ApprovalRequest stale = pending.get();
-                stale.setStatus(ApprovalStatus.CANCELLED);
-                stale.setCompletedAt(Instant.now());
-                if (routeStaleOnly) {
-                    stale.setFailureReason("NONCANONICAL_REPAIR_CAMPAIGN_ROUTE");
-                    log.warn("Cancelling noncanonical repair campaign approval id={} reason={} detail={}",
-                            stale.getId(), routeValidation.reason(), routeValidation.detail());
+            for (ApprovalRequest candidate : pendingApprovals) {
+                RepairCampaignApprovalRouteValidator.ValidationResult validation =
+                        routeValidation(targetType, candidate);
+                boolean payloadStale = currentPayload != null
+                        && !Objects.equals(candidate.getPayloadJson(), currentPayload);
+                boolean routeStale = validation != null && !validation.valid();
+                boolean duplicate = reusable != null;
+                if (!payloadStale && !routeStale && !duplicate) {
+                    reusable = candidate;
+                    continue;
                 }
-                requestRepository.saveAndFlush(stale);
-                governanceService.record(stale, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
-                        effectiveRequesterId, routeStaleOnly ? "NONCANONICAL_REPAIR_CAMPAIGN_ROUTE" : supersededScopeMessage(targetType));
-                pending = java.util.Optional.empty();
+
+                candidate.setStatus(ApprovalStatus.CANCELLED);
+                candidate.setCompletedAt(Instant.now());
+                String cancellationReason;
+                if (routeStale) {
+                    cancellationReason = "NONCANONICAL_REPAIR_CAMPAIGN_ROUTE";
+                    candidate.setFailureReason(cancellationReason);
+                    log.warn("Cancelling noncanonical repair campaign approval id={} reason={} detail={}",
+                            candidate.getId(), validation.reason(), validation.detail());
+                } else if (payloadStale) {
+                    cancellationReason = supersededScopeMessage(targetType);
+                } else {
+                    cancellationReason = "DUPLICATE_PENDING_APPROVAL";
+                    candidate.setFailureReason(cancellationReason);
+                }
+                requestRepository.saveAndFlush(candidate);
+                governanceService.record(candidate, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
+                        effectiveRequesterId, cancellationReason);
             }
         }
-        if (pending.isPresent()) return toDtoAfterReuse(pending.get());
+        if (reusable != null) {
+            return toDtoAfterReuse(reusable);
+        }
         return createNewApproval(
                 targetType,
                 documentId,
@@ -666,6 +681,12 @@ public class ApprovalService implements ApprovalOrchestrator {
         return validation == null || validation.valid();
     }
 
+    private void assertActionableRoute(ApprovalRequest request) {
+        if (!hasActionableRoute(request)) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_STALE");
+        }
+    }
+
     private String supersededScopeMessage(ApprovalTargetType targetType) {
         if (targetType == ApprovalTargetType.REPAIR_CAMPAIGN) {
             return "Superseded by a newer repair campaign scope snapshot";
@@ -686,15 +707,18 @@ public class ApprovalService implements ApprovalOrchestrator {
         );
     }
 
-    private java.util.Optional<ApprovalRequest> findPendingApproval(String normalizedType,
-                                                                    UUID documentId,
-                                                                    ApprovalActionType actionType) {
+    private List<ApprovalRequest> findPendingApprovals(ApprovalTargetType targetType,
+                                                       String normalizedType,
+                                                       UUID documentId,
+                                                       ApprovalActionType actionType) {
+        if (targetType == ApprovalTargetType.REPAIR_CAMPAIGN) {
+            return requestRepository.findAllPendingByTargetAndAction(
+                    normalizedType, documentId, actionType.name(), ApprovalStatus.PENDING.name());
+        }
         return requestRepository.findFirstPendingByTargetAndAction(
-                normalizedType,
-                documentId,
-                actionType.name(),
-                ApprovalStatus.PENDING.name()
-        );
+                        normalizedType, documentId, actionType.name(), ApprovalStatus.PENDING.name())
+                .stream()
+                .toList();
     }
 
     private ApprovalRequestDto toDtoAfterReuse(ApprovalRequest existing) {
@@ -732,6 +756,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
+        assertActionableRoute(request);
         if (request.isExecuted()) {
             throw RestException.conflict("Executed approvals cannot be returned");
         }
@@ -803,6 +828,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
+        assertActionableRoute(request);
         request.setStatus(ApprovalStatus.CANCELLED);
         request.setCompletedAt(Instant.now());
         if (effectiveTargetType(request) == ApprovalTargetType.MAINTENANCE_DUE_EVENT) {
@@ -845,6 +871,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
+        assertActionableRoute(request);
         ApprovalStep current = currentStepOrThrow(request);
         if (expectedStepId != null && !expectedStepId.equals(current.getId())) {
             throw RestException.conflict("Only current pending step can be acted on");
@@ -1236,30 +1263,23 @@ public class ApprovalService implements ApprovalOrchestrator {
             request.setExpiresAt(Instant.now().plus(slaPolicyService.slaFor(request)));
         }
 
-        List<CreateApprovalRequest.StepInput> effectiveSteps = normalizeStepInputs(steps);
+        boolean repairCampaignApproval = targetType == ApprovalTargetType.REPAIR_CAMPAIGN
+                && (actionType == null || actionType == ApprovalActionType.APPROVE);
+        List<CreateApprovalRequest.StepInput> effectiveSteps = repairCampaignApproval
+                ? List.of()
+                : normalizeStepInputs(steps);
         if (effectiveSteps.isEmpty()) {
             effectiveSteps = normalizeStepInputs(routeResolver.resolveRoute(request));
         }
         if (effectiveSteps.isEmpty()) {
+            if (repairCampaignApproval) {
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_NOT_CONFIGURED");
+            }
             throw RestException.badRequest("At least one approval step is required");
         }
-        if (targetType == ApprovalTargetType.REPAIR_CAMPAIGN
-                && (actionType == null || actionType == ApprovalActionType.APPROVE)) {
-            ApprovalRequest routeProbe = new ApprovalRequest();
-            routeProbe.setTargetType(targetType);
-            routeProbe.setTargetId(targetId);
-            routeProbe.setActionType(ApprovalActionType.APPROVE);
-            int probeIndex = 1;
-            for (CreateApprovalRequest.StepInput input : effectiveSteps) {
-                ApprovalStep step = new ApprovalStep();
-                step.setRequest(routeProbe);
-                step.setStepNumber(probeIndex++);
-                step.setApproverId(input.approverId());
-                step.setApproverRole(input.approverRole());
-                step.setDecision(ApprovalDecision.PENDING);
-                routeProbe.getSteps().add(step);
-            }
-            RepairCampaignApprovalRouteValidator.ValidationResult validation = repairCampaignApprovalRouteValidator.validate(routeProbe);
+        if (repairCampaignApproval) {
+            RepairCampaignApprovalRouteValidator.ValidationResult validation =
+                    repairCampaignApprovalRouteValidator.validateInputs(effectiveSteps);
             if (!validation.valid()) {
                 log.warn("Repair campaign approval route is not configured: targetId={} reason={} detail={}",
                         targetId, validation.reason(), validation.detail());
@@ -1502,12 +1522,17 @@ public class ApprovalService implements ApprovalOrchestrator {
         String targetTypeName = effectiveTargetTypeName(request);
         UUID targetId = effectiveTargetId(request);
         String targetUrl = targetUrl(targetTypeName, targetId);
+        RepairCampaignApprovalRouteValidator.ValidationResult routeValidation =
+                routeValidation(effectiveTargetType(request), request);
+        boolean staleRoute = routeValidation != null && !routeValidation.valid();
+        boolean actionableRoute = !staleRoute;
         boolean canDecide = request.getStatus() == ApprovalStatus.PENDING
                 && currentStep != null
                 && currentStep.getDecision() == ApprovalDecision.PENDING
-                && hasActionableRoute(request)
+                && actionableRoute
                 && canCurrentPrincipalActOnStep(currentStep);
         boolean canCancel = request.getStatus() == ApprovalStatus.PENDING
+                && actionableRoute
                 && (scopeAccessService.isScopeAdmin() || matchesCurrentPrincipal(request.getRequesterId()));
 
         return new ApprovalRequestDto(
@@ -1550,7 +1575,10 @@ public class ApprovalService implements ApprovalOrchestrator {
                 request.getLastReturnedAt() != null,
                 request.getLastReturnedAt(),
                 request.getLastReturnedBy(),
-                request.getLastReturnComment());
+                request.getLastReturnComment(),
+                request.getStatus() == ApprovalStatus.PENDING && actionableRoute,
+                staleRoute,
+                staleRoute ? "NONCANONICAL_ROUTE" : null);
     }
 
     private String currentApproverLabel(ApprovalStep currentStep) {

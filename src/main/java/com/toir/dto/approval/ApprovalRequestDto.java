@@ -41,7 +41,10 @@ public record ApprovalRequestDto(
         boolean returned,
         Instant lastReturnedAt,
         UUID lastReturnedBy,
-        String lastReturnComment
+        String lastReturnComment,
+        boolean actionable,
+        boolean stale,
+        String staleReason
 ) {
     public ApprovalRequestDto(UUID id,
                               String documentType,
@@ -74,7 +77,7 @@ public record ApprovalRequestDto(
         this(id, documentType, documentId, title, requesterId, status, currentStep, completedAt, description,
                 createdAt, steps, targetType, targetId, actionType, requesterName, currentApproverName, totalSteps,
                 expiresAt, escalated, overdue, targetDisplayName, targetUrl, resultJson, failureReason,
-                canApprove, canReject, canCancel, targetSummary, false, null, null, null);
+                canApprove, canReject, canCancel, targetSummary, false, null, null, null, false, false, null);
     }
 
     public ApprovalRequestDto(UUID id,
@@ -90,7 +93,7 @@ public record ApprovalRequestDto(
                               List<ApprovalStepDto> steps) {
         this(id, documentType, documentId, title, requesterId, status, currentStep, completedAt, description,
                 createdAt, steps, null, null, null, null, null, steps == null ? 0 : steps.size(), null, false,
-                false, title, null, null, null, false, false, false, null, false, null, null, null);
+                false, title, null, null, null, false, false, false, null, false, null, null, null, false, false, null);
     }
 
     public static ApprovalRequestDto from(ApprovalRequest r) {
@@ -130,7 +133,10 @@ public record ApprovalRequestDto(
                 r.getLastReturnedAt() != null,
                 r.getLastReturnedAt(),
                 r.getLastReturnedBy(),
-                r.getLastReturnComment());
+                r.getLastReturnComment(),
+                false,
+                false,
+                null);
     }
 
     private static String targetUrl(String targetType, UUID targetId) {

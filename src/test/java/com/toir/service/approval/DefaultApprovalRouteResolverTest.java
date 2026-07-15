@@ -20,7 +20,7 @@ class DefaultApprovalRouteResolverTest {
     @Test
     void usesExactlyTheConfiguredApproverRole() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
-        DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
         ApprovalTemplate template = new ApprovalTemplate();
         template.setTargetType(ApprovalTargetType.WORK_ORDER);
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
@@ -42,7 +42,7 @@ class DefaultApprovalRouteResolverTest {
     @Test
     void fallsBackToLegacyTargetTemplateButKeepsItsConfiguredRole() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
-        DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
         ApprovalTemplate template = new ApprovalTemplate();
         template.setTargetType(ApprovalTargetType.WORK_ORDER);
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
@@ -68,7 +68,7 @@ class DefaultApprovalRouteResolverTest {
     @Test
     void repairCampaignApproveAlwaysUsesCanonicalSevenDisciplineRoute() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
-        DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
         ApprovalTemplate template = new ApprovalTemplate();
         template.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
@@ -76,6 +76,19 @@ class DefaultApprovalRouteResolverTest {
         ApprovalRequest request = new ApprovalRequest();
         request.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
         request.setActionType(ApprovalActionType.APPROVE);
+        template.setActionType(ApprovalActionType.APPROVE);
+        int order = 1;
+        for (String role : com.toir.service.repair.RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES) {
+            com.toir.entity.ApprovalTemplateStep step = new com.toir.entity.ApprovalTemplateStep();
+            step.setTemplate(template);
+            step.setStepOrder(order++);
+            step.setApproverRole(role);
+            template.getSteps().add(step);
+        }
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                ApprovalActionType.APPROVE
+        )).thenReturn(Optional.of(template));
 
         var steps = resolver.resolveRoute(request);
 
@@ -87,7 +100,7 @@ class DefaultApprovalRouteResolverTest {
     @Test
     void fallsBackToDomainPermissionWhenTemplateHasNoSteps() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
-        DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
         ApprovalRequest request = new ApprovalRequest();
         request.setTargetType(ApprovalTargetType.WORK_ORDER);
         when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
@@ -108,7 +121,7 @@ class DefaultApprovalRouteResolverTest {
     @Test
     void emptyTemplateFallsBackToDomainPermissionStep() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
-        DefaultApprovalRouteResolver resolver = new DefaultApprovalRouteResolver(templateRepository);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
         ApprovalTemplate template = new ApprovalTemplate();
         template.setTargetType(ApprovalTargetType.WORK_ORDER);
         template.setRoutePolicy(ApprovalRoutePolicy.DEPARTMENT_HEAD);
@@ -123,5 +136,49 @@ class DefaultApprovalRouteResolverTest {
 
         assertThat(steps).hasSize(1);
         assertThat(steps.getFirst().approverRole()).isEqualTo("WORK_ORDER_APPROVE");
+    }
+
+    @Test
+    void repairCampaignApproveDoesNotSynthesizeRouteWhenConfigurationIsMissing() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        ApprovalRequest request = new ApprovalRequest();
+        request.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
+        request.setActionType(ApprovalActionType.APPROVE);
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                ApprovalActionType.APPROVE
+        )).thenReturn(Optional.empty());
+
+        assertThat(resolver.resolveRoute(request)).isEmpty();
+    }
+
+    @Test
+    void repairCampaignApproveRejectsConfiguredOneStepSystemAdminRoute() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        ApprovalRequest request = new ApprovalRequest();
+        request.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
+        request.setActionType(ApprovalActionType.APPROVE);
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
+        template.setActionType(ApprovalActionType.APPROVE);
+        com.toir.entity.ApprovalTemplateStep step = new com.toir.entity.ApprovalTemplateStep();
+        step.setTemplate(template);
+        step.setStepOrder(1);
+        step.setApproverRole("SYSTEM_ADMIN");
+        template.getSteps().add(step);
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                ApprovalActionType.APPROVE
+        )).thenReturn(Optional.of(template));
+
+        assertThat(resolver.resolveRoute(request)).isEmpty();
+    }
+
+    private static DefaultApprovalRouteResolver resolver(ApprovalTemplateRepository templateRepository) {
+        return new DefaultApprovalRouteResolver(
+                templateRepository,
+                new com.toir.service.repair.RepairCampaignApprovalRouteValidator());
     }
 }

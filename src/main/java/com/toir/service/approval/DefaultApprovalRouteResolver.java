@@ -19,6 +19,7 @@ import java.util.List;
 public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
 
     private final ApprovalTemplateRepository templateRepository;
+    private final RepairCampaignApprovalRouteValidator repairCampaignRouteValidator;
 
     @Override
     public List<CreateApprovalRequest.StepInput> resolveRoute(ApprovalRequest request) {
@@ -30,9 +31,13 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                 : request.getActionType();
         if (request.getTargetType() == ApprovalTargetType.REPAIR_CAMPAIGN
                 && actionType == ApprovalActionType.APPROVE) {
-            return RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.stream()
-                    .map(role -> new CreateApprovalRequest.StepInput(null, role))
-                    .toList();
+            return templateRepository
+                    .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                            ApprovalTargetType.REPAIR_CAMPAIGN,
+                            ApprovalActionType.APPROVE)
+                    .map(this::stepsFromTemplate)
+                    .filter(steps -> repairCampaignRouteValidator.validateInputs(steps).valid())
+                    .orElse(List.of());
         }
         return templateRepository
                 .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(

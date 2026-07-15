@@ -63,4 +63,39 @@ class RepairCampaignApprovalRouteMigrationContractTest {
         assertThat(sql).doesNotContain("DELETE FROM approval_requests", "DELETE FROM approval_steps");
     }
 
+
+    @Test
+    void forwardRepairCancelsOnlyPendingNoncanonicalRoutesAndIsIdempotentByConstruction() throws Exception {
+        String sql = Files.readString(Path.of(
+                "src/main/resources/db/migration/V20260715_1__repair_pending_noncanonical_repair_campaign_approvals.sql"));
+
+        assertThat(sql).contains(
+                "expected_route(step_number, approver_role)",
+                "COALESCE(ar.target_type, ar.document_type) = 'REPAIR_CAMPAIGN'",
+                "COALESCE(ar.action_type, 'APPROVE') = 'APPROVE'",
+                ") <> 7",
+                ") <> 1",
+                "expected.step_number = step.step_number",
+                "expected.approver_role = step.approver_role",
+                "WHERE ar.id = n.id",
+                "AND ar.status = 'PENDING'",
+                "RETURNING ar.id",
+                "FROM updated",
+                "NONCANONICAL_REPAIR_CAMPAIGN_ROUTE");
+        assertThat(sql).doesNotContain("DELETE FROM approval_requests", "DELETE FROM approval_steps");
+    }
+
+    @Test
+    void concurrentPendingCreationHasDatabaseUniquenessBackstop() throws Exception {
+        String sql = Files.readString(Path.of(
+                "src/main/resources/db/migration/V20260613_2__approval_governance.sql"));
+
+        assertThat(sql).contains(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_approval_requests_pending_target_action",
+                "COALESCE(target_type, document_type)",
+                "COALESCE(target_id, document_id)",
+                "COALESCE(action_type, 'APPROVE')",
+                "WHERE is_deleted = false AND status = 'PENDING'");
+    }
+
 }

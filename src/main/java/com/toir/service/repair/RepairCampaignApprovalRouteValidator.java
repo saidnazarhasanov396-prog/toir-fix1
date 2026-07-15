@@ -1,5 +1,6 @@
 package com.toir.service.repair;
 
+import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.enums.ApprovalActionType;
@@ -66,6 +67,25 @@ public class RepairCampaignApprovalRouteValidator {
             return ValidationResult.invalid(RouteValidationReason.WRONG_STEP_COUNT, "approval request is null");
         }
         return validateSteps(activeSteps(request));
+    }
+
+    public ValidationResult validateInputs(List<CreateApprovalRequest.StepInput> inputs) {
+        if (inputs == null) {
+            return validateSteps(List.of());
+        }
+        List<ApprovalStep> steps = new ArrayList<>();
+        int stepNumber = 1;
+        for (CreateApprovalRequest.StepInput input : inputs) {
+            if (input == null) {
+                continue;
+            }
+            ApprovalStep step = new ApprovalStep();
+            step.setStepNumber(stepNumber++);
+            step.setApproverId(input.approverId());
+            step.setApproverRole(input.approverRole());
+            steps.add(step);
+        }
+        return validateSteps(steps);
     }
 
     public ValidationResult validateCompleted(ApprovalRequest request) {
