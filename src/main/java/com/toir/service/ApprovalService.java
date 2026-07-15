@@ -33,6 +33,7 @@ import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalOrchestrator;
 import com.toir.service.approval.ApprovalRouteResolver;
 import com.toir.service.approval.ApprovalSlaPolicyService;
+import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.service.repair.RepairRequestService;
 import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
