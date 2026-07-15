@@ -35,7 +35,7 @@ public class RepairCampaignRiskService {
                 .filter(Objects::nonNull).collect(Collectors.toSet());
         Map<UUID, String> ownerNames = resolveOwnerNames(ownerIds);
         return risks.stream().map(risk -> RepairCampaignRiskResponse.from(
-                risk, ownerNames.get(risk.getOwnerId()))).toList();
+                risk, risk.getOwnerId() == null ? null : ownerNames.get(risk.getOwnerId()))).toList();
     }
 
     @Transactional
