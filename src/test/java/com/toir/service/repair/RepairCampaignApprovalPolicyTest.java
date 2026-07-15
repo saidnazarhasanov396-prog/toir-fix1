@@ -61,7 +61,7 @@ class RepairCampaignApprovalPolicyTest {
 
         assertThatThrownBy(() -> new RepairCampaignApprovalPolicy(hasher).validateDecision(campaign, request))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("REPAIR_CAMPAIGN_APPROVAL_SCOPE_STALE");
+                .hasMessageContaining("REPAIR_CAMPAIGN_APPROVAL_SCOPE_VERSION_MISMATCH");
     }
 
     @Test
@@ -82,7 +82,35 @@ class RepairCampaignApprovalPolicyTest {
         request.setPayloadJson(request.getPayloadJson().replace(":9}", ":8}"));
         assertThatThrownBy(() -> new RepairCampaignApprovalPolicy(hasher).validateDecision(campaign, request))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("REPAIR_CAMPAIGN_APPROVAL_SCOPE_STALE");
+                .hasMessageContaining("REPAIR_CAMPAIGN_APPROVAL_CAMPAIGN_VERSION_MISMATCH");
+    }
+
+
+    @Test
+    void decisionRejectsCompletedOneStepSystemAdminRouteAsStaleRoute() {
+        RepairCampaignApprovalScopeHasher hasher = mock(RepairCampaignApprovalScopeHasher.class);
+        RepairCampaign campaign = new RepairCampaign();
+        campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
+        campaign.setScopeVersion(5L);
+        campaign.setApprovalScopeVersion(5L);
+        campaign.setApprovalScopeHash("b".repeat(64));
+        campaign.setVersion(9L);
+        when(hasher.hash(campaign)).thenReturn("b".repeat(64));
+        ApprovalRequest request = new ApprovalRequest();
+        request.setStatus(com.toir.enums.ApprovalStatus.APPROVED);
+        request.setActionType(com.toir.enums.ApprovalActionType.APPROVE);
+        request.setRequesterId(java.util.UUID.randomUUID());
+        var step = new com.toir.entity.ApprovalStep();
+        step.setStepNumber(1);
+        step.setApproverRole("SYSTEM_ADMIN");
+        step.setDecision(com.toir.enums.ApprovalDecision.APPROVED);
+        step.setDecidedById(java.util.UUID.randomUUID());
+        request.setSteps(java.util.List.of(step));
+        request.setPayloadJson(RepairCampaignApprovalPolicy.payload(campaign));
+
+        assertThatThrownBy(() -> new RepairCampaignApprovalPolicy(hasher).validateDecision(campaign, request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("REPAIR_CAMPAIGN_APPROVAL_ROUTE_STALE");
     }
 
     private void completeRoute(ApprovalRequest request) {

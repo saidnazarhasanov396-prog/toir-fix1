@@ -47,4 +47,20 @@ class RepairCampaignApprovalRouteMigrationContractTest {
         }
         assertThat(sql).doesNotContain("'REPAIR_CAMPAIGN_APPROVAL', 8");
     }
+    @Test
+    void legacyPendingNonCanonicalRepairCampaignApprovalsAreCancelledIdempotently() throws Exception {
+        String sql = Files.readString(Path.of(
+                "src/main/resources/db/migration/V20260714_1__cancel_noncanonical_repair_campaign_approvals.sql"));
+
+        assertThat(sql).contains(
+                "NONCANONICAL_REPAIR_CAMPAIGN_ROUTE",
+                "UPDATE approval_requests",
+                "status = 'CANCELLED'",
+                "WHERE ar.status = 'PENDING'",
+                "COALESCE(ar.target_type, ar.document_type) = 'REPAIR_CAMPAIGN'",
+                "COALESCE(ar.action_type, 'APPROVE') = 'APPROVE'");
+        assertThat(sql).contains("NOT EXISTS");
+        assertThat(sql).doesNotContain("DELETE FROM approval_requests", "DELETE FROM approval_steps");
+    }
+
 }

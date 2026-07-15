@@ -53,6 +53,7 @@ import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.service.repair.RepairRequestService;
+import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -140,6 +141,7 @@ class ApprovalPbacScopeTest {
                 scopeAccessService,
                 notificationService,
                 userRepository,
+                new RepairCampaignApprovalRouteValidator(),
                 provider(workOrderService),
                 provider(pprPlanService),
                 provider(procurementRequestService),

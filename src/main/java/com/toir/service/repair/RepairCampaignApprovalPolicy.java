@@ -4,25 +4,34 @@ import com.toir.entity.ApprovalRequest;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.RestException;
-import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.util.Objects;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.IntStream;
+import java.util.Objects;
 
 @Component
-@RequiredArgsConstructor
 public class RepairCampaignApprovalPolicy {
 
-    public static final List<String> DISCIPLINE_ROLES = List.of(
-            "REPAIR_CAMPAIGN_CHIEF_MECHANIC_APPROVER", "REPAIR_CAMPAIGN_PRODUCTION_APPROVER",
-            "REPAIR_CAMPAIGN_WAREHOUSE_APPROVER", "REPAIR_CAMPAIGN_PROCUREMENT_APPROVER",
-            "REPAIR_CAMPAIGN_FINANCE_APPROVER", "REPAIR_CAMPAIGN_HSE_APPROVER",
-            "REPAIR_CAMPAIGN_CHIEF_ENGINEER_APPROVER");
+    private static final Logger log = LoggerFactory.getLogger(RepairCampaignApprovalPolicy.class);
+
+    public static final List<String> DISCIPLINE_ROLES = RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES;
 
     private final RepairCampaignApprovalScopeHasher scopeHasher;
+    private final RepairCampaignApprovalRouteValidator routeValidator;
+
+    @Autowired
+    public RepairCampaignApprovalPolicy(RepairCampaignApprovalScopeHasher scopeHasher,
+                                        RepairCampaignApprovalRouteValidator routeValidator) {
+        this.scopeHasher = scopeHasher;
+        this.routeValidator = routeValidator;
+    }
+
+    public RepairCampaignApprovalPolicy(RepairCampaignApprovalScopeHasher scopeHasher) {
+        this(scopeHasher, new RepairCampaignApprovalRouteValidator());
+    }
 
     public void prepareRequest(RepairCampaign campaign, Long expectedScopeVersion) {
         long scopeVersion = campaign.getScopeVersion() == null ? 0L : campaign.getScopeVersion();
@@ -39,39 +48,48 @@ public class RepairCampaignApprovalPolicy {
     }
 
     public void validateDecision(RepairCampaign campaign, ApprovalRequest request) {
-        if (request == null
-                || campaign.getStatus() != RepairCampaignStatus.PENDING_APPROVAL
-                || campaign.getApprovalScopeHash() == null
-                || !Objects.equals(campaign.getScopeVersion(), campaign.getApprovalScopeVersion())
-                || !Objects.equals(campaign.getApprovalScopeHash(), scopeHasher.hash(campaign))
-                || !Objects.equals(request.getPayloadJson(), payload(campaign))
-                || !completedSevenDisciplineRoute(request)) {
-            throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_STALE");
+        if (request == null) {
+            throw routeStale("approval request is null");
+        }
+        if (campaign.getStatus() != RepairCampaignStatus.PENDING_APPROVAL) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_CAMPAIGN_STATUS_MISMATCH");
+        }
+        if (campaign.getApprovalScopeHash() == null) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_HASH_MISMATCH");
+        }
+        if (!Objects.equals(campaign.getScopeVersion(), campaign.getApprovalScopeVersion())) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_VERSION_MISMATCH");
+        }
+        if (!Objects.equals(campaign.getApprovalScopeHash(), scopeHasher.hash(campaign))) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_HASH_MISMATCH");
+        }
+        String expectedPayload = payload(campaign);
+        if (!Objects.equals(request.getPayloadJson(), expectedPayload)) {
+            if (request.getPayloadJson() == null
+                    || !request.getPayloadJson().contains("\"campaignVersion\":" + campaign.getVersion())) {
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_CAMPAIGN_VERSION_MISMATCH");
+            }
+            throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_PAYLOAD_MISMATCH");
+        }
+        RepairCampaignApprovalRouteValidator.ValidationResult route = routeValidator.validateCompleted(request);
+        if (!route.valid()) {
+            if (route.reason() == RepairCampaignApprovalRouteValidator.RouteValidationReason.INCOMPLETE_DISCIPLINE_ROUTE) {
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_INCOMPLETE_DISCIPLINE_ROUTE");
+            }
+            if (route.reason() == RepairCampaignApprovalRouteValidator.RouteValidationReason.SEPARATION_OF_DUTY_FAILURE) {
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SEPARATION_OF_DUTY_FAILURE");
+            }
+            throw routeStale(route.detail());
         }
     }
 
-    private boolean completedSevenDisciplineRoute(ApprovalRequest request) {
-        if (request == null || request.getStatus() != com.toir.enums.ApprovalStatus.APPROVED
-                || request.getActionType() != com.toir.enums.ApprovalActionType.APPROVE
-                || !hasCanonicalDisciplineRoute(request)) return false;
-        boolean approved = request.getSteps().stream().allMatch(step ->
-                step.getDecision() == com.toir.enums.ApprovalDecision.APPROVED
-                        && step.getDecidedById() != null);
-        if (!approved) return false;
-        Set<java.util.UUID> actors = request.getSteps().stream()
-                .map(com.toir.entity.ApprovalStep::getDecidedById).collect(java.util.stream.Collectors.toSet());
-        return actors.size() == DISCIPLINE_ROLES.size() && !actors.contains(request.getRequesterId());
+    private RestException routeStale(String detail) {
+        log.warn("Repair campaign approval route stale: {}", detail);
+        return RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_STALE");
     }
 
     public static boolean hasCanonicalDisciplineRoute(ApprovalRequest request) {
-        return request != null
-                && request.getSteps() != null
-                && request.getSteps().size() == DISCIPLINE_ROLES.size()
-                && IntStream.range(0, DISCIPLINE_ROLES.size()).allMatch(index -> {
-            var step = request.getSteps().get(index);
-            return step.getStepNumber() == index + 1
-                    && DISCIPLINE_ROLES.get(index).equals(step.getApproverRole());
-        });
+        return new RepairCampaignApprovalRouteValidator().validate(request).valid();
     }
 
     public static String payload(RepairCampaign campaign) {
