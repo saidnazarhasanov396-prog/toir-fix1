@@ -210,6 +210,7 @@ class RepairCampaignRiskServiceTest {
         RepairCampaign campaign = new RepairCampaign();
         campaign.setId(id);
         campaign.setDepartmentId(UUID.randomUUID());
+        campaign.setScopeVersion(0L);
         return campaign;
     }
 

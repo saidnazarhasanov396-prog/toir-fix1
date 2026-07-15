@@ -318,16 +318,17 @@ class ApprovalServiceTest {
     @Test
     void oneStepSystemAdminRepairCampaignApprovalIsNotActionable() {
         UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
-        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, UUID.randomUUID(), "SYSTEM_ADMIN");
+        ApprovalRequest approval = pendingRoleOnlyApproval(approvalId, requesterId, "SYSTEM_ADMIN");
         approval.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
         approval.setTargetId(UUID.randomUUID());
         approval.setActionType(ApprovalActionType.APPROVE);
-        User actor = activeUserWithRole(actorId, "SYSTEM_ADMIN");
+        User requester = activeUserWithRole(requesterId, "REQUESTER");
 
         when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
         when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
-        when(userRepository.findByIdAndIsDeletedFalse(actorId)).thenReturn(Optional.of(actor));
+        when(userRepository.findByIdAndIsDeletedFalse(requesterId)).thenReturn(Optional.of(requester));
 
         ApprovalRequestDto result = service.findById(approvalId);
 
