@@ -134,7 +134,7 @@ class ApprovalPbacScopeTest {
                 )),
                 governanceService,
                 slaPolicyService,
-                new DefaultApprovalRouteResolver(templateRepository),
+                new DefaultApprovalRouteResolver(templateRepository, new RepairCampaignApprovalRouteValidator()),
                 jdbcTemplate,
                 auditBuilderService,
                 approvalScopeService,

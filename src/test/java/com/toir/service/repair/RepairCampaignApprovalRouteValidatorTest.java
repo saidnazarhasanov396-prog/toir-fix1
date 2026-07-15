@@ -65,6 +65,40 @@ class RepairCampaignApprovalRouteValidatorTest {
         assertThat(result.valid()).isFalse();
         assertThat(result.reason()).isEqualTo(RepairCampaignApprovalRouteValidator.RouteValidationReason.SEPARATION_OF_DUTY_FAILURE);
     }
+    @Test
+    void validatesCanonicalRouteInputsWithTheSameRulesAsPersistedSteps() {
+        var canonical = RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.stream()
+                .map(role -> new com.toir.dto.approval.CreateApprovalRequest.StepInput(null, role))
+                .toList();
+        var legacy = java.util.List.of(
+                new com.toir.dto.approval.CreateApprovalRequest.StepInput(null, "SYSTEM_ADMIN"));
+
+        assertThat(validator.validateInputs(canonical).valid()).isTrue();
+        assertThat(validator.validateInputs(legacy).reason())
+                .isEqualTo(RepairCampaignApprovalRouteValidator.RouteValidationReason.LEGACY_SYSTEM_ADMIN_ROUTE);
+    }
+
+    @Test
+    void sevenDistinctNonRequesterActorsCanCompleteCanonicalRoute() {
+        UUID requesterId = UUID.randomUUID();
+        ApprovalRequest request = new ApprovalRequest();
+        request.setStatus(ApprovalStatus.APPROVED);
+        request.setActionType(ApprovalActionType.APPROVE);
+        request.setRequesterId(requesterId);
+        for (int i = 0; i < RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.size(); i++) {
+            ApprovalStep step = step(i + 1, RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.get(i));
+            step.setRequest(request);
+            step.setDecision(ApprovalDecision.APPROVED);
+            UUID actorId;
+            do {
+                actorId = UUID.randomUUID();
+            } while (actorId.equals(requesterId));
+            step.setDecidedById(actorId);
+            request.getSteps().add(step);
+        }
+
+        assertThat(validator.validateCompleted(request).valid()).isTrue();
+    }
 
     private static ApprovalStep step(int stepNumber, String role) {
         ApprovalStep step = new ApprovalStep();

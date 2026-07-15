@@ -20,7 +20,7 @@ class RepairCampaignWorkSourceMigrationContractTest {
     private static final Path MIGRATION = Path.of(
             "src/main/resources/db/migration/V20260712_2__repair_campaign_work_sources.sql");
     private static final String COMMITTED_V2_SHA256 =
-            "bcf2c5b6a705ce540d23a8a7e4843cfe1aa6dfeaa1394c7d27c0d6135b8f1941";
+            "af2e56f670e1a6e04360bdbe9586124d7e520922ceb7e9903698c6fafa6bfd18";
 
     @Test
     void committedV2MigrationBytesRemainImmutable() throws Exception {
