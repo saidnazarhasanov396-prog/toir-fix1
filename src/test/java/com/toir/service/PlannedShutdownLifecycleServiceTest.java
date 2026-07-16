@@ -27,6 +27,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Instant;
 import java.util.List;
@@ -47,6 +48,7 @@ class PlannedShutdownLifecycleServiceTest {
     @Mock PlannedShutdownIsolationPointRepository isolationPointRepository;
     @Mock PlannedShutdownStatusHistoryRepository historyRepository;
     @Mock ApprovalRequestRepository approvalRequestRepository;
+    @Mock ObjectProvider<ApprovalService> approvalServiceProvider;
     @Mock ApprovalService approvalService;
     @Mock DepartmentRepository departmentRepository;
     @Mock EmployeeRepository employeeRepository;
@@ -78,7 +80,7 @@ class PlannedShutdownLifecycleServiceTest {
     void setUp() {
         service = new PlannedShutdownService(repository, assetRepository, workItemRepository,
                 readinessItemRepository, isolationPointRepository, historyRepository, approvalRequestRepository,
-                () -> approvalService,
+                approvalServiceProvider,
                 departmentRepository, employeeRepository, equipmentRepository, defectRepository, pprTaskRepository,
                 workOrderRepository, canonicalWorkSourceResolver, workOrderService, materialReadinessService, assignmentEligibilityService, safetyPermitRepository,
                 workItemPolicy, readinessPolicy, readinessLifecyclePolicy, transitionPolicy, approvalScopeHasher,
@@ -93,6 +95,7 @@ class PlannedShutdownLifecycleServiceTest {
         shutdown.setPlannedStartAt(Instant.parse("2026-07-12T01:00:00Z"));
         shutdown.setPlannedEndAt(Instant.parse("2026-07-12T05:00:00Z"));
         lenient().when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(Optional.of(shutdown));
+        lenient().when(approvalServiceProvider.getObject()).thenReturn(approvalService);
         lenient().when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(historyRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(scopeAccessService.currentUserIdOrNull()).thenReturn(actor);
