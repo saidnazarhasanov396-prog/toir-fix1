@@ -21,6 +21,215 @@ import org.springframework.stereotype.Repository;
 @Repository
 @Deprecated(forRemoval = false)
 public interface StockMovementRepository extends JpaRepository<StockMovement, UUID> {
+    @Query(value = """
+            WITH filtered_parts AS (
+                SELECT sp.id
+                  FROM spare_parts sp
+                 WHERE sp.is_deleted = false
+                   AND (cast(:typeId as uuid) IS NULL OR sp.type_id = cast(:typeId as uuid))
+                   AND (cast(:itemType as varchar) IS NULL OR sp.kind = cast(:itemType as varchar))
+                   AND (cast(:unitId as varchar) IS NULL OR EXISTS (
+                       SELECT 1 FROM units_of_measurement uom
+                        WHERE uom.id = cast(:unitId as uuid)
+                          AND uom.is_deleted = false
+                          AND (
+                               upper(sp.unit) = upper(uom.code)
+                            OR upper(sp.unit) = upper(uom.name)
+                            OR (uom.name_en IS NOT NULL AND upper(sp.unit) = upper(uom.name_en))
+                            OR (uom.name_uz IS NOT NULL AND upper(sp.unit) = upper(uom.name_uz))
+                       )
+                   ))
+                   AND (cast(:search as varchar) IS NULL
+                       OR lower(sp.code) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.name) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.manufacturer) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.sku) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.specification) LIKE lower(concat('%', cast(:search as varchar), '%')))
+            )
+            SELECT
+                cast(sm.id as varchar) AS "movementId",
+                sm.movement_date AS "movementDate",
+                cast(sm.spare_part_id as varchar) AS "sparePartId",
+                sp.code AS "sparePartCode",
+                sp.name AS "sparePartName",
+                sm.quantity AS quantity,
+                sm.unit AS unit,
+                cast(sm.warehouse_id as varchar) AS "warehouseId",
+                wh.name AS "warehouseName",
+                cast(sm.work_order_id as varchar) AS "workOrderId",
+                wo.number AS "workOrderNumber",
+                wo.title AS "workOrderTitle",
+                cast(wo.status as varchar) AS "workOrderStatus",
+                cast(sm.created_by_id as varchar) AS "issuedById",
+                issued_by.full_name AS "issuedByName",
+                cast(sm.responsible_person_id as varchar) AS "responsiblePersonId",
+                concat(responsible.first_name, ' ', responsible.last_name) AS "responsiblePersonName",
+                sm.document_number AS "documentNumber",
+                sm.source_document_no AS "sourceDocumentNo",
+                cast(sm.source_type as varchar) AS "sourceType",
+                cast(sm.source_id as varchar) AS "sourceId"
+              FROM stock_movements sm
+              JOIN spare_parts sp
+                ON sp.id = sm.spare_part_id
+               AND sp.is_deleted = false
+              LEFT JOIN warehouses wh ON wh.id = sm.warehouse_id
+              LEFT JOIN work_orders wo ON wo.id = sm.work_order_id
+              LEFT JOIN users issued_by
+                ON issued_by.id = sm.created_by_id
+               AND issued_by.is_deleted = false
+              LEFT JOIN hr_employees responsible
+                ON responsible.id = sm.responsible_person_id
+               AND responsible.is_deleted = false
+             WHERE sm.is_deleted = false
+               AND sm.type = 'ISSUE'
+               AND sm.work_order_id IS NOT NULL
+               AND sm.spare_part_id IN (SELECT id FROM filtered_parts)
+             ORDER BY sm.movement_date DESC NULLS LAST, sm.id DESC
+            """, countQuery = """
+            WITH filtered_parts AS (
+                SELECT sp.id
+                  FROM spare_parts sp
+                 WHERE sp.is_deleted = false
+                   AND (cast(:typeId as uuid) IS NULL OR sp.type_id = cast(:typeId as uuid))
+                   AND (cast(:itemType as varchar) IS NULL OR sp.kind = cast(:itemType as varchar))
+                   AND (cast(:unitId as varchar) IS NULL OR EXISTS (
+                       SELECT 1 FROM units_of_measurement uom
+                        WHERE uom.id = cast(:unitId as uuid)
+                          AND uom.is_deleted = false
+                          AND (
+                               upper(sp.unit) = upper(uom.code)
+                            OR upper(sp.unit) = upper(uom.name)
+                            OR (uom.name_en IS NOT NULL AND upper(sp.unit) = upper(uom.name_en))
+                            OR (uom.name_uz IS NOT NULL AND upper(sp.unit) = upper(uom.name_uz))
+                       )
+                   ))
+                   AND (cast(:search as varchar) IS NULL
+                       OR lower(sp.code) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.name) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.manufacturer) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.sku) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.specification) LIKE lower(concat('%', cast(:search as varchar), '%')))
+            )
+            SELECT count(*)
+              FROM stock_movements sm
+             WHERE sm.is_deleted = false
+               AND sm.type = 'ISSUE'
+               AND sm.work_order_id IS NOT NULL
+               AND sm.spare_part_id IN (SELECT id FROM filtered_parts)
+            """, nativeQuery = true)
+    Page<IssuedToWorkRowProjection> findIssuedToWork(
+            @Param("search") String search,
+            @Param("typeId") UUID typeId,
+            @Param("itemType") String itemType,
+            @Param("unitId") UUID unitId,
+            Pageable pageable);
+
+    @Query(value = """
+            WITH filtered_parts AS (
+                SELECT sp.id
+                  FROM spare_parts sp
+                 WHERE sp.is_deleted = false
+                   AND (cast(:typeId as uuid) IS NULL OR sp.type_id = cast(:typeId as uuid))
+                   AND (cast(:itemType as varchar) IS NULL OR sp.kind = cast(:itemType as varchar))
+                   AND (cast(:unitId as varchar) IS NULL OR EXISTS (
+                       SELECT 1 FROM units_of_measurement uom
+                        WHERE uom.id = cast(:unitId as uuid)
+                          AND uom.is_deleted = false
+                          AND (
+                               upper(sp.unit) = upper(uom.code)
+                            OR upper(sp.unit) = upper(uom.name)
+                            OR (uom.name_en IS NOT NULL AND upper(sp.unit) = upper(uom.name_en))
+                            OR (uom.name_uz IS NOT NULL AND upper(sp.unit) = upper(uom.name_uz))
+                       )
+                   ))
+                   AND (cast(:search as varchar) IS NULL
+                       OR lower(sp.code) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.name) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.manufacturer) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.sku) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.specification) LIKE lower(concat('%', cast(:search as varchar), '%')))
+            )
+            SELECT
+                cast(sm.id as varchar) AS "movementId",
+                sm.movement_date AS "movementDate",
+                cast(sm.spare_part_id as varchar) AS "sparePartId",
+                sp.code AS "sparePartCode",
+                sp.name AS "sparePartName",
+                sm.quantity AS quantity,
+                sm.unit AS unit,
+                cast(sm.warehouse_id as varchar) AS "warehouseId",
+                wh.name AS "warehouseName",
+                cast(sm.work_order_id as varchar) AS "workOrderId",
+                wo.number AS "workOrderNumber",
+                wo.title AS "workOrderTitle",
+                cast(wo.status as varchar) AS "workOrderStatus",
+                cast(sm.created_by_id as varchar) AS "issuedById",
+                issued_by.full_name AS "issuedByName",
+                cast(sm.responsible_person_id as varchar) AS "responsiblePersonId",
+                concat(responsible.first_name, ' ', responsible.last_name) AS "responsiblePersonName",
+                sm.document_number AS "documentNumber",
+                sm.source_document_no AS "sourceDocumentNo",
+                cast(sm.source_type as varchar) AS "sourceType",
+                cast(sm.source_id as varchar) AS "sourceId"
+              FROM stock_movements sm
+              JOIN spare_parts sp
+                ON sp.id = sm.spare_part_id
+               AND sp.is_deleted = false
+              LEFT JOIN warehouses wh ON wh.id = sm.warehouse_id
+              LEFT JOIN work_orders wo ON wo.id = sm.work_order_id
+              LEFT JOIN users issued_by
+                ON issued_by.id = sm.created_by_id
+               AND issued_by.is_deleted = false
+              LEFT JOIN hr_employees responsible
+                ON responsible.id = sm.responsible_person_id
+               AND responsible.is_deleted = false
+             WHERE sm.is_deleted = false
+               AND sm.type = 'ISSUE'
+               AND sm.work_order_id IS NOT NULL
+               AND sm.warehouse_id IN (:warehouseIds)
+               AND sm.spare_part_id IN (SELECT id FROM filtered_parts)
+             ORDER BY sm.movement_date DESC NULLS LAST, sm.id DESC
+            """, countQuery = """
+            WITH filtered_parts AS (
+                SELECT sp.id
+                  FROM spare_parts sp
+                 WHERE sp.is_deleted = false
+                   AND (cast(:typeId as uuid) IS NULL OR sp.type_id = cast(:typeId as uuid))
+                   AND (cast(:itemType as varchar) IS NULL OR sp.kind = cast(:itemType as varchar))
+                   AND (cast(:unitId as varchar) IS NULL OR EXISTS (
+                       SELECT 1 FROM units_of_measurement uom
+                        WHERE uom.id = cast(:unitId as uuid)
+                          AND uom.is_deleted = false
+                          AND (
+                               upper(sp.unit) = upper(uom.code)
+                            OR upper(sp.unit) = upper(uom.name)
+                            OR (uom.name_en IS NOT NULL AND upper(sp.unit) = upper(uom.name_en))
+                            OR (uom.name_uz IS NOT NULL AND upper(sp.unit) = upper(uom.name_uz))
+                       )
+                   ))
+                   AND (cast(:search as varchar) IS NULL
+                       OR lower(sp.code) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.name) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.manufacturer) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.sku) LIKE lower(concat('%', cast(:search as varchar), '%'))
+                       OR lower(sp.specification) LIKE lower(concat('%', cast(:search as varchar), '%')))
+            )
+            SELECT count(*)
+              FROM stock_movements sm
+             WHERE sm.is_deleted = false
+               AND sm.type = 'ISSUE'
+               AND sm.work_order_id IS NOT NULL
+               AND sm.warehouse_id IN (:warehouseIds)
+               AND sm.spare_part_id IN (SELECT id FROM filtered_parts)
+            """, nativeQuery = true)
+    Page<IssuedToWorkRowProjection> findIssuedToWorkByWarehouseIds(
+            @Param("warehouseIds") Collection<UUID> warehouseIds,
+            @Param("search") String search,
+            @Param("typeId") UUID typeId,
+            @Param("itemType") String itemType,
+            @Param("unitId") UUID unitId,
+            Pageable pageable);
+
     @Query(value = "SELECT * FROM stock_movements WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<StockMovement> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
