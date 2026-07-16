@@ -47,6 +47,7 @@ class PlannedShutdownLifecycleServiceTest {
     @Mock PlannedShutdownIsolationPointRepository isolationPointRepository;
     @Mock PlannedShutdownStatusHistoryRepository historyRepository;
     @Mock ApprovalRequestRepository approvalRequestRepository;
+    @Mock ApprovalService approvalService;
     @Mock DepartmentRepository departmentRepository;
     @Mock EmployeeRepository employeeRepository;
     @Mock EquipmentRepository equipmentRepository;
@@ -77,6 +78,7 @@ class PlannedShutdownLifecycleServiceTest {
     void setUp() {
         service = new PlannedShutdownService(repository, assetRepository, workItemRepository,
                 readinessItemRepository, isolationPointRepository, historyRepository, approvalRequestRepository,
+                () -> approvalService,
                 departmentRepository, employeeRepository, equipmentRepository, defectRepository, pprTaskRepository,
                 workOrderRepository, canonicalWorkSourceResolver, workOrderService, materialReadinessService, assignmentEligibilityService, safetyPermitRepository,
                 workItemPolicy, readinessPolicy, readinessLifecyclePolicy, transitionPolicy, approvalScopeHasher,

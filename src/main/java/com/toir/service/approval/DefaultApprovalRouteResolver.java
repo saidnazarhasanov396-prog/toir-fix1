@@ -8,6 +8,7 @@ import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
+import com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator;
 import com.toir.security.ApprovalDomainPermissions;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
 
     private final ApprovalTemplateRepository templateRepository;
     private final RepairCampaignApprovalRouteValidator repairCampaignRouteValidator;
+    private final PlannedShutdownApprovalRouteValidator plannedShutdownRouteValidator;
 
     @Override
     public List<CreateApprovalRequest.StepInput> resolveRoute(ApprovalRequest request) {
@@ -37,6 +39,16 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                             ApprovalActionType.APPROVE)
                     .map(this::stepsFromTemplate)
                     .filter(steps -> repairCampaignRouteValidator.validateInputs(steps).valid())
+                    .orElse(List.of());
+        }
+        if (request.getTargetType() == ApprovalTargetType.PLANNED_SHUTDOWN
+                && actionType == ApprovalActionType.APPROVE) {
+            return templateRepository
+                    .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                            ApprovalTargetType.PLANNED_SHUTDOWN,
+                            ApprovalActionType.APPROVE)
+                    .map(this::stepsFromTemplate)
+                    .filter(steps -> plannedShutdownRouteValidator.validateInputs(steps).valid())
                     .orElse(List.of());
         }
         return templateRepository

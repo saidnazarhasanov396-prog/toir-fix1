@@ -63,6 +63,7 @@ class PlannedShutdownWorkItemServiceTest {
     @Mock PlannedShutdownIsolationPointRepository isolationPointRepository;
     @Mock com.toir.repository.plannedshutdown.PlannedShutdownStatusHistoryRepository statusHistoryRepository;
     @Mock ApprovalRequestRepository approvalRequestRepository;
+    @Mock ApprovalService approvalService;
     @Mock ScopeAccessService scopeAccessService;
     @Mock AuditBuilderService audit;
     PlannedShutdownService service;
@@ -76,6 +77,7 @@ class PlannedShutdownWorkItemServiceTest {
         service = new PlannedShutdownService(shutdownRepository, assetRepository, itemRepository,
                 readinessItemRepository, isolationPointRepository,
                 statusHistoryRepository, approvalRequestRepository,
+                () -> approvalService,
                 departmentRepository, employeeRepository, equipmentRepository, defectRepository,
                 pprTaskRepository, workOrderRepository, canonicalWorkSourceResolver, workOrderService, materialReadinessService, assignmentEligibilityService,
                 safetyPermitRepository, new PlannedShutdownWorkItemPolicy(), new PlannedShutdownReadinessPolicy(),

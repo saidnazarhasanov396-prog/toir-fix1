@@ -176,9 +176,71 @@ class DefaultApprovalRouteResolverTest {
         assertThat(resolver.resolveRoute(request)).isEmpty();
     }
 
+
+    @Test
+    void plannedShutdownApproveRequiresCanonicalProductionThenHseTemplate() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
+        template.setActionType(ApprovalActionType.APPROVE);
+        int order = 1;
+        for (String role : com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator.REQUIRED_APPROVER_ROLES) {
+            com.toir.entity.ApprovalTemplateStep step = new com.toir.entity.ApprovalTemplateStep();
+            step.setTemplate(template);
+            step.setStepOrder(order++);
+            step.setApproverRole(role);
+            template.getSteps().add(step);
+        }
+        ApprovalRequest request = new ApprovalRequest();
+        request.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
+        request.setActionType(ApprovalActionType.APPROVE);
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                ApprovalActionType.APPROVE
+        )).thenReturn(Optional.of(template));
+
+        var steps = resolver.resolveRoute(request);
+
+        assertThat(steps).hasSize(2);
+        assertThat(steps).extracting(CreateApprovalRequest.StepInput::approverRole)
+                .containsExactlyElementsOf(com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator.REQUIRED_APPROVER_ROLES);
+    }
+
+    @Test
+    void plannedShutdownApproveDoesNotUseGenericFallbackWhenTemplateIsMissingOrInvalid() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        ApprovalRequest request = new ApprovalRequest();
+        request.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
+        request.setActionType(ApprovalActionType.APPROVE);
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                ApprovalActionType.APPROVE
+        )).thenReturn(Optional.empty());
+
+        assertThat(resolver.resolveRoute(request)).isEmpty();
+
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
+        template.setActionType(ApprovalActionType.APPROVE);
+        com.toir.entity.ApprovalTemplateStep step = new com.toir.entity.ApprovalTemplateStep();
+        step.setTemplate(template);
+        step.setStepOrder(1);
+        step.setApproverRole("PLANNED_SHUTDOWN_APPROVE");
+        template.getSteps().add(step);
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                ApprovalActionType.APPROVE
+        )).thenReturn(Optional.of(template));
+
+        assertThat(resolver.resolveRoute(request)).isEmpty();
+    }
+
     private static DefaultApprovalRouteResolver resolver(ApprovalTemplateRepository templateRepository) {
         return new DefaultApprovalRouteResolver(
                 templateRepository,
-                new com.toir.service.repair.RepairCampaignApprovalRouteValidator());
+                new com.toir.service.repair.RepairCampaignApprovalRouteValidator(),
+                new com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator());
     }
 }

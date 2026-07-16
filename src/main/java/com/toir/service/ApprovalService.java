@@ -36,6 +36,7 @@ import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.service.repair.RepairRequestService;
 import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
+import com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -99,6 +100,7 @@ public class ApprovalService implements ApprovalOrchestrator {
     private final NotificationService notificationService;
     private final UserRepository userRepository;
     private final RepairCampaignApprovalRouteValidator repairCampaignApprovalRouteValidator;
+    private final PlannedShutdownApprovalRouteValidator plannedShutdownApprovalRouteValidator;
     private final ObjectProvider<WorkOrderService> workOrderServiceProvider;
     private final ObjectProvider<PprPlanService> pprPlanServiceProvider;
     private final ObjectProvider<ProcurementRequestService> procurementRequestServiceProvider;
@@ -607,11 +609,9 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (!pendingApprovals.isEmpty()) {
             String currentPayload = currentScopePayload(targetType, documentId);
             for (ApprovalRequest candidate : pendingApprovals) {
-                RepairCampaignApprovalRouteValidator.ValidationResult validation =
-                        routeValidation(targetType, candidate);
                 boolean payloadStale = currentPayload != null
                         && !Objects.equals(candidate.getPayloadJson(), currentPayload);
-                boolean routeStale = validation != null && !validation.valid();
+                boolean routeStale = routeStale(targetType, candidate);
                 boolean duplicate = reusable != null;
                 if (!payloadStale && !routeStale && !duplicate) {
                     reusable = candidate;
@@ -622,10 +622,12 @@ public class ApprovalService implements ApprovalOrchestrator {
                 candidate.setCompletedAt(Instant.now());
                 String cancellationReason;
                 if (routeStale) {
-                    cancellationReason = "NONCANONICAL_REPAIR_CAMPAIGN_ROUTE";
+                    cancellationReason = targetType == ApprovalTargetType.PLANNED_SHUTDOWN
+                            ? "NONCANONICAL_PLANNED_SHUTDOWN_ROUTE"
+                            : "NONCANONICAL_REPAIR_CAMPAIGN_ROUTE";
                     candidate.setFailureReason(cancellationReason);
-                    log.warn("Cancelling noncanonical repair campaign approval id={} reason={} detail={}",
-                            candidate.getId(), validation.reason(), validation.detail());
+                    log.warn("Cancelling noncanonical approval id={} targetType={} reason={}",
+                            candidate.getId(), targetType, cancellationReason);
                 } else if (payloadStale) {
                     cancellationReason = supersededScopeMessage(targetType);
                 } else {
@@ -664,25 +666,33 @@ public class ApprovalService implements ApprovalOrchestrator {
         return null;
     }
 
-    private RepairCampaignApprovalRouteValidator.ValidationResult routeValidation(ApprovalTargetType targetType, ApprovalRequest request) {
-        if (targetType != ApprovalTargetType.REPAIR_CAMPAIGN) {
-            return null;
+    private boolean routeStale(ApprovalTargetType targetType, ApprovalRequest request) {
+        if (request == null) {
+            return false;
         }
-        ApprovalActionType actionType = request == null ? null : request.getActionType();
+        ApprovalActionType actionType = request.getActionType();
         if (actionType != null && actionType != ApprovalActionType.APPROVE) {
-            return null;
+            return false;
         }
-        return repairCampaignApprovalRouteValidator.validate(request);
+        if (targetType == ApprovalTargetType.REPAIR_CAMPAIGN) {
+            return !repairCampaignApprovalRouteValidator.validate(request).valid();
+        }
+        if (targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
+            return !plannedShutdownApprovalRouteValidator.validate(request).valid();
+        }
+        return false;
     }
 
     private boolean hasActionableRoute(ApprovalRequest request) {
-        ApprovalTargetType targetType = effectiveTargetType(request);
-        RepairCampaignApprovalRouteValidator.ValidationResult validation = routeValidation(targetType, request);
-        return validation == null || validation.valid();
+        return !routeStale(effectiveTargetType(request), request);
     }
 
     private void assertActionableRoute(ApprovalRequest request) {
-        if (!hasActionableRoute(request)) {
+        ApprovalTargetType targetType = effectiveTargetType(request);
+        if (routeStale(targetType, request)) {
+            if (targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
+                throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
+            }
             throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_STALE");
         }
     }
@@ -1265,7 +1275,10 @@ public class ApprovalService implements ApprovalOrchestrator {
 
         boolean repairCampaignApproval = targetType == ApprovalTargetType.REPAIR_CAMPAIGN
                 && (actionType == null || actionType == ApprovalActionType.APPROVE);
-        List<CreateApprovalRequest.StepInput> effectiveSteps = repairCampaignApproval
+        boolean plannedShutdownApproval = targetType == ApprovalTargetType.PLANNED_SHUTDOWN
+                && (actionType == null || actionType == ApprovalActionType.APPROVE);
+        boolean domainValidatedApproval = repairCampaignApproval || plannedShutdownApproval;
+        List<CreateApprovalRequest.StepInput> effectiveSteps = domainValidatedApproval
                 ? List.of()
                 : normalizeStepInputs(steps);
         if (effectiveSteps.isEmpty()) {
@@ -1274,6 +1287,9 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (effectiveSteps.isEmpty()) {
             if (repairCampaignApproval) {
                 throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_NOT_CONFIGURED");
+            }
+            if (plannedShutdownApproval) {
+                throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_ROUTE_NOT_CONFIGURED");
             }
             throw RestException.badRequest("At least one approval step is required");
         }
@@ -1284,6 +1300,15 @@ public class ApprovalService implements ApprovalOrchestrator {
                 log.warn("Repair campaign approval route is not configured: targetId={} reason={} detail={}",
                         targetId, validation.reason(), validation.detail());
                 throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_NOT_CONFIGURED");
+            }
+        }
+        if (plannedShutdownApproval) {
+            PlannedShutdownApprovalRouteValidator.ValidationResult validation =
+                    plannedShutdownApprovalRouteValidator.validateInputs(effectiveSteps);
+            if (!validation.valid()) {
+                log.warn("Planned shutdown approval route is not configured: targetId={} reason={} detail={}",
+                        targetId, validation.reason(), validation.detail());
+                throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_ROUTE_NOT_CONFIGURED");
             }
         }
 
@@ -1522,9 +1547,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         String targetTypeName = effectiveTargetTypeName(request);
         UUID targetId = effectiveTargetId(request);
         String targetUrl = targetUrl(targetTypeName, targetId);
-        RepairCampaignApprovalRouteValidator.ValidationResult routeValidation =
-                routeValidation(effectiveTargetType(request), request);
-        boolean staleRoute = routeValidation != null && !routeValidation.valid();
+        boolean staleRoute = routeStale(effectiveTargetType(request), request);
         boolean actionableRoute = !staleRoute;
         boolean canDecide = request.getStatus() == ApprovalStatus.PENDING
                 && currentStep != null
