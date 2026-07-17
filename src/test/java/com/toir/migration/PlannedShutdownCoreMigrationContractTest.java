@@ -196,7 +196,7 @@ class PlannedShutdownCoreMigrationContractTest {
     }
 
     @Test
-    void approvalRouteSeedsExactIndependentProductionAndHseRoles() throws Exception {
+    void historicalApprovalRouteSeedKeepsItsOriginalProductionAndHseRoles() throws Exception {
         String sql = Files.readString(APPROVAL_ROUTE_MIGRATION);
         assertThat(sql).contains("'PLANNED_SHUTDOWN_APPROVAL'")
                 .contains("(1, 'PLANNED_SHUTDOWN_PRODUCTION_APPROVER')")

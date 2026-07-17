@@ -24,8 +24,6 @@ import com.toir.service.approval.LifecycleApprovalRoutePolicy;
 import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.approval.LifecycleRouteResolution;
 import com.toir.service.maintanance.MaintenanceRegulationService;
-import com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator;
-import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +32,6 @@ import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -116,12 +113,6 @@ class ApprovalServiceTest {
 
     @Mock
     UserRepository userRepository;
-
-    @Spy
-    RepairCampaignApprovalRouteValidator repairCampaignApprovalRouteValidator = new RepairCampaignApprovalRouteValidator();
-
-    @Spy
-    PlannedShutdownApprovalRouteValidator plannedShutdownApprovalRouteValidator = new PlannedShutdownApprovalRouteValidator();
 
     LifecycleApprovalRoutePolicy lifecycleApprovalRoutePolicy = new LifecycleApprovalRoutePolicy();
 
@@ -1782,10 +1773,8 @@ class ApprovalServiceTest {
         stubRepairCampaignApprovalSnapshot("PENDING_APPROVAL", 0L, 0L, "a".repeat(64), 2L);
         when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
         when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(List.of());
-        List<CreateApprovalRequest.StepInput> callerSteps =
-                com.toir.service.repair.RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.stream()
-                        .map(role -> new CreateApprovalRequest.StepInput(null, role))
-                        .toList();
+        List<CreateApprovalRequest.StepInput> callerSteps = lifecycleRoleInputs(
+                "CONFIGURED_REVIEWER_ALPHA", "CONFIGURED_REVIEWER_BETA");
 
         assertThatThrownBy(() -> service.create(new CreateApprovalRequest(
                 ApprovalTargetType.REPAIR_CAMPAIGN.name(),
@@ -1806,17 +1795,18 @@ class ApprovalServiceTest {
     }
 
     @Test
-    void repairCampaignRequestCreatesExactlySevenCanonicalSteps() {
+    void repairCampaignRequestPreservesVariableConfiguredRuntimeSteps() {
         UUID targetId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
-        stubTargetMetadata(ApprovalTargetType.REPAIR_CAMPAIGN, "RCMP-2026-004", "Canonical route");
+        stubTargetMetadata(ApprovalTargetType.REPAIR_CAMPAIGN, "RCMP-2026-004", "Variable route");
         stubRepairCampaignApprovalSnapshot("PENDING_APPROVAL", 0L, 0L, "c".repeat(64), 2L);
         when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
-        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(
-                RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.stream()
-                        .map(role -> new CreateApprovalRequest.StepInput(null, role))
-                        .toList());
+        List<CreateApprovalRequest.StepInput> configuredRoute = lifecycleRoleInputs(
+                "CONFIGURED_REVIEWER_ALPHA",
+                "CONFIGURED_REVIEWER_BETA",
+                "CONFIGURED_REVIEWER_GAMMA");
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(configuredRoute);
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
         when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
             ApprovalRequest saved = invocation.getArgument(0);
@@ -1829,21 +1819,22 @@ class ApprovalServiceTest {
         ApprovalRequestDto result = service.requestApproval(new ApprovalStartRequest(
                 ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, "submit"));
 
-        assertThat(result.steps()).hasSize(7);
+        assertThat(result.steps()).hasSize(configuredRoute.size());
         assertThat(result.steps()).extracting(ApprovalStepDto::approverRole)
-                .containsExactlyElementsOf(RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES);
+                .containsExactly("CONFIGURED_REVIEWER_ALPHA", "CONFIGURED_REVIEWER_BETA",
+                        "CONFIGURED_REVIEWER_GAMMA");
         assertThat(result.actionable()).isTrue();
     }
 
     @Test
-    void concurrentRepairCampaignRequestsLockBeforeLookupAndReuseCanonicalPendingApproval() {
+    void concurrentRepairCampaignRequestsLockBeforeLookupAndReusePersistedVariablePendingApproval() {
         UUID targetId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         String payload = "{\"scopeVersion\":0,\"scopeHash\":\"" + "d".repeat(64)
                 + "\",\"campaignVersion\":2}";
         ApprovalRequest existing = repairCampaignPending(
                 UUID.randomUUID(), targetId, requesterId, payload,
-                RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES);
+                List.of("RUNTIME_REVIEWER_ALPHA", "RUNTIME_REVIEWER_BETA"));
         stubRepairCampaignApprovalSnapshot("PENDING_APPROVAL", 0L, 0L, "d".repeat(64), 2L);
         when(requestRepository.findAllPendingByTargetAndAction(
                 ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
@@ -1867,7 +1858,7 @@ class ApprovalServiceTest {
     }
 
     @Test
-    void repairCampaignRetryCancelsAllNoncanonicalPendingApprovalsAndLeavesOnePending() {
+    void repairCampaignRetryCancelsAllMalformedPendingApprovalsAndLeavesOnePending() {
         UUID targetId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         String payload = "{\"scopeVersion\":0,\"scopeHash\":\"" + "e".repeat(64)
@@ -1884,10 +1875,9 @@ class ApprovalServiceTest {
                 ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
                 .thenReturn(List.of(first, second));
         when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
-        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(
-                RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.stream()
-                        .map(role -> new CreateApprovalRequest.StepInput(null, role))
-                        .toList());
+        List<CreateApprovalRequest.StepInput> configuredRoute = lifecycleRoleInputs(
+                "CURRENT_REVIEWER_ALPHA", "CURRENT_REVIEWER_BETA", "CURRENT_REVIEWER_GAMMA");
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(configuredRoute);
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
         when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
             ApprovalRequest saved = invocation.getArgument(0);
@@ -1905,7 +1895,7 @@ class ApprovalServiceTest {
         assertThat(first.getFailureReason()).isEqualTo("NONCANONICAL_REPAIR_CAMPAIGN_ROUTE");
         assertThat(second.getFailureReason()).isEqualTo("NONCANONICAL_REPAIR_CAMPAIGN_ROUTE");
         assertThat(result.status()).isEqualTo(ApprovalStatus.PENDING);
-        assertThat(result.steps()).hasSize(7);
+        assertThat(result.steps()).hasSize(configuredRoute.size());
         ArgumentCaptor<ApprovalRequest> saved = ArgumentCaptor.forClass(ApprovalRequest.class);
         verify(requestRepository, times(3)).saveAndFlush(saved.capture());
         assertThat(saved.getAllValues()).filteredOn(value -> value.getStatus() == ApprovalStatus.PENDING)
@@ -1913,7 +1903,7 @@ class ApprovalServiceTest {
     }
 
     @Test
-    void plannedShutdownApprovalCapturesCurrentScopeVersionInCanonicalRequest() {
+    void plannedShutdownApprovalCapturesCurrentScopeVersionWithVariableRuntimeRoute() {
         UUID targetId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
@@ -1931,11 +1921,8 @@ class ApprovalServiceTest {
                 "select approval_scope_hash from planned_shutdowns where id = ? and is_deleted = false",
                 String.class, targetId)).thenReturn("a".repeat(64));
         when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
-        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(List.of(
-                new CreateApprovalRequest.StepInput(null,
-                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE),
-                new CreateApprovalRequest.StepInput(null,
-                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE)));
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(lifecycleRoleInputs(
+                "SHUTDOWN_REVIEWER_ALPHA", "SHUTDOWN_REVIEWER_BETA", "SHUTDOWN_REVIEWER_GAMMA"));
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
         when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
             ApprovalRequest saved = invocation.getArgument(0);
@@ -1953,9 +1940,8 @@ class ApprovalServiceTest {
         assertThat(request.getValue().getPayloadJson()).isEqualTo(
                 "{\"scopeVersion\":8,\"scopeHash\":\"" + "a".repeat(64) + "\"}");
         assertThat(request.getValue().getSteps()).extracting(ApprovalStep::getApproverRole)
-                .containsExactly(
-                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE,
-                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE);
+                .containsExactly("SHUTDOWN_REVIEWER_ALPHA", "SHUTDOWN_REVIEWER_BETA",
+                        "SHUTDOWN_REVIEWER_GAMMA");
     }
 
     @Test
@@ -2020,11 +2006,8 @@ class ApprovalServiceTest {
                 ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
                 .thenReturn(Optional.of(stale));
         when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
-        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(List.of(
-                new CreateApprovalRequest.StepInput(null,
-                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE),
-                new CreateApprovalRequest.StepInput(null,
-                        com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE)));
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(lifecycleRoleInputs(
+                "CURRENT_SHUTDOWN_REVIEWER_ALPHA", "CURRENT_SHUTDOWN_REVIEWER_BETA"));
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
         when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(inv -> {
             ApprovalRequest saved = inv.getArgument(0);
@@ -2066,7 +2049,7 @@ class ApprovalServiceTest {
         stale.setPayloadJson("{\"scopeVersion\":8,\"scopeHash\":\"" + "a".repeat(64)
                 + "\",\"campaignVersion\":11}");
         int routeOrder = 1;
-        for (String role : RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES) {
+        for (String role : List.of("OLD_REVIEWER_ALPHA", "OLD_REVIEWER_BETA")) {
             ApprovalStep step = new ApprovalStep();
             step.setRequest(stale);
             step.setStepNumber(routeOrder++);
@@ -2079,10 +2062,8 @@ class ApprovalServiceTest {
                 ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
                 .thenReturn(List.of(stale));
         when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
-        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(
-                RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.stream()
-                        .map(role -> new CreateApprovalRequest.StepInput(null, role))
-                        .toList());
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(lifecycleRoleInputs(
+                "CURRENT_REVIEWER_ALPHA", "CURRENT_REVIEWER_BETA", "CURRENT_REVIEWER_GAMMA"));
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
         when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(inv -> {
             ApprovalRequest saved = inv.getArgument(0);
@@ -2107,7 +2088,7 @@ class ApprovalServiceTest {
     }
 
     @Test
-    void repairCampaignRetryCancelsPendingRequestWithNonCanonicalRoute() {
+    void repairCampaignRetryCancelsPendingRequestWithMalformedRuntimeRoute() {
         UUID targetId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
@@ -2135,10 +2116,9 @@ class ApprovalServiceTest {
                 ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
                 .thenReturn(List.of(stale));
         when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
-        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(
-                RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.stream()
-                        .map(role -> new CreateApprovalRequest.StepInput(null, role))
-                        .toList());
+        List<CreateApprovalRequest.StepInput> configuredRoute = lifecycleRoleInputs(
+                "CURRENT_REVIEWER_ALPHA", "CURRENT_REVIEWER_BETA", "CURRENT_REVIEWER_GAMMA");
+        when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(configuredRoute);
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
         when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(inv -> {
             ApprovalRequest saved = inv.getArgument(0);
@@ -2152,9 +2132,10 @@ class ApprovalServiceTest {
                 ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, "retry"));
 
         assertThat(stale.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
-        assertThat(result.steps()).hasSize(7);
+        assertThat(result.steps()).hasSize(configuredRoute.size());
         assertThat(result.steps()).extracting(ApprovalStepDto::approverRole)
-                .containsExactlyElementsOf(RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES);
+                .containsExactly("CURRENT_REVIEWER_ALPHA", "CURRENT_REVIEWER_BETA",
+                        "CURRENT_REVIEWER_GAMMA");
         verify(requestRepository, times(2)).saveAndFlush(any(ApprovalRequest.class));
         assertThat(stale.getFailureReason()).isEqualTo("NONCANONICAL_REPAIR_CAMPAIGN_ROUTE");
         verify(governanceService).record(stale, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
@@ -2491,6 +2472,12 @@ class ApprovalServiceTest {
             approval.getSteps().add(step);
         }
         return approval;
+    }
+
+    private static List<CreateApprovalRequest.StepInput> lifecycleRoleInputs(String... roles) {
+        return java.util.Arrays.stream(roles)
+                .map(role -> new CreateApprovalRequest.StepInput(null, role))
+                .toList();
     }
 
     private ApprovalRequest lifecyclePending(UUID id,

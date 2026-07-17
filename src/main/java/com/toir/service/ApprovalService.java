@@ -11,6 +11,8 @@ import com.toir.dto.approval.ReturnApprovalRequest;
 import com.toir.dto.approval.UpdateApprovalRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
+import com.toir.entity.ApprovalTemplate;
+import com.toir.entity.ApprovalTemplateStep;
 import com.toir.entity.users.Role;
 import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
@@ -38,8 +40,6 @@ import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.approval.LifecycleRouteResolution;
 import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.service.repair.RepairRequestService;
-import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
-import com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -107,8 +107,6 @@ public class ApprovalService implements ApprovalOrchestrator {
     private final UserRepository userRepository;
     @Autowired
     private LifecycleApprovalRoutePolicy lifecycleApprovalRoutePolicy = new LifecycleApprovalRoutePolicy();
-    private final RepairCampaignApprovalRouteValidator repairCampaignApprovalRouteValidator;
-    private final PlannedShutdownApprovalRouteValidator plannedShutdownApprovalRouteValidator;
     private final ObjectProvider<WorkOrderService> workOrderServiceProvider;
     private final ObjectProvider<PprPlanService> pprPlanServiceProvider;
     private final ObjectProvider<ProcurementRequestService> procurementRequestServiceProvider;
@@ -1783,22 +1781,15 @@ public class ApprovalService implements ApprovalOrchestrator {
             }
             throw RestException.badRequest("At least one approval step is required");
         }
-        if (repairCampaignApproval) {
-            RepairCampaignApprovalRouteValidator.ValidationResult validation =
-                    repairCampaignApprovalRouteValidator.validateInputs(effectiveSteps);
+        if (domainValidatedApproval) {
+            LifecycleApprovalRoutePolicy.ValidationResult validation = validateLifecycleInputs(
+                    targetType, actionType, effectiveSteps);
             if (!validation.valid()) {
-                log.warn("Repair campaign approval route is not configured: targetId={} reason={} detail={}",
-                        targetId, validation.reason(), validation.detail());
-                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_NOT_CONFIGURED");
-            }
-        }
-        if (plannedShutdownApproval) {
-            PlannedShutdownApprovalRouteValidator.ValidationResult validation =
-                    plannedShutdownApprovalRouteValidator.validateInputs(effectiveSteps);
-            if (!validation.valid()) {
-                log.warn("Planned shutdown approval route is not configured: targetId={} reason={} detail={}",
-                        targetId, validation.reason(), validation.detail());
-                throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_ROUTE_NOT_CONFIGURED");
+                log.warn("Lifecycle approval route is not configured: targetType={} targetId={} reason={}",
+                        targetType, targetId, validation.reason());
+                throw RestException.conflict(repairCampaignApproval
+                        ? "REPAIR_CAMPAIGN_APPROVAL_ROUTE_NOT_CONFIGURED"
+                        : "PLANNED_SHUTDOWN_APPROVAL_ROUTE_NOT_CONFIGURED");
             }
         }
 
@@ -1833,6 +1824,25 @@ public class ApprovalService implements ApprovalOrchestrator {
         );
 
         return toDto(saved);
+    }
+
+    private LifecycleApprovalRoutePolicy.ValidationResult validateLifecycleInputs(
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType,
+            List<CreateApprovalRequest.StepInput> inputs) {
+        ApprovalTemplate candidate = new ApprovalTemplate();
+        candidate.setTargetType(targetType);
+        candidate.setActionType(effectiveActionType(actionType));
+        int order = 1;
+        for (CreateApprovalRequest.StepInput input : inputs) {
+            ApprovalTemplateStep step = new ApprovalTemplateStep();
+            step.setTemplate(candidate);
+            step.setStepOrder(order++);
+            step.setApproverId(input.approverId());
+            step.setApproverRole(input.approverRole());
+            candidate.getSteps().add(step);
+        }
+        return lifecycleApprovalRoutePolicy.validateTemplate(candidate);
     }
 
     private List<CreateApprovalRequest.StepInput> normalizeStepInputs(List<CreateApprovalRequest.StepInput> steps) {

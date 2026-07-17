@@ -326,14 +326,14 @@ class PlannedShutdownLifecycleServiceTest {
     }
 
     @Test
-    void productionAndHseTwoStepRuntimeCanFinalizeAndPrepare() {
+    void arbitraryTwoStepRuntimeCanFinalizeAndPrepare() {
         shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
         shutdown.setApprovalScopeVersion(3L);
         shutdown.setApprovalScopeHash(currentScopeHash());
         ApprovalRequest approval = approvedRoleRoute(
                 actor,
-                PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE,
-                PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE);
+                "SHUTDOWN_REVIEWER_ALPHA",
+                "SHUTDOWN_REVIEWER_BETA");
 
         var result = service.finalizeApprovalFromApprovalRequest(id, approval);
         when(approvalRequestRepository.findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
