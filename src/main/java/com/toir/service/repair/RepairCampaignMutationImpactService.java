@@ -3,14 +3,15 @@ package com.toir.service.repair;
 import com.toir.dto.repaircampaign.CampaignMutationImpact;
 import com.toir.enums.RepairCampaignMutationType;
 import com.toir.enums.RepairCampaignStatus;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.exception.RestException;
 import com.toir.repository.repair.RepairCampaignRepository;
-import com.toir.repository.ApprovalRequestRepository;
-import com.toir.enums.ApprovalStatus;
 import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.ApprovalService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.EnumSet;
@@ -23,7 +24,7 @@ public class RepairCampaignMutationImpactService {
 
     private final RepairCampaignRepository campaignRepository;
     private final ScopeAccessService scopeAccessService;
-    private final ApprovalRequestRepository approvalRequestRepository;
+    private final ObjectProvider<ApprovalService> approvalServiceProvider;
 
     private static final EnumSet<RepairCampaignMutationType> SCOPE_FORMATION_MUTATIONS = EnumSet.of(
             RepairCampaignMutationType.METADATA,
@@ -94,21 +95,17 @@ public class RepairCampaignMutationImpactService {
         long version = campaign.getVersion() == null ? 0L : campaign.getVersion();
         long scopeVersion = campaign.getScopeVersion() == null ? 0L : campaign.getScopeVersion();
         CampaignMutationImpact impact = evaluate(campaign.getStatus(), scopeVersion, version, mutationType);
-        campaign.setScopeVersion(scopeVersion + 1L);
         if (impact.invalidatesApproval()) {
-            approvalRequestRepository.findAllByTargetTypeAndTargetIdAndIsDeletedFalse(
-                            "REPAIR_CAMPAIGN", campaign.getId()).stream()
-                    .filter(request -> request.getStatus() == ApprovalStatus.PENDING)
-                    .forEach(request -> {
-                        request.setStatus(ApprovalStatus.CANCELLED);
-                        request.setCompletedAt(java.time.Instant.now());
-                        approvalRequestRepository.save(request);
-                    });
+            approvalServiceProvider.getObject().cancelPendingLifecycleApproval(
+                    ApprovalTargetType.REPAIR_CAMPAIGN,
+                    campaign.getId(),
+                    impact.reason());
             campaign.setApprovalScopeVersion(null);
             campaign.setApprovalScopeHash(null);
             campaign.setApprovedAt(null);
             campaign.setStatus(impact.nextStatus());
         }
+        campaign.setScopeVersion(scopeVersion + 1L);
         return impact;
     }
 

@@ -17,6 +17,9 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
     @Query(value = "SELECT * FROM approval_requests WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<ApprovalRequest> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query(value = "SELECT * FROM approval_requests WHERE id = cast(:id as uuid) AND is_deleted = false FOR UPDATE", nativeQuery = true)
+    Optional<ApprovalRequest> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
+
     @Query(value = "SELECT * FROM approval_requests WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ApprovalRequest> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 

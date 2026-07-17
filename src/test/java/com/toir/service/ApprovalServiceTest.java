@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -71,6 +72,14 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ApprovalServiceTest {
+
+    private static final String LIFECYCLE_IDENTITY_SQL = """
+            SELECT COALESCE(target_type, document_type) AS target_type,
+                   COALESCE(target_id, document_id) AS target_id,
+                   COALESCE(action_type, 'APPROVE') AS action_type
+            FROM approval_requests
+            WHERE id = ? AND is_deleted = false
+            """;
 
     @Mock
     ApprovalRequestRepository requestRepository;
@@ -524,6 +533,183 @@ class ApprovalServiceTest {
                         ex -> assertThat(ex.getStatus().value()).isEqualTo(403));
 
         verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void lifecycleDecisionLocksDomainThenApprovalAndRereadsCancelledRequestBeforeMutation() {
+        UUID approvalId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest cancelled = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, UUID.randomUUID(), "LIFECYCLE_APPROVER");
+        cancelled.setTargetId(targetId);
+        cancelled.setStatus(ApprovalStatus.CANCELLED);
+        ApprovalStep persistedStep = cancelled.getSteps().getFirst();
+        stubLifecycleMutationLock(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, targetId, cancelled);
+
+        assertThatThrownBy(() -> service.approve(
+                approvalId, new DecisionRequest(actorId, "must not apply")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Request is not pending: CANCELLED");
+
+        InOrder lockOrder = org.mockito.Mockito.inOrder(jdbcTemplate, requestRepository);
+        lockOrder.verify(jdbcTemplate).query(eq(LIFECYCLE_IDENTITY_SQL), any(RowMapper.class), eq(approvalId));
+        lockOrder.verify(jdbcTemplate).query(
+                eq(lifecycleDomainLockSql(ApprovalTargetType.REPAIR_CAMPAIGN)),
+                any(RowMapper.class), eq(targetId));
+        lockOrder.verify(jdbcTemplate).query(
+                eq("SELECT pg_advisory_xact_lock(?, ?)"),
+                any(PreparedStatementSetter.class),
+                any(ResultSetExtractor.class));
+        lockOrder.verify(requestRepository).findByIdAndIsDeletedFalseForUpdate(approvalId);
+        assertThat(cancelled.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
+        assertThat(cancelled.getSteps()).containsExactly(persistedStep);
+        assertThat(persistedStep.getDecision()).isEqualTo(ApprovalDecision.PENDING);
+        assertThat(persistedStep.getDecidedById()).isNull();
+        verify(requestRepository, never()).save(any());
+        verifyNoInteractions(approvalActionExecutor, governanceService);
+    }
+
+    @Test
+    void supportedLifecycleDecisionUsesLockedRereadAndSucceedsAfterBothLocks() {
+        UUID approvalId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecyclePending(
+                approvalId,
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                targetId,
+                "{}",
+                new CreateApprovalRequest.StepInput(actorId, null),
+                new CreateApprovalRequest.StepInput(null, "SECOND_REVIEWER"));
+        stubLifecycleMutationLock(
+                approvalId, ApprovalTargetType.PLANNED_SHUTDOWN, targetId, approval);
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.approve(
+                approvalId, new DecisionRequest(actorId, "first step approved"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.PENDING);
+        assertThat(result.currentStep()).isEqualTo(2);
+        assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.APPROVED);
+        assertThat(approval.getSteps().getFirst().getDecidedById()).isEqualTo(actorId);
+        InOrder lockOrder = org.mockito.Mockito.inOrder(jdbcTemplate, requestRepository);
+        lockOrder.verify(jdbcTemplate).query(
+                eq(LIFECYCLE_IDENTITY_SQL), any(RowMapper.class), eq(approvalId));
+        lockOrder.verify(jdbcTemplate).query(
+                eq(lifecycleDomainLockSql(ApprovalTargetType.PLANNED_SHUTDOWN)),
+                any(RowMapper.class), eq(targetId));
+        lockOrder.verify(jdbcTemplate).query(
+                eq("SELECT pg_advisory_xact_lock(?, ?)"),
+                any(PreparedStatementSetter.class), any(ResultSetExtractor.class));
+        lockOrder.verify(requestRepository).findByIdAndIsDeletedFalseForUpdate(approvalId);
+        lockOrder.verify(requestRepository).save(approval);
+        verifyNoInteractions(approvalActionExecutor);
+    }
+
+    @Test
+    void unrelatedIdentityUsesExistingRequestPathWithoutLifecycleLocks() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        ApprovalRequest workOrder = pendingMultiStepApproval(
+                approvalId, requesterId, 1, UUID.randomUUID());
+        UUID targetId = workOrder.getTargetId();
+        when(jdbcTemplate.query(eq(LIFECYCLE_IDENTITY_SQL), any(RowMapper.class), eq(approvalId)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    java.sql.ResultSet rs = org.mockito.Mockito.mock(java.sql.ResultSet.class);
+                    when(rs.getString("target_type")).thenReturn(ApprovalTargetType.WORK_ORDER.name());
+                    when(rs.getObject("target_id", UUID.class)).thenReturn(targetId);
+                    when(rs.getString("action_type")).thenReturn(ApprovalActionType.APPROVE.name());
+                    return List.of(mapper.mapRow(rs, 0));
+                });
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(workOrder));
+        when(requestRepository.save(workOrder)).thenReturn(workOrder);
+
+        ApprovalRequestDto result = service.cancel(approvalId);
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.CANCELLED);
+        verify(requestRepository).findByIdAndIsDeletedFalse(approvalId);
+        verify(requestRepository, never()).findByIdAndIsDeletedFalseForUpdate(any());
+        verify(jdbcTemplate, never()).query(
+                eq("SELECT pg_advisory_xact_lock(?, ?)"),
+                any(PreparedStatementSetter.class), any(ResultSetExtractor.class));
+        verify(jdbcTemplate, never()).query(
+                eq(lifecycleDomainLockSql(ApprovalTargetType.REPAIR_CAMPAIGN)),
+                any(RowMapper.class), any(UUID.class));
+        verify(jdbcTemplate, never()).query(
+                eq(lifecycleDomainLockSql(ApprovalTargetType.PLANNED_SHUTDOWN)),
+                any(RowMapper.class), any(UUID.class));
+    }
+
+    @Test
+    void lifecycleUserCancelUsesDomainAndApprovalLocksBeforeLockedReread() {
+        UUID approvalId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, UUID.randomUUID(), "REVIEWER");
+        approval.setTargetId(targetId);
+        stubLifecycleMutationLock(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, targetId, approval);
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.cancel(approvalId);
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.CANCELLED);
+        InOrder order = org.mockito.Mockito.inOrder(jdbcTemplate, requestRepository);
+        order.verify(jdbcTemplate).query(
+                eq(LIFECYCLE_IDENTITY_SQL), any(RowMapper.class), eq(approvalId));
+        order.verify(jdbcTemplate).query(
+                eq(lifecycleDomainLockSql(ApprovalTargetType.REPAIR_CAMPAIGN)),
+                any(RowMapper.class), eq(targetId));
+        order.verify(jdbcTemplate).query(
+                eq("SELECT pg_advisory_xact_lock(?, ?)"),
+                any(PreparedStatementSetter.class), any(ResultSetExtractor.class));
+        order.verify(requestRepository).findByIdAndIsDeletedFalseForUpdate(approvalId);
+        order.verify(requestRepository).save(approval);
+        verify(approvalScopeService).assertCanCancelApproval(approval);
+    }
+
+    @Test
+    void lifecycleReturnToStepUsesDomainAndApprovalLocksBeforeReopeningRoute() {
+        UUID approvalId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID firstActor = UUID.randomUUID();
+        UUID currentActor = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleApprovalWithApprovedFirstStep(
+                approvalId,
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                UUID.randomUUID(),
+                firstActor,
+                "CURRENT_REVIEWER");
+        approval.setTargetId(targetId);
+        User actor = activeUserWithRole(currentActor, "CURRENT_REVIEWER");
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(currentActor);
+        when(userRepository.findByIdAndIsDeletedFalse(currentActor)).thenReturn(Optional.of(actor));
+        stubLifecycleMutationLock(
+                approvalId, ApprovalTargetType.PLANNED_SHUTDOWN, targetId, approval);
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.returnToStep(
+                approvalId, new ReturnApprovalRequest(currentActor, 1, "Rework scope evidence"));
+
+        assertThat(result.currentStep()).isEqualTo(1);
+        assertThat(approval.getSteps()).extracting(ApprovalStep::getDecision)
+                .containsExactly(ApprovalDecision.PENDING, ApprovalDecision.PENDING);
+        InOrder order = org.mockito.Mockito.inOrder(jdbcTemplate, requestRepository);
+        order.verify(jdbcTemplate).query(
+                eq(LIFECYCLE_IDENTITY_SQL), any(RowMapper.class), eq(approvalId));
+        order.verify(jdbcTemplate).query(
+                eq(lifecycleDomainLockSql(ApprovalTargetType.PLANNED_SHUTDOWN)),
+                any(RowMapper.class), eq(targetId));
+        order.verify(jdbcTemplate).query(
+                eq("SELECT pg_advisory_xact_lock(?, ?)"),
+                any(PreparedStatementSetter.class), any(ResultSetExtractor.class));
+        order.verify(requestRepository).findByIdAndIsDeletedFalseForUpdate(approvalId);
+        order.verify(requestRepository).save(approval);
     }
 
     @Test
@@ -1301,6 +1487,106 @@ class ApprovalServiceTest {
         verify(governanceService).record(eq(scopeStale), eq(ApprovalStatus.PENDING),
                 eq(ApprovalStatus.CANCELLED), eq(actorId), eq("Superseded by a newer repair campaign scope snapshot"));
         verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void cancelPendingLifecycleApprovalCancelsEveryExactPendingAndPreservesRuntimeSteps() {
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        String reason = "PLANNED_SHUTDOWN_APPROVAL_SCOPE_INVALIDATED";
+        ApprovalRequest pending = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.PLANNED_SHUTDOWN, targetId,
+                "{\"scopeVersion\":7}",
+                new CreateApprovalRequest.StepInput(null, "OPERATIONS_REVIEWER"),
+                new CreateApprovalRequest.StepInput(UUID.randomUUID(), null));
+        ApprovalRequest duplicate = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.PLANNED_SHUTDOWN, targetId,
+                "{\"scopeVersion\":7}",
+                new CreateApprovalRequest.StepInput(null, "SECOND_RUNTIME_ROUTE"));
+        List<ApprovalStep> persistedSteps = List.copyOf(pending.getSteps());
+        List<ApprovalStep> duplicateSteps = List.copyOf(duplicate.getSteps());
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(pending, duplicate));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.cancelPendingLifecycleApproval(ApprovalTargetType.PLANNED_SHUTDOWN, targetId, reason);
+
+        assertThat(pending.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
+        assertThat(pending.getCompletedAt()).isNotNull();
+        assertThat(pending.getFailureReason()).isEqualTo(reason);
+        assertThat(pending.getSteps()).containsExactlyElementsOf(persistedSteps);
+        assertThat(pending.getSteps()).allMatch(step -> step.getDecision() == ApprovalDecision.PENDING);
+        assertThat(duplicate.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
+        assertThat(duplicate.getCompletedAt()).isNotNull();
+        assertThat(duplicate.getFailureReason()).isEqualTo(reason);
+        assertThat(duplicate.getSteps()).containsExactlyElementsOf(duplicateSteps);
+        assertThat(duplicate.getSteps()).allMatch(step -> step.getDecision() == ApprovalDecision.PENDING);
+        verify(requestRepository).saveAndFlush(pending);
+        verify(requestRepository).saveAndFlush(duplicate);
+        verify(governanceService).record(
+                pending, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED, actorId, reason);
+        verify(governanceService).record(
+                duplicate, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED, actorId, reason);
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void cancelPendingLifecycleApprovalRejectsUnrelatedTargetsWithoutMutation() {
+        UUID targetId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.cancelPendingLifecycleApproval(
+                ApprovalTargetType.WORK_ORDER, targetId, "scope changed"))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Unsupported lifecycle approval target/action");
+
+        verifyNoInteractions(requestRepository, governanceService, routeResolver);
+    }
+
+    @Test
+    void explicitRequestAfterScopeCancellationResolvesAndFreezesThenCurrentTemplate() {
+        UUID targetId = UUID.randomUUID();
+        ApprovalRequest superseded = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.REPAIR_CAMPAIGN, targetId,
+                "{\"scopeVersion\":12}",
+                new CreateApprovalRequest.StepInput(null, "OLD_TEMPLATE_ROLE"));
+        UUID currentExplicitApprover = UUID.randomUUID();
+        ArrayList<CreateApprovalRequest.StepInput> thenCurrentRoute = new ArrayList<>(List.of(
+                new CreateApprovalRequest.StepInput(null, "NEW_TEMPLATE_ROLE"),
+                new CreateApprovalRequest.StepInput(currentExplicitApprover, null)));
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(superseded), List.of());
+        when(requestRepository.saveAndFlush(superseded)).thenReturn(superseded);
+        when(routeResolver.resolveLifecycleRoute(
+                ApprovalTargetType.REPAIR_CAMPAIGN, ApprovalActionType.APPROVE))
+                .thenReturn(new LifecycleRouteResolution(
+                        thenCurrentRoute, LifecycleApprovalRoutePolicy.Reason.VALID));
+
+        service.cancelPendingLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                targetId,
+                "REPAIR_CAMPAIGN_APPROVAL_SCOPE_INVALIDATED");
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                targetId,
+                ApprovalActionType.APPROVE,
+                false,
+                null);
+        thenCurrentRoute.clear();
+
+        assertThat(superseded.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
+        assertThat(plan.creatable()).isTrue();
+        assertThat(plan.frozenSteps()).extracting(CreateApprovalRequest.StepInput::approverRole)
+                .containsExactly("NEW_TEMPLATE_ROLE", null);
+        assertThat(plan.frozenSteps()).extracting(CreateApprovalRequest.StepInput::approverId)
+                .containsExactly(null, currentExplicitApprover);
+        verify(routeResolver).resolveLifecycleRoute(
+                ApprovalTargetType.REPAIR_CAMPAIGN, ApprovalActionType.APPROVE);
     }
 
     @Test
@@ -2286,6 +2572,33 @@ class ApprovalServiceTest {
         first.setDecidedById(approvedActorId);
         first.setDecidedAt(Instant.now().minusSeconds(30));
         return approval;
+    }
+
+    private void stubLifecycleMutationLock(
+            UUID approvalId,
+            ApprovalTargetType targetType,
+            UUID targetId,
+            ApprovalRequest reread) {
+        when(jdbcTemplate.query(eq(LIFECYCLE_IDENTITY_SQL), any(RowMapper.class), eq(approvalId)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    RowMapper<Object> mapper = invocation.getArgument(1);
+                    java.sql.ResultSet rs = org.mockito.Mockito.mock(java.sql.ResultSet.class);
+                    when(rs.getString("target_type")).thenReturn(targetType.name());
+                    when(rs.getObject("target_id", UUID.class)).thenReturn(targetId);
+                    when(rs.getString("action_type")).thenReturn(ApprovalActionType.APPROVE.name());
+                    return List.of(mapper.mapRow(rs, 0));
+                });
+        when(jdbcTemplate.query(eq(lifecycleDomainLockSql(targetType)), any(RowMapper.class), eq(targetId)))
+                .thenReturn(List.of(targetId));
+        when(requestRepository.findByIdAndIsDeletedFalseForUpdate(approvalId))
+                .thenReturn(Optional.of(reread));
+    }
+
+    private static String lifecycleDomainLockSql(ApprovalTargetType targetType) {
+        return targetType == ApprovalTargetType.REPAIR_CAMPAIGN
+                ? "SELECT id FROM repair_campaigns WHERE id = ? AND is_deleted = false FOR UPDATE"
+                : "SELECT id FROM planned_shutdowns WHERE id = ? AND is_deleted = false FOR UPDATE";
     }
 
     private void stubLifecycleActor(UUID approvalId,

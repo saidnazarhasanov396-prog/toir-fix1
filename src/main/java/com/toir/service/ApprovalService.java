@@ -57,6 +57,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.TransactionException;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
@@ -756,6 +757,21 @@ public class ApprovalService implements ApprovalOrchestrator {
                 reason);
     }
 
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void cancelPendingLifecycleApproval(
+            ApprovalTargetType targetType, UUID targetId, String reason) {
+        if (targetId == null
+                || !lifecycleApprovalRoutePolicy.supports(targetType, ApprovalActionType.APPROVE)) {
+            throw RestException.badRequest("Unsupported lifecycle approval target/action");
+        }
+        lockApprovalTargetAction(targetType.name(), targetId, ApprovalActionType.APPROVE);
+        UUID changedBy = scopeAccessService.currentUserIdOrNull();
+        requestRepository.findAllPendingByTargetAndAction(
+                        targetType.name(), targetId,
+                        ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name())
+                .forEach(request -> cancelLifecyclePending(request, changedBy, reason));
+    }
+
     private void requireValidLifecyclePlanIdentity(LifecycleApprovalStartPlan plan) {
         if (plan == null) {
             throw RestException.badRequest("Lifecycle approval plan is required");
@@ -1054,7 +1070,7 @@ public class ApprovalService implements ApprovalOrchestrator {
 
     @Transactional
     public ApprovalRequestDto returnToStep(UUID requestId, ReturnApprovalRequest returnRequest) {
-        ApprovalRequest request = getOrThrow(requestId);
+        ApprovalRequest request = lockLifecycleMutationRequest(requestId);
         UUID actorId = effectiveDecisionActor(returnRequest == null ? null : returnRequest.approverId());
         expireIfNeeded(request);
         if (request.getStatus() != ApprovalStatus.PENDING) {
@@ -1127,7 +1143,7 @@ public class ApprovalService implements ApprovalOrchestrator {
 
     @Transactional
     public ApprovalRequestDto cancel(UUID requestId) {
-        ApprovalRequest request = getOrThrow(requestId);
+        ApprovalRequest request = lockLifecycleMutationRequest(requestId);
         approvalScopeService.assertCanCancelApproval(request);
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
@@ -1163,7 +1179,7 @@ public class ApprovalService implements ApprovalOrchestrator {
     }
 
     private ApprovalRequestDto applyDecision(UUID requestId, UUID expectedStepId, DecisionRequest decision, ApprovalDecision outcome) {
-        ApprovalRequest request = getOrThrow(requestId);
+        ApprovalRequest request = lockLifecycleMutationRequest(requestId);
         UUID actorId = effectiveDecisionActor(decision);
         if (request.getStatus() == ApprovalStatus.FAILED) {
             if (expectedStepId != null && !expectedStepId.equals(currentStepOrThrow(request).getId())) {
@@ -1234,6 +1250,55 @@ public class ApprovalService implements ApprovalOrchestrator {
 
         return toDto(request);
     }
+
+    private ApprovalRequest lockLifecycleMutationRequest(UUID requestId) {
+        List<LifecycleDecisionIdentity> identities = jdbcTemplate.query(
+                """
+                SELECT COALESCE(target_type, document_type) AS target_type,
+                       COALESCE(target_id, document_id) AS target_id,
+                       COALESCE(action_type, 'APPROVE') AS action_type
+                FROM approval_requests
+                WHERE id = ? AND is_deleted = false
+                """,
+                (rs, rowNum) -> new LifecycleDecisionIdentity(
+                        ApprovalTargetType.fromDocumentType(rs.getString("target_type")),
+                        rs.getObject("target_id", UUID.class),
+                        ApprovalActionType.valueOf(rs.getString("action_type"))),
+                requestId);
+        if (identities.isEmpty()) {
+            return getOrThrow(requestId);
+        }
+        LifecycleDecisionIdentity identity = identities.getFirst();
+        if (!lifecycleApprovalRoutePolicy.supports(identity.targetType(), identity.actionType())
+                || identity.targetId() == null) {
+            return getOrThrow(requestId);
+        }
+
+        lockLifecycleDomainRow(identity.targetType(), identity.targetId());
+        lockApprovalTargetAction(identity.targetType().name(), identity.targetId(), identity.actionType());
+        return requestRepository.findByIdAndIsDeletedFalseForUpdate(requestId)
+                .orElseThrow(() -> RestException.notFound("Approval request not found: " + requestId));
+    }
+
+    private void lockLifecycleDomainRow(ApprovalTargetType targetType, UUID targetId) {
+        String sql = switch (targetType) {
+            case REPAIR_CAMPAIGN ->
+                    "SELECT id FROM repair_campaigns WHERE id = ? AND is_deleted = false FOR UPDATE";
+            case PLANNED_SHUTDOWN ->
+                    "SELECT id FROM planned_shutdowns WHERE id = ? AND is_deleted = false FOR UPDATE";
+            default -> throw RestException.badRequest("Unsupported lifecycle approval target/action");
+        };
+        List<UUID> locked = jdbcTemplate.query(
+                sql,
+                (rs, rowNum) -> rs.getObject("id", UUID.class),
+                targetId);
+        if (locked.isEmpty()) {
+            throw RestException.notFound("Lifecycle approval target not found: " + targetId);
+        }
+    }
+
+    private record LifecycleDecisionIdentity(
+            ApprovalTargetType targetType, UUID targetId, ApprovalActionType actionType) {}
 
     private ApprovalRequestDto retryFailedFinalization(ApprovalRequest request,
                                                        DecisionRequest decision,

@@ -222,10 +222,9 @@ public class PlannedShutdownService {
         shutdown.setNotes(r.notes());
         shutdown.setRiskLevel(normalizeNullable(r.riskLevel()));
         shutdown.setRiskScore(r.riskScore());
+        invalidatePendingApproval(shutdown);
         shutdown.setScopeVersion(shutdown.getScopeVersion() + 1);
         if (windowChanged) bumpWindowVersion(shutdown);
-        shutdown.setApprovalScopeVersion(null);
-        shutdown.setApprovalScopeHash(null);
         PlannedShutdown saved = saveRoot(shutdown, code);
         auditBuilderService.log("planned_shutdown", id.toString(), AuditAction.UPDATE,
                 AuditModule.PLANNED_SHUTDOWN, "Плановая остановка обновлена", before,
@@ -912,6 +911,8 @@ public class PlannedShutdownService {
         String reason = requireReason(request.reason(), "RESCHEDULE_REASON_REQUIRED", shutdown);
         validateWindow(request.newStartAt(), request.newEndAt());
         Window old = window(shutdown);
+        PlannedShutdownStatus from = shutdown.getLifecycleStatus();
+        invalidatePendingApproval(shutdown);
         shutdown.setStartAt(request.newStartAt());
         shutdown.setEndAt(request.newEndAt());
         shutdown.setPlannedStartAt(request.newStartAt());
@@ -919,12 +920,9 @@ public class PlannedShutdownService {
         shutdown.setApprovedStartAt(null);
         shutdown.setApprovedEndAt(null);
         shutdown.setEffectiveExtensionEndAt(null);
-        shutdown.setApprovalScopeVersion(null);
-        shutdown.setApprovalScopeHash(null);
         shutdown.setRescheduleReason(reason);
         shutdown.setScopeVersion(shutdown.getScopeVersion() + 1);
         bumpWindowVersion(shutdown);
-        PlannedShutdownStatus from = shutdown.getLifecycleStatus();
         PlannedShutdownStatus target = EnumSet.of(PlannedShutdownStatus.DRAFT, PlannedShutdownStatus.SCOPE_FORMATION)
                 .contains(shutdown.getLifecycleStatus()) ? PlannedShutdownStatus.SCOPE_FORMATION
                 : PlannedShutdownStatus.READINESS_CHECK;
@@ -1300,10 +1298,23 @@ public class PlannedShutdownService {
     }
 
     private PlannedShutdown incrementScope(PlannedShutdown shutdown) {
+        invalidatePendingApproval(shutdown);
         shutdown.setScopeVersion(shutdown.getScopeVersion() + 1);
+        return repository.saveAndFlush(shutdown);
+    }
+
+    private void invalidatePendingApproval(PlannedShutdown shutdown) {
+        approvalServiceProvider.getObject().cancelPendingLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                shutdown.getId(),
+                "PLANNED_SHUTDOWN_APPROVAL_SCOPE_INVALIDATED");
         shutdown.setApprovalScopeVersion(null);
         shutdown.setApprovalScopeHash(null);
-        return repository.saveAndFlush(shutdown);
+        shutdown.setApprovedStartAt(null);
+        shutdown.setApprovedEndAt(null);
+        if (shutdown.getLifecycleStatus() == PlannedShutdownStatus.PENDING_APPROVAL) {
+            shutdown.setStatus(PlannedShutdownStatus.READINESS_CHECK);
+        }
     }
 
     private PlannedShutdownDetailResponse transition(UUID id, PlannedShutdownTransitionRequest request,
