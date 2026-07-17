@@ -1,8 +1,9 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/toir_demo
+    url: jdbc:postgresql://localhost:5433/toir_migration_test
     username: postgres
     password: root123
+    driver-class-name: org.postgresql.Driver
     hikari:
       connection-timeout: 3000
 
@@ -14,9 +15,9 @@ spring:
       mode: never
 
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: none
 
   test:
     database:
