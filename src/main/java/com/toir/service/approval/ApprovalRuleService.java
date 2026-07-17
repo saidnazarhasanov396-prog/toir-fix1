@@ -31,6 +31,7 @@ public class ApprovalRuleService {
 
     private final ApprovalTemplateRepository templateRepository;
     private final UserRepository userRepository;
+    private final LifecycleApprovalRoutePolicy lifecycleRoutePolicy;
 
     @Transactional(readOnly = true)
     public List<ApprovalRuleDto> listRules() {
@@ -66,19 +67,26 @@ public class ApprovalRuleService {
         validateRule(request);
         ApprovalActionType actionType = effectiveActionType(request.actionType());
         String code = ruleCode(request.targetType(), actionType);
-        ApprovalTemplate template = templateRepository
-                .findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
-                        request.targetType(),
-                        actionType
-                )
-                .orElseGet(() -> templateRepository.findByCode(code)
-                        .map(existing -> {
-                            if (!existing.isDeleted()) {
-                                throw RestException.conflict("Approval template code already exists: " + code);
-                            }
-                            return existing;
-                        })
-                        .orElseGet(ApprovalTemplate::new));
+        ApprovalTemplate template;
+        if (lifecycleRoutePolicy.supports(request.targetType(), actionType)) {
+            template = templateRepository.findByCode(code)
+                    .filter(ApprovalTemplate::isDeleted)
+                    .orElseGet(ApprovalTemplate::new);
+        } else {
+            template = templateRepository
+                    .findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
+                            request.targetType(),
+                            actionType
+                    )
+                    .orElseGet(() -> templateRepository.findByCode(code)
+                            .map(existing -> {
+                                if (!existing.isDeleted()) {
+                                    throw RestException.conflict("Approval template code already exists: " + code);
+                                }
+                                return existing;
+                            })
+                            .orElseGet(ApprovalTemplate::new));
+        }
 
         return saveRule(template, request);
     }
@@ -110,6 +118,15 @@ public class ApprovalRuleService {
     private ApprovalRuleDto saveRule(ApprovalTemplate template, ApprovalRuleDto request) {
         ApprovalActionType actionType = effectiveActionType(request.actionType());
         String code = ruleCode(request.targetType(), actionType);
+        boolean lifecycleRule = lifecycleRoutePolicy.supports(request.targetType(), actionType);
+        LifecycleApprovalRoutePolicy.ValidationResult lifecycleValidation = lifecycleRule
+                ? validateLifecycleCandidate(request)
+                : null;
+
+        if (lifecycleRule && request.active()) {
+            rejectOtherActiveLifecycleTemplates(template, request.targetType(), actionType);
+        }
+
         templateRepository.findByCode(code)
                 .filter(existing -> template.getId() == null || !existing.getId().equals(template.getId()))
                 .ifPresent(existing -> {
@@ -122,12 +139,18 @@ public class ApprovalRuleService {
         template.setTargetType(request.targetType());
         template.setActionType(actionType);
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
-        template.setApproverId(null);
-        template.setApproverRole(normalizedRole(request.steps().getFirst().approverRole()));
+        if (lifecycleRule) {
+            LifecycleApprovalRoutePolicy.RouteStep first = lifecycleValidation.orderedSteps().getFirst();
+            template.setApproverId(first.approverId());
+            template.setApproverRole(first.approverRole());
+        } else {
+            template.setApproverId(null);
+            template.setApproverRole(normalizedRole(request.steps().getFirst().approverRole()));
+        }
         template.setActive(request.active());
         template.setDeleted(false);
 
-        if (request.active()) {
+        if (request.active() && !lifecycleRule) {
             List<ApprovalTemplate> activeTemplates = templateRepository
                     .findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
                             request.targetType(),
@@ -145,20 +168,34 @@ public class ApprovalRuleService {
                 templateRepository.saveAndFlush(template);
             }
 
-            request.steps().stream()
-                    .sorted(Comparator.comparingInt(ApprovalRuleDto.Step::order))
-                    .forEach(stepRequest -> {
-                        ApprovalTemplateStep step = new ApprovalTemplateStep();
-                        step.setTemplate(template);
-                        step.setStepOrder(stepRequest.order());
-                        step.setApproverId(null);
-                        step.setApproverRole(normalizedRole(stepRequest.approverRole()));
-                        template.getSteps().add(step);
-                    });
+            if (lifecycleRule) {
+                lifecycleValidation.orderedSteps().forEach(routeStep -> {
+                    ApprovalTemplateStep step = new ApprovalTemplateStep();
+                    step.setTemplate(template);
+                    step.setStepOrder(routeStep.order());
+                    step.setApproverId(routeStep.approverId());
+                    step.setApproverRole(routeStep.approverRole());
+                    template.getSteps().add(step);
+                });
+            } else {
+                request.steps().stream()
+                        .sorted(Comparator.comparingInt(ApprovalRuleDto.Step::order))
+                        .forEach(stepRequest -> {
+                            ApprovalTemplateStep step = new ApprovalTemplateStep();
+                            step.setTemplate(template);
+                            step.setStepOrder(stepRequest.order());
+                            step.setApproverId(null);
+                            step.setApproverRole(normalizedRole(stepRequest.approverRole()));
+                            template.getSteps().add(step);
+                        });
+            }
 
             ApprovalTemplate saved = templateRepository.saveAndFlush(template);
             return toDto(saved, Map.of());
         } catch (DataIntegrityViolationException ex) {
+            if (hasExactConstraint(ex, "uq_active_lifecycle_approval_template")) {
+                throw RestException.conflict("MULTIPLE_ACTIVE_TEMPLATES");
+            }
             if (isCodeConflict(ex)) {
                 throw RestException.conflict("Approval template code already exists: " + code);
             }
@@ -216,6 +253,11 @@ public class ApprovalRuleService {
         if (request.targetType() == null) {
             throw RestException.badRequest("targetType is required");
         }
+        if (lifecycleRoutePolicy.supports(
+                request.targetType(), effectiveActionType(request.actionType()))) {
+            validateLifecycleCandidate(request);
+            return;
+        }
         if (request.steps() == null || request.steps().isEmpty()) {
             throw RestException.badRequest("At least one approval step is required");
         }
@@ -234,6 +276,96 @@ public class ApprovalRuleService {
                 throw RestException.badRequest("approverRole is required for role-based approval templates");
             }
         }
+    }
+
+    private LifecycleApprovalRoutePolicy.ValidationResult validateLifecycleCandidate(
+            ApprovalRuleDto request
+    ) {
+        ApprovalTemplate candidate = new ApprovalTemplate();
+        candidate.setCode(ruleCode(request.targetType(), effectiveActionType(request.actionType())));
+        candidate.setName(StringUtils.hasText(request.documentName())
+                ? request.documentName().trim()
+                : documentName(request.targetType()));
+        candidate.setTargetType(request.targetType());
+        candidate.setActionType(effectiveActionType(request.actionType()));
+        candidate.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
+        candidate.setActive(request.active());
+        candidate.setDeleted(false);
+
+        List<ApprovalRuleDto.Step> requestSteps = request.steps() == null
+                ? List.of()
+                : request.steps();
+        for (ApprovalRuleDto.Step stepRequest : requestSteps) {
+            if (!hasValidLifecycleAssignment(stepRequest)) {
+                throw invalidLifecycleSteps();
+            }
+            ApprovalTemplateStep step = new ApprovalTemplateStep();
+            step.setTemplate(candidate);
+            step.setStepOrder(stepRequest.order());
+            step.setApproverId(stepRequest.approverType() == ApprovalRuleDto.ApproverType.USER
+                    ? stepRequest.approverId()
+                    : null);
+            step.setApproverRole(stepRequest.approverType() == ApprovalRuleDto.ApproverType.ROLE
+                    ? normalizedRole(stepRequest.approverRole())
+                    : null);
+            candidate.getSteps().add(step);
+        }
+
+        candidate.getSteps().stream()
+                .min(Comparator.comparingInt(ApprovalTemplateStep::getStepOrder))
+                .ifPresent(first -> {
+                    candidate.setApproverId(first.getApproverId());
+                    candidate.setApproverRole(first.getApproverRole());
+                });
+
+        LifecycleApprovalRoutePolicy.ValidationResult validation =
+                lifecycleRoutePolicy.validateTemplate(candidate);
+        if (!validation.valid()) {
+            throw invalidLifecycleSteps();
+        }
+        return validation;
+    }
+
+    private boolean hasValidLifecycleAssignment(ApprovalRuleDto.Step step) {
+        if (step == null || step.approverType() == null) {
+            return false;
+        }
+        boolean hasApproverId = step.approverId() != null;
+        boolean hasApproverRole = StringUtils.hasText(step.approverRole());
+        return switch (step.approverType()) {
+            case USER -> hasApproverId && !hasApproverRole;
+            case ROLE -> !hasApproverId && hasApproverRole;
+        };
+    }
+
+    private RestException invalidLifecycleSteps() {
+        return RestException.badRequest("APPROVAL_TEMPLATE_STEPS_INVALID");
+    }
+
+    private void rejectOtherActiveLifecycleTemplates(
+            ApprovalTemplate template,
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType
+    ) {
+        List<ApprovalTemplate> templates = templateRepository.findAllRules();
+        boolean hasOther = (templates == null ? List.<ApprovalTemplate>of() : templates)
+                .stream()
+                .filter(java.util.Objects::nonNull)
+                .filter(ApprovalTemplate::isActive)
+                .filter(existing -> !existing.isDeleted())
+                .filter(existing -> existing.getTargetType() == targetType)
+                .filter(existing -> effectiveActionType(existing) == actionType)
+                .anyMatch(existing -> !sameTemplateId(existing, template));
+        if (hasOther) {
+            throw RestException.conflict("MULTIPLE_ACTIVE_TEMPLATES");
+        }
+    }
+
+    private boolean sameTemplateId(ApprovalTemplate first, ApprovalTemplate second) {
+        return first != null
+                && second != null
+                && first.getId() != null
+                && first.getId().equals(second.getId());
     }
 
     private String normalizedRole(String role) {
@@ -307,6 +439,27 @@ public class ApprovalRuleService {
             return false;
         }
         return message.toLowerCase(Locale.ROOT).contains("uq_approval_template_steps_order");
+    }
+
+    private boolean hasExactConstraint(Throwable failure, String constraintName) {
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof org.hibernate.exception.ConstraintViolationException violation
+                    && constraintName.equalsIgnoreCase(violation.getConstraintName())) {
+                return true;
+            }
+            if (containsExactConstraintToken(current.getMessage(), constraintName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsExactConstraintToken(String message, String constraintName) {
+        if (message == null) {
+            return false;
+        }
+        return java.util.Arrays.stream(message.split("[^A-Za-z0-9_]+"))
+                .anyMatch(constraintName::equalsIgnoreCase);
     }
 
     private record RuleStep(int order, UUID approverId, String approverRole) {

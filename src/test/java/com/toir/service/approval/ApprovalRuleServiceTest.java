@@ -11,6 +11,9 @@ import com.toir.exception.RestException;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.repository.users.UserRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -23,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -32,7 +36,11 @@ class ApprovalRuleServiceTest {
 
     private final ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final ApprovalRuleService service = new ApprovalRuleService(templateRepository, userRepository);
+    private final ApprovalRuleService service = new ApprovalRuleService(
+            templateRepository,
+            userRepository,
+            new LifecycleApprovalRoutePolicy()
+    );
 
     @Test
     void returnsTemplateRulesWithRoleAndUserStepsAndCorrectCount() {
@@ -155,6 +163,300 @@ class ApprovalRuleServiceTest {
         verify(templateRepository, times(2)).saveAndFlush(template);
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 7, 9})
+    void activeLifecycleTemplateAllowsVariableStepCounts(int count) {
+        stubActiveLifecycleSave();
+        List<ApprovalRuleDto.Step> steps = java.util.stream.IntStream.rangeClosed(1, count)
+                .mapToObj(order -> roleStep(order, "APPROVER_" + order))
+                .toList();
+
+        ApprovalRuleDto saved = service.saveRule(lifecycleRule(
+                ApprovalTargetType.REPAIR_CAMPAIGN, steps, true));
+
+        ArgumentCaptor<ApprovalTemplate> captor = ArgumentCaptor.forClass(ApprovalTemplate.class);
+        verify(templateRepository).saveAndFlush(captor.capture());
+        assertThat(saved.stepsCount()).isEqualTo(count);
+        assertThat(saved.steps()).extracting(ApprovalRuleDto.Step::order)
+                .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, count).boxed().toList());
+        assertThat(captor.getValue().getSteps()).extracting(ApprovalTemplateStep::getStepOrder)
+                .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, count).boxed().toList());
+    }
+
+    @Test
+    void oneSystemAdminRoleStepSavesForActiveLifecycleTemplate() {
+        stubActiveLifecycleSave();
+
+        ApprovalRuleDto saved = service.saveRule(lifecycleRule(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                List.of(roleStep(1, "SYSTEM_ADMIN")),
+                true));
+
+        assertThat(saved.steps()).singleElement().satisfies(step -> {
+            assertThat(step.approverType()).isEqualTo(ApprovalRuleDto.ApproverType.ROLE);
+            assertThat(step.approverId()).isNull();
+            assertThat(step.approverRole()).isEqualTo("SYSTEM_ADMIN");
+        });
+    }
+
+    @Test
+    void repeatedRolesSaveForActiveLifecycleTemplate() {
+        stubActiveLifecycleSave();
+
+        ApprovalRuleDto saved = service.saveRule(lifecycleRule(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                List.of(roleStep(1, "MANAGER"), roleStep(2, "MANAGER")),
+                true));
+
+        assertThat(saved.steps()).extracting(ApprovalRuleDto.Step::approverRole)
+                .containsExactly("MANAGER", "MANAGER");
+    }
+
+    @Test
+    void explicitUserStepRetainsApproverIdAndNullRole() {
+        UUID approverId = UUID.randomUUID();
+        stubActiveLifecycleSave();
+
+        ApprovalRuleDto saved = service.saveRule(lifecycleRule(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                List.of(userStep(1, approverId)),
+                true));
+
+        ArgumentCaptor<ApprovalTemplate> captor = ArgumentCaptor.forClass(ApprovalTemplate.class);
+        verify(templateRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getSteps()).singleElement().satisfies(step -> {
+            assertThat(step.getApproverId()).isEqualTo(approverId);
+            assertThat(step.getApproverRole()).isNull();
+        });
+        assertThat(saved.steps()).singleElement().satisfies(step -> {
+            assertThat(step.approverType()).isEqualTo(ApprovalRuleDto.ApproverType.USER);
+            assertThat(step.approverId()).isEqualTo(approverId);
+            assertThat(step.approverRole()).isNull();
+        });
+    }
+
+    @Test
+    void duplicateExplicitIdsMapToInvalidWithoutTouchingExistingSteps() {
+        UUID templateId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        ApprovalTemplate existing = template(
+                "REPAIR_CAMPAIGN_APPROVE",
+                "Repair Campaign",
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                ApprovalActionType.APPROVE
+        );
+        ReflectionTestUtils.setField(existing, "id", templateId);
+        ApprovalTemplateStep original = step(existing, 1, null, "ORIGINAL_ROLE");
+        existing.getSteps().add(original);
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.updateRule(templateId, lifecycleRule(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                List.of(userStep(1, approverId), userStep(2, approverId)),
+                true)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("APPROVAL_TEMPLATE_STEPS_INVALID");
+                });
+
+        assertThat(existing.getSteps()).containsExactly(original);
+        assertThat(original.getApproverRole()).isEqualTo("ORIGINAL_ROLE");
+        verify(templateRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void assignmentXorViolationsMapToInvalid() {
+        UUID approverId = UUID.randomUUID();
+        assertInvalidLifecycleSteps(List.of(new ApprovalRuleDto.Step(
+                1, approverId, null, "MANAGER", ApprovalRuleDto.ApproverType.USER)));
+        assertInvalidLifecycleSteps(List.of(new ApprovalRuleDto.Step(
+                1, null, null, null, ApprovalRuleDto.ApproverType.ROLE)));
+        assertInvalidLifecycleSteps(List.of(new ApprovalRuleDto.Step(
+                1, approverId, null, "MANAGER", ApprovalRuleDto.ApproverType.ROLE)));
+    }
+
+    @Test
+    void emptyActiveLifecycleRouteMapsToInvalid() {
+        assertInvalidLifecycleSteps(List.of());
+    }
+
+    @Test
+    void invalidLifecycleOrdersMapToInvalid() {
+        assertInvalidLifecycleSteps(List.of(roleStep(0, "MANAGER")));
+        assertInvalidLifecycleSteps(List.of(roleStep(1, "MANAGER"), roleStep(1, "SYSTEM_ADMIN")));
+        assertInvalidLifecycleSteps(List.of(roleStep(1, "MANAGER"), roleStep(3, "SYSTEM_ADMIN")));
+    }
+
+    @Test
+    void secondActiveExactLifecycleTemplateMapsToMultipleActiveTemplates() {
+        ApprovalTemplate existing = template(
+                "LEGACY_REPAIR_CAMPAIGN_APPROVAL",
+                "Existing Repair Campaign",
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                ApprovalActionType.APPROVE
+        );
+        ReflectionTestUtils.setField(existing, "id", UUID.randomUUID());
+        when(templateRepository.findAllRules()).thenReturn(List.of(existing));
+
+        assertThatThrownBy(() -> service.saveRule(lifecycleRule(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                List.of(roleStep(1, "MANAGER")),
+                true)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).isEqualTo("MULTIPLE_ACTIVE_TEMPLATES");
+                });
+
+        assertThat(existing.isActive()).isTrue();
+        verify(templateRepository, never()).saveAndFlush(any());
+        verify(templateRepository, never())
+                .findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
+                        ApprovalTargetType.REPAIR_CAMPAIGN,
+                        ApprovalActionType.APPROVE
+                );
+    }
+
+    @Test
+    void nullActionActiveTemplateConflictsWithDifferentIdApproveRequestBeforeMutation() {
+        ApprovalTemplate legacy = template(
+                "LEGACY_REPAIR_CAMPAIGN_APPROVAL",
+                "Legacy Repair Campaign",
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                null
+        );
+        ReflectionTestUtils.setField(legacy, "id", UUID.randomUUID());
+        legacy.getSteps().add(step(legacy, 1, null, "ORIGINAL_ROLE"));
+        when(templateRepository.findAllRules()).thenReturn(List.of(legacy));
+
+        assertThatThrownBy(() -> service.saveRule(lifecycleRule(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                List.of(roleStep(1, "MANAGER")),
+                true)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).isEqualTo("MULTIPLE_ACTIVE_TEMPLATES");
+                });
+
+        assertThat(legacy.isActive()).isTrue();
+        assertThat(legacy.getActionType()).isNull();
+        assertThat(legacy.getSteps()).extracting(ApprovalTemplateStep::getApproverRole)
+                .containsExactly("ORIGINAL_ROLE");
+        verify(templateRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void sameIdNullActionLifecycleUpdateIsExcludedFromCardinalityConflict() {
+        UUID templateId = UUID.randomUUID();
+        ApprovalTemplate existing = template(
+                "PLANNED_SHUTDOWN_APPROVE",
+                "Planned Shutdown",
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                null
+        );
+        ReflectionTestUtils.setField(existing, "id", templateId);
+        existing.getSteps().add(step(existing, 1, null, "OLD_ROLE"));
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(existing));
+        when(templateRepository.findByCode("PLANNED_SHUTDOWN_APPROVE")).thenReturn(Optional.of(existing));
+        when(templateRepository.findAllRules()).thenReturn(List.of(existing));
+        when(templateRepository.saveAndFlush(existing)).thenReturn(existing);
+
+        ApprovalRuleDto saved = service.updateRule(templateId, lifecycleRule(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                List.of(roleStep(1, "SYSTEM_ADMIN")),
+                true));
+
+        assertThat(saved.steps()).extracting(ApprovalRuleDto.Step::approverRole)
+                .containsExactly("SYSTEM_ADMIN");
+        verify(templateRepository, times(2)).saveAndFlush(existing);
+    }
+
+    @Test
+    void namedLifecycleUniqueIndexViolationMapsToMultipleActiveTemplates() {
+        when(templateRepository.findAllRules()).thenReturn(List.of());
+        when(templateRepository.saveAndFlush(any(ApprovalTemplate.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "write failed",
+                        new IllegalStateException(
+                                "duplicate key violates unique constraint uq_active_lifecycle_approval_template")));
+
+        assertThatThrownBy(() -> service.saveRule(lifecycleRule(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                List.of(roleStep(1, "MANAGER")),
+                true)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(ex.getMessage()).isEqualTo("MULTIPLE_ACTIVE_TEMPLATES");
+                });
+    }
+
+    @Test
+    void unrelatedIntegrityViolationIsNotMappedAsLifecycleCardinalityConflict() {
+        DataIntegrityViolationException unrelated = new DataIntegrityViolationException(
+                "duplicate key violates unique constraint some_other_constraint");
+        when(templateRepository.findAllRules()).thenReturn(List.of());
+        when(templateRepository.saveAndFlush(any(ApprovalTemplate.class))).thenThrow(unrelated);
+
+        assertThatThrownBy(() -> service.saveRule(lifecycleRule(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                List.of(roleStep(1, "MANAGER")),
+                true))).isSameAs(unrelated);
+    }
+
+    @Test
+    void similarlyNamedLifecycleConstraintSuffixIsNotMapped() {
+        DataIntegrityViolationException suffixed = new DataIntegrityViolationException(
+                "duplicate key violates unique constraint "
+                        + "uq_active_lifecycle_approval_template_archive");
+        when(templateRepository.findAllRules()).thenReturn(List.of());
+        when(templateRepository.saveAndFlush(any(ApprovalTemplate.class))).thenThrow(suffixed);
+
+        assertThatThrownBy(() -> service.saveRule(lifecycleRule(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                List.of(roleStep(1, "MANAGER")),
+                true))).isSameAs(suffixed);
+    }
+
+    @Test
+    void workOrderKeepsExistingRoleOnlyReplacementAndDeactivationBehavior() {
+        ApprovalTemplate edited = template(
+                "WORK_ORDER_APPROVE",
+                "Work Order",
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        );
+        ApprovalTemplate otherActive = template(
+                "LEGACY_WORK_ORDER_APPROVE",
+                "Legacy Work Order",
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        );
+        ReflectionTestUtils.setField(edited, "id", UUID.randomUUID());
+        ReflectionTestUtils.setField(otherActive, "id", UUID.randomUUID());
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        )).thenReturn(Optional.of(edited));
+        when(templateRepository.findByCode("WORK_ORDER_APPROVE")).thenReturn(Optional.of(edited));
+        when(templateRepository.findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        )).thenReturn(List.of(edited, otherActive));
+        when(templateRepository.saveAndFlush(edited)).thenReturn(edited);
+
+        ApprovalRuleDto saved = service.saveRule(new ApprovalRuleDto(
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE,
+                "Work Order",
+                1,
+                List.of(roleStep(1, "DEPARTMENT_HEAD")),
+                true
+        ));
+
+        assertThat(saved.steps()).extracting(ApprovalRuleDto.Step::approverRole)
+                .containsExactly("DEPARTMENT_HEAD");
+        assertThat(otherActive.isActive()).isFalse();
+    }
+
     @Test
     void duplicateGeneratedCodeReturnsConflictBeforeInsert() {
         ApprovalTemplate existing = template(
@@ -237,6 +539,47 @@ class ApprovalRuleServiceTest {
                     assertThat(ex.getMessage()).isEqualTo(
                             "Approval template contains duplicate step order");
                 });
+    }
+
+    private void assertInvalidLifecycleSteps(List<ApprovalRuleDto.Step> steps) {
+        assertThatThrownBy(() -> service.saveRule(lifecycleRule(
+                ApprovalTargetType.REPAIR_CAMPAIGN, steps, true)))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).isEqualTo("APPROVAL_TEMPLATE_STEPS_INVALID");
+                });
+        verify(templateRepository, never()).saveAndFlush(any());
+    }
+
+    private void stubActiveLifecycleSave() {
+        when(templateRepository.findAllRules()).thenReturn(List.of());
+        when(templateRepository.saveAndFlush(any(ApprovalTemplate.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private ApprovalRuleDto lifecycleRule(
+            ApprovalTargetType targetType,
+            List<ApprovalRuleDto.Step> steps,
+            boolean active
+    ) {
+        return new ApprovalRuleDto(
+                targetType,
+                ApprovalActionType.APPROVE,
+                "Lifecycle Approval",
+                steps.size(),
+                steps,
+                active
+        );
+    }
+
+    private ApprovalRuleDto.Step roleStep(int order, String role) {
+        return new ApprovalRuleDto.Step(
+                order, null, null, role, ApprovalRuleDto.ApproverType.ROLE);
+    }
+
+    private ApprovalRuleDto.Step userStep(int order, UUID approverId) {
+        return new ApprovalRuleDto.Step(
+                order, approverId, null, null, ApprovalRuleDto.ApproverType.USER);
     }
 
     private ApprovalRuleDto rule(ApprovalTargetType targetType, ApprovalActionType actionType) {
