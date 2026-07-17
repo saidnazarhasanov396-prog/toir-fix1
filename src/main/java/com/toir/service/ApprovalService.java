@@ -51,6 +51,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
@@ -1179,7 +1180,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (expectedStepId != null && !expectedStepId.equals(current.getId())) {
             throw RestException.conflict("Only current pending step can be acted on");
         }
-        boolean delegateApprover = assertCanActOnCurrentStep(request, current, actorId) != null;
+        boolean delegateApprover = assertCanActOnCurrentStep(request, current, actorId, outcome) != null;
         current.setDecision(outcome);
         current.setDecidedById(actorId);
         current.setDelegatedForId(delegateApprover ? current.getApproverId() : null);
@@ -1309,6 +1310,48 @@ public class ApprovalService implements ApprovalOrchestrator {
         throw RestException.forbidden("Only designated approver can act on this step");
     }
 
+    private UUID assertCanActOnCurrentStep(ApprovalRequest request,
+                                           ApprovalStep current,
+                                           UUID actorId,
+                                           ApprovalDecision outcome) {
+        if (!isLifecycleApproval(request)) {
+            return assertCanActOnCurrentStep(request, current, actorId);
+        }
+        if (!matchesAuthenticatedPrincipal(actorId)) {
+            throw RestException.forbidden(
+                    "Lifecycle decision actor must match the authenticated principal");
+        }
+        boolean assignmentSatisfied = lifecycleAssignmentSatisfied(current, actorId);
+        LifecycleApprovalRoutePolicy.ValidationResult decision = lifecycleApprovalRoutePolicy.validateDecision(
+                normalizedLifecycleRuntimeView(request),
+                current,
+                actorId,
+                outcome,
+                assignmentSatisfied);
+        if (!decision.valid()) {
+            throw mapDecisionFailure(decision.reason());
+        }
+        approvalScopeService.assertCanDecideApproval(request, current);
+        return null;
+    }
+
+    private RestException mapDecisionFailure(LifecycleApprovalRoutePolicy.Reason reason) {
+        return switch (reason) {
+            case REQUESTER_DECISION -> RestException.forbidden(
+                    "Requester cannot approve or reject this lifecycle approval");
+            case REPEATED_APPROVING_ACTOR -> RestException.forbidden(
+                    "An actor cannot approve more than one lifecycle approval step");
+            case ACTOR_INELIGIBLE -> RestException.forbidden(
+                    "Only the persisted lifecycle step assignee can act on this step");
+            case DECISION_ACTOR_MISSING -> RestException.badRequest(
+                    "Authenticated decision actor is required");
+            case CURRENT_STEP_ONLY -> RestException.conflict(
+                    "Only current pending step can be acted on");
+            default -> RestException.conflict(
+                    "Lifecycle approval decision is not actionable: " + reason);
+        };
+    }
+
     private void executeTerminalAction(ApprovalRequest request, ApprovalDecision outcome) {
         if (request.isExecuted()) {
             return;
@@ -1378,19 +1421,6 @@ public class ApprovalService implements ApprovalOrchestrator {
         return delegateRepository.findActiveDelegation(approverId, delegateId, Instant.now()).isPresent();
     }
 
-    private boolean matchesCurrentPrincipal(UUID candidateId) {
-        if (candidateId == null) {
-            return false;
-        }
-        UUID currentUserId = scopeAccessService.currentUserIdOrNull();
-        if (candidateId.equals(currentUserId) || scopeAccessService.isScopeAdmin()) {
-            return true;
-        }
-        return scopeAccessService.currentEmployeeId()
-                .map(candidateId::equals)
-                .orElse(false);
-    }
-
     private boolean matchesAuthenticatedPrincipal(UUID candidateId) {
         if (candidateId == null) {
             return false;
@@ -1408,18 +1438,90 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (!matchesAuthenticatedPrincipal(actorId)) {
             return false;
         }
-        return isActiveUserWithRole(actorId, approverRole);
+        return userRepository.findByIdAndIsDeletedFalse(actorId)
+                .filter(this::isActiveUser)
+                .filter(user -> hasRole(user, approverRole)
+                        || currentAuthenticationHasRole(approverRole))
+                .isPresent();
+    }
+
+    private boolean isLifecycleApproval(ApprovalRequest request) {
+        return request != null && lifecycleApprovalRoutePolicy.supports(
+                effectiveTargetType(request), effectiveActionType(request.getActionType()));
+    }
+
+    private boolean lifecycleAssignmentSatisfied(ApprovalStep step, UUID actorId) {
+        if (step == null || actorId == null) {
+            return false;
+        }
+        if (step.getApproverId() != null) {
+            return step.getApproverId().equals(actorId);
+        }
+        return lifecycleRoleSatisfied(actorId, step.getApproverRole());
+    }
+
+    private boolean lifecycleRoleSatisfied(UUID actorId, String configuredRole) {
+        return isActiveUserWithRole(actorId, configuredRole)
+                || (matchesAuthenticatedPrincipal(actorId)
+                && currentAuthenticationHasRole(configuredRole));
     }
 
     private boolean canCurrentPrincipalActOnStep(ApprovalStep step) {
         if (step == null) {
             return false;
         }
+        return canActorActOnStep(step, currentAuthenticatedActorId());
+    }
+
+    private UUID currentAuthenticatedActorId() {
         UUID actorId = scopeAccessService.currentUserIdOrNull();
-        if (actorId == null) {
-            actorId = scopeAccessService.currentEmployeeId().orElse(null);
+        return actorId != null
+                ? actorId
+                : scopeAccessService.currentEmployeeId().orElse(null);
+    }
+
+    private boolean lifecycleDecisionIsActionable(ApprovalRequest request,
+                                                  ApprovalStep current,
+                                                  UUID actorId,
+                                                  ApprovalDecision outcome) {
+        if (actorId == null
+                || current == null
+                || !matchesAuthenticatedPrincipal(actorId)
+                || lifecycleDecisionExpired(request)) {
+            return false;
         }
-        return canActorActOnStep(step, actorId);
+        boolean assignmentSatisfied = lifecycleAssignmentSatisfied(current, actorId);
+        LifecycleApprovalRoutePolicy.ValidationResult decision = lifecycleApprovalRoutePolicy.validateDecision(
+                normalizedLifecycleRuntimeView(request),
+                current,
+                actorId,
+                outcome,
+                assignmentSatisfied);
+        return decision.valid() && hasDecisionScope(request, current);
+    }
+
+    private boolean lifecycleDecisionExpired(ApprovalRequest request) {
+        return request != null
+                && request.getExpiresAt() != null
+                && request.getExpiresAt().isBefore(Instant.now());
+    }
+
+    private boolean hasDecisionScope(ApprovalRequest request, ApprovalStep current) {
+        try {
+            approvalScopeService.assertCanDecideApproval(request, current);
+            return true;
+        } catch (AccessDeniedException ignored) {
+            return false;
+        }
+    }
+
+    private boolean hasCancellationPermission(ApprovalRequest request) {
+        try {
+            approvalScopeService.assertCanCancelApproval(request);
+            return true;
+        } catch (AccessDeniedException ignored) {
+            return false;
+        }
     }
 
     private boolean canActorActOnStep(ApprovalStep step, UUID actorId) {
@@ -1442,7 +1544,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         }
         return userRepository.findByIdAndIsDeletedFalse(userId)
                 .filter(this::isActiveUser)
-                .filter(user -> hasRole(user, roleCode) || currentAuthenticationHasRole(roleCode))
+                .filter(user -> hasRole(user, roleCode))
                 .isPresent();
     }
 
@@ -1842,14 +1944,26 @@ public class ApprovalService implements ApprovalOrchestrator {
         String targetUrl = targetUrl(targetTypeName, targetId);
         boolean staleRoute = routeStale(effectiveTargetType(request), request);
         boolean actionableRoute = !staleRoute;
-        boolean canDecide = request.getStatus() == ApprovalStatus.PENDING
+        UUID actorId = currentAuthenticatedActorId();
+        boolean lifecycleApproval = isLifecycleApproval(request);
+        boolean canDecide = !lifecycleApproval
+                && request.getStatus() == ApprovalStatus.PENDING
                 && currentStep != null
                 && currentStep.getDecision() == ApprovalDecision.PENDING
                 && actionableRoute
                 && canCurrentPrincipalActOnStep(currentStep);
+        boolean canApprove = lifecycleApproval
+                ? actionableRoute && lifecycleDecisionIsActionable(
+                request, currentStep, actorId, ApprovalDecision.APPROVED)
+                : canDecide;
+        boolean canReject = lifecycleApproval
+                ? actionableRoute && lifecycleDecisionIsActionable(
+                request, currentStep, actorId, ApprovalDecision.REJECTED)
+                : canDecide;
         boolean canCancel = request.getStatus() == ApprovalStatus.PENDING
                 && actionableRoute
-                && (scopeAccessService.isScopeAdmin() || matchesCurrentPrincipal(request.getRequesterId()));
+                && actorId != null
+                && hasCancellationPermission(request);
 
         return new ApprovalRequestDto(
                 request.getId(),
@@ -1878,8 +1992,8 @@ public class ApprovalService implements ApprovalOrchestrator {
                 targetUrl,
                 request.getResultJson(),
                 request.getFailureReason(),
-                canDecide,
-                canDecide,
+                canApprove,
+                canReject,
                 canCancel,
                 new ApprovalRequestDto.TargetSummary(
                         targetId,
