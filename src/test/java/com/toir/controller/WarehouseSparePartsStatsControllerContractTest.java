@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.warehouse.SparePartsWarehouseStatsResponse;
+import com.toir.dto.warehouse.IssuedToWorkRowDto;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.service.WarehouseSparePartsStatsService;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +13,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.UUID;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -66,5 +72,54 @@ class WarehouseSparePartsStatsControllerContractTest {
                 .andExpect(jsonPath("$.issuedToWork").value(7.0));
 
         verify(statsService).getStats(eq(warehouseId), isNull(), isNull(), isNull(), isNull());
+    }
+
+    @Test
+    void getIssuedToWorkForwardsAllFiltersAndReturnsStandardPage() throws Exception {
+        UUID warehouseId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID movementId = UUID.randomUUID();
+        IssuedToWorkRowDto row = new IssuedToWorkRowDto(
+                movementId,
+                LocalDate.of(2026, 7, 15),
+                UUID.randomUUID(),
+                "SP-1",
+                "Bolt",
+                new BigDecimal("2.5000"),
+                "PCS",
+                warehouseId,
+                "Warehouse",
+                UUID.randomUUID(),
+                "WO-1",
+                "Repair",
+                "IN_PROGRESS",
+                null,
+                "Issuer",
+                null,
+                null,
+                "DOC-1",
+                null,
+                "WORK_ORDER_MATERIAL_USAGE",
+                null
+        );
+        when(statsService.getIssuedToWork(
+                eq(warehouseId), eq("bolt"), eq(typeId), eq("SPARE_PART"), eq("PCS"), eq(1), eq(25)))
+                .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(1, 25), 26));
+
+        mockMvc.perform(get("/api/v1/warehouses/spare-parts/issued-to-work")
+                        .param("page", "1")
+                        .param("size", "25")
+                        .param("warehouseId", warehouseId.toString())
+                        .param("search", "bolt")
+                        .param("typeId", typeId.toString())
+                        .param("itemType", "SPARE_PART")
+                        .param("unit", "PCS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].movementId").value(movementId.toString()))
+                .andExpect(jsonPath("$.content[0].workOrderNumber").value("WO-1"))
+                .andExpect(jsonPath("$.content[0].quantity").value(2.5))
+                .andExpect(jsonPath("$.number").value(1))
+                .andExpect(jsonPath("$.size").value(25))
+                .andExpect(jsonPath("$.totalElements").value(26));
     }
 }
