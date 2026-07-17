@@ -27,6 +27,7 @@ import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator;
 import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -113,7 +114,6 @@ class ApprovalServiceTest {
     @Spy
     PlannedShutdownApprovalRouteValidator plannedShutdownApprovalRouteValidator = new PlannedShutdownApprovalRouteValidator();
 
-    @Spy
     LifecycleApprovalRoutePolicy lifecycleApprovalRoutePolicy = new LifecycleApprovalRoutePolicy();
 
     @Mock
@@ -124,6 +124,11 @@ class ApprovalServiceTest {
 
     @InjectMocks
     ApprovalService service;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(service, "lifecycleApprovalRoutePolicy", lifecycleApprovalRoutePolicy);
+    }
 
     @Test
     void requesterCanUpdatePendingApprovalBeforeAnyDecision() {
