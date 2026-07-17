@@ -1,10 +1,12 @@
 package com.toir.controller;
 
+import com.toir.dto.warehouse.IssuedToWorkRowDto;
 import com.toir.dto.warehouse.SparePartsWarehouseStatsResponse;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.service.WarehouseSparePartsStatsService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,5 +35,20 @@ public class WarehouseSparePartsStatsController {
             @RequestParam(required = false) String unit
     ) {
         return ResponseEntity.ok(statsService.getStats(warehouseId, search, typeId, itemType, unit));
+    }
+
+    @GetMapping("/issued-to-work")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('STOCK_READ')")
+    public ResponseEntity<Page<IssuedToWorkRowDto>> getIssuedToWork(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) UUID typeId,
+            @RequestParam(required = false) String itemType,
+            @RequestParam(required = false) String unit
+    ) {
+        return ResponseEntity.ok(statsService.getIssuedToWork(
+                warehouseId, search, typeId, itemType, unit, page, size));
     }
 }

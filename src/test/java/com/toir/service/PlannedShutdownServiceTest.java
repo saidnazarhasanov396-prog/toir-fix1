@@ -1,14 +1,19 @@
 package com.toir.service;
 
 import com.toir.dto.plannedshutdown.PlannedShutdownDto;
+import com.toir.dto.approval.ApprovalStartRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownAssetReplaceRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownAssetRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownCreateRequest;
+import com.toir.dto.plannedshutdown.PlannedShutdownReadinessAssessment;
+import com.toir.dto.plannedshutdown.PlannedShutdownTransitionRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownUpdateRequest;
 import com.toir.entity.PlannedShutdown;
 import com.toir.entity.Department;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.users.Employee;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.PlannedShutdownAssetDisposition;
 import com.toir.enums.PlannedShutdownReadinessSeverity;
 import com.toir.enums.PlannedShutdownStatus;
@@ -37,9 +42,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Instant;
 import java.util.List;
@@ -71,6 +78,8 @@ class PlannedShutdownServiceTest {
     @Mock private PlannedShutdownIsolationPointRepository isolationPointRepository;
     @Mock private com.toir.repository.plannedshutdown.PlannedShutdownStatusHistoryRepository statusHistoryRepository;
     @Mock private com.toir.repository.ApprovalRequestRepository approvalRequestRepository;
+    @Mock private ObjectProvider<ApprovalService> approvalServiceProvider;
+    @Mock private ApprovalService approvalService;
     @Mock private PlannedShutdownReadinessPolicy readinessPolicy;
     @Mock private WorkOrderAssignmentEligibilityService workOrderAssignmentEligibilityService;
     @Mock private WorkOrderMaterialReadinessService workOrderMaterialReadinessService;
@@ -93,6 +102,7 @@ class PlannedShutdownServiceTest {
     void allowDefaultDepartmentScope() {
         lenient().when(scopeAccessService.canAccessDepartment(any())).thenReturn(true);
         lenient().when(scopeAccessService.enforceDepartmentScope(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(approvalServiceProvider.getObject()).thenReturn(approvalService);
     }
 
     @Test
@@ -801,6 +811,43 @@ class PlannedShutdownServiceTest {
         when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
         assertThatThrownBy(() -> service.replaceAssets(id, new PlannedShutdownAssetReplaceRequest(2L, List.of())))
                 .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    void requestApprovalSnapshotsScopeTransitionsAndStartsRuntimeApproval() {
+        UUID id = UUID.randomUUID();
+        UUID actor = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 2L, PlannedShutdownStatus.READINESS_CHECK);
+        shutdown.setScopeVersion(5L);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(readinessPolicy.evaluateReadiness(any()))
+                .thenReturn(new PlannedShutdownReadinessAssessment(true, List.of()));
+        when(repository.saveAndFlush(shutdown)).thenReturn(shutdown);
+        when(statusHistoryRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actor);
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+
+        var response = service.requestApproval(id, new PlannedShutdownTransitionRequest(2L, "Ready", "ps-approval-1"));
+
+        assertThat(response.status()).isEqualTo(PlannedShutdownStatus.PENDING_APPROVAL);
+        assertThat(shutdown.getApprovalScopeVersion()).isEqualTo(5L);
+        assertThat(shutdown.getApprovalScopeHash()).matches("[0-9a-f]{64}");
+        assertThat(shutdown.getApprovedStartAt()).isEqualTo(shutdown.getPlannedStartAt());
+        assertThat(shutdown.getApprovedEndAt()).isEqualTo(shutdown.getPlannedEndAt());
+
+        ArgumentCaptor<ApprovalStartRequest> approval = ArgumentCaptor.forClass(ApprovalStartRequest.class);
+        verify(approvalService).requestApproval(approval.capture());
+        assertThat(approval.getValue().targetType()).isEqualTo(ApprovalTargetType.PLANNED_SHUTDOWN);
+        assertThat(approval.getValue().targetId()).isEqualTo(id);
+        assertThat(approval.getValue().actionType()).isEqualTo(ApprovalActionType.APPROVE);
+        assertThat(approval.getValue().comment()).isEqualTo("Ready");
+
+        InOrder inOrder = inOrder(repository, approvalService);
+        inOrder.verify(repository).saveAndFlush(shutdown);
+        inOrder.verify(approvalService).requestApproval(any(ApprovalStartRequest.class));
     }
 
     private static PlannedShutdownCreateRequest request(UUID departmentId, UUID employeeId) {

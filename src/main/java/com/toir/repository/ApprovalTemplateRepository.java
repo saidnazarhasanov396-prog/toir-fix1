@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -30,9 +31,19 @@ public interface ApprovalTemplateRepository extends JpaRepository<ApprovalTempla
     @EntityGraph(attributePaths = "steps")
     Optional<ApprovalTemplate> findByIdAndIsDeletedFalse(UUID id);
 
+    @EntityGraph(attributePaths = "steps")
+    @Query("""
+            SELECT template
+            FROM ApprovalTemplate template
+            WHERE template.targetType = :targetType
+              AND template.actionType = :actionType
+              AND template.active = true
+              AND template.isDeleted = false
+            ORDER BY template.createdAt DESC, template.id DESC
+            """)
     List<ApprovalTemplate> findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
-            ApprovalTargetType targetType,
-            ApprovalActionType actionType
+            @Param("targetType") ApprovalTargetType targetType,
+            @Param("actionType") ApprovalActionType actionType
     );
 
     @EntityGraph(attributePaths = "steps")

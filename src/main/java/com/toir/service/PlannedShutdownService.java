@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.plannedshutdown.*;
+import com.toir.dto.approval.ApprovalStartRequest;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.entity.Department;
 import com.toir.entity.PlannedShutdown;
@@ -13,6 +14,8 @@ import com.toir.entity.plannedshutdown.PlannedShutdownWorkItem;
 import com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem;
 import com.toir.entity.plannedshutdown.PlannedShutdownIsolationPoint;
 import com.toir.entity.users.Employee;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.PlanStatus;
@@ -47,6 +50,7 @@ import com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy;
 import com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher;
 import com.toir.service.repair.CanonicalWorkSourceResolver;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -67,6 +71,7 @@ public class PlannedShutdownService {
     private final PlannedShutdownIsolationPointRepository isolationPointRepository;
     private final PlannedShutdownStatusHistoryRepository statusHistoryRepository;
     private final ApprovalRequestRepository approvalRequestRepository;
+    private final ObjectProvider<ApprovalService> approvalServiceProvider;
     private final DepartmentRepository departmentRepository;
     private final EmployeeRepository employeeRepository;
     private final EquipmentRepository equipmentRepository;
@@ -719,8 +724,11 @@ public class PlannedShutdownService {
         shutdown.setApprovedEndAt(shutdown.getPlannedEndAt());
         shutdown.setApprovalScopeVersion(shutdown.getScopeVersion());
         shutdown.setApprovalScopeHash(computeApprovalScopeHash(shutdown));
-        return detail(executeTransition(shutdown, PlannedShutdownStatus.PENDING_APPROVAL, requireUserActor(),
-                request.reason(), request.correlationKey(), null));
+        PlannedShutdown saved = executeTransition(shutdown, PlannedShutdownStatus.PENDING_APPROVAL, requireUserActor(),
+                request.reason(), request.correlationKey(), null);
+        approvalServiceProvider.getObject().requestApproval(new ApprovalStartRequest(
+                ApprovalTargetType.PLANNED_SHUTDOWN, saved.getId(), ApprovalActionType.APPROVE, request.reason()));
+        return detail(saved);
     }
 
     @Transactional

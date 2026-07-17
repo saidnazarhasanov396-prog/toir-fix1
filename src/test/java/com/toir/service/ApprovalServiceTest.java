@@ -20,7 +20,11 @@ import com.toir.service.approval.ApprovalActionExecutor;
 import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalRouteResolver;
 import com.toir.service.approval.ApprovalSlaPolicyService;
+import com.toir.service.approval.LifecycleApprovalRoutePolicy;
+import com.toir.service.approval.LifecycleApprovalStartPlan;
+import com.toir.service.approval.LifecycleRouteResolution;
 import com.toir.service.maintanance.MaintenanceRegulationService;
+import com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator;
 import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -44,6 +48,7 @@ import org.springframework.transaction.UnexpectedRollbackException;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -58,6 +63,8 @@ import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -101,6 +108,12 @@ class ApprovalServiceTest {
 
     @Spy
     RepairCampaignApprovalRouteValidator repairCampaignApprovalRouteValidator = new RepairCampaignApprovalRouteValidator();
+
+    @Spy
+    PlannedShutdownApprovalRouteValidator plannedShutdownApprovalRouteValidator = new PlannedShutdownApprovalRouteValidator();
+
+    @Spy
+    LifecycleApprovalRoutePolicy lifecycleApprovalRoutePolicy = new LifecycleApprovalRoutePolicy();
 
     @Mock
     ObjectProvider<MaintenanceRegulationService> maintenanceRegulationServiceProvider;
@@ -316,7 +329,7 @@ class ApprovalServiceTest {
 
 
     @Test
-    void oneStepSystemAdminRepairCampaignApprovalIsNotActionable() {
+    void configuredOneStepSystemAdminRepairCampaignApprovalIsAValidRuntimeRoute() {
         UUID approvalId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
@@ -334,9 +347,9 @@ class ApprovalServiceTest {
         assertThat(result.canApprove()).isFalse();
         assertThat(result.canReject()).isFalse();
         assertThat(result.canCancel()).isFalse();
-        assertThat(result.actionable()).isFalse();
-        assertThat(result.stale()).isTrue();
-        assertThat(result.staleReason()).isEqualTo("NONCANONICAL_ROUTE");
+        assertThat(result.actionable()).isTrue();
+        assertThat(result.stale()).isFalse();
+        assertThat(result.staleReason()).isNull();
     }
 
     @Test
@@ -347,6 +360,7 @@ class ApprovalServiceTest {
         approval.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
         approval.setTargetId(UUID.randomUUID());
         approval.setActionType(ApprovalActionType.APPROVE);
+        approval.getSteps().clear();
         when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
 
         assertThatThrownBy(() -> service.approve(
@@ -364,6 +378,7 @@ class ApprovalServiceTest {
         approval.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
         approval.setTargetId(UUID.randomUUID());
         approval.setActionType(ApprovalActionType.APPROVE);
+        approval.getSteps().clear();
         when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
 
         assertThatThrownBy(() -> service.cancel(approvalId))
@@ -445,6 +460,561 @@ class ApprovalServiceTest {
         );
         verify(requestRepository, never()).saveAndFlush(any(ApprovalRequest.class));
         verify(governanceService, never()).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void compatiblePendingIsReusedWhenNoActiveTemplateExists() {
+        UUID targetId = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":4}";
+        ApprovalRequest existing = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.REPAIR_CAMPAIGN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "PLANNER"),
+                new CreateApprovalRequest.StepInput(UUID.randomUUID(), null));
+        List<ApprovalStep> originalSteps = List.copyOf(existing.getSteps());
+
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(existing));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, true, payload);
+        ApprovalRequestDto result = service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "ignored", "ignored", payload);
+
+        assertThat(plan.reusable()).isTrue();
+        assertThat(plan.reusableRequest()).isSameAs(existing);
+        assertThat(result.id()).isEqualTo(existing.getId());
+        assertThat(existing.getSteps()).containsExactlyElementsOf(originalSteps);
+        assertThat(existing.getSteps()).extracting(ApprovalStep::getId)
+                .containsExactlyElementsOf(originalSteps.stream().map(ApprovalStep::getId).toList());
+        verifyNoInteractions(routeResolver);
+        verify(requestRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void compatiblePendingIsReusedWhenMultipleTemplatesExist() {
+        UUID targetId = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":8}";
+        ApprovalRequest existing = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.PLANNED_SHUTDOWN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "OPERATIONS"));
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(existing));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, targetId, ApprovalActionType.APPROVE, true, payload);
+
+        assertThat(plan.reusableRequest()).isSameAs(existing);
+        assertThat(plan.failure()).isEqualTo(LifecycleApprovalRoutePolicy.Reason.VALID);
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void editedOrDeactivatedTemplateDoesNotChangePendingSteps() {
+        UUID targetId = UUID.randomUUID();
+        UUID explicitApprover = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":13}";
+        ApprovalRequest existing = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.REPAIR_CAMPAIGN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "OLD_ROLE"),
+                new CreateApprovalRequest.StepInput(explicitApprover, null));
+        List<ApprovalStep> originalSteps = List.copyOf(existing.getSteps());
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(existing));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, true, payload);
+        service.materializeLifecycleApproval(plan, UUID.randomUUID(), "ignored", null, payload);
+
+        assertThat(existing.getSteps()).containsExactlyElementsOf(originalSteps);
+        assertThat(existing.getSteps()).extracting(ApprovalStep::getStepNumber)
+                .containsExactly(1, 2);
+        assertThat(existing.getSteps()).extracting(ApprovalStep::getApproverRole)
+                .containsExactly("OLD_ROLE", null);
+        assertThat(existing.getSteps()).extracting(ApprovalStep::getApproverId)
+                .containsExactly(null, explicitApprover);
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void newRequestResolvesAndFreezesTemplateExactlyOnce() {
+        UUID targetId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID explicitApprover = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":21}";
+        ArrayList<CreateApprovalRequest.StepInput> resolvedSteps = new ArrayList<>(List.of(
+                new CreateApprovalRequest.StepInput(null, " PLANNER "),
+                new CreateApprovalRequest.StepInput(explicitApprover, null)));
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of());
+        when(routeResolver.resolveLifecycleRoute(
+                ApprovalTargetType.REPAIR_CAMPAIGN, ApprovalActionType.APPROVE))
+                .thenReturn(new LifecycleRouteResolution(resolvedSteps, LifecycleApprovalRoutePolicy.Reason.VALID));
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, false, null);
+        org.mockito.InOrder planningOrder = org.mockito.Mockito.inOrder(
+                jdbcTemplate, requestRepository, routeResolver);
+        planningOrder.verify(jdbcTemplate).query(
+                eq("SELECT pg_advisory_xact_lock(?, ?)"),
+                any(PreparedStatementSetter.class),
+                any(ResultSetExtractor.class));
+        planningOrder.verify(requestRepository).findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name());
+        planningOrder.verify(routeResolver).resolveLifecycleRoute(
+                ApprovalTargetType.REPAIR_CAMPAIGN, ApprovalActionType.APPROVE);
+        verify(requestRepository, never()).save(any(ApprovalRequest.class));
+        verify(requestRepository, never()).saveAndFlush(any(ApprovalRequest.class));
+        resolvedSteps.clear();
+        ApprovalRequestDto result = service.materializeLifecycleApproval(
+                plan, requesterId, "Campaign approval", "Approve", payload);
+
+        assertThat(plan.creatable()).isTrue();
+        assertThat(plan.frozenSteps()).hasSize(2);
+        assertThat(result.targetType()).isEqualTo(ApprovalTargetType.REPAIR_CAMPAIGN);
+        assertThat(result.targetId()).isEqualTo(targetId);
+        ArgumentCaptor<ApprovalRequest> saved = ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getPayloadJson()).isEqualTo(payload);
+        assertThat(saved.getValue().getRequesterId()).isEqualTo(requesterId);
+        assertThat(saved.getValue().getSteps()).extracting(ApprovalStep::getApproverRole)
+                .containsExactly(" PLANNER ", null);
+        assertThat(saved.getValue().getSteps()).extracting(ApprovalStep::getApproverId)
+                .containsExactly(null, explicitApprover);
+        verify(routeResolver).resolveLifecycleRoute(
+                ApprovalTargetType.REPAIR_CAMPAIGN, ApprovalActionType.APPROVE);
+        verifyNoMoreInteractions(routeResolver);
+    }
+
+    @Test
+    void materializationDoesNotResolveTemplateAgain() {
+        UUID targetId = UUID.randomUUID();
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                targetId,
+                ApprovalActionType.APPROVE,
+                null,
+                List.of(new CreateApprovalRequest.StepInput(null, "OPERATIONS")),
+                LifecycleApprovalRoutePolicy.Reason.VALID);
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "Shutdown approval", null, "{\"scopeVersion\":9}");
+
+        verifyNoInteractions(routeResolver);
+        verify(requestRepository).saveAndFlush(any(ApprovalRequest.class));
+    }
+
+    @Test
+    void reusableRequestPreservesEveryPersistedStepIdAndAssignment() {
+        UUID targetId = UUID.randomUUID();
+        UUID explicitApprover = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":55}";
+        ApprovalRequest existing = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.REPAIR_CAMPAIGN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "ROLE_ONE"),
+                new CreateApprovalRequest.StepInput(explicitApprover, null),
+                new CreateApprovalRequest.StepInput(null, "ROLE_ONE"));
+        List<UUID> stepIds = existing.getSteps().stream().map(ApprovalStep::getId).toList();
+        List<UUID> approverIds = existing.getSteps().stream().map(ApprovalStep::getApproverId).toList();
+        List<String> roles = existing.getSteps().stream().map(ApprovalStep::getApproverRole).toList();
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(existing));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, true, payload);
+        service.materializeLifecycleApproval(plan, UUID.randomUUID(), "ignored", null, payload);
+
+        assertThat(existing.getSteps()).extracting(ApprovalStep::getId).containsExactlyElementsOf(stepIds);
+        assertThat(existing.getSteps()).extracting(ApprovalStep::getApproverId).containsExactlyElementsOf(approverIds);
+        assertThat(existing.getSteps()).extracting(ApprovalStep::getApproverRole).containsExactlyElementsOf(roles);
+        assertThat(existing.getSteps()).extracting(ApprovalStep::getStepNumber).containsExactly(1, 2, 3);
+        verify(requestRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void newMaterializationPreservesRoleAndExplicitAssignments() {
+        UUID targetId = UUID.randomUUID();
+        UUID explicitApprover = UUID.randomUUID();
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                targetId,
+                ApprovalActionType.APPROVE,
+                null,
+                List.of(
+                        new CreateApprovalRequest.StepInput(null, " MECHANICAL_REVIEW "),
+                        new CreateApprovalRequest.StepInput(explicitApprover, null)),
+                LifecycleApprovalRoutePolicy.Reason.VALID);
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "Campaign approval", null, "{\"scopeVersion\":89}");
+
+        ArgumentCaptor<ApprovalRequest> saved = ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getSteps()).extracting(ApprovalStep::getApproverRole)
+                .containsExactly(" MECHANICAL_REVIEW ", null);
+        assertThat(saved.getValue().getSteps()).extracting(ApprovalStep::getApproverId)
+                .containsExactly(null, explicitApprover);
+    }
+
+    @Test
+    void unrelatedTargetBehaviorIsUnchanged() {
+        UUID targetId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        ApprovalRequest existing = pendingApproval(UUID.randomUUID(), targetId, requesterId);
+        when(requestRepository.findFirstPendingByTargetAndAction(
+                ApprovalTargetType.WORK_ORDER.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(Optional.of(existing));
+
+        ApprovalRequestDto result = service.createOrReuseApprovalForDocument(
+                ApprovalTargetType.WORK_ORDER.name(), targetId, ApprovalActionType.APPROVE,
+                requesterId, UUID.randomUUID(), null, "Work order approval", null);
+
+        assertThat(result.id()).isEqualTo(existing.getId());
+        verify(requestRepository).findFirstPendingByTargetAndAction(
+                ApprovalTargetType.WORK_ORDER.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name());
+        verify(requestRepository, never()).findAllPendingByTargetAndAction(any(), any(), any(), any());
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void startPlanDefensivelyCopiesFrozenSteps() {
+        ArrayList<CreateApprovalRequest.StepInput> supplied = new ArrayList<>(List.of(
+                new CreateApprovalRequest.StepInput(null, "FIRST"),
+                new CreateApprovalRequest.StepInput(UUID.randomUUID(), null)));
+
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                UUID.randomUUID(),
+                ApprovalActionType.APPROVE,
+                null,
+                supplied,
+                LifecycleApprovalRoutePolicy.Reason.VALID);
+        supplied.clear();
+
+        assertThat(plan.frozenSteps()).hasSize(2);
+        assertThatThrownBy(() -> plan.frozenSteps().add(
+                new CreateApprovalRequest.StepInput(null, "THIRD")))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void pendingRequestInReadinessDomainStateIsConflict() {
+        UUID targetId = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":3}";
+        ApprovalRequest existing = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.PLANNED_SHUTDOWN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "OPERATIONS"));
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(existing));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, targetId, ApprovalActionType.APPROVE, false, null);
+
+        assertThat(plan.failure()).isEqualTo(LifecycleApprovalRoutePolicy.Reason.REQUEST_STATUS_INCONSISTENT);
+        assertThatThrownBy(() -> service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "Shutdown approval", null, payload))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("REQUEST_STATUS_INCONSISTENT");
+        assertThat(existing.getStatus()).isEqualTo(ApprovalStatus.PENDING);
+        verifyNoInteractions(routeResolver);
+        verify(requestRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void malformedPendingRuntimeRouteIsRouteStaleNotTemplateMismatch() {
+        UUID targetId = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":5}";
+        ApprovalRequest malformed = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.REPAIR_CAMPAIGN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "PLANNER"));
+        malformed.getSteps().clear();
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(malformed));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, true, payload);
+
+        assertThat(plan.failure()).isEqualTo(LifecycleApprovalRoutePolicy.Reason.EMPTY_ROUTE);
+        assertThat(plan.failure()).isNotIn(
+                LifecycleApprovalRoutePolicy.Reason.NO_ACTIVE_TEMPLATE,
+                LifecycleApprovalRoutePolicy.Reason.MULTIPLE_ACTIVE_TEMPLATES);
+        assertThatThrownBy(() -> service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "Campaign approval", null, payload))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("EMPTY_ROUTE")
+                .hasMessageNotContaining("REPAIR_CAMPAIGN_")
+                .hasMessageNotContaining("PLANNED_SHUTDOWN_");
+        assertThat(malformed.getStatus()).isEqualTo(ApprovalStatus.PENDING);
+        verifyNoInteractions(routeResolver);
+        verify(requestRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void plannedShutdownMalformedPendingKeepsNeutralFailureBoundary() {
+        UUID targetId = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":5}";
+        ApprovalRequest malformed = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.PLANNED_SHUTDOWN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "OPERATIONS"));
+        malformed.getSteps().clear();
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(malformed));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, targetId, ApprovalActionType.APPROVE, true, payload);
+
+        assertThat(plan.failure()).isEqualTo(LifecycleApprovalRoutePolicy.Reason.EMPTY_ROUTE);
+        assertThatThrownBy(() -> service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "Shutdown approval", null, payload))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("EMPTY_ROUTE")
+                .hasMessageNotContaining("REPAIR_CAMPAIGN_")
+                .hasMessageNotContaining("PLANNED_SHUTDOWN_");
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void malformedTemplateFailureIsNotMappedAsRuntimeRouteStale() {
+        UUID targetId = UUID.randomUUID();
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of());
+        when(routeResolver.resolveLifecycleRoute(
+                ApprovalTargetType.REPAIR_CAMPAIGN, ApprovalActionType.APPROVE))
+                .thenReturn(new LifecycleRouteResolution(
+                        List.of(), LifecycleApprovalRoutePolicy.Reason.EMPTY_ROUTE));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, false, null);
+
+        assertThat(plan.failure()).isEqualTo(LifecycleApprovalRoutePolicy.Reason.EMPTY_ROUTE);
+        assertThatThrownBy(() -> service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "Campaign approval", null, "{}"))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("EMPTY_ROUTE")
+                .hasMessageNotContaining("REPAIR_CAMPAIGN_")
+                .hasMessageNotContaining("PLANNED_SHUTDOWN_");
+    }
+
+    @Test
+    void duplicatePendingRequestsAreCancelledExceptOneCompatibleNewest() {
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":34}";
+        ApprovalRequest newest = lifecyclePending(
+                UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "NEWEST_ROLE"));
+        ApprovalRequest olderCompatible = lifecyclePending(
+                UUID.fromString("00000000-0000-0000-0000-000000000002"),
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "OLDER_ROLE"));
+        ApprovalRequest scopeStale = lifecyclePending(
+                UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, "{\"scopeVersion\":33}",
+                new CreateApprovalRequest.StepInput(null, "STALE_ROLE"));
+        ReflectionTestUtils.setField(newest, "createdAt", Instant.parse("2026-07-17T12:00:00Z"));
+        ReflectionTestUtils.setField(olderCompatible, "createdAt", Instant.parse("2026-07-17T11:00:00Z"));
+        ReflectionTestUtils.setField(scopeStale, "createdAt", Instant.parse("2026-07-17T10:00:00Z"));
+        ApprovalStep olderStep = olderCompatible.getSteps().getFirst();
+        ApprovalStep staleStep = scopeStale.getSteps().getFirst();
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(newest, olderCompatible, scopeStale));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, true, payload);
+
+        assertThat(plan.reusableRequest()).isSameAs(newest);
+        assertThat(newest.getStatus()).isEqualTo(ApprovalStatus.PENDING);
+        assertThat(olderCompatible.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
+        assertThat(scopeStale.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
+        assertThat(olderCompatible.getSteps().getFirst()).isSameAs(olderStep);
+        assertThat(scopeStale.getSteps().getFirst()).isSameAs(staleStep);
+        verify(requestRepository).saveAndFlush(olderCompatible);
+        verify(requestRepository).saveAndFlush(scopeStale);
+        verify(governanceService).record(eq(olderCompatible), eq(ApprovalStatus.PENDING),
+                eq(ApprovalStatus.CANCELLED), eq(actorId), eq("DUPLICATE_PENDING_APPROVAL"));
+        verify(governanceService).record(eq(scopeStale), eq(ApprovalStatus.PENDING),
+                eq(ApprovalStatus.CANCELLED), eq(actorId), eq("Superseded by a newer repair campaign scope snapshot"));
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void equalCreatedAtHighBitUuidUsesRepositoryOrderForNewestCompatibleSelection() {
+        UUID targetId = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":144}";
+        ApprovalRequest repositoryFirst = lifecyclePending(
+                UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "FIRST"));
+        ApprovalRequest repositorySecond = lifecyclePending(
+                UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "SECOND"));
+        Instant sameCreatedAt = Instant.parse("2026-07-17T12:00:00Z");
+        ReflectionTestUtils.setField(repositoryFirst, "createdAt", sameCreatedAt);
+        ReflectionTestUtils.setField(repositorySecond, "createdAt", sameCreatedAt);
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(repositoryFirst, repositorySecond));
+        when(requestRepository.saveAndFlush(repositorySecond)).thenReturn(repositorySecond);
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, true, payload);
+
+        assertThat(plan.reusableRequest()).isSameAs(repositoryFirst);
+        assertThat(repositoryFirst.getStatus()).isEqualTo(ApprovalStatus.PENDING);
+        assertThat(repositorySecond.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
+    }
+
+    @Test
+    void legacyAliasPendingIsReusedWithoutMutatingHistoricalAliases() {
+        UUID targetId = UUID.randomUUID();
+        String payload = "{\"scopeVersion\":233}";
+        ApprovalRequest legacy = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.REPAIR_CAMPAIGN, targetId, payload,
+                new CreateApprovalRequest.StepInput(null, "LEGACY_ROLE"));
+        ReflectionTestUtils.setField(legacy, "targetType", null);
+        ReflectionTestUtils.setField(legacy, "targetId", null);
+        legacy.setActionType(null);
+        when(requestRepository.findAllPendingByTargetAndAction(
+                ApprovalTargetType.REPAIR_CAMPAIGN.name(), targetId,
+                ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of(legacy));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, targetId, ApprovalActionType.APPROVE, true, payload);
+
+        assertThat(plan.reusableRequest()).isSameAs(legacy);
+        assertThat(legacy.getTargetType()).isNull();
+        assertThat(legacy.getTargetId()).isNull();
+        assertThat(legacy.getActionType()).isNull();
+        assertThat(legacy.getDocumentType()).isEqualTo(ApprovalTargetType.REPAIR_CAMPAIGN.name());
+        assertThat(legacy.getDocumentId()).isEqualTo(targetId);
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void legacyAliasMalformedRuntimeIsStaleWithoutMutatingHistoricalAliases() {
+        UUID approvalId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        ApprovalRequest legacy = lifecyclePending(
+                approvalId, ApprovalTargetType.PLANNED_SHUTDOWN, targetId, "{}",
+                new CreateApprovalRequest.StepInput(null, "LEGACY_ROLE"));
+        legacy.getSteps().clear();
+        ReflectionTestUtils.setField(legacy, "targetType", null);
+        ReflectionTestUtils.setField(legacy, "targetId", null);
+        legacy.setActionType(null);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(legacy));
+
+        ApprovalRequestDto result = service.findById(approvalId);
+
+        assertThat(result.stale()).isTrue();
+        assertThat(legacy.getTargetType()).isNull();
+        assertThat(legacy.getTargetId()).isNull();
+        assertThat(legacy.getActionType()).isNull();
+    }
+
+    @Test
+    void manualCreatablePlanWithNullActionPersistsApprove() {
+        UUID targetId = UUID.randomUUID();
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                targetId,
+                null,
+                null,
+                List.of(new CreateApprovalRequest.StepInput(null, " EXACT_ROLE ")),
+                LifecycleApprovalRoutePolicy.Reason.VALID);
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "Shutdown approval", null, "{}");
+
+        ArgumentCaptor<ApprovalRequest> saved = ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getActionType()).isEqualTo(ApprovalActionType.APPROVE);
+        assertThat(saved.getValue().getSteps().getFirst().getApproverRole()).isEqualTo(" EXACT_ROLE ");
+    }
+
+    @Test
+    void manualReusablePlanWithNullActionAcceptsLegacyApproveRequest() {
+        UUID targetId = UUID.randomUUID();
+        ApprovalRequest existing = lifecyclePending(
+                UUID.randomUUID(), ApprovalTargetType.REPAIR_CAMPAIGN, targetId, "{}",
+                new CreateApprovalRequest.StepInput(null, "ROLE"));
+        existing.setActionType(null);
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                targetId,
+                null,
+                existing,
+                List.of(),
+                LifecycleApprovalRoutePolicy.Reason.VALID);
+
+        ApprovalRequestDto result = service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "ignored", null, "{}");
+
+        assertThat(result.id()).isEqualTo(existing.getId());
+        assertThat(existing.getActionType()).isNull();
+        verify(requestRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(routeResolver);
     }
 
     @Test
@@ -602,9 +1172,9 @@ class ApprovalServiceTest {
         String payload = "{\"scopeVersion\":0,\"scopeHash\":\"" + "e".repeat(64)
                 + "\",\"campaignVersion\":2}";
         ApprovalRequest first = repairCampaignPending(
-                UUID.randomUUID(), targetId, requesterId, payload, List.of("SYSTEM_ADMIN"));
+                UUID.randomUUID(), targetId, requesterId, payload, List.of());
         ApprovalRequest second = repairCampaignPending(
-                UUID.randomUUID(), targetId, requesterId, payload, List.of("REPAIR_CAMPAIGN_APPROVE"));
+                UUID.randomUUID(), targetId, requesterId, payload, List.of());
         when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
         stubTargetMetadata(ApprovalTargetType.REPAIR_CAMPAIGN, "RCMP-2026-005", "Legacy duplicates");
         stubRepairCampaignApprovalSnapshot("PENDING_APPROVAL", 0L, 0L, "e".repeat(64), 2L);
@@ -736,7 +1306,14 @@ class ApprovalServiceTest {
         stale.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN); stale.setTargetId(targetId);
         stale.setActionType(ApprovalActionType.APPROVE); stale.setRequesterId(requesterId);
         stale.setTitle("Old"); stale.setStatus(ApprovalStatus.PENDING);
+        stale.setCurrentStep(1);
         stale.setPayloadJson("{\"scopeVersion\":8,\"scopeHash\":\"" + "a".repeat(64) + "\"}");
+        ApprovalStep staleStep = new ApprovalStep();
+        staleStep.setRequest(stale);
+        staleStep.setStepNumber(1);
+        staleStep.setApproverRole("OPERATIONS");
+        staleStep.setDecision(ApprovalDecision.PENDING);
+        stale.getSteps().add(staleStep);
         when(requestRepository.findFirstPendingByTargetAndAction(
                 ApprovalTargetType.PLANNED_SHUTDOWN.name(), targetId,
                 ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name()))
@@ -784,6 +1361,7 @@ class ApprovalServiceTest {
         stale.setRequesterId(requesterId);
         stale.setTitle("Old");
         stale.setStatus(ApprovalStatus.PENDING);
+        stale.setCurrentStep(1);
         stale.setPayloadJson("{\"scopeVersion\":8,\"scopeHash\":\"" + "a".repeat(64)
                 + "\",\"campaignVersion\":11}");
         int routeOrder = 1;
@@ -842,11 +1420,12 @@ class ApprovalServiceTest {
         stale.setRequesterId(requesterId);
         stale.setTitle("Old");
         stale.setStatus(ApprovalStatus.PENDING);
+        stale.setCurrentStep(1);
         stale.setPayloadJson("{\"scopeVersion\":9,\"scopeHash\":\"" + "b".repeat(64)
                 + "\",\"campaignVersion\":12}");
         ApprovalStep wrongStep = new ApprovalStep();
         wrongStep.setRequest(stale);
-        wrongStep.setStepNumber(1);
+        wrongStep.setStepNumber(2);
         wrongStep.setApproverRole("REPAIR_CAMPAIGN_APPROVE");
         wrongStep.setDecision(ApprovalDecision.PENDING);
         stale.getSteps().add(wrongStep);
@@ -1188,6 +1767,38 @@ class ApprovalServiceTest {
             step.setRequest(approval);
             step.setStepNumber(stepNumber++);
             step.setApproverRole(role);
+            step.setDecision(ApprovalDecision.PENDING);
+            approval.getSteps().add(step);
+        }
+        return approval;
+    }
+
+    private ApprovalRequest lifecyclePending(UUID id,
+                                             ApprovalTargetType targetType,
+                                             UUID targetId,
+                                             String payload,
+                                             CreateApprovalRequest.StepInput... inputs) {
+        ApprovalRequest approval = new ApprovalRequest();
+        approval.setId(id);
+        ReflectionTestUtils.setField(approval, "createdAt", Instant.now());
+        ReflectionTestUtils.setField(approval, "updatedAt", Instant.now());
+        approval.setTargetType(targetType);
+        approval.setTargetId(targetId);
+        approval.setActionType(ApprovalActionType.APPROVE);
+        approval.setRequesterId(UUID.randomUUID());
+        approval.setTitle(targetType.name() + " approval");
+        approval.setStatus(ApprovalStatus.PENDING);
+        approval.setCurrentStep(1);
+        approval.setPayloadJson(payload);
+        approval.setExpiresAt(Instant.now().plus(Duration.ofHours(24)));
+        int stepNumber = 1;
+        for (CreateApprovalRequest.StepInput input : inputs) {
+            ApprovalStep step = new ApprovalStep();
+            step.setId(UUID.randomUUID());
+            step.setRequest(approval);
+            step.setStepNumber(stepNumber++);
+            step.setApproverId(input.approverId());
+            step.setApproverRole(input.approverRole());
             step.setDecision(ApprovalDecision.PENDING);
             approval.getSteps().add(step);
         }
