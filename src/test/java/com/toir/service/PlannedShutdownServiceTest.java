@@ -50,8 +50,10 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.jpa.repository.Query;
 
 import java.time.Instant;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.UUID;
 
@@ -139,6 +141,23 @@ class PlannedShutdownServiceTest {
 
         verify(scopeAccessService).assertCanAccessDepartment(departmentId);
         verify(workOrderService).findByPlannedShutdown(id, departmentId);
+    }
+
+    @Test
+    void approvedRuntimeEvidenceQueryUsesDeterministicCreatedAtAndIdOrdering() throws Exception {
+        Method queryMethod = com.toir.repository.ApprovalRequestRepository.class.getMethod(
+                "findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc",
+                String.class, UUID.class, String.class, String.class);
+
+        String sql = queryMethod.getAnnotation(Query.class).value().replaceAll("\\s+", " ").trim();
+
+        assertThat(sql).contains("ORDER BY created_at DESC, id DESC");
+        assertThat(sql).contains(
+                "COALESCE(target_type, document_type) = :targetType",
+                "COALESCE(target_id, document_id) = cast(:targetId as uuid)",
+                "COALESCE(action_type, 'APPROVE') = :actionType",
+                "status = :status",
+                "is_deleted = false");
     }
 
     @Test

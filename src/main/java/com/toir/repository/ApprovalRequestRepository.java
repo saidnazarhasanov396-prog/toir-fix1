@@ -136,4 +136,21 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
             @Param("actionType") String actionType,
             @Param("status") String status
     );
+
+    @Query(value = """
+            SELECT *
+            FROM approval_requests
+            WHERE is_deleted = false
+              AND status = :status
+              AND COALESCE(target_type, document_type) = :targetType
+              AND COALESCE(target_id, document_id) = cast(:targetId as uuid)
+              AND COALESCE(action_type, 'APPROVE') = :actionType
+            ORDER BY created_at DESC, id DESC
+            """, nativeQuery = true)
+    List<ApprovalRequest> findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
+            @Param("targetType") String targetType,
+            @Param("targetId") UUID targetId,
+            @Param("actionType") String actionType,
+            @Param("status") String status
+    );
 }
