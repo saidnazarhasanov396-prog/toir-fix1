@@ -8,18 +8,33 @@ import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
+import com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator;
 import com.toir.security.ApprovalDomainPermissions;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
 
     private final ApprovalTemplateRepository templateRepository;
-    private final RepairCampaignApprovalRouteValidator repairCampaignRouteValidator;
+    private final LifecycleApprovalRoutePolicy lifecycleRoutePolicy;
+
+    @Autowired
+    public DefaultApprovalRouteResolver(
+            ApprovalTemplateRepository templateRepository,
+            LifecycleApprovalRoutePolicy lifecycleRoutePolicy) {
+        this.templateRepository = templateRepository;
+        this.lifecycleRoutePolicy = lifecycleRoutePolicy;
+    }
+
+    public DefaultApprovalRouteResolver(
+            ApprovalTemplateRepository templateRepository,
+            RepairCampaignApprovalRouteValidator repairCampaignRouteValidator,
+            PlannedShutdownApprovalRouteValidator plannedShutdownRouteValidator) {
+        this(templateRepository, new LifecycleApprovalRoutePolicy());
+    }
 
     @Override
     public List<CreateApprovalRequest.StepInput> resolveRoute(ApprovalRequest request) {
@@ -29,15 +44,8 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
         ApprovalActionType actionType = request.getActionType() == null
                 ? ApprovalActionType.APPROVE
                 : request.getActionType();
-        if (request.getTargetType() == ApprovalTargetType.REPAIR_CAMPAIGN
-                && actionType == ApprovalActionType.APPROVE) {
-            return templateRepository
-                    .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
-                            ApprovalTargetType.REPAIR_CAMPAIGN,
-                            ApprovalActionType.APPROVE)
-                    .map(this::stepsFromTemplate)
-                    .filter(steps -> repairCampaignRouteValidator.validateInputs(steps).valid())
-                    .orElse(List.of());
+        if (lifecycleRoutePolicy.supports(request.getTargetType(), actionType)) {
+            return resolveLifecycleRoute(request.getTargetType(), actionType).steps();
         }
         return templateRepository
                 .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
@@ -51,6 +59,48 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                 .map(this::stepsFromTemplate)
                 .filter(steps -> !steps.isEmpty())
                 .orElseGet(() -> permissionFallbackSteps(request));
+    }
+
+    @Override
+    public LifecycleRouteResolution resolveLifecycleRoute(
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType) {
+        if (!lifecycleRoutePolicy.supports(targetType, actionType)) {
+            return new LifecycleRouteResolution(
+                    List.of(),
+                    LifecycleApprovalRoutePolicy.Reason.UNSUPPORTED_TARGET_ACTION);
+        }
+
+        ApprovalActionType exactAction = actionType == null
+                ? ApprovalActionType.APPROVE
+                : actionType;
+        List<ApprovalTemplate> templates = templateRepository
+                .findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
+                        targetType,
+                        exactAction);
+        if (templates.isEmpty()) {
+            return new LifecycleRouteResolution(
+                    List.of(),
+                    LifecycleApprovalRoutePolicy.Reason.NO_ACTIVE_TEMPLATE);
+        }
+        if (templates.size() > 1) {
+            return new LifecycleRouteResolution(
+                    List.of(),
+                    LifecycleApprovalRoutePolicy.Reason.MULTIPLE_ACTIVE_TEMPLATES);
+        }
+
+        LifecycleApprovalRoutePolicy.ValidationResult validation =
+                lifecycleRoutePolicy.validateTemplate(templates.getFirst());
+        if (!validation.valid()) {
+            return new LifecycleRouteResolution(List.of(), validation.reason());
+        }
+
+        List<CreateApprovalRequest.StepInput> frozenSteps = validation.orderedSteps().stream()
+                .map(step -> new CreateApprovalRequest.StepInput(
+                        step.approverId(),
+                        step.approverRole()))
+                .toList();
+        return new LifecycleRouteResolution(frozenSteps, validation.reason());
     }
 
     private List<CreateApprovalRequest.StepInput> permissionFallbackSteps(ApprovalRequest request) {

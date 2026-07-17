@@ -1,9 +1,12 @@
 package com.toir.service;
 
 import com.toir.dto.warehouse.SparePartsWarehouseStatsResponse;
+import com.toir.dto.warehouse.IssuedToWorkRowDto;
 import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.repository.SparePartsWarehouseStatsProjection;
+import com.toir.repository.IssuedToWorkRowProjection;
+import com.toir.repository.StockMovementRepository;
 import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
@@ -14,11 +17,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,6 +52,9 @@ class WarehouseSparePartsStatsServiceTest {
     @Mock
     UnitOfMeasurementRepository unitOfMeasurementRepository;
 
+    @Mock
+    StockMovementRepository movementRepository;
+
     WarehouseSparePartsStatsService service;
 
     @BeforeEach
@@ -52,8 +63,67 @@ class WarehouseSparePartsStatsServiceTest {
                 stockRepository,
                 warehouseRepository,
                 scopeAccessService,
-                unitOfMeasurementRepository
+                unitOfMeasurementRepository,
+                movementRepository
         );
+    }
+
+    @Test
+    void getIssuedToWorkForAdminUsesGlobalQueryWithNormalizedFilters() {
+        UUID typeId = UUID.randomUUID();
+        UUID unitId = UUID.randomUUID();
+        UUID movementId = UUID.randomUUID();
+        UnitOfMeasurement kgUnit = unit(unitId, "KG", "Kilogram");
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(unitOfMeasurementRepository.findByTokenIgnoreCase("KG")).thenReturn(List.of(kgUnit));
+        when(movementRepository.findIssuedToWork(
+                eq("bolt"), eq(typeId), eq("SPARE_PART"), eq(unitId), eq(PageRequest.of(2, 25))))
+                .thenReturn(new PageImpl<>(List.of(issuedRow(movementId)), PageRequest.of(2, 25), 51));
+
+        Page<IssuedToWorkRowDto> result = service.getIssuedToWork(
+                null, " bolt ", typeId, "SPARE_PART", "KG", 2, 25);
+
+        assertThat(result.getTotalElements()).isEqualTo(51);
+        assertThat(result.getContent()).singleElement().satisfies(row -> {
+            assertThat(row.movementId()).isEqualTo(movementId);
+            assertThat(row.workOrderNumber()).isEqualTo("WO-1");
+            assertThat(row.quantity()).isEqualByComparingTo("3.5000");
+        });
+    }
+
+    @Test
+    void getIssuedToWorkForNonAdminUsesSameAccessibleWarehouseScopeAsStats() {
+        UUID accessibleId = UUID.randomUUID();
+        UUID blockedId = UUID.randomUUID();
+        UUID accessibleDepartment = UUID.randomUUID();
+        Warehouse accessible = warehouse(accessibleId, accessibleDepartment, null);
+        Warehouse blocked = warehouse(blockedId, UUID.randomUUID(), null);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(accessible, blocked));
+        when(scopeAccessService.canAccessDepartment(accessibleDepartment)).thenReturn(true);
+        when(movementRepository.findIssuedToWorkByWarehouseIds(
+                eq(List.of(accessibleId)), isNull(), isNull(), isNull(), isNull(), eq(PageRequest.of(0, 10))))
+                .thenReturn(Page.empty(PageRequest.of(0, 10)));
+
+        service.getIssuedToWork(null, null, null, null, null, 0, 10);
+
+        verify(movementRepository).findIssuedToWorkByWarehouseIds(
+                eq(List.of(accessibleId)), isNull(), isNull(), isNull(), isNull(), eq(PageRequest.of(0, 10)));
+        verify(movementRepository, never()).findIssuedToWork(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void getIssuedToWorkReturnsEmptyPageWhenScopedUserHasNoWarehouses() {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+
+        Page<IssuedToWorkRowDto> result = service.getIssuedToWork(null, null, null, null, null, 3, 20);
+
+        assertThat(result).isEmpty();
+        assertThat(result.getPageable()).isEqualTo(PageRequest.of(3, 20));
+        verify(movementRepository, never()).findIssuedToWork(any(), any(), any(), any(), any());
+        verify(movementRepository, never()).findIssuedToWorkByWarehouseIds(
+                any(Collection.class), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -279,6 +349,32 @@ class WarehouseSparePartsStatsServiceTest {
             public Double getIssuedToWork() {
                 return issuedToWork;
             }
+        };
+    }
+
+    private IssuedToWorkRowProjection issuedRow(UUID movementId) {
+        return new IssuedToWorkRowProjection() {
+            @Override public UUID getMovementId() { return movementId; }
+            @Override public LocalDate getMovementDate() { return LocalDate.of(2026, 7, 15); }
+            @Override public UUID getSparePartId() { return UUID.randomUUID(); }
+            @Override public String getSparePartCode() { return "SP-1"; }
+            @Override public String getSparePartName() { return "Bolt"; }
+            @Override public BigDecimal getQuantity() { return new BigDecimal("3.5000"); }
+            @Override public String getUnit() { return "KG"; }
+            @Override public UUID getWarehouseId() { return UUID.randomUUID(); }
+            @Override public String getWarehouseName() { return "Warehouse"; }
+            @Override public UUID getWorkOrderId() { return UUID.randomUUID(); }
+            @Override public String getWorkOrderNumber() { return "WO-1"; }
+            @Override public String getWorkOrderTitle() { return "Repair"; }
+            @Override public String getWorkOrderStatus() { return "IN_PROGRESS"; }
+            @Override public UUID getIssuedById() { return null; }
+            @Override public String getIssuedByName() { return "Issuer"; }
+            @Override public UUID getResponsiblePersonId() { return null; }
+            @Override public String getResponsiblePersonName() { return null; }
+            @Override public String getDocumentNumber() { return "DOC-1"; }
+            @Override public String getSourceDocumentNo() { return null; }
+            @Override public String getSourceType() { return "WORK_ORDER_MATERIAL_USAGE"; }
+            @Override public UUID getSourceId() { return null; }
         };
     }
 }

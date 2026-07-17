@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -71,5 +72,22 @@ class RbacWarehouseSparePartsStatsSecurityTest {
 
         mockMvc.perform(get("/api/v1/warehouses/spare-parts/stats"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.STOCK_READ)
+    void stockReadCanReadIssuedToWork() throws Exception {
+        when(statsService.getIssuedToWork(isNull(), isNull(), isNull(), isNull(), isNull(), eq(0), eq(20)))
+                .thenReturn(org.springframework.data.domain.Page.empty());
+
+        mockMvc.perform(get("/api/v1/warehouses/spare-parts/issued-to-work"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.USER_READ)
+    void unrelatedPermissionCannotReadIssuedToWork() throws Exception {
+        mockMvc.perform(get("/api/v1/warehouses/spare-parts/issued-to-work"))
+                .andExpect(status().isForbidden());
     }
 }

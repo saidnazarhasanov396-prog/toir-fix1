@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 
@@ -63,6 +64,8 @@ class PlannedShutdownWorkItemServiceTest {
     @Mock PlannedShutdownIsolationPointRepository isolationPointRepository;
     @Mock com.toir.repository.plannedshutdown.PlannedShutdownStatusHistoryRepository statusHistoryRepository;
     @Mock ApprovalRequestRepository approvalRequestRepository;
+    @Mock ObjectProvider<ApprovalService> approvalServiceProvider;
+    @Mock ApprovalService approvalService;
     @Mock ScopeAccessService scopeAccessService;
     @Mock AuditBuilderService audit;
     PlannedShutdownService service;
@@ -76,6 +79,7 @@ class PlannedShutdownWorkItemServiceTest {
         service = new PlannedShutdownService(shutdownRepository, assetRepository, itemRepository,
                 readinessItemRepository, isolationPointRepository,
                 statusHistoryRepository, approvalRequestRepository,
+                approvalServiceProvider,
                 departmentRepository, employeeRepository, equipmentRepository, defectRepository,
                 pprTaskRepository, workOrderRepository, canonicalWorkSourceResolver, workOrderService, materialReadinessService, assignmentEligibilityService,
                 safetyPermitRepository, new PlannedShutdownWorkItemPolicy(), new PlannedShutdownReadinessPolicy(),

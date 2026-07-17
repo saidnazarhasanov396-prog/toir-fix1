@@ -1,15 +1,19 @@
 package com.toir.service;
 
+import com.toir.dto.warehouse.IssuedToWorkRowDto;
 import com.toir.dto.warehouse.SparePartsWarehouseStatsResponse;
 import com.toir.entity.UnitOfMeasurement;
 import com.toir.entity.warehouse.Warehouse;
 import com.toir.exception.RestException;
 import com.toir.repository.SparePartsWarehouseStatsProjection;
+import com.toir.repository.StockMovementRepository;
 import com.toir.repository.UnitOfMeasurementRepository;
 import com.toir.repository.WarehouseRepository;
 import com.toir.repository.WarehouseStockRepository;
 import com.toir.security.ScopeAccessService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import static com.toir.util.PaginationUtils.pageRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +32,7 @@ public class WarehouseSparePartsStatsService {
     private final WarehouseRepository warehouseRepository;
     private final ScopeAccessService scopeAccessService;
     private final UnitOfMeasurementRepository unitOfMeasurementRepository;
+    private final StockMovementRepository movementRepository;
 
     @Transactional(readOnly = true)
     public SparePartsWarehouseStatsResponse getStats(
@@ -35,33 +42,89 @@ public class WarehouseSparePartsStatsService {
             String itemType,
             String unit
     ) {
+        ResolvedFilters filters = resolveFilters(search, itemType, unit);
+        WarehouseScope warehouseScope = resolveWarehouseScope(warehouseId);
+
+        if (warehouseScope.global()) {
+            return toResponse(stockRepository.getSparePartsWarehouseStats(
+                    filters.search(), typeId, filters.itemType(), filters.unitId()));
+        }
+
+        if (warehouseScope.warehouseIds().isEmpty()) {
+            return new SparePartsWarehouseStatsResponse(0, 0, 0, 0);
+        }
+
+        return toResponse(stockRepository.getSparePartsWarehouseStatsByWarehouseIds(
+                warehouseScope.warehouseIds(), filters.search(), typeId, filters.itemType(), filters.unitId()));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<IssuedToWorkRowDto> getIssuedToWork(
+            UUID warehouseId,
+            String search,
+            UUID typeId,
+            String itemType,
+            String unit,
+            int page,
+            int size
+    ) {
+        ResolvedFilters filters = resolveFilters(search, itemType, unit);
+        WarehouseScope warehouseScope = resolveWarehouseScope(warehouseId);
+        Pageable pageable = pageRequest(page, size);
+
+        if (warehouseScope.global()) {
+            return movementRepository.findIssuedToWork(
+                    filters.search(), typeId, filters.itemType(), filters.unitId(), pageable)
+                    .map(IssuedToWorkRowDto::from);
+        }
+
+        if (warehouseScope.warehouseIds().isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        return movementRepository.findIssuedToWorkByWarehouseIds(
+                warehouseScope.warehouseIds(),
+                filters.search(),
+                typeId,
+                filters.itemType(),
+                filters.unitId(),
+                pageable
+        ).map(IssuedToWorkRowDto::from);
+    }
+
+    private ResolvedFilters resolveFilters(String search, String itemType, String unit) {
         String normalizedSearch = (search == null || search.isBlank()) ? null : search.trim();
         String normalizedItemType = (itemType == null || itemType.isBlank()) ? null : itemType.trim();
-        UUID unitId = resolveUnitFilter(unit);
+        return new ResolvedFilters(normalizedSearch, normalizedItemType, resolveUnitFilter(unit));
+    }
 
+    private WarehouseScope resolveWarehouseScope(UUID warehouseId) {
         if (warehouseId != null) {
             assertCanAccessWarehouseId(warehouseId);
-            return toResponse(stockRepository.getSparePartsWarehouseStatsByWarehouseIds(
-                    List.of(warehouseId), normalizedSearch, typeId, normalizedItemType, unitId));
+            return new WarehouseScope(false, List.of(warehouseId));
         }
 
         if (scopeAccessService.isScopeAdmin()) {
-            return toResponse(stockRepository.getSparePartsWarehouseStats(
-                    normalizedSearch, typeId, normalizedItemType, unitId));
+            return new WarehouseScope(true, List.of());
         }
 
         List<UUID> accessibleWarehouseIds = warehouseRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(this::canAccessWarehouse)
                 .map(Warehouse::getId)
                 .toList();
-        if (accessibleWarehouseIds.isEmpty()) {
-            return new SparePartsWarehouseStatsResponse(0, 0, 0, 0);
-        }
-
-        return toResponse(stockRepository.getSparePartsWarehouseStatsByWarehouseIds(
-                accessibleWarehouseIds, normalizedSearch, typeId, normalizedItemType, unitId));
+        return new WarehouseScope(false, accessibleWarehouseIds);
     }
 
+    private record ResolvedFilters(String search, String itemType, UUID unitId) {
+    }
+
+    private record WarehouseScope(boolean global, List<UUID> warehouseIds) {
+    }
+
+    /*
+     * UOM resolution intentionally remains shared between the aggregate and detail
+     * paths so legacy codes/names and UUID tokens cannot drift.
+     */
     private UUID resolveUnitFilter(String unit) {
         if (unit == null || unit.isBlank()) {
             return null;

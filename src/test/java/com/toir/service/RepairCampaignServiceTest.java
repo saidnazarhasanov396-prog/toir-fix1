@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.dto.repaircampaign.CampaignMutationImpact;
 import com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest;
@@ -16,7 +17,10 @@ import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignStage;
 import com.toir.entity.users.Employee;
+import com.toir.entity.ApprovalRequest;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignScopeType;
 import com.toir.enums.RepairCampaignPriority;
@@ -38,7 +42,10 @@ import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.approval.LifecycleApprovalRoutePolicy;
+import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.repair.RepairCampaignApprovalPolicy;
+import com.toir.service.repair.RepairCampaignApprovalScopeHasher;
 import com.toir.service.repair.RepairCampaignService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
@@ -63,13 +70,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
 class RepairCampaignServiceTest {
@@ -124,6 +136,9 @@ class RepairCampaignServiceTest {
 
     @Mock
     private ObjectProvider<ApprovalService> approvalServiceProvider;
+
+    @Mock
+    private ApprovalService approvalService;
 
     @Mock
     private com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
@@ -448,6 +463,229 @@ class RepairCampaignServiceTest {
         assertThatThrownBy(() -> service.approve(campaignId))
                 .hasMessageContaining("approval request");
         verify(repository, never()).save(campaign);
+    }
+
+    @Test
+    void requestApprovalLocksPlansFlushesAndMaterializesInOrder() {
+        UUID campaignId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setVersion(2L);
+        campaign.setScopeVersion(5L);
+        campaign.setStatus(RepairCampaignStatus.RESOURCE_CHECK);
+        campaign.setCode("RCMP-2026-001");
+        campaign.setName("Annual overhaul");
+        LifecycleApprovalStartPlan plan = creatablePlan(ApprovalTargetType.REPAIR_CAMPAIGN, campaignId);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(approvalServiceProvider.getObject()).thenReturn(approvalService);
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, campaignId, ApprovalActionType.APPROVE, false, null))
+                .thenReturn(plan);
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
+        doAnswer(invocation -> {
+            campaign.setApprovalScopeVersion(5L);
+            campaign.setApprovalScopeHash("a".repeat(64));
+            campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
+            return null;
+        }).when(approvalPolicy).prepareRequest(campaign, 5L);
+        when(repository.saveAndFlush(campaign)).thenAnswer(invocation -> {
+            campaign.setVersion(3L);
+            return campaign;
+        });
+
+        RepairCampaignDto result = service.requestApproval(campaignId, 2L, 5L, "Ready");
+
+        assertThat(result.status()).isEqualTo(RepairCampaignStatus.PENDING_APPROVAL);
+        InOrder inOrder = inOrder(repository, approvalService);
+        inOrder.verify(repository).findLockedByIdAndIsDeletedFalse(campaignId);
+        inOrder.verify(approvalService).planLifecycleApproval(
+                eq(ApprovalTargetType.REPAIR_CAMPAIGN), eq(campaignId),
+                eq(ApprovalActionType.APPROVE), eq(false), isNull());
+        inOrder.verify(repository).saveAndFlush(campaign);
+        inOrder.verify(approvalService).materializeLifecycleApproval(
+                eq(plan), any(UUID.class), anyString(), any(), anyString());
+    }
+
+    @Test
+    void requestApprovalPropagatesMaterializeFailureAfterDomainFlush() {
+        UUID campaignId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setVersion(2L);
+        campaign.setScopeVersion(5L);
+        campaign.setStatus(RepairCampaignStatus.RESOURCE_CHECK);
+        campaign.setCode("RCMP-2026-002");
+        campaign.setName("Materialize failure campaign");
+        LifecycleApprovalStartPlan plan = creatablePlan(ApprovalTargetType.REPAIR_CAMPAIGN, campaignId);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(approvalServiceProvider.getObject()).thenReturn(approvalService);
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, campaignId, ApprovalActionType.APPROVE, false, null))
+                .thenReturn(plan);
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
+        doAnswer(invocation -> {
+            campaign.setApprovalScopeVersion(5L);
+            campaign.setApprovalScopeHash("d".repeat(64));
+            campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
+            return null;
+        }).when(approvalPolicy).prepareRequest(campaign, 5L);
+        when(repository.saveAndFlush(campaign)).thenReturn(campaign);
+        doThrow(new IllegalStateException("materialize failed"))
+                .when(approvalService).materializeLifecycleApproval(
+                        eq(plan), eq(requesterId), anyString(), any(), anyString());
+
+        assertThatThrownBy(() -> service.requestApproval(campaignId, 2L, 5L, "Ready"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("materialize failed");
+
+        InOrder inOrder = inOrder(repository, approvalService);
+        inOrder.verify(repository).saveAndFlush(campaign);
+        inOrder.verify(approvalService).materializeLifecycleApproval(
+                eq(plan), eq(requesterId), anyString(), any(), anyString());
+    }
+
+    @Test
+    void requestApprovalMapsTemplateFailuresBeforeMutatingCampaign() {
+        doCallRealMethod().when(approvalPolicy).requireStartPlan(any());
+        List<LifecycleApprovalRoutePolicy.Reason> failures = List.of(
+                LifecycleApprovalRoutePolicy.Reason.NO_ACTIVE_TEMPLATE,
+                LifecycleApprovalRoutePolicy.Reason.EMPTY_ROUTE,
+                LifecycleApprovalRoutePolicy.Reason.MULTIPLE_ACTIVE_TEMPLATES);
+        List<String> errors = List.of(
+                "REPAIR_CAMPAIGN_APPROVAL_TEMPLATE_NOT_CONFIGURED",
+                "APPROVAL_TEMPLATE_STEPS_INVALID",
+                "MULTIPLE_ACTIVE_TEMPLATES");
+
+        for (int index = 0; index < failures.size(); index++) {
+            UUID campaignId = UUID.randomUUID();
+            RepairCampaign campaign = campaign(campaignId, null);
+            campaign.setVersion(2L);
+            campaign.setScopeVersion(5L);
+            campaign.setStatus(RepairCampaignStatus.RESOURCE_CHECK);
+            when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+            when(approvalServiceProvider.getObject()).thenReturn(approvalService);
+            when(approvalService.planLifecycleApproval(
+                    ApprovalTargetType.REPAIR_CAMPAIGN, campaignId, ApprovalActionType.APPROVE, false, null))
+                    .thenReturn(failedPlan(ApprovalTargetType.REPAIR_CAMPAIGN, campaignId, failures.get(index)));
+
+            String expectedError = errors.get(index);
+            assertThatThrownBy(() -> service.requestApproval(campaignId, 2L, 5L, "Ready"))
+                    .isInstanceOf(RestException.class)
+                    .hasMessageContaining(expectedError);
+            assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.RESOURCE_CHECK);
+            assertThat(campaign.getApprovalScopeVersion()).isNull();
+            assertThat(campaign.getApprovalScopeHash()).isNull();
+        }
+
+        verify(repository, never()).saveAndFlush(any(RepairCampaign.class));
+        verify(approvalService, never()).materializeLifecycleApproval(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void requestApprovalMapsInconsistentPendingRuntimeToCampaignRouteStale() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setVersion(2L);
+        campaign.setScopeVersion(5L);
+        campaign.setStatus(RepairCampaignStatus.RESOURCE_CHECK);
+        LifecycleApprovalStartPlan plan = failedPlan(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                campaignId,
+                LifecycleApprovalRoutePolicy.Reason.REQUEST_STATUS_INCONSISTENT);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(approvalServiceProvider.getObject()).thenReturn(approvalService);
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, campaignId, ApprovalActionType.APPROVE, false, null))
+                .thenReturn(plan);
+        doCallRealMethod().when(approvalPolicy).requireStartPlan(plan);
+
+        assertThatThrownBy(() -> service.requestApproval(campaignId, 2L, 5L, "Ready"))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("REPAIR_CAMPAIGN_APPROVAL_ROUTE_STALE");
+        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.RESOURCE_CHECK);
+        assertThat(campaign.getApprovalScopeVersion()).isNull();
+        assertThat(campaign.getApprovalScopeHash()).isNull();
+        verify(repository, never()).saveAndFlush(campaign);
+        verify(approvalService, never()).materializeLifecycleApproval(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void requestApprovalReusesCompatiblePendingRequestWithoutTemplateOrDomainMutation() {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setVersion(3L);
+        campaign.setScopeVersion(5L);
+        campaign.setApprovalScopeVersion(5L);
+        campaign.setApprovalScopeHash("b".repeat(64));
+        campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
+        RepairCampaignApprovalScopeHasher scopeHasher = mock(RepairCampaignApprovalScopeHasher.class);
+        when(scopeHasher.hash(campaign)).thenReturn("b".repeat(64));
+        RepairCampaignApprovalPolicy realPolicy = new RepairCampaignApprovalPolicy(scopeHasher);
+        assertThat(realPolicy.validateRequestScope(campaign, 5L)).isEqualTo("b".repeat(64));
+        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.PENDING_APPROVAL);
+        assertThat(campaign.getScopeVersion()).isEqualTo(5L);
+        assertThat(campaign.getApprovalScopeVersion()).isEqualTo(5L);
+        assertThat(campaign.getApprovalScopeHash()).isEqualTo("b".repeat(64));
+        ApprovalRequest reusable = new ApprovalRequest();
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.REPAIR_CAMPAIGN, campaignId, ApprovalActionType.APPROVE,
+                reusable, List.of(), LifecycleApprovalRoutePolicy.Reason.VALID);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(approvalServiceProvider.getObject()).thenReturn(approvalService);
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, campaignId, ApprovalActionType.APPROVE, true,
+                RepairCampaignApprovalPolicy.payload(campaign))).thenReturn(plan);
+        doCallRealMethod().when(approvalPolicy).requireStartPlan(plan);
+
+        RepairCampaignDto result = service.requestApproval(campaignId, 3L, 5L, "Still ready");
+
+        assertThat(result.status()).isEqualTo(RepairCampaignStatus.PENDING_APPROVAL);
+        verify(approvalService).planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN, campaignId, ApprovalActionType.APPROVE, true,
+                RepairCampaignApprovalPolicy.payload(campaign));
+        verify(approvalPolicy, never()).prepareRequest(any(), any());
+        verify(repository, never()).saveAndFlush(any(RepairCampaign.class));
+        verify(approvalService, never()).materializeLifecycleApproval(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void requestScopeValidationRejectsStalePendingVersionWithoutMutation() {
+        RepairCampaign campaign = campaign(UUID.randomUUID(), null);
+        campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
+        campaign.setScopeVersion(5L);
+        campaign.setApprovalScopeVersion(4L);
+        campaign.setApprovalScopeHash("e".repeat(64));
+        RepairCampaignApprovalScopeHasher scopeHasher = mock(RepairCampaignApprovalScopeHasher.class);
+        when(scopeHasher.hash(campaign)).thenReturn("e".repeat(64));
+        RepairCampaignApprovalPolicy realPolicy = new RepairCampaignApprovalPolicy(scopeHasher);
+
+        assertThatThrownBy(() -> realPolicy.validateRequestScope(campaign, 5L))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("REPAIR_CAMPAIGN_APPROVAL_SCOPE_VERSION_MISMATCH");
+        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.PENDING_APPROVAL);
+        assertThat(campaign.getScopeVersion()).isEqualTo(5L);
+        assertThat(campaign.getApprovalScopeVersion()).isEqualTo(4L);
+        assertThat(campaign.getApprovalScopeHash()).isEqualTo("e".repeat(64));
+    }
+
+    @Test
+    void requestScopeValidationRejectsStalePendingHashWithoutMutation() {
+        RepairCampaign campaign = campaign(UUID.randomUUID(), null);
+        campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
+        campaign.setScopeVersion(5L);
+        campaign.setApprovalScopeVersion(5L);
+        campaign.setApprovalScopeHash("f".repeat(64));
+        RepairCampaignApprovalScopeHasher scopeHasher = mock(RepairCampaignApprovalScopeHasher.class);
+        when(scopeHasher.hash(campaign)).thenReturn("0".repeat(64));
+        RepairCampaignApprovalPolicy realPolicy = new RepairCampaignApprovalPolicy(scopeHasher);
+
+        assertThatThrownBy(() -> realPolicy.validateRequestScope(campaign, 5L))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("REPAIR_CAMPAIGN_APPROVAL_SCOPE_HASH_MISMATCH");
+        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.PENDING_APPROVAL);
+        assertThat(campaign.getScopeVersion()).isEqualTo(5L);
+        assertThat(campaign.getApprovalScopeVersion()).isEqualTo(5L);
+        assertThat(campaign.getApprovalScopeHash()).isEqualTo("f".repeat(64));
     }
 
     @Test
@@ -1214,6 +1452,18 @@ class RepairCampaignServiceTest {
         campaign.setEndDate(LocalDate.of(2026, 12, 31));
         campaign.setStages(new java.util.ArrayList<>());
         return campaign;
+    }
+
+    private static LifecycleApprovalStartPlan creatablePlan(ApprovalTargetType targetType, UUID targetId) {
+        return new LifecycleApprovalStartPlan(targetType, targetId, ApprovalActionType.APPROVE, null,
+                List.of(new CreateApprovalRequest.StepInput(null, "APPROVER")),
+                LifecycleApprovalRoutePolicy.Reason.VALID);
+    }
+
+    private static LifecycleApprovalStartPlan failedPlan(
+            ApprovalTargetType targetType, UUID targetId, LifecycleApprovalRoutePolicy.Reason reason) {
+        return new LifecycleApprovalStartPlan(
+                targetType, targetId, ApprovalActionType.APPROVE, null, List.of(), reason);
     }
 
     private MaintenanceBudget budget(

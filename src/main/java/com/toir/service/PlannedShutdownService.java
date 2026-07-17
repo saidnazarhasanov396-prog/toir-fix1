@@ -13,6 +13,8 @@ import com.toir.entity.plannedshutdown.PlannedShutdownWorkItem;
 import com.toir.entity.plannedshutdown.PlannedShutdownReadinessItem;
 import com.toir.entity.plannedshutdown.PlannedShutdownIsolationPoint;
 import com.toir.entity.users.Employee;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.PlanStatus;
@@ -45,8 +47,11 @@ import com.toir.service.plannedshutdown.PlannedShutdownReadinessPolicy;
 import com.toir.service.plannedshutdown.PlannedShutdownReadinessLifecyclePolicy;
 import com.toir.service.plannedshutdown.PlannedShutdownTransitionPolicy;
 import com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher;
+import com.toir.service.approval.LifecycleApprovalRoutePolicy;
+import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.repair.CanonicalWorkSourceResolver;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -67,6 +72,7 @@ public class PlannedShutdownService {
     private final PlannedShutdownIsolationPointRepository isolationPointRepository;
     private final PlannedShutdownStatusHistoryRepository statusHistoryRepository;
     private final ApprovalRequestRepository approvalRequestRepository;
+    private final ObjectProvider<ApprovalService> approvalServiceProvider;
     private final DepartmentRepository departmentRepository;
     private final EmployeeRepository employeeRepository;
     private final EquipmentRepository equipmentRepository;
@@ -703,24 +709,52 @@ public class PlannedShutdownService {
     public PlannedShutdownDetailResponse requestApproval(UUID id, PlannedShutdownTransitionRequest request) {
         PlannedShutdown shutdown = findLocked(id);
         requireVersion(shutdown, request.version());
-        requireAllowedTransition(shutdown, PlannedShutdownStatus.PENDING_APPROVAL);
-        PlannedShutdownReadinessAssessment assessment = assessReadinessFacts(shutdown, Instant.now());
-        List<PlannedShutdownBlocker> submissionBlockers = assessment.blockers().stream()
-                .filter(blocker -> !blocker.code().startsWith("APPROVAL_"))
-                .filter(blocker -> !blocker.code().equals("WINDOW_OUTSIDE_APPROVED"))
-                .toList();
-        if (!submissionBlockers.isEmpty()) {
-            String codes = submissionBlockers.stream().map(PlannedShutdownBlocker::code).distinct().sorted()
-                    .collect(java.util.stream.Collectors.joining(","));
-            throw new PlannedShutdownBlockerException(org.springframework.http.HttpStatus.CONFLICT,
-                    "APPROVAL_REQUEST_BLOCKED:" + codes, shutdown.getVersion(), submissionBlockers);
+        boolean pending = shutdown.getLifecycleStatus() == PlannedShutdownStatus.PENDING_APPROVAL;
+        if (!pending) {
+            requireAllowedTransition(shutdown, PlannedShutdownStatus.PENDING_APPROVAL);
+            PlannedShutdownReadinessAssessment assessment = assessReadinessFacts(shutdown, Instant.now());
+            List<PlannedShutdownBlocker> submissionBlockers = assessment.blockers().stream()
+                    .filter(blocker -> !blocker.code().startsWith("APPROVAL_"))
+                    .filter(blocker -> !blocker.code().equals("WINDOW_OUTSIDE_APPROVED"))
+                    .toList();
+            if (!submissionBlockers.isEmpty()) {
+                String codes = submissionBlockers.stream().map(PlannedShutdownBlocker::code).distinct().sorted()
+                        .collect(java.util.stream.Collectors.joining(","));
+                throw new PlannedShutdownBlockerException(org.springframework.http.HttpStatus.CONFLICT,
+                        "APPROVAL_REQUEST_BLOCKED:" + codes, shutdown.getVersion(), submissionBlockers);
+            }
         }
-        shutdown.setApprovedStartAt(shutdown.getPlannedStartAt());
-        shutdown.setApprovedEndAt(shutdown.getPlannedEndAt());
-        shutdown.setApprovalScopeVersion(shutdown.getScopeVersion());
-        shutdown.setApprovalScopeHash(computeApprovalScopeHash(shutdown));
-        return detail(executeTransition(shutdown, PlannedShutdownStatus.PENDING_APPROVAL, requireUserActor(),
-                request.reason(), request.correlationKey(), null));
+        String prospectiveScopeHash = computeApprovalScopeHash(
+                pending ? shutdown : approvalScopeCandidate(shutdown));
+        if (pending && (!Objects.equals(shutdown.getScopeVersion(), shutdown.getApprovalScopeVersion())
+                || !Objects.equals(prospectiveScopeHash, shutdown.getApprovalScopeHash()))) {
+            throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_SCOPE_STALE");
+        }
+        ApprovalService approvalService = approvalServiceProvider.getObject();
+        LifecycleApprovalStartPlan plan = approvalService.planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                shutdown.getId(),
+                ApprovalActionType.APPROVE,
+                pending,
+                pending ? plannedShutdownApprovalPayload(shutdown) : null);
+        requireStartPlan(plan);
+        if (plan.reusable()) {
+            return detail(shutdown);
+        }
+        if (pending) {
+            throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
+        }
+        UUID requester = requireUserActor();
+        shutdown.setApprovalScopeHash(prospectiveScopeHash);
+        PlannedShutdown saved = executeTransition(shutdown, PlannedShutdownStatus.PENDING_APPROVAL, requester,
+                request.reason(), request.correlationKey(), null);
+        approvalService.materializeLifecycleApproval(
+                plan,
+                requester,
+                approvalTitle(saved),
+                request.reason(),
+                plannedShutdownApprovalPayload(saved));
+        return detail(saved);
     }
 
     @Transactional
@@ -1029,6 +1063,65 @@ public class PlannedShutdownService {
         UUID actor = scopeAccessService.currentUserIdOrNull();
         if (actor == null) throw RestException.conflict("Authenticated user actor is required");
         return actor;
+    }
+
+    private static void requireStartPlan(LifecycleApprovalStartPlan plan) {
+        if (plan != null && (plan.reusable() || plan.creatable())) {
+            return;
+        }
+        LifecycleApprovalRoutePolicy.Reason reason = plan == null ? null : plan.failure();
+        if (reason == LifecycleApprovalRoutePolicy.Reason.NO_ACTIVE_TEMPLATE) {
+            throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_TEMPLATE_NOT_CONFIGURED");
+        }
+        if (reason == LifecycleApprovalRoutePolicy.Reason.MULTIPLE_ACTIVE_TEMPLATES) {
+            throw RestException.conflict("MULTIPLE_ACTIVE_TEMPLATES");
+        }
+        if (isInvalidTemplate(reason)) {
+            throw RestException.conflict("APPROVAL_TEMPLATE_STEPS_INVALID");
+        }
+        throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
+    }
+
+    private static boolean isInvalidTemplate(LifecycleApprovalRoutePolicy.Reason reason) {
+        return reason == LifecycleApprovalRoutePolicy.Reason.EMPTY_ROUTE
+                || reason == LifecycleApprovalRoutePolicy.Reason.NONPOSITIVE_ORDER
+                || reason == LifecycleApprovalRoutePolicy.Reason.DUPLICATE_ORDER
+                || reason == LifecycleApprovalRoutePolicy.Reason.NONCONTIGUOUS_ORDER
+                || reason == LifecycleApprovalRoutePolicy.Reason.INVALID_ASSIGNMENT
+                || reason == LifecycleApprovalRoutePolicy.Reason.DUPLICATE_EXPLICIT_APPROVER;
+    }
+
+    private static String approvalTitle(PlannedShutdown shutdown) {
+        String title = "PLANNED_SHUTDOWN approval: " + shutdown.getCode();
+        return shutdown.getName() == null || shutdown.getName().isBlank()
+                ? title
+                : title + " - " + shutdown.getName();
+    }
+
+    private static String plannedShutdownApprovalPayload(PlannedShutdown shutdown) {
+        return "{\"scopeVersion\":" + shutdown.getApprovalScopeVersion()
+                + ",\"scopeHash\":\"" + shutdown.getApprovalScopeHash() + "\"}";
+    }
+
+    private static PlannedShutdown approvalScopeCandidate(PlannedShutdown shutdown) {
+        PlannedShutdown candidate = new PlannedShutdown();
+        candidate.setId(shutdown.getId());
+        candidate.setCode(shutdown.getCode());
+        candidate.setName(shutdown.getName());
+        candidate.setShutdownType(shutdown.getShutdownType());
+        candidate.setDepartmentId(shutdown.getDepartmentId());
+        candidate.setResponsibleEmployeeId(shutdown.getResponsibleEmployeeId());
+        candidate.setPlannedStartAt(shutdown.getPlannedStartAt());
+        candidate.setPlannedEndAt(shutdown.getPlannedEndAt());
+        candidate.setReason(shutdown.getReason());
+        candidate.setObjective(shutdown.getObjective());
+        candidate.setNotes(shutdown.getNotes());
+        candidate.setRiskLevel(shutdown.getRiskLevel());
+        candidate.setRiskScore(shutdown.getRiskScore());
+        candidate.setScopeVersion(shutdown.getScopeVersion());
+        candidate.setApprovedStartAt(shutdown.getPlannedStartAt());
+        candidate.setApprovedEndAt(shutdown.getPlannedEndAt());
+        return candidate;
     }
 
     private UUID requireEmployeeActor() {

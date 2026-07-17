@@ -1,14 +1,20 @@
 package com.toir.service;
 
 import com.toir.dto.plannedshutdown.PlannedShutdownDto;
+import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownAssetReplaceRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownAssetRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownCreateRequest;
+import com.toir.dto.plannedshutdown.PlannedShutdownReadinessAssessment;
+import com.toir.dto.plannedshutdown.PlannedShutdownTransitionRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownUpdateRequest;
 import com.toir.entity.PlannedShutdown;
+import com.toir.entity.ApprovalRequest;
 import com.toir.entity.Department;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.users.Employee;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.PlannedShutdownAssetDisposition;
 import com.toir.enums.PlannedShutdownReadinessSeverity;
 import com.toir.enums.PlannedShutdownStatus;
@@ -26,6 +32,8 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.defects.DefectRepository;
 import com.toir.service.plannedshutdown.PlannedShutdownWorkItemPolicy;
 import com.toir.service.plannedshutdown.PlannedShutdownReadinessPolicy;
+import com.toir.service.approval.LifecycleApprovalRoutePolicy;
+import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.repair.CanonicalWorkSourceResolver;
 import com.toir.security.ScopeAccessService;
 import com.toir.repository.users.EmployeeRepository;
@@ -37,9 +45,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Instant;
 import java.util.List;
@@ -71,6 +81,8 @@ class PlannedShutdownServiceTest {
     @Mock private PlannedShutdownIsolationPointRepository isolationPointRepository;
     @Mock private com.toir.repository.plannedshutdown.PlannedShutdownStatusHistoryRepository statusHistoryRepository;
     @Mock private com.toir.repository.ApprovalRequestRepository approvalRequestRepository;
+    @Mock private ObjectProvider<ApprovalService> approvalServiceProvider;
+    @Mock private ApprovalService approvalService;
     @Mock private PlannedShutdownReadinessPolicy readinessPolicy;
     @Mock private WorkOrderAssignmentEligibilityService workOrderAssignmentEligibilityService;
     @Mock private WorkOrderMaterialReadinessService workOrderMaterialReadinessService;
@@ -93,6 +105,7 @@ class PlannedShutdownServiceTest {
     void allowDefaultDepartmentScope() {
         lenient().when(scopeAccessService.canAccessDepartment(any())).thenReturn(true);
         lenient().when(scopeAccessService.enforceDepartmentScope(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(approvalServiceProvider.getObject()).thenReturn(approvalService);
     }
 
     @Test
@@ -803,6 +816,197 @@ class PlannedShutdownServiceTest {
                 .isInstanceOfSatisfying(RestException.class, ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.CONFLICT));
     }
 
+    @Test
+    void requestApprovalSnapshotsScopeTransitionsAndStartsRuntimeApproval() {
+        UUID id = UUID.randomUUID();
+        UUID actor = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 2L, PlannedShutdownStatus.READINESS_CHECK);
+        shutdown.setScopeVersion(5L);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(readinessPolicy.evaluateReadiness(any()))
+                .thenReturn(new PlannedShutdownReadinessAssessment(true, List.of()));
+        when(repository.saveAndFlush(shutdown)).thenReturn(shutdown);
+        when(statusHistoryRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actor);
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        LifecycleApprovalStartPlan plan = creatablePlan(ApprovalTargetType.PLANNED_SHUTDOWN, id);
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, id, ApprovalActionType.APPROVE, false, null))
+                .thenReturn(plan);
+
+        var response = service.requestApproval(id, new PlannedShutdownTransitionRequest(2L, "Ready", "ps-approval-1"));
+
+        assertThat(response.status()).isEqualTo(PlannedShutdownStatus.PENDING_APPROVAL);
+        assertThat(shutdown.getApprovalScopeVersion()).isEqualTo(5L);
+        assertThat(shutdown.getApprovalScopeHash()).matches("[0-9a-f]{64}");
+        assertThat(shutdown.getApprovedStartAt()).isEqualTo(shutdown.getPlannedStartAt());
+        assertThat(shutdown.getApprovedEndAt()).isEqualTo(shutdown.getPlannedEndAt());
+        assertThat(shutdown.getApprovalScopeHash()).isEqualTo(
+                approvalScopeHasher.hash(shutdown, List.of(), List.of(), List.of(), List.of()));
+
+        InOrder inOrder = inOrder(repository, approvalService);
+        inOrder.verify(repository).findByIdAndIsDeletedFalseForUpdate(id);
+        inOrder.verify(approvalService).planLifecycleApproval(
+                eq(ApprovalTargetType.PLANNED_SHUTDOWN), eq(id),
+                eq(ApprovalActionType.APPROVE), eq(false), isNull());
+        inOrder.verify(repository).saveAndFlush(shutdown);
+        inOrder.verify(approvalService).materializeLifecycleApproval(
+                eq(plan), any(UUID.class), anyString(), any(), anyString());
+    }
+
+    @Test
+    void requestApprovalMapsTemplateFailuresBeforeMutatingShutdown() {
+        List<LifecycleApprovalRoutePolicy.Reason> failures = List.of(
+                LifecycleApprovalRoutePolicy.Reason.NO_ACTIVE_TEMPLATE,
+                LifecycleApprovalRoutePolicy.Reason.EMPTY_ROUTE,
+                LifecycleApprovalRoutePolicy.Reason.MULTIPLE_ACTIVE_TEMPLATES);
+        List<String> errors = List.of(
+                "PLANNED_SHUTDOWN_APPROVAL_TEMPLATE_NOT_CONFIGURED",
+                "APPROVAL_TEMPLATE_STEPS_INVALID",
+                "MULTIPLE_ACTIVE_TEMPLATES");
+
+        for (int index = 0; index < failures.size(); index++) {
+            UUID failureId = UUID.randomUUID();
+            PlannedShutdown failed = shutdown(
+                    failureId, UUID.randomUUID(), 2L, PlannedShutdownStatus.READINESS_CHECK);
+            failed.setScopeVersion(5L);
+            when(repository.findByIdAndIsDeletedFalseForUpdate(failureId))
+                    .thenReturn(java.util.Optional.of(failed));
+            when(readinessPolicy.evaluateReadiness(any()))
+                    .thenReturn(new PlannedShutdownReadinessAssessment(true, List.of()));
+            when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(failureId))
+                    .thenReturn(List.of());
+            when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(failureId))
+                    .thenReturn(List.of());
+            when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(failureId))
+                    .thenReturn(List.of());
+            when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(failureId))
+                    .thenReturn(List.of());
+            when(approvalService.planLifecycleApproval(
+                    ApprovalTargetType.PLANNED_SHUTDOWN, failureId,
+                    ApprovalActionType.APPROVE, false, null))
+                    .thenReturn(failedPlan(
+                            ApprovalTargetType.PLANNED_SHUTDOWN, failureId, failures.get(index)));
+
+            String expectedError = errors.get(index);
+            assertThatThrownBy(() -> service.requestApproval(
+                    failureId, new PlannedShutdownTransitionRequest(2L, "Ready", "ps-approval")))
+                    .isInstanceOf(RestException.class)
+                    .hasMessageContaining(expectedError);
+            assertThat(failed.getLifecycleStatus()).isEqualTo(PlannedShutdownStatus.READINESS_CHECK);
+            assertThat(failed.getApprovalScopeVersion()).isNull();
+            assertThat(failed.getApprovalScopeHash()).isNull();
+            assertThat(failed.getApprovedStartAt()).isNull();
+            assertThat(failed.getApprovedEndAt()).isNull();
+        }
+
+        verify(repository, never()).saveAndFlush(any(PlannedShutdown.class));
+        verify(approvalService, never()).materializeLifecycleApproval(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void requestApprovalPropagatesMaterializeFailureAfterDomainFlush() {
+        UUID id = UUID.randomUUID();
+        UUID actor = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 2L, PlannedShutdownStatus.READINESS_CHECK);
+        shutdown.setScopeVersion(5L);
+        LifecycleApprovalStartPlan plan = creatablePlan(ApprovalTargetType.PLANNED_SHUTDOWN, id);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(readinessPolicy.evaluateReadiness(any()))
+                .thenReturn(new PlannedShutdownReadinessAssessment(true, List.of()));
+        when(repository.saveAndFlush(shutdown)).thenReturn(shutdown);
+        when(statusHistoryRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actor);
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, id, ApprovalActionType.APPROVE, false, null))
+                .thenReturn(plan);
+        doThrow(new IllegalStateException("materialize failed"))
+                .when(approvalService).materializeLifecycleApproval(
+                        eq(plan), eq(actor), anyString(), any(), anyString());
+
+        assertThatThrownBy(() -> service.requestApproval(
+                id, new PlannedShutdownTransitionRequest(2L, "Ready", "ps-approval-materialize")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("materialize failed");
+
+        InOrder inOrder = inOrder(repository, approvalService);
+        inOrder.verify(repository).saveAndFlush(shutdown);
+        inOrder.verify(approvalService).materializeLifecycleApproval(
+                eq(plan), eq(actor), anyString(), any(), anyString());
+    }
+
+    @Test
+    void requestApprovalRejectsPendingRuntimeWhenShutdownRemainsInReadiness() {
+        UUID id = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 2L, PlannedShutdownStatus.READINESS_CHECK);
+        shutdown.setScopeVersion(5L);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(readinessPolicy.evaluateReadiness(any()))
+                .thenReturn(new PlannedShutdownReadinessAssessment(true, List.of()));
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, id, ApprovalActionType.APPROVE, false, null))
+                .thenReturn(failedPlan(
+                        ApprovalTargetType.PLANNED_SHUTDOWN,
+                        id,
+                        LifecycleApprovalRoutePolicy.Reason.REQUEST_STATUS_INCONSISTENT));
+
+        assertThatThrownBy(() -> service.requestApproval(
+                id, new PlannedShutdownTransitionRequest(2L, "Ready", "ps-approval-conflict")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
+        assertThat(shutdown.getLifecycleStatus()).isEqualTo(PlannedShutdownStatus.READINESS_CHECK);
+        assertThat(shutdown.getApprovalScopeVersion()).isNull();
+        assertThat(shutdown.getApprovalScopeHash()).isNull();
+        verify(repository, never()).saveAndFlush(shutdown);
+        verify(approvalService, never()).materializeLifecycleApproval(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void requestApprovalReusesCompatiblePendingRequestWithoutTemplateOrDomainMutation() {
+        UUID id = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 2L, PlannedShutdownStatus.PENDING_APPROVAL);
+        shutdown.setScopeVersion(5L);
+        shutdown.setApprovedStartAt(shutdown.getPlannedStartAt());
+        shutdown.setApprovedEndAt(shutdown.getPlannedEndAt());
+        String scopeHash = approvalScopeHasher.hash(shutdown, List.of(), List.of(), List.of(), List.of());
+        shutdown.setApprovalScopeVersion(5L);
+        shutdown.setApprovalScopeHash(scopeHash);
+        ApprovalRequest reusable = new ApprovalRequest();
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.PLANNED_SHUTDOWN, id, ApprovalActionType.APPROVE,
+                reusable, List.of(), LifecycleApprovalRoutePolicy.Reason.VALID);
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(readinessItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(isolationPointRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id)).thenReturn(List.of());
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, id, ApprovalActionType.APPROVE, true,
+                plannedShutdownPayload(5L, scopeHash))).thenReturn(plan);
+
+        var response = service.requestApproval(
+                id, new PlannedShutdownTransitionRequest(2L, "Still ready", "ps-approval-reuse"));
+
+        assertThat(response.status()).isEqualTo(PlannedShutdownStatus.PENDING_APPROVAL);
+        verify(approvalService).planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, id, ApprovalActionType.APPROVE, true,
+                plannedShutdownPayload(5L, scopeHash));
+        verify(repository, never()).saveAndFlush(any(PlannedShutdown.class));
+        verify(statusHistoryRepository, never()).saveAndFlush(any());
+        verify(approvalService, never()).materializeLifecycleApproval(any(), any(), any(), any(), any());
+    }
+
     private static PlannedShutdownCreateRequest request(UUID departmentId, UUID employeeId) {
         return new PlannedShutdownCreateRequest("PS-CUSTOM", "Annual", "PLANNED", departmentId, employeeId,
                 Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"),
@@ -860,6 +1064,22 @@ class PlannedShutdownServiceTest {
         s.setName("Annual"); s.setShutdownType("PLANNED"); s.setDepartmentId(departmentId); s.setResponsibleEmployeeId(UUID.randomUUID());
         s.setStartAt(Instant.parse("2026-08-01T00:00:00Z")); s.setEndAt(Instant.parse("2026-08-02T00:00:00Z"));
         s.setPlannedStartAt(s.getStartAt()); s.setPlannedEndAt(s.getEndAt()); s.setReason("Maintenance"); s.setStatus(status); s.setScopeVersion(0L); return s;
+    }
+
+    private static LifecycleApprovalStartPlan creatablePlan(ApprovalTargetType targetType, UUID targetId) {
+        return new LifecycleApprovalStartPlan(targetType, targetId, ApprovalActionType.APPROVE, null,
+                List.of(new CreateApprovalRequest.StepInput(null, "APPROVER")),
+                LifecycleApprovalRoutePolicy.Reason.VALID);
+    }
+
+    private static LifecycleApprovalStartPlan failedPlan(
+            ApprovalTargetType targetType, UUID targetId, LifecycleApprovalRoutePolicy.Reason reason) {
+        return new LifecycleApprovalStartPlan(
+                targetType, targetId, ApprovalActionType.APPROVE, null, List.of(), reason);
+    }
+
+    private static String plannedShutdownPayload(long scopeVersion, String scopeHash) {
+        return "{\"scopeVersion\":" + scopeVersion + ",\"scopeHash\":\"" + scopeHash + "\"}";
     }
 
     private static com.toir.entity.plannedshutdown.PlannedShutdownAsset asset(UUID shutdownId, UUID equipmentId,
