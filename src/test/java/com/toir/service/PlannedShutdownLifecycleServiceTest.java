@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownRescheduleRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownExtensionRequest;
 import com.toir.dto.plannedshutdown.PlannedShutdownTransitionRequest;
@@ -18,6 +19,8 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.plannedshutdown.*;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.approval.LifecycleApprovalRoutePolicy;
+import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.plannedshutdown.*;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -173,6 +176,10 @@ class PlannedShutdownLifecycleServiceTest {
         service.beginReadiness(id, new PlannedShutdownTransitionRequest(7L, "ready", "s-2"));
         when(readinessPolicy.evaluateReadiness(any())).thenReturn(
                 new com.toir.dto.plannedshutdown.PlannedShutdownReadinessAssessment(true, List.of()));
+        LifecycleApprovalStartPlan plan = neutralCreatablePlan();
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, id, ApprovalActionType.APPROVE, false, null))
+                .thenReturn(plan);
 
         var response = service.requestApproval(id,
                 new PlannedShutdownTransitionRequest(7L, "submit", "s-3"));
@@ -182,6 +189,17 @@ class PlannedShutdownLifecycleServiceTest {
         assertThat(response.approvalScopeHash()).matches("[0-9a-f]{64}");
         assertThat(response.approvedStartAt()).isEqualTo(response.plannedStartAt());
         assertThat(response.approvedEndAt()).isEqualTo(response.plannedEndAt());
+
+        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+        var approvalFlow = inOrder(approvalService, repository);
+        approvalFlow.verify(approvalService).planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, id, ApprovalActionType.APPROVE, false, null);
+        approvalFlow.verify(repository).saveAndFlush(shutdown);
+        approvalFlow.verify(approvalService).materializeLifecycleApproval(
+                eq(plan), eq(actor), anyString(), eq("submit"), payload.capture());
+        assertThat(shutdown.getLifecycleStatus()).isEqualTo(PlannedShutdownStatus.PENDING_APPROVAL);
+        assertThat(payload.getValue()).isEqualTo(
+                "{\"scopeVersion\":3,\"scopeHash\":\"" + response.approvalScopeHash() + "\"}");
     }
 
     @Test
@@ -192,7 +210,25 @@ class PlannedShutdownLifecycleServiceTest {
         when(readinessPolicy.evaluateSafeState(any())).thenReturn(proceed);
         service.formScope(id, command());
         service.beginReadiness(id, command());
-        var pending = service.requestApproval(id, command());
+        LifecycleApprovalStartPlan plan = neutralCreatablePlan();
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, id, ApprovalActionType.APPROVE, false, null))
+                .thenReturn(plan);
+        var approvalCommand = command();
+        var pending = service.requestApproval(id, approvalCommand);
+
+        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+        var approvalFlow = inOrder(approvalService, repository);
+        approvalFlow.verify(approvalService).planLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN, id, ApprovalActionType.APPROVE, false, null);
+        approvalFlow.verify(repository).saveAndFlush(shutdown);
+        approvalFlow.verify(approvalService).materializeLifecycleApproval(
+                eq(plan), eq(actor), anyString(), eq(approvalCommand.reason()), payload.capture());
+        assertThat(pending.status()).isEqualTo(PlannedShutdownStatus.PENDING_APPROVAL);
+        assertThat(shutdown.getLifecycleStatus()).isEqualTo(PlannedShutdownStatus.PENDING_APPROVAL);
+        assertThat(payload.getValue()).isEqualTo(
+                "{\"scopeVersion\":3,\"scopeHash\":\"" + pending.approvalScopeHash() + "\"}");
+
         ApprovalRequest approval = approval(actor, UUID.randomUUID(), UUID.randomUUID());
         approval.setPayloadJson("{\"scopeVersion\":3,\"scopeHash\":\"" + pending.approvalScopeHash() + "\"}");
         service.finalizeApprovalFromApprovalRequest(id, approval);
@@ -509,6 +545,18 @@ class PlannedShutdownLifecycleServiceTest {
 
     private PlannedShutdownTransitionRequest command() {
         return new PlannedShutdownTransitionRequest(7L, "reason", UUID.randomUUID().toString());
+    }
+
+    private LifecycleApprovalStartPlan neutralCreatablePlan() {
+        return new LifecycleApprovalStartPlan(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                id,
+                ApprovalActionType.APPROVE,
+                null,
+                List.of(
+                        new CreateApprovalRequest.StepInput(null, "LIFECYCLE_REVIEWER_ALPHA"),
+                        new CreateApprovalRequest.StepInput(null, "LIFECYCLE_REVIEWER_BETA")),
+                LifecycleApprovalRoutePolicy.Reason.VALID);
     }
 
     private PlannedShutdownIsolationPoint isolationPoint(int order) {
