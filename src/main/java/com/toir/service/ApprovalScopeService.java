@@ -42,8 +42,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
-import com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher;
-import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
 
 @Service
 @RequiredArgsConstructor
@@ -122,8 +120,6 @@ public class ApprovalScopeService {
                 && !canAccessLinkedDocumentScope(effectiveTargetType(approval), effectiveTargetId(approval))) {
             throw forbidden();
         }
-        assertPlannedShutdownSeparationOfDuty(approval, currentStep);
-        assertRepairCampaignSeparationOfDuty(approval, currentStep);
         if (delegatedForId != null) {
             if (!Objects.equals(currentStep.getApproverId(), delegatedForId)) {
                 throw forbidden();
@@ -136,57 +132,6 @@ public class ApprovalScopeService {
         if (!canCurrentPrincipalActOnStep(currentStep)) {
             throw forbidden();
         }
-    }
-
-    private void assertPlannedShutdownSeparationOfDuty(ApprovalRequest approval, ApprovalStep currentStep) {
-        if (effectiveTargetType(approval) != ApprovalTargetType.PLANNED_SHUTDOWN
-                || !isCriticalShutdownApprovalRole(currentStep.getApproverRole())) {
-            return;
-        }
-        Set<UUID> actorIds = currentPrincipalIds();
-        if (actorIds.contains(approval.getRequesterId())) {
-            throw new AccessDeniedException("Planned shutdown approval separation of duty forbids requester self-approval");
-        }
-        boolean alreadyApprovedOtherCriticalStep = approval.getSteps().stream()
-                .filter(step -> step != currentStep)
-                .filter(step -> step.getDecision() == ApprovalDecision.APPROVED)
-                .filter(step -> isCriticalShutdownApprovalRole(step.getApproverRole()))
-                .map(ApprovalStep::getDecidedById)
-                .filter(Objects::nonNull)
-                .anyMatch(actorIds::contains);
-        if (alreadyApprovedOtherCriticalStep) {
-            throw new AccessDeniedException("Planned shutdown approval separation of duty requires distinct production and HSE approvers");
-        }
-    }
-
-    private static boolean isCriticalShutdownApprovalRole(String role) {
-        return PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE.equals(role)
-                || PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE.equals(role);
-    }
-
-    private void assertRepairCampaignSeparationOfDuty(ApprovalRequest approval, ApprovalStep currentStep) {
-        if (effectiveTargetType(approval) != ApprovalTargetType.REPAIR_CAMPAIGN
-                || !isRepairCampaignDisciplineRole(currentStep.getApproverRole())) {
-            return;
-        }
-        Set<UUID> actorIds = currentPrincipalIds();
-        if (actorIds.contains(approval.getRequesterId())) {
-            throw new AccessDeniedException("Repair campaign requester cannot approve their own request");
-        }
-        boolean alreadyApprovedDiscipline = approval.getSteps().stream()
-                .filter(step -> step != currentStep)
-                .filter(step -> step.getDecision() == ApprovalDecision.APPROVED)
-                .filter(step -> isRepairCampaignDisciplineRole(step.getApproverRole()))
-                .map(ApprovalStep::getDecidedById)
-                .filter(Objects::nonNull)
-                .anyMatch(actorIds::contains);
-        if (alreadyApprovedDiscipline) {
-            throw new AccessDeniedException("Repair campaign approval requires a distinct actor per discipline");
-        }
-    }
-
-    private static boolean isRepairCampaignDisciplineRole(String role) {
-        return RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.contains(role);
     }
 
     public void assertCanCancelApproval(ApprovalRequest approval) {

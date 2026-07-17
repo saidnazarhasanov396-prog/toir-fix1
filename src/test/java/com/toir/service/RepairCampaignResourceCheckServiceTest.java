@@ -1,7 +1,10 @@
 package com.toir.service;
 
+import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.dto.repaircampaign.RepairCampaignDto;
 import com.toir.entity.repair.RepairCampaign;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
@@ -17,6 +20,8 @@ import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.approval.LifecycleApprovalRoutePolicy;
+import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.service.repair.RepairCampaignMutationImpactService;
 import com.toir.service.repair.RepairCampaignService;
@@ -26,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
@@ -33,15 +39,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -192,10 +203,27 @@ class RepairCampaignResourceCheckServiceTest {
     @Test
     void requestApprovalSucceedsAfterResourceCheckTransition() {
         UUID campaignId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
         RepairCampaign campaign = campaign(campaignId, RepairCampaignStatus.DRAFT, 0L, 0L);
+        campaign.setCode("RCMP-2026-001");
+        campaign.setName("Annual overhaul");
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                campaignId,
+                ApprovalActionType.APPROVE,
+                null,
+                List.of(new CreateApprovalRequest.StepInput(null, "APPROVER")),
+                LifecycleApprovalRoutePolicy.Reason.VALID);
         when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
         when(repository.saveAndFlush(campaign)).thenReturn(campaign);
         when(approvalServiceProvider.getObject()).thenReturn(approvalService);
+        when(approvalService.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                campaignId,
+                ApprovalActionType.APPROVE,
+                false,
+                null)).thenReturn(plan);
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(requesterId);
         doAnswer(invocation -> {
             RepairCampaign c = invocation.getArgument(0);
             c.setApprovalScopeVersion(c.getScopeVersion());
@@ -210,7 +238,17 @@ class RepairCampaignResourceCheckServiceTest {
         assertThat(result.status()).isEqualTo(RepairCampaignStatus.PENDING_APPROVAL);
         assertThat(result.approvalScopeVersion()).isEqualTo(0L);
         assertThat(result.approvalScopeHash()).isEqualTo("a".repeat(64));
-        verify(approvalService).requestApproval(any(com.toir.dto.approval.ApprovalStartRequest.class));
+        InOrder inOrder = inOrder(approvalService, repository);
+        inOrder.verify(approvalService).planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                campaignId,
+                ApprovalActionType.APPROVE,
+                false,
+                null);
+        inOrder.verify(repository).saveAndFlush(campaign);
+        inOrder.verify(approvalService).materializeLifecycleApproval(
+                eq(plan), eq(requesterId), anyString(), any(), anyString());
+        verify(repository, times(2)).saveAndFlush(campaign);
     }
 
     private RepairCampaign campaign(UUID id, RepairCampaignStatus status, Long version, Long scopeVersion) {

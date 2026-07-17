@@ -60,7 +60,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.ObjectProvider;
 import com.toir.service.ApprovalService;
-import com.toir.dto.approval.ApprovalStartRequest;
+import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.entity.ApprovalRequest;
@@ -261,11 +261,46 @@ public class RepairCampaignService {
         RepairCampaign campaign = getLockedOrThrow(id);
         scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
         validateExpectedVersion(campaign, expectedVersion);
+        approvalPolicy.validateRequestScope(campaign, expectedScopeVersion);
+        boolean pending = campaign.getStatus() == RepairCampaignStatus.PENDING_APPROVAL;
+        ApprovalService approvalService = approvalServiceProvider.getObject();
+        LifecycleApprovalStartPlan plan = approvalService.planLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                campaign.getId(),
+                ApprovalActionType.APPROVE,
+                pending,
+                pending ? RepairCampaignApprovalPolicy.payload(campaign) : null);
+        approvalPolicy.requireStartPlan(plan);
+        if (plan.reusable()) {
+            return toDto(campaign);
+        }
+        if (pending) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_STALE");
+        }
         approvalPolicy.prepareRequest(campaign, expectedScopeVersion);
         RepairCampaign saved = repository.saveAndFlush(campaign);
-        approvalServiceProvider.getObject().requestApproval(new ApprovalStartRequest(
-                ApprovalTargetType.REPAIR_CAMPAIGN, saved.getId(), ApprovalActionType.APPROVE, comment));
+        approvalService.materializeLifecycleApproval(
+                plan,
+                requireApprovalRequester(),
+                approvalTitle(saved),
+                comment,
+                RepairCampaignApprovalPolicy.payload(saved));
         return toDto(saved);
+    }
+
+    private UUID requireApprovalRequester() {
+        UUID requester = scopeAccessService.currentUserIdOrNull();
+        if (requester == null) {
+            throw RestException.badRequest("Authenticated requester is required");
+        }
+        return requester;
+    }
+
+    private static String approvalTitle(RepairCampaign campaign) {
+        String title = "REPAIR_CAMPAIGN approval: " + campaign.getCode();
+        return campaign.getName() == null || campaign.getName().isBlank()
+                ? title
+                : title + " - " + campaign.getName();
     }
 
     private String nextCode() {

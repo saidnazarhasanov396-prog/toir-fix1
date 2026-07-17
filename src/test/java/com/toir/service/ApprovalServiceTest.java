@@ -60,6 +60,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -327,6 +328,69 @@ class ApprovalServiceTest {
         assertThat(approval.getSteps().getFirst().getDecidedById()).isEqualTo(actorId);
     }
 
+    @Test
+    void unrelatedRoleStepExactAuthorityRejectsMissingPersistedUser() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = pendingRoleOnlyApproval(
+                approvalId, UUID.randomUUID(), "WORK_ORDER_APPROVER");
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(userRepository.findByIdAndIsDeletedFalse(actorId)).thenReturn(Optional.empty());
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                actorId.toString(),
+                null,
+                List.of(new SimpleGrantedAuthority("WORK_ORDER_APPROVER"))));
+
+        try {
+            ApprovalRequestDto flags = service.findById(approvalId);
+            assertThat(flags.canApprove()).isFalse();
+            assertThat(flags.canReject()).isFalse();
+            assertThatThrownBy(() -> service.approve(
+                    approvalId, new DecisionRequest(actorId, "approve")))
+                    .isInstanceOfSatisfying(RestException.class,
+                            ex -> assertThat(ex.getStatus().value()).isEqualTo(403));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.PENDING);
+        verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void unrelatedRoleStepExactAuthorityRejectsInactivePersistedUser() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = pendingRoleOnlyApproval(
+                approvalId, UUID.randomUUID(), "WORK_ORDER_APPROVER");
+        User actor = new User();
+        actor.setId(actorId);
+        actor.setStatus(UserStatus.INACTIVE);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(userRepository.findByIdAndIsDeletedFalse(actorId)).thenReturn(Optional.of(actor));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                actorId.toString(),
+                null,
+                List.of(new SimpleGrantedAuthority("WORK_ORDER_APPROVER"))));
+
+        try {
+            ApprovalRequestDto flags = service.findById(approvalId);
+            assertThat(flags.canApprove()).isFalse();
+            assertThat(flags.canReject()).isFalse();
+            assertThatThrownBy(() -> service.reject(
+                    approvalId, new DecisionRequest(actorId, "reject")))
+                    .isInstanceOfSatisfying(RestException.class,
+                            ex -> assertThat(ex.getStatus().value()).isEqualTo(403));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.PENDING);
+        verify(requestRepository, never()).save(any());
+    }
+
 
     @Test
     void configuredOneStepSystemAdminRepairCampaignApprovalIsAValidRuntimeRoute() {
@@ -350,6 +414,279 @@ class ApprovalServiceTest {
         assertThat(result.actionable()).isTrue();
         assertThat(result.stale()).isFalse();
         assertThat(result.staleReason()).isNull();
+    }
+
+    @Test
+    void lifecycleRequesterCannotApproveAssignedRoleStep() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        String role = "LIFECYCLE_APPROVER";
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, requesterId, role);
+        stubLifecycleActor(approvalId, approval, requesterId, role);
+
+        assertThatThrownBy(() -> service.approve(approvalId, new DecisionRequest(requesterId, "approve")))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus().value()).isEqualTo(403));
+
+        verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void lifecycleRequesterCannotRejectAssignedRoleStep() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        String role = "LIFECYCLE_APPROVER";
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.PLANNED_SHUTDOWN, requesterId, role);
+        stubLifecycleActor(approvalId, approval, requesterId, role);
+
+        assertThatThrownBy(() -> service.reject(approvalId, new DecisionRequest(requesterId, "reject")))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus().value()).isEqualTo(403));
+
+        verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void lifecycleRepeatedApprovedActorCannotApproveCurrentStep() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleApprovalWithApprovedFirstStep(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, UUID.randomUUID(), actorId, "SECOND_REVIEWER");
+        stubLifecycleActor(approvalId, approval, actorId, "SECOND_REVIEWER");
+
+        assertThatThrownBy(() -> service.approve(approvalId, new DecisionRequest(actorId, "approve again")))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus().value()).isEqualTo(403));
+
+        verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void lifecycleRepeatedApprovedActorCanRejectWhenEligibleForCurrentStep() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleApprovalWithApprovedFirstStep(
+                approvalId, ApprovalTargetType.PLANNED_SHUTDOWN, UUID.randomUUID(), actorId, "SECOND_REVIEWER");
+        stubLifecycleActor(approvalId, approval, actorId, "SECOND_REVIEWER");
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.reject(approvalId, new DecisionRequest(actorId, "reject"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.REJECTED);
+        assertThat(approval.getSteps().get(1).getDecision()).isEqualTo(ApprovalDecision.REJECTED);
+        assertThat(approval.getSteps().get(1).getDecidedById()).isEqualTo(actorId);
+    }
+
+    @Test
+    void lifecycleWrongRoleCannotApproveCurrentStep() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, UUID.randomUUID(), "REQUIRED_ROLE");
+        stubLifecycleActor(approvalId, approval, actorId, "OTHER_ROLE");
+
+        assertThatThrownBy(() -> service.approve(approvalId, new DecisionRequest(actorId, "approve")))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus().value()).isEqualTo(403));
+
+        verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void lifecycleUnassignedExplicitActorCannotRejectCurrentStep() {
+        UUID approvalId = UUID.randomUUID();
+        UUID assignedActorId = UUID.randomUUID();
+        UUID otherActorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleExplicitApproval(
+                approvalId, ApprovalTargetType.PLANNED_SHUTDOWN, UUID.randomUUID(), assignedActorId);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(otherActorId);
+
+        assertThatThrownBy(() -> service.reject(approvalId, new DecisionRequest(otherActorId, "reject")))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus().value()).isEqualTo(403));
+
+        verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void lifecycleRoleDecisionRejectsSuppliedActorThatDoesNotMatchAuthenticatedPrincipal() {
+        UUID approvalId = UUID.randomUUID();
+        UUID suppliedActorId = UUID.randomUUID();
+        UUID authenticatedActorId = UUID.randomUUID();
+        String configuredRole = "CONFIGURED_REVIEWER";
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, UUID.randomUUID(), configuredRole);
+        User suppliedActor = activeUserWithRole(suppliedActorId, "OTHER_ROLE");
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(authenticatedActorId);
+        org.mockito.Mockito.lenient().when(userRepository.findByIdAndIsDeletedFalse(suppliedActorId))
+                .thenReturn(Optional.of(suppliedActor));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                authenticatedActorId.toString(),
+                null,
+                List.of(new SimpleGrantedAuthority(configuredRole))));
+
+        try {
+            assertThatThrownBy(() -> service.approve(
+                    approvalId, new DecisionRequest(suppliedActorId, "spoof")))
+                    .isInstanceOfSatisfying(RestException.class,
+                            ex -> assertThat(ex.getStatus().value()).isEqualTo(403));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.PENDING);
+        verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void lifecycleExplicitDecisionRejectsSuppliedActorThatDoesNotMatchAuthenticatedPrincipal() {
+        UUID approvalId = UUID.randomUUID();
+        UUID assignedActorId = UUID.randomUUID();
+        UUID authenticatedActorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleExplicitApproval(
+                approvalId, ApprovalTargetType.PLANNED_SHUTDOWN, UUID.randomUUID(), assignedActorId);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(authenticatedActorId);
+
+        assertThatThrownBy(() -> service.reject(
+                approvalId, new DecisionRequest(assignedActorId, "spoof")))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getStatus().value()).isEqualTo(403));
+
+        assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.PENDING);
+        verify(requestRepository, never()).save(any());
+    }
+
+    @Test
+    void lifecycleWildcardOnlyAdminCannotSubstituteForConfiguredRoleInActionFlags() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, UUID.randomUUID(), "CONFIGURED_REVIEWER");
+        stubLifecycleActor(approvalId, approval, actorId, "OTHER_ROLE");
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                actorId.toString(), null, List.of(new SimpleGrantedAuthority("*"))));
+
+        try {
+            ApprovalRequestDto result = service.findById(approvalId);
+
+            assertThat(result.canApprove()).isFalse();
+            assertThat(result.canReject()).isFalse();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void explicitlyConfiguredSystemAdminRoleIsEligibleForLifecycleActionFlags() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.PLANNED_SHUTDOWN, UUID.randomUUID(), "SYSTEM_ADMIN");
+        stubLifecycleActor(approvalId, approval, actorId, "OTHER_ROLE");
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                actorId.toString(), null, List.of(new SimpleGrantedAuthority("SYSTEM_ADMIN"))));
+
+        try {
+            ApprovalRequestDto result = service.findById(approvalId);
+
+            assertThat(result.canApprove()).isTrue();
+            assertThat(result.canReject()).isTrue();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void lifecycleCancellationPermissionIsComputedSeparatelyFromDecisionEligibility() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, UUID.randomUUID(), "CONFIGURED_REVIEWER");
+        stubLifecycleActor(approvalId, approval, actorId, "OTHER_ROLE");
+
+        ApprovalRequestDto result = service.findById(approvalId);
+
+        assertThat(result.canApprove()).isFalse();
+        assertThat(result.canReject()).isFalse();
+        assertThat(result.canCancel()).isTrue();
+    }
+
+    @Test
+    void lifecycleCancellationDenialDoesNotDisableEligibleApproveOrReject() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.PLANNED_SHUTDOWN, UUID.randomUUID(), "CONFIGURED_REVIEWER");
+        stubLifecycleActor(approvalId, approval, actorId, "CONFIGURED_REVIEWER");
+        doThrow(new AccessDeniedException("cancel denied"))
+                .when(approvalScopeService).assertCanCancelApproval(approval);
+
+        ApprovalRequestDto result = service.findById(approvalId);
+
+        assertThat(result.canApprove()).isTrue();
+        assertThat(result.canReject()).isTrue();
+        assertThat(result.canCancel()).isFalse();
+    }
+
+    @Test
+    void expiredPendingLifecycleRequestDisablesDecisionsWithoutMutatingDuringDtoConversion() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, UUID.randomUUID(), "CONFIGURED_REVIEWER");
+        approval.setExpiresAt(Instant.now().minusSeconds(60));
+        stubLifecycleActor(approvalId, approval, actorId, "CONFIGURED_REVIEWER");
+
+        ApprovalRequestDto result = service.findById(approvalId);
+
+        assertThat(result.canApprove()).isFalse();
+        assertThat(result.canReject()).isFalse();
+        assertThat(result.canCancel()).isTrue();
+        assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.PENDING);
+        assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.PENDING);
+        verifyNoInteractions(governanceService);
+    }
+
+    @Test
+    void malformedPendingLifecycleRouteMakesEveryActionFlagFalse() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, UUID.randomUUID(), "SYSTEM_ADMIN");
+        approval.getSteps().clear();
+        stubLifecycleActor(approvalId, approval, actorId, "SYSTEM_ADMIN");
+
+        ApprovalRequestDto result = service.findById(approvalId);
+
+        assertThat(result.canApprove()).isFalse();
+        assertThat(result.canReject()).isFalse();
+        assertThat(result.canCancel()).isFalse();
+    }
+
+    @Test
+    void nonPendingLifecycleRequestMakesEveryActionFlagFalse() {
+        UUID approvalId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.PLANNED_SHUTDOWN, UUID.randomUUID(), "SYSTEM_ADMIN");
+        ApprovalStep step = approval.getSteps().getFirst();
+        step.setDecision(ApprovalDecision.APPROVED);
+        step.setDecidedById(actorId);
+        step.setDecidedAt(Instant.now());
+        approval.setStatus(ApprovalStatus.APPROVED);
+        approval.setCompletedAt(Instant.now());
+        stubLifecycleActor(approvalId, approval, actorId, "SYSTEM_ADMIN");
+
+        ApprovalRequestDto result = service.findById(approvalId);
+
+        assertThat(result.canApprove()).isFalse();
+        assertThat(result.canReject()).isFalse();
+        assertThat(result.canCancel()).isFalse();
     }
 
     @Test
@@ -1803,6 +2140,68 @@ class ApprovalServiceTest {
             approval.getSteps().add(step);
         }
         return approval;
+    }
+
+    private ApprovalRequest lifecycleRoleApproval(UUID id,
+                                                  ApprovalTargetType targetType,
+                                                  UUID requesterId,
+                                                  String role) {
+        ApprovalRequest approval = lifecyclePending(
+                id,
+                targetType,
+                UUID.randomUUID(),
+                "{}",
+                new CreateApprovalRequest.StepInput(null, role));
+        approval.setRequesterId(requesterId);
+        return approval;
+    }
+
+    private ApprovalRequest lifecycleExplicitApproval(UUID id,
+                                                      ApprovalTargetType targetType,
+                                                      UUID requesterId,
+                                                      UUID approverId) {
+        ApprovalRequest approval = lifecyclePending(
+                id,
+                targetType,
+                UUID.randomUUID(),
+                "{}",
+                new CreateApprovalRequest.StepInput(approverId, null));
+        approval.setRequesterId(requesterId);
+        return approval;
+    }
+
+    private ApprovalRequest lifecycleApprovalWithApprovedFirstStep(UUID id,
+                                                                   ApprovalTargetType targetType,
+                                                                   UUID requesterId,
+                                                                   UUID approvedActorId,
+                                                                   String currentRole) {
+        ApprovalRequest approval = lifecyclePending(
+                id,
+                targetType,
+                UUID.randomUUID(),
+                "{}",
+                new CreateApprovalRequest.StepInput(null, "FIRST_REVIEWER"),
+                new CreateApprovalRequest.StepInput(null, currentRole));
+        approval.setRequesterId(requesterId);
+        approval.setCurrentStep(2);
+        ApprovalStep first = approval.getSteps().getFirst();
+        first.setDecision(ApprovalDecision.APPROVED);
+        first.setDecidedById(approvedActorId);
+        first.setDecidedAt(Instant.now().minusSeconds(30));
+        return approval;
+    }
+
+    private void stubLifecycleActor(UUID approvalId,
+                                    ApprovalRequest approval,
+                                    UUID actorId,
+                                    String actorRole) {
+        User actor = activeUserWithRole(actorId, actorRole);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(userRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenAnswer(invocation -> {
+            UUID userId = invocation.getArgument(0);
+            return actorId.equals(userId) ? Optional.of(actor) : Optional.empty();
+        });
     }
 
     private User activeUserWithRole(UUID userId, String roleCode) {

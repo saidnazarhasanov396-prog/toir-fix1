@@ -34,19 +34,18 @@ class RepairCampaignApprovalScopePolicyTest {
             "REPAIR_CAMPAIGN_CHIEF_ENGINEER_APPROVER");
 
     @Test
-    void requesterCannotApproveAnyDiscipline() {
+    void requesterSeparationOfDutyIsDeferredToLifecycleDecisionPolicy() {
         UUID requester = UUID.randomUUID(), department = UUID.randomUUID();
         Fixture fixture = fixture(requester, department, true);
         for (String role : ROLES) {
             ApprovalRequest approval = approval(requester, step(1, role, requester, ApprovalDecision.PENDING));
-            assertThatThrownBy(() -> fixture.service.assertCanDecideApproval(approval, approval.getSteps().getFirst()))
-                    .isInstanceOf(AccessDeniedException.class)
-                    .hasMessageContaining("own request");
+            assertThatNoException().isThrownBy(() -> fixture.service
+                    .assertCanDecideApproval(approval, approval.getSteps().getFirst()));
         }
     }
 
     @Test
-    void sameActorCannotApproveTwoDisciplinesIncludingWhenDelegated() {
+    void repeatedActorSeparationOfDutyIsDeferredToLifecycleDecisionPolicy() {
         UUID actor = UUID.randomUUID(), requester = UUID.randomUUID(), department = UUID.randomUUID();
         Fixture fixture = fixture(actor, department, true);
         ApprovalStep prior = step(1, ROLES.get(0), UUID.randomUUID(), ApprovalDecision.APPROVED);
@@ -55,10 +54,8 @@ class RepairCampaignApprovalScopePolicyTest {
         ApprovalRequest approval = approval(requester, prior, current);
         approval.setCurrentStep(2);
 
-        assertThatThrownBy(() -> fixture.service.assertCanDecideApproval(
-                approval, current, current.getApproverId()))
-                .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("distinct actor");
+        assertThatNoException().isThrownBy(() -> fixture.service.assertCanDecideApproval(
+                approval, current, current.getApproverId()));
     }
 
     @Test
@@ -91,7 +88,7 @@ class RepairCampaignApprovalScopePolicyTest {
     }
 
     @Test
-    void sevenDistinctActorsCanActOnlyOnTheirOrderedCurrentDiscipline() {
+    void documentScopeAllowsEachAssignedCurrentActorWithoutFixedDisciplinePolicy() {
         UUID requester = UUID.randomUUID(), department = UUID.randomUUID();
         List<ApprovalStep> steps = new ArrayList<>();
         List<UUID> actors = ROLES.stream().map(role -> UUID.randomUUID()).toList();

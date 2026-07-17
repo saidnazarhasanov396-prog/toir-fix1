@@ -6,6 +6,7 @@ import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.exception.GlobalExceptionHandler;
+import com.toir.exception.RestException;
 import com.toir.service.ApprovalService;
 import com.toir.service.approval.ApprovalAnalyticsService;
 import com.toir.service.approval.ApprovalRuleService;
@@ -20,12 +21,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -160,6 +163,50 @@ class ApprovalControllerTest {
         assertThat(captor.getValue().comment()).isEqualTo("Looks good");
     }
 
+    @Test
+    void requesterApproveDecisionFailureReturnsForbidden() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        when(service.approve(eq(approvalId), org.mockito.ArgumentMatchers.any()))
+                .thenThrow(RestException.forbidden("Requester cannot decide lifecycle approval"));
+
+        mockMvc.perform(post("/api/v1/approvals/{id}/approve", approvalId)
+                        .contentType("application/json")
+                        .content("""
+                                {"comment": "approve"}
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void requesterRejectDecisionFailureReturnsForbidden() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        when(service.reject(eq(approvalId), org.mockito.ArgumentMatchers.any()))
+                .thenThrow(RestException.forbidden("Requester cannot decide lifecycle approval"));
+
+        mockMvc.perform(post("/api/v1/approvals/{id}/reject", approvalId)
+                        .contentType("application/json")
+                        .content("""
+                                {"comment": "reject"}
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getPreservesIndependentAuthoritativeActionFlags() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        ApprovalRequestDto response = responseWithFlags(
+                approvalId, requesterId, targetId, false, true, false);
+        when(service.findById(approvalId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/approvals/{id}", approvalId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.canApprove").value(false))
+                .andExpect(jsonPath("$.canReject").value(true))
+                .andExpect(jsonPath("$.canCancel").value(false));
+    }
+
     private ApprovalRequestDto response(UUID id, UUID requesterId, UUID targetId) {
         ApprovalRequest approval = new ApprovalRequest();
         ReflectionTestUtils.setField(approval, "id", id);
@@ -173,5 +220,42 @@ class ApprovalControllerTest {
         approval.setCurrentStep(1);
         approval.setActionType(ApprovalActionType.APPROVE);
         return ApprovalRequestDto.from(approval);
+    }
+
+    private ApprovalRequestDto responseWithFlags(UUID id,
+                                                 UUID requesterId,
+                                                 UUID targetId,
+                                                 boolean canApprove,
+                                                 boolean canReject,
+                                                 boolean canCancel) {
+        return new ApprovalRequestDto(
+                id,
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(),
+                targetId,
+                "Lifecycle approval",
+                requesterId,
+                ApprovalStatus.PENDING,
+                1,
+                null,
+                null,
+                Instant.now(),
+                List.of(),
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                targetId,
+                ApprovalActionType.APPROVE,
+                null,
+                "SYSTEM_ADMIN",
+                1,
+                null,
+                false,
+                false,
+                "Lifecycle approval",
+                "/planned-shutdowns/" + targetId,
+                null,
+                null,
+                canApprove,
+                canReject,
+                canCancel,
+                null);
     }
 }
