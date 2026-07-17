@@ -1194,10 +1194,12 @@ public class ApprovalService implements ApprovalOrchestrator {
             isTerminal = true;
         } else {
             int next = request.getCurrentStep() + 1;
-            boolean hasNext = request.getSteps().stream().anyMatch(s -> s.getStepNumber() == next);
+            boolean hasNext = request.getSteps().stream()
+                    .anyMatch(step -> !step.isDeleted() && step.getStepNumber() == next);
             if (hasNext) {
                 request.setCurrentStep(next);
             } else {
+                validatePersistedLifecycleCompletion(request);
                 request.setStatus(ApprovalStatus.APPROVED);
                 request.setCompletedAt(Instant.now());
                 isTerminal = true;
@@ -1352,10 +1354,38 @@ public class ApprovalService implements ApprovalOrchestrator {
         };
     }
 
+    private void validatePersistedLifecycleCompletion(ApprovalRequest request) {
+        if (!isLifecycleApproval(request)) {
+            return;
+        }
+        LifecycleApprovalRoutePolicy.ValidationResult completion = lifecycleApprovalRoutePolicy
+                .validateCompletion(normalizedLifecycleRuntimeView(request));
+        if (!completion.valid()) {
+            throw mapLifecycleCompletionFailure(request, completion.reason());
+        }
+    }
+
+    private RestException mapLifecycleCompletionFailure(ApprovalRequest request,
+                                                        LifecycleApprovalRoutePolicy.Reason reason) {
+        if (effectiveTargetType(request) == ApprovalTargetType.REPAIR_CAMPAIGN) {
+            if (reason == LifecycleApprovalRoutePolicy.Reason.RUNTIME_INCOMPLETE
+                    || reason == LifecycleApprovalRoutePolicy.Reason.DECISION_ACTOR_MISSING) {
+                return RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_INCOMPLETE_DISCIPLINE_ROUTE");
+            }
+            if (reason == LifecycleApprovalRoutePolicy.Reason.REQUESTER_DECISION
+                    || reason == LifecycleApprovalRoutePolicy.Reason.REPEATED_APPROVING_ACTOR) {
+                return RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SEPARATION_OF_DUTY_FAILURE");
+            }
+            return RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_STALE");
+        }
+        return RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
+    }
+
     private void executeTerminalAction(ApprovalRequest request, ApprovalDecision outcome) {
         if (request.isExecuted()) {
             return;
         }
+        boolean lifecycleFinalization = isLifecycleApproval(request);
         ApprovalActionType originalActionType = request.getActionType();
         boolean isMaintenanceDueEvent = effectiveTargetType(request) == ApprovalTargetType.MAINTENANCE_DUE_EVENT;
         boolean preserveActionType = isMaintenanceDueEvent
@@ -1370,7 +1400,7 @@ public class ApprovalService implements ApprovalOrchestrator {
             request.setResultJson(executeOnce(request));
             request.setFailureReason(null);
         } catch (RuntimeException ex) {
-            if (shouldPropagateFinalizerFailure(ex)) {
+            if (lifecycleFinalization || shouldPropagateFinalizerFailure(ex)) {
                 throw ex;
             }
             request.setStatus(ApprovalStatus.FAILED);

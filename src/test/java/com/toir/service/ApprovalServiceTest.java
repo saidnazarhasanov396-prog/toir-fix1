@@ -422,6 +422,79 @@ class ApprovalServiceTest {
     }
 
     @Test
+    void terminalRepairCampaignApprovalMarksStepThenRequestApprovedBeforeFinalizerWithoutRouteResolution() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, requesterId, "SYSTEM_ADMIN");
+        stubLifecycleActor(approvalId, approval, actorId, "SYSTEM_ADMIN");
+        when(approvalActionExecutor.execute(approval)).thenAnswer(invocation -> {
+            assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.APPROVED);
+            assertThat(approval.getSteps().getFirst().getDecidedById()).isEqualTo(actorId);
+            assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
+            return "{\"status\":\"APPROVED\"}";
+        });
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.approve(approvalId, new DecisionRequest(actorId, "approve"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(result.resultJson()).isEqualTo("{\"status\":\"APPROVED\"}");
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void terminalLifecycleApprovalIgnoresSoftDeletedNextStep() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, requesterId, "SYSTEM_ADMIN");
+        ApprovalStep deletedNext = new ApprovalStep();
+        deletedNext.setRequest(approval);
+        deletedNext.setStepNumber(2);
+        deletedNext.setApproverRole("OBSOLETE_REVIEWER");
+        deletedNext.setDecision(ApprovalDecision.PENDING);
+        deletedNext.setDeleted(true);
+        approval.getSteps().add(deletedNext);
+        stubLifecycleActor(approvalId, approval, actorId, "SYSTEM_ADMIN");
+        when(approvalActionExecutor.execute(approval)).thenReturn("{\"status\":\"APPROVED\"}");
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.approve(approvalId, new DecisionRequest(actorId, "approve"));
+
+        assertThat(approval.getCurrentStep()).isEqualTo(1);
+        assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.APPROVED);
+        assertThat(deletedNext.getDecision()).isEqualTo(ApprovalDecision.PENDING);
+        assertThat(result.status()).isEqualTo(ApprovalStatus.APPROVED);
+        verify(approvalActionExecutor).execute(approval);
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
+    void lifecycleDomainFinalizerExceptionPropagatesWithoutConvertingRequestToFailed() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        ApprovalRequest approval = lifecycleRoleApproval(
+                approvalId, ApprovalTargetType.REPAIR_CAMPAIGN, requesterId, "SYSTEM_ADMIN");
+        stubLifecycleActor(approvalId, approval, actorId, "SYSTEM_ADMIN");
+        when(approvalActionExecutor.execute(approval))
+                .thenThrow(new IllegalStateException("repair campaign finalization failed"));
+
+        assertThatThrownBy(() -> service.approve(approvalId, new DecisionRequest(actorId, "approve")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("repair campaign finalization failed");
+
+        assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.APPROVED);
+        assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(approval.getFailureReason()).isNull();
+        verify(requestRepository, never()).save(approval);
+        verifyNoInteractions(routeResolver);
+    }
+
+    @Test
     void lifecycleRequesterCannotApproveAssignedRoleStep() {
         UUID approvalId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
@@ -1721,7 +1794,7 @@ class ApprovalServiceTest {
                 .thenReturn(List.of(stale));
         when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
         when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(
-                com.toir.service.repair.RepairCampaignApprovalPolicy.DISCIPLINE_ROLES.stream()
+                RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.stream()
                         .map(role -> new CreateApprovalRequest.StepInput(null, role))
                         .toList());
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
@@ -1777,7 +1850,7 @@ class ApprovalServiceTest {
                 .thenReturn(List.of(stale));
         when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
         when(routeResolver.resolveRoute(any(ApprovalRequest.class))).thenReturn(
-                com.toir.service.repair.RepairCampaignApprovalPolicy.DISCIPLINE_ROLES.stream()
+                RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES.stream()
                         .map(role -> new CreateApprovalRequest.StepInput(null, role))
                         .toList());
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
@@ -1795,7 +1868,7 @@ class ApprovalServiceTest {
         assertThat(stale.getStatus()).isEqualTo(ApprovalStatus.CANCELLED);
         assertThat(result.steps()).hasSize(7);
         assertThat(result.steps()).extracting(ApprovalStepDto::approverRole)
-                .containsExactlyElementsOf(com.toir.service.repair.RepairCampaignApprovalPolicy.DISCIPLINE_ROLES);
+                .containsExactlyElementsOf(RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES);
         verify(requestRepository, times(2)).saveAndFlush(any(ApprovalRequest.class));
         assertThat(stale.getFailureReason()).isEqualTo("NONCANONICAL_REPAIR_CAMPAIGN_ROUTE");
         verify(governanceService).record(stale, ApprovalStatus.PENDING, ApprovalStatus.CANCELLED,
@@ -2017,6 +2090,25 @@ class ApprovalServiceTest {
         verify(requestRepository, never()).save(approval);
         assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
         assertThat(approval.getFailureReason()).isNull();
+    }
+
+    @Test
+    void unrelatedDomainFinalizerExceptionKeepsExistingFailedRequestSemantics() {
+        UUID approvalId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(
+                approvalId, UUID.randomUUID(), 1, approverId);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(approvalActionExecutor.execute(approval))
+                .thenThrow(new IllegalStateException("ordinary finalization failed"));
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.approve(
+                approvalId, new DecisionRequest(approverId, "approve"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.FAILED);
+        assertThat(result.failureReason()).isEqualTo("ordinary finalization failed");
+        verify(requestRepository).save(approval);
     }
 
     private ApprovalRequest pendingApproval(UUID id, UUID workOrderId, UUID requesterId) {

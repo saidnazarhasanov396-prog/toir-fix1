@@ -321,7 +321,7 @@ public class RepairCampaignService {
     public RepairCampaignDto finalizeApprovalFromApprovalRequest(ApprovalRequest request) {
         UUID id = request.getTargetId() == null ? request.getDocumentId() : request.getTargetId();
         RepairCampaign campaign = getLockedOrThrow(id);
-        approvalPolicy.validateDecision(campaign, request);
+        approvalPolicy.validateCompletion(campaign, request);
         RepairCampaign before = snapshot(campaign);
         campaign.setStatus(RepairCampaignStatus.APPROVED);
         campaign.setApprovedAt(java.time.Instant.now());
