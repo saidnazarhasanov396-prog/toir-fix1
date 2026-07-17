@@ -4,6 +4,8 @@ import com.toir.entity.ApprovalRequest;
 import com.toir.entity.repair.RepairCampaign;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.RestException;
+import com.toir.service.approval.LifecycleApprovalRoutePolicy;
+import com.toir.service.approval.LifecycleApprovalStartPlan;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,18 +35,62 @@ public class RepairCampaignApprovalPolicy {
         this(scopeHasher, new RepairCampaignApprovalRouteValidator());
     }
 
-    public void prepareRequest(RepairCampaign campaign, Long expectedScopeVersion) {
+    public String validateRequestScope(RepairCampaign campaign, Long expectedScopeVersion) {
         long scopeVersion = campaign.getScopeVersion() == null ? 0L : campaign.getScopeVersion();
         if (expectedScopeVersion == null || expectedScopeVersion != scopeVersion) {
             throw RestException.conflict("REPAIR_CAMPAIGN_STALE_SCOPE_VERSION");
         }
-        if (campaign.getStatus() != RepairCampaignStatus.RESOURCE_CHECK) {
+        if (campaign.getStatus() != RepairCampaignStatus.RESOURCE_CHECK
+                && campaign.getStatus() != RepairCampaignStatus.PENDING_APPROVAL) {
             throw RestException.conflict("REPAIR_CAMPAIGN_NOT_READY_FOR_APPROVAL");
         }
         String scopeHash = scopeHasher.hash(campaign);
+        if (campaign.getStatus() == RepairCampaignStatus.PENDING_APPROVAL) {
+            if (!Objects.equals(campaign.getScopeVersion(), campaign.getApprovalScopeVersion())) {
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_VERSION_MISMATCH");
+            }
+            if (!Objects.equals(scopeHash, campaign.getApprovalScopeHash())) {
+                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_HASH_MISMATCH");
+            }
+        }
+        return scopeHash;
+    }
+
+    public void prepareRequest(RepairCampaign campaign, Long expectedScopeVersion) {
+        if (campaign.getStatus() != RepairCampaignStatus.RESOURCE_CHECK) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_NOT_READY_FOR_APPROVAL");
+        }
+        String scopeHash = validateRequestScope(campaign, expectedScopeVersion);
+        long scopeVersion = campaign.getScopeVersion() == null ? 0L : campaign.getScopeVersion();
         campaign.setApprovalScopeVersion(scopeVersion);
         campaign.setApprovalScopeHash(scopeHash);
         campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
+    }
+
+    public void requireStartPlan(LifecycleApprovalStartPlan plan) {
+        if (plan != null && (plan.reusable() || plan.creatable())) {
+            return;
+        }
+        LifecycleApprovalRoutePolicy.Reason reason = plan == null ? null : plan.failure();
+        if (reason == LifecycleApprovalRoutePolicy.Reason.NO_ACTIVE_TEMPLATE) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_TEMPLATE_NOT_CONFIGURED");
+        }
+        if (reason == LifecycleApprovalRoutePolicy.Reason.MULTIPLE_ACTIVE_TEMPLATES) {
+            throw RestException.conflict("MULTIPLE_ACTIVE_TEMPLATES");
+        }
+        if (isInvalidTemplate(reason)) {
+            throw RestException.conflict("APPROVAL_TEMPLATE_STEPS_INVALID");
+        }
+        throw routeStale(reason == null ? "approval start plan is null" : reason.name());
+    }
+
+    private static boolean isInvalidTemplate(LifecycleApprovalRoutePolicy.Reason reason) {
+        return reason == LifecycleApprovalRoutePolicy.Reason.EMPTY_ROUTE
+                || reason == LifecycleApprovalRoutePolicy.Reason.NONPOSITIVE_ORDER
+                || reason == LifecycleApprovalRoutePolicy.Reason.DUPLICATE_ORDER
+                || reason == LifecycleApprovalRoutePolicy.Reason.NONCONTIGUOUS_ORDER
+                || reason == LifecycleApprovalRoutePolicy.Reason.INVALID_ASSIGNMENT
+                || reason == LifecycleApprovalRoutePolicy.Reason.DUPLICATE_EXPLICIT_APPROVER;
     }
 
     public void validateDecision(RepairCampaign campaign, ApprovalRequest request) {
