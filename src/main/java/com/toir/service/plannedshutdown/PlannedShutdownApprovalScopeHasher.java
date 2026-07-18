@@ -10,9 +10,6 @@ import java.util.*;
 
 @Component
 public class PlannedShutdownApprovalScopeHasher {
-    public static final String PRODUCTION_APPROVER_ROLE = "PLANNED_SHUTDOWN_PRODUCTION_APPROVER";
-    public static final String HSE_APPROVER_ROLE = "PLANNED_SHUTDOWN_HSE_APPROVER";
-
     public String hash(PlannedShutdown s, List<PlannedShutdownAsset> assets, List<PlannedShutdownWorkItem> work,
             List<PlannedShutdownReadinessItem> readiness, List<PlannedShutdownIsolationPoint> isolation) {
         List<String> facts = new ArrayList<>();

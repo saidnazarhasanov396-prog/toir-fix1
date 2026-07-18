@@ -18,8 +18,11 @@ import com.toir.entity.repair.RepairCampaign;
 import com.toir.entity.repair.RepairCampaignStage;
 import com.toir.entity.users.Employee;
 import com.toir.entity.ApprovalRequest;
+import com.toir.entity.ApprovalStep;
 import com.toir.enums.ActualCostStatus;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalDecision;
+import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.BudgetStatus;
 import com.toir.enums.RepairCampaignScopeType;
@@ -44,6 +47,7 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.approval.LifecycleApprovalRoutePolicy;
 import com.toir.service.approval.LifecycleApprovalStartPlan;
+import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.service.repair.RepairCampaignApprovalScopeHasher;
 import com.toir.service.repair.RepairCampaignService;
@@ -58,6 +62,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -142,6 +147,9 @@ class RepairCampaignServiceTest {
 
     @Mock
     private com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
+
+    @Mock
+    private ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
 
     @InjectMocks
     private RepairCampaignService service;
@@ -463,6 +471,28 @@ class RepairCampaignServiceTest {
         assertThatThrownBy(() -> service.approve(campaignId))
                 .hasMessageContaining("approval request");
         verify(repository, never()).save(campaign);
+    }
+
+    @Test
+    void completedOneStepSystemAdminRuntimeFinalizesCampaignAsApproved() {
+        assertCompletedRuntimeFinalizesCampaign("SYSTEM_ADMIN");
+    }
+
+    @Test
+    void completedSevenStepRuntimeFinalizesCampaignAsApproved() {
+        assertCompletedRuntimeFinalizesCampaign(
+                "REPAIR_CAMPAIGN_CHIEF_MECHANIC_APPROVER",
+                "REPAIR_CAMPAIGN_PRODUCTION_APPROVER",
+                "REPAIR_CAMPAIGN_WAREHOUSE_APPROVER",
+                "REPAIR_CAMPAIGN_PROCUREMENT_APPROVER",
+                "REPAIR_CAMPAIGN_FINANCE_APPROVER",
+                "REPAIR_CAMPAIGN_HSE_APPROVER",
+                "REPAIR_CAMPAIGN_CHIEF_ENGINEER_APPROVER");
+    }
+
+    @Test
+    void completedArbitraryThreeStepRuntimeFinalizesCampaignAsApproved() {
+        assertCompletedRuntimeFinalizesCampaign("PLANNER", "FINANCE_REVIEWER", "FINAL_OWNER");
     }
 
     @Test
@@ -1452,6 +1482,50 @@ class RepairCampaignServiceTest {
         campaign.setEndDate(LocalDate.of(2026, 12, 31));
         campaign.setStages(new java.util.ArrayList<>());
         return campaign;
+    }
+
+    private void assertCompletedRuntimeFinalizesCampaign(String... roles) {
+        UUID campaignId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
+        campaign.setScopeVersion(5L);
+        campaign.setApprovalScopeVersion(5L);
+        campaign.setApprovalScopeHash("a".repeat(64));
+        campaign.setVersion(9L);
+        campaign.setTotalBudget(BigDecimal.ZERO);
+        RepairCampaignApprovalScopeHasher scopeHasher = mock(RepairCampaignApprovalScopeHasher.class);
+        when(scopeHasher.hash(campaign)).thenReturn(campaign.getApprovalScopeHash());
+        ReflectionTestUtils.setField(service, "approvalPolicy",
+                new RepairCampaignApprovalPolicy(scopeHasher, new LifecycleApprovalRoutePolicy()));
+        ApprovalRequest request = completedApprovalRequest(campaign, roles);
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(repository.save(campaign)).thenReturn(campaign);
+
+        RepairCampaignDto result = service.finalizeApprovalFromApprovalRequest(request);
+
+        assertThat(result.status()).isEqualTo(RepairCampaignStatus.APPROVED);
+        assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.APPROVED);
+    }
+
+    private static ApprovalRequest completedApprovalRequest(RepairCampaign campaign, String... roles) {
+        ApprovalRequest request = new ApprovalRequest();
+        request.setTargetType(ApprovalTargetType.REPAIR_CAMPAIGN);
+        request.setTargetId(campaign.getId());
+        request.setActionType(ApprovalActionType.APPROVE);
+        request.setRequesterId(UUID.randomUUID());
+        request.setStatus(ApprovalStatus.APPROVED);
+        request.setCurrentStep(roles.length);
+        request.setPayloadJson(RepairCampaignApprovalPolicy.payload(campaign));
+        for (int index = 0; index < roles.length; index++) {
+            ApprovalStep step = new ApprovalStep();
+            step.setRequest(request);
+            step.setStepNumber(index + 1);
+            step.setApproverRole(roles[index]);
+            step.setDecision(ApprovalDecision.APPROVED);
+            step.setDecidedById(UUID.randomUUID());
+            request.getSteps().add(step);
+        }
+        return request;
     }
 
     private static LifecycleApprovalStartPlan creatablePlan(ApprovalTargetType targetType, UUID targetId) {

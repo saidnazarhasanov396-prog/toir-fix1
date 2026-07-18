@@ -10,6 +10,7 @@ import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.service.WorkOrderMaterialReadinessService;
+import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ public class MaintenancePlannerService {
 
     private final WorkOrderRepository workOrderRepository;
     private final WorkOrderMaterialReadinessService materialReadinessService;
+    private final ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
 
     @Transactional(readOnly = true)
     public List<MaintenancePlannerBacklogItem> backlog() {
@@ -76,7 +78,9 @@ public class MaintenancePlannerService {
         if (workOrder.getStatus() == WorkOrderStatus.DRAFT) {
             workOrder.setStatus(WorkOrderStatus.PLANNED);
         }
-        return item(workOrderRepository.save(workOrder));
+        WorkOrder saved = workOrderRepository.save(workOrder);
+        erpWorkOrderDeltas.queueDelta(saved.getId());
+        return item(saved);
     }
 
     private boolean isBacklog(WorkOrder workOrder) {

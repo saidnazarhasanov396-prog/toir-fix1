@@ -37,6 +37,9 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
     @Query(value = "SELECT * FROM equipment WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<Equipment> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
+    @Query("select equipment from Equipment equipment where equipment.isDeleted = false order by equipment.id asc")
+    List<Equipment> findAllByIsDeletedFalseOrderByIdAsc();
+
     @Query(value = "SELECT * FROM equipment WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<Equipment> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 

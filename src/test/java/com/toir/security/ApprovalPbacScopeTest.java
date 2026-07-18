@@ -50,10 +50,10 @@ import com.toir.service.approval.ProcurementRequestApprovalHandler;
 import com.toir.service.approval.WorkOrderApprovalHandler;
 import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalSlaPolicyService;
+import com.toir.service.approval.LifecycleApprovalRoutePolicy;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.service.repair.RepairRequestService;
-import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -137,15 +137,13 @@ class ApprovalPbacScopeTest {
                 )),
                 governanceService,
                 slaPolicyService,
-                new DefaultApprovalRouteResolver(templateRepository, new RepairCampaignApprovalRouteValidator(), new com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator()),
+                new DefaultApprovalRouteResolver(templateRepository, new LifecycleApprovalRoutePolicy()),
                 jdbcTemplate,
                 auditBuilderService,
                 approvalScopeService,
                 scopeAccessService,
                 notificationService,
                 userRepository,
-                new RepairCampaignApprovalRouteValidator(),
-                new com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator(),
                 provider(workOrderService),
                 provider(pprPlanService),
                 provider(procurementRequestService),
@@ -761,13 +759,13 @@ class ApprovalPbacScopeTest {
     void lifecycleRequesterSeparationOfDutyIsDeferredToSharedDecisionPolicy() {
         UUID requesterId = UUID.randomUUID();
         ApprovalRequest approval = roleBasedApproval(UUID.randomUUID(), requesterId,
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE,
+                "SHUTDOWN_REVIEWER_ALPHA",
                 UUID.randomUUID());
         approval.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
         ScopeAccessService access = scopeAccessService(requesterId, Optional.empty(), true);
         UserRepository users = mock(UserRepository.class);
         when(users.findByIdAndIsDeletedFalse(requesterId)).thenReturn(Optional.of(activeUser(requesterId,
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE)));
+                "SHUTDOWN_REVIEWER_ALPHA")));
 
         scope(access, mock(WorkOrderRepository.class), users)
                 .assertCanDecideApproval(approval, approval.getSteps().getFirst());
@@ -778,27 +776,26 @@ class ApprovalPbacScopeTest {
         UUID requesterId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
         ApprovalRequest approval = roleBasedApproval(UUID.randomUUID(), requesterId,
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE,
+                "SHUTDOWN_REVIEWER_BETA",
                 UUID.randomUUID());
         approval.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
-        ApprovalStep production = new ApprovalStep();
-        production.setRequest(approval);
-        production.setStepNumber(1);
-        production.setApproverRole(
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE);
-        production.setDecision(ApprovalDecision.APPROVED);
-        production.setDecidedById(actorId);
-        ApprovalStep hse = approval.getSteps().getFirst();
-        hse.setStepNumber(2);
-        approval.setSteps(List.of(production, hse));
+        ApprovalStep first = new ApprovalStep();
+        first.setRequest(approval);
+        first.setStepNumber(1);
+        first.setApproverRole("SHUTDOWN_REVIEWER_ALPHA");
+        first.setDecision(ApprovalDecision.APPROVED);
+        first.setDecidedById(actorId);
+        ApprovalStep second = approval.getSteps().getFirst();
+        second.setStepNumber(2);
+        approval.setSteps(List.of(first, second));
         approval.setCurrentStep(2);
         ScopeAccessService access = scopeAccessService(actorId, Optional.empty(), true);
         UserRepository users = mock(UserRepository.class);
         when(users.findByIdAndIsDeletedFalse(actorId)).thenReturn(Optional.of(activeUser(actorId,
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE)));
+                "SHUTDOWN_REVIEWER_BETA")));
 
         scope(access, mock(WorkOrderRepository.class), users)
-                .assertCanDecideApproval(approval, hse);
+                .assertCanDecideApproval(approval, second);
     }
 
     @Test
@@ -806,13 +803,13 @@ class ApprovalPbacScopeTest {
         UUID requesterId = UUID.randomUUID(); UUID approverId = UUID.randomUUID();
         UUID shutdownId = UUID.randomUUID(); UUID departmentId = UUID.randomUUID();
         ApprovalRequest approval = roleBasedApproval(UUID.randomUUID(), requesterId,
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE,
+                "SHUTDOWN_REVIEWER_ALPHA",
                 shutdownId);
         approval.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
         ScopeAccessService access = scopeAccessService(approverId, Optional.empty(), false);
         UserRepository users = mock(UserRepository.class);
         when(users.findByIdAndIsDeletedFalse(approverId)).thenReturn(Optional.of(activeUser(approverId,
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE)));
+                "SHUTDOWN_REVIEWER_ALPHA")));
         com.toir.repository.PlannedShutdownRepository shutdowns = mock(com.toir.repository.PlannedShutdownRepository.class);
         com.toir.entity.PlannedShutdown shutdown = new com.toir.entity.PlannedShutdown();
         shutdown.setDepartmentId(departmentId);
@@ -830,13 +827,13 @@ class ApprovalPbacScopeTest {
         UUID requesterId = UUID.randomUUID(); UUID approverId = UUID.randomUUID();
         UUID shutdownId = UUID.randomUUID(); UUID departmentId = UUID.randomUUID();
         ApprovalRequest approval = roleBasedApproval(UUID.randomUUID(), requesterId,
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE,
+                "SHUTDOWN_REVIEWER_ALPHA",
                 shutdownId);
         approval.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
         ScopeAccessService access = scopeAccessService(approverId, Optional.empty(), false);
         UserRepository users = mock(UserRepository.class);
         when(users.findByIdAndIsDeletedFalse(approverId)).thenReturn(Optional.of(activeUser(approverId,
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE)));
+                "SHUTDOWN_REVIEWER_ALPHA")));
         com.toir.repository.PlannedShutdownRepository shutdowns = mock(com.toir.repository.PlannedShutdownRepository.class);
         com.toir.entity.PlannedShutdown shutdown = new com.toir.entity.PlannedShutdown();
         shutdown.setDepartmentId(departmentId);
@@ -855,8 +852,7 @@ class ApprovalPbacScopeTest {
         ApprovalRequest approval = approval(UUID.randomUUID(), requesterId, designatedId, shutdownId);
         approval.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
         ApprovalStep step = approval.getSteps().getFirst();
-        step.setApproverRole(
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE);
+        step.setApproverRole("SHUTDOWN_REVIEWER_ALPHA");
         com.toir.entity.PlannedShutdown shutdown = new com.toir.entity.PlannedShutdown();
         shutdown.setDepartmentId(departmentId);
         com.toir.repository.PlannedShutdownRepository shutdowns = mock(com.toir.repository.PlannedShutdownRepository.class);
@@ -878,14 +874,13 @@ class ApprovalPbacScopeTest {
         scope(validAccess, mock(WorkOrderRepository.class), mock(UserRepository.class), shutdowns)
                 .assertCanDecideApproval(approval, step, designatedId);
 
-        ApprovalStep production = new ApprovalStep();
-        production.setRequest(approval); production.setStepNumber(1);
-        production.setApproverRole(
-                com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE);
-        production.setDecision(ApprovalDecision.APPROVED); production.setDecidedById(delegateId);
+        ApprovalStep first = new ApprovalStep();
+        first.setRequest(approval); first.setStepNumber(1);
+        first.setApproverRole("SHUTDOWN_REVIEWER_ALPHA");
+        first.setDecision(ApprovalDecision.APPROVED); first.setDecidedById(delegateId);
         step.setStepNumber(2);
-        step.setApproverRole(com.toir.service.plannedshutdown.PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE);
-        approval.setCurrentStep(2); approval.setSteps(List.of(production, step));
+        step.setApproverRole("SHUTDOWN_REVIEWER_BETA");
+        approval.setCurrentStep(2); approval.setSteps(List.of(first, step));
         scope(validAccess, mock(WorkOrderRepository.class), mock(UserRepository.class), shutdowns)
                 .assertCanDecideApproval(approval, step, designatedId);
     }

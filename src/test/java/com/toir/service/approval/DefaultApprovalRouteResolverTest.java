@@ -122,6 +122,51 @@ class DefaultApprovalRouteResolverTest {
     }
 
     @Test
+    void oneStepSystemAdminLifecycleTemplateIsAValidFrozenRoute() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        ApprovalTemplate template = lifecycleTemplate(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                roleStep(1, "SYSTEM_ADMIN"));
+        when(templateRepository.findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                ApprovalActionType.APPROVE
+        )).thenReturn(List.of(template));
+
+        LifecycleRouteResolution result = resolver.resolveLifecycleRoute(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                ApprovalActionType.APPROVE);
+
+        assertThat(result.resolved()).isTrue();
+        assertThat(result.steps()).containsExactly(
+                new CreateApprovalRequest.StepInput(null, "SYSTEM_ADMIN"));
+    }
+
+    @Test
+    void arbitraryRepeatedRoleLifecycleTemplateIsAValidFrozenRoute() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        ApprovalTemplate template = lifecycleTemplate(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                roleStep(4, "REVIEWER"),
+                roleStep(2, "REVIEWER"),
+                roleStep(1, "REVIEWER"),
+                roleStep(3, "REVIEWER"));
+        when(templateRepository.findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                ApprovalActionType.APPROVE
+        )).thenReturn(List.of(template));
+
+        LifecycleRouteResolution result = resolver.resolveLifecycleRoute(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                ApprovalActionType.APPROVE);
+
+        assertThat(result.resolved()).isTrue();
+        assertThat(result.steps()).hasSize(4)
+                .allSatisfy(step -> assertThat(step.approverRole()).isEqualTo("REVIEWER"));
+    }
+
+    @Test
     void lifecycleResolutionNeverCallsTargetOnlyOrPermissionFallback() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
         DefaultApprovalRouteResolver resolver = resolver(templateRepository);

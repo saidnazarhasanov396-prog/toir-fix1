@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RepairCampaignApprovalRouteMigrationContractTest {
 
     @Test
-    void v6DefinesImmutableCampaignApprovalRouteAndConservativeSeeds() throws Exception {
+    void v6PreservesHistoricalCampaignApprovalSeedAndPermissions() throws Exception {
         Path path = Path.of("src/main/resources/db/migration/V20260712_6__repair_campaign_approval_route.sql");
         assertThat(path).exists();
 
@@ -38,7 +38,7 @@ class RepairCampaignApprovalRouteMigrationContractTest {
     }
 
     @Test
-    void routeContainsExactlySevenOrderedDisciplineSteps() throws Exception {
+    void historicalV6SeedContainsItsOriginalSevenOrderedDisciplineSteps() throws Exception {
         String sql = Files.readString(Path.of(
                 "src/main/resources/db/migration/V20260712_6__repair_campaign_approval_route.sql"));
 

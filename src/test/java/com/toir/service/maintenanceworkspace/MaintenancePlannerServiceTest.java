@@ -11,6 +11,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.service.WorkOrderMaterialReadinessService;
+import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -31,6 +32,9 @@ class MaintenancePlannerServiceTest {
 
     @Mock
     WorkOrderMaterialReadinessService materialReadinessService;
+
+    @Mock
+    ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
 
     @Test
     void backlogFiltersItemsAndCapacityUsesFilteredBacklog() {
@@ -77,7 +81,7 @@ class MaintenancePlannerServiceTest {
         readiness(matchingReady, MaterialReadinessStatus.READY, false);
         readiness(blockedMaterial, MaterialReadinessStatus.SHORTAGE, true);
         readiness(otherDepartment, MaterialReadinessStatus.READY, false);
-        MaintenancePlannerService service = new MaintenancePlannerService(workOrderRepository, materialReadinessService);
+        MaintenancePlannerService service = new MaintenancePlannerService(workOrderRepository, materialReadinessService, erpWorkOrderDeltas);
         MaintenanceWorkspaceFilter filter = new MaintenanceWorkspaceFilter(
                 "pump",
                 departmentId,
@@ -132,7 +136,7 @@ class MaintenancePlannerServiceTest {
                 .thenReturn(List.of(matchingBlocked, otherDepartmentBlocked));
         readiness(matchingBlocked, MaterialReadinessStatus.SHORTAGE, true);
         readiness(otherDepartmentBlocked, MaterialReadinessStatus.SHORTAGE, true);
-        MaintenancePlannerService service = new MaintenancePlannerService(workOrderRepository, materialReadinessService);
+        MaintenancePlannerService service = new MaintenancePlannerService(workOrderRepository, materialReadinessService, erpWorkOrderDeltas);
 
         List<MaintenancePlannerBacklogItem> items = service.materialReadiness(
                 new MaintenanceWorkspaceFilter(null, departmentId, null, null, null, null, null, null, null, null, null)

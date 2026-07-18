@@ -21,7 +21,7 @@ class PlannedShutdownReadinessPolicyTest {
         var facts = new PlannedShutdownReadinessPolicy.Facts(
                 shutdownId, false, false, false,
                 List.of(new PlannedShutdownReadinessPolicy.WorkFact(workId, true, true, false, false)),
-                false, false, false, false,
+                false, false, false,
                 List.of(new PlannedShutdownReadinessPolicy.IsolationFact(isolationId, false, false, false)),
                 false, false, Instant.parse("2026-08-01T00:00:00Z"),
                 Instant.parse("2026-08-01T01:00:00Z"), Instant.parse("2026-08-01T02:00:00Z"));
@@ -30,10 +30,28 @@ class PlannedShutdownReadinessPolicyTest {
 
         assertThat(result.canProceed()).isFalse();
         assertThat(result.blockers()).extracting(PlannedShutdownBlocker::code).containsExactly(
-                "APPROVAL_HSE_MISSING", "APPROVAL_PRODUCTION_MISSING", "APPROVAL_SCOPE_STALE",
-                "BOUNDARY_MISSING", "ISOLATION_POINT_MISSING", "MATERIAL_RESERVATION_MISSING",
-                "OWNER_MISSING", "PERFORMER_OR_CONTRACTOR_MISSING", "PERMIT_INACTIVE",
-                "READINESS_CRITICAL_INCOMPLETE", "WINDOW_OUTSIDE_APPROVED", "WORK_MISSING");
+                "APPROVAL_SCOPE_STALE", "BOUNDARY_MISSING", "ISOLATION_POINT_MISSING",
+                "MATERIAL_RESERVATION_MISSING", "OWNER_MISSING", "PERFORMER_OR_CONTRACTOR_MISSING",
+                "PERMIT_INACTIVE", "READINESS_CRITICAL_INCOMPLETE", "WINDOW_OUTSIDE_APPROVED",
+                "WORK_MISSING");
+    }
+
+    @Test
+    void currentScopeIncompleteRuntimeUsesNeutralRouteStaleBlocker() {
+        Instant now = Instant.parse("2026-08-01T01:00:00Z");
+        var facts = new PlannedShutdownReadinessPolicy.Facts(
+                UUID.randomUUID(), true, true, true,
+                List.of(new PlannedShutdownReadinessPolicy.WorkFact(
+                        UUID.randomUUID(), true, false, true, true)),
+                false, true, true, List.of(), true, true,
+                Instant.parse("2026-08-01T00:00:00Z"),
+                Instant.parse("2026-08-01T02:00:00Z"), now);
+
+        var result = policy.evaluateReadiness(facts);
+
+        assertThat(result.canProceed()).isFalse();
+        assertThat(result.blockers()).extracting(PlannedShutdownBlocker::code)
+                .containsExactly("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
     }
 
     @Test
@@ -63,7 +81,7 @@ class PlannedShutdownReadinessPolicyTest {
         Instant now = Instant.parse("2026-08-01T01:00:00Z");
         return new PlannedShutdownReadinessPolicy.Facts(UUID.randomUUID(), true, true, true,
                 List.of(new PlannedShutdownReadinessPolicy.WorkFact(UUID.randomUUID(), true, true, true, true)),
-                true, true, true, true, isolation, true, true,
+                true, true, true, isolation, true, true,
                 Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-01T02:00:00Z"), now);
     }
 }

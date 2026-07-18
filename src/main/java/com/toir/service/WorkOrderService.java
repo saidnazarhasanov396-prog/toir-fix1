@@ -123,6 +123,7 @@ import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.service.maintanance.WorkOrderSparePartRequirementService;
 import com.toir.service.maintenance.WorkOrderCompletionService;
 import com.toir.service.repair.RepairMaterialUsageService;
+import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
@@ -234,6 +235,7 @@ public class WorkOrderService {
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final com.toir.service.sparepartlifecycle.SparePartLifecycleService sparePartLifecycleService;
     private final ObjectMapper objectMapper;
+    private final ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.APPROVED, WorkOrderStatus.IN_PROGRESS);
     private static final Set<WorkOrderStatus> TERMINAL_WORK_ORDER_STATUSES =
@@ -896,6 +898,7 @@ public class WorkOrderService {
         entity.setRequiresShutdown(Boolean.TRUE.equals(request.requiresShutdown()));
         entity.setRequiresIsolation(Boolean.TRUE.equals(request.requiresIsolation()));
         WorkOrder saved = repository.save(entity);
+        erpWorkOrderDeltas.queueDelta(saved.getId());
         generateTemplateTasksFromWorkOrderContext(saved);
         validatePerformerSkillsForWorkOrder(saved);
         safetyChecklistService.generateForWorkOrderIfTemplateExists(saved);
@@ -981,6 +984,7 @@ public class WorkOrderService {
         ensureReplacementEquipmentReservedOnStart(entity);
 
         WorkOrder saved = repository.save(entity);
+        erpWorkOrderDeltas.queueDelta(saved.getId());
         safetyChecklistService.generateForWorkOrderIfTemplateExists(saved);
 
         auditBuilderService.log(
@@ -1037,6 +1041,7 @@ public class WorkOrderService {
         ensureReplacementEquipmentReservedOnStart(entity);
 
         WorkOrder saved = repository.save(entity);
+        erpWorkOrderDeltas.queueDelta(saved.getId());
         syncLinkedOnStart(saved);
         equipmentStatusLifecycleService.recordWorkOrderTransition(
                 saved.getId(),
@@ -1118,6 +1123,7 @@ public class WorkOrderService {
         completeLinkedPprTask(entity);
 
         WorkOrder saved = repository.save(entity);
+        erpWorkOrderDeltas.queueDelta(saved.getId());
         MaintenanceCompletionAnchor completionAnchor = createMaintenanceCompletionAnchor(saved, request, dueEvent);
         completeLinkedMaintenanceDueEvent(dueEvent);
         persistCompletionMeterReadings(saved, completionMeterSnapshots, request);
@@ -1216,6 +1222,7 @@ public class WorkOrderService {
         completeLinkedPprTask(entity);
 
         WorkOrder saved = repository.save(entity);
+        erpWorkOrderDeltas.queueDelta(saved.getId());
         syncLinkedOnClose(saved);
         if (!isReplacementWorkOrder(saved)) {
             equipmentStatusLifecycleService.recordWorkOrderReturn(

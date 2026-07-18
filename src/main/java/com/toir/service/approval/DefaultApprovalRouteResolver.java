@@ -7,8 +7,6 @@ import com.toir.entity.ApprovalTemplateStep;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.repository.ApprovalTemplateRepository;
-import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
-import com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator;
 import com.toir.security.ApprovalDomainPermissions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -27,13 +25,6 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
             LifecycleApprovalRoutePolicy lifecycleRoutePolicy) {
         this.templateRepository = templateRepository;
         this.lifecycleRoutePolicy = lifecycleRoutePolicy;
-    }
-
-    public DefaultApprovalRouteResolver(
-            ApprovalTemplateRepository templateRepository,
-            RepairCampaignApprovalRouteValidator repairCampaignRouteValidator,
-            PlannedShutdownApprovalRouteValidator plannedShutdownRouteValidator) {
-        this(templateRepository, new LifecycleApprovalRoutePolicy());
     }
 
     @Override
