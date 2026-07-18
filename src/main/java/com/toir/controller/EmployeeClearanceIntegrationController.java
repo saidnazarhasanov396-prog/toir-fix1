@@ -1,6 +1,7 @@
 package com.toir.controller;
 
 import com.toir.dto.integration.EmployeeClearanceReceiptRequest;
+import com.toir.dto.integration.EmployeeClearanceReceiptV2Request;
 import com.toir.service.integration.ErpEmployeeClearanceOutboxService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,5 +25,13 @@ public class EmployeeClearanceIntegrationController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*')")
     public void submit(@Valid @RequestBody EmployeeClearanceReceiptRequest request) {
         service.queue(request);
+    }
+
+    /** Receives a reviewed clearance tied to the authoritative ERP offboarding case. */
+    @PostMapping("/employee-clearances/v2")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*')")
+    public void submitV2(@Valid @RequestBody EmployeeClearanceReceiptV2Request request) {
+        service.queueV2(request);
     }
 }
