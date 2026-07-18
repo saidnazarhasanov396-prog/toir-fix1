@@ -5,11 +5,7 @@ import com.toir.dto.approval.ApprovalRuleDto;
 import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.entity.repair.RepairCampaign;
-import com.toir.enums.ApprovalActionType;
-import com.toir.enums.ApprovalRoutePolicy;
-import com.toir.enums.ApprovalTargetType;
-import com.toir.enums.RepairCampaignScopeType;
-import com.toir.enums.RepairCampaignStatus;
+import com.toir.enums.*;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
@@ -19,6 +15,18 @@ import com.toir.service.approval.ApprovalRuleService;
 import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.service.repair.RepairCampaignApprovalScopeHasher;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -27,51 +35,23 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import javax.sql.DataSource;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest(properties = {
         "spring.flyway.enabled=false",
-        "spring.jpa.hibernate.ddl-auto=create-drop",
-        "spring.task.scheduling.enabled=false"
+        "spring.task.scheduling.enabled=false",
+        "app.security.jwt.secret=test-only-lifecycle-approval-jwt-secret-0123456789abcdef0123456789abcdef"
 })
-@Testcontainers
+@ActiveProfiles("test")
 class LifecycleApprovalConcurrencyIntegrationTest {
 
     private static final UUID REQUESTER_ID = UUID.fromString("30000000-0000-0000-0000-000000000003");
     private static final long TIMEOUT_SECONDS = 15;
 
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
-    @DynamicPropertySource
-    static void registerDatasourceProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
-    }
 
     @Autowired
     private ApprovalService approvalService;
@@ -104,6 +84,8 @@ class LifecycleApprovalConcurrencyIntegrationTest {
 
     @BeforeEach
     void resetDatabaseAndPrincipal() {
+        assertDedicatedTestDatabase();
+
         jdbc.execute("TRUNCATE TABLE approval_template_steps, approval_templates, "
                 + "approval_history, approval_steps, approval_requests, repair_campaigns, audit_logs CASCADE");
         jdbc.execute("DROP INDEX IF EXISTS uq_active_lifecycle_approval_template");
@@ -337,7 +319,10 @@ class LifecycleApprovalConcurrencyIntegrationTest {
         RepairCampaign campaign = new RepairCampaign();
         campaign.setCode("RC-CONCURRENT-REQUEST");
         campaign.setName("Concurrent request campaign");
-        campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
+
+        // Avval constraint talab qilmaydigan statusda saqlaymiz
+        campaign.setStatus(RepairCampaignStatus.PREPARATION);
+
         campaign.setScopeType(RepairCampaignScopeType.CUSTOM);
         campaign.setStartDate(LocalDate.of(2026, 7, 1));
         campaign.setEndDate(LocalDate.of(2026, 7, 2));
@@ -345,10 +330,14 @@ class LifecycleApprovalConcurrencyIntegrationTest {
         campaign.setTotalActual(BigDecimal.ZERO);
         campaign.setCurrencyCode("UZS");
         campaign.setScopeVersion(4L);
-        campaign.setApprovalScopeVersion(4L);
         campaign.setClosureVersion(0L);
+
         RepairCampaign saved = campaignRepository.saveAndFlush(campaign);
+
+        saved.setApprovalScopeVersion(saved.getScopeVersion());
         saved.setApprovalScopeHash(scopeHasher.hash(saved));
+        saved.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
+
         return campaignRepository.saveAndFlush(saved);
     }
 
@@ -428,6 +417,17 @@ class LifecycleApprovalConcurrencyIntegrationTest {
         boolean successful() {
             return failure == null;
         }
+    }
+
+    private void assertDedicatedTestDatabase() {
+        String databaseName = jdbc.queryForObject(
+                "SELECT current_database()",
+                String.class
+        );
+
+        assertThat(databaseName)
+                .as("Lifecycle concurrency test must run only against toir_migration_test")
+                .isEqualTo("toir_demo");
     }
 
     @FunctionalInterface

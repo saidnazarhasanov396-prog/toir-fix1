@@ -3,45 +3,30 @@ package com.toir.migration;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Types;
+import java.sql.*;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.*;
 
-@Testcontainers
 class LifecycleApprovalTemplateUniquenessMigrationPostgresTest {
 
     private static final String PREVIOUS_VERSION = "20260715.1";
 
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES =
-            new PostgreSQLContainer<>("postgres:16-alpine");
+    private static final String JDBC_URL =
+            "jdbc:postgresql://localhost:5433/toir_migration_test";
+
+    private static final String DB_USERNAME = "postgres";
+    private static final String DB_PASSWORD = "root123";
 
     @BeforeEach
     void migrateContainerToPreviousMigration() throws Exception {
         Flyway flyway = Flyway.configure()
-                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .dataSource(JDBC_URL, DB_USERNAME, DB_PASSWORD)
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
@@ -176,7 +161,7 @@ class LifecycleApprovalTemplateUniquenessMigrationPostgresTest {
 
     private void migrateLatest() {
         Flyway.configure()
-                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .dataSource(JDBC_URL, DB_USERNAME, DB_PASSWORD)
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
@@ -278,9 +263,9 @@ class LifecycleApprovalTemplateUniquenessMigrationPostgresTest {
 
     private Connection testConnection() throws SQLException {
         return DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(),
-                POSTGRES.getUsername(),
-                POSTGRES.getPassword()
+                JDBC_URL,
+                DB_USERNAME,
+                DB_PASSWORD
         );
     }
 
