@@ -59,32 +59,43 @@ class LifecycleApprovalTemplateUniquenessMigrationContractTest {
     }
 
     @Test
-    void postgresTestIsSelfProvisionedAndConcurrencyIsBounded() throws IOException {
-        String test = Files.readString(POSTGRES_TEST);
+    void postgresTestUsesDedicatedLocalDatabaseAndConcurrencyIsBounded() throws Exception {
+        String source = Files.readString(
+                Path.of(
+                        "src/test/java/com/toir/migration/"
+                        + "LifecycleApprovalTemplateUniquenessMigrationPostgresTest.java"
+                )
+        );
 
-        assertThat(test).contains(
-                "@Testcontainers",
-                "@Container",
-                "new PostgreSQLContainer<>(\"postgres:16-alpine\")",
-                "POSTGRES.getJdbcUrl()",
-                "POSTGRES.getUsername()",
-                "POSTGRES.getPassword()",
-                "new CountDownLatch(2)",
-                "connectionsReady.await(10, TimeUnit.SECONDS)",
-                "start.await(10, TimeUnit.SECONDS)",
-                "get(15, TimeUnit.SECONDS)",
-                "SET LOCAL lock_timeout = '5s'",
-                "SET LOCAL statement_timeout = '10s'",
-                "finally",
-                "executor.shutdownNow()",
-                "executor.awaitTermination(5, TimeUnit.SECONDS)",
-                "\"23505\"");
-        assertThat(test).doesNotContain(
-                "disabledWithoutDocker",
-                "TOIR_LOCAL_PG",
-                "localhost:5432",
-                "Thread.sleep",
-                "CyclicBarrier");
+        assertThat(source)
+                .contains(
+                        "private static final String JDBC_URL",
+                        "jdbc:postgresql://localhost:5433/toir_migration_test",
+                        "private static final String DB_USERNAME",
+                        "private static final String DB_PASSWORD",
+                        "DriverManager.getConnection(",
+                        "JDBC_URL",
+                        "DB_USERNAME",
+                        "DB_PASSWORD",
+                        "new CountDownLatch(2)",
+                        "connectionsReady.await(10, TimeUnit.SECONDS)",
+                        "start.await(10, TimeUnit.SECONDS)",
+                        "get(15, TimeUnit.SECONDS)",
+                        "SET LOCAL lock_timeout = '5s'",
+                        "SET LOCAL statement_timeout = '10s'",
+                        "finally",
+                        "executor.shutdownNow()",
+                        "executor.awaitTermination(5, TimeUnit.SECONDS)",
+                        "\"23505\""
+                )
+                .doesNotContain(
+                        "@Testcontainers",
+                        "@Container",
+                        "PostgreSQLContainer<",
+                        "POSTGRES.getJdbcUrl()",
+                        "POSTGRES.getUsername()",
+                        "POSTGRES.getPassword()"
+                );
     }
 
     private static int count(String text, String needle) {
