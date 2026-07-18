@@ -47,6 +47,7 @@ import com.toir.repository.users.EmployeeRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.approval.LifecycleApprovalRoutePolicy;
 import com.toir.service.approval.LifecycleApprovalStartPlan;
+import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.service.repair.RepairCampaignApprovalScopeHasher;
 import com.toir.service.repair.RepairCampaignService;
@@ -146,6 +147,9 @@ class RepairCampaignServiceTest {
 
     @Mock
     private com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
+
+    @Mock
+    private ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
 
     @InjectMocks
     private RepairCampaignService service;

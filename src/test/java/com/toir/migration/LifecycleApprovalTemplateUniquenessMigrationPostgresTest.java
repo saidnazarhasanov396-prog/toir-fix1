@@ -3,6 +3,9 @@ package com.toir.migration;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -26,19 +29,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+@Testcontainers
 class LifecycleApprovalTemplateUniquenessMigrationPostgresTest {
 
     private static final String PREVIOUS_VERSION = "20260715.1";
-    private static final String JDBC_URL =
-            "jdbc:postgresql://localhost:5433/toir_migration_test";
 
-    private static final String DB_USERNAME = "postgres";
-    private static final String DB_PASSWORD = "root123";
+    @Container
+    static final PostgreSQLContainer<?> POSTGRES =
+            new PostgreSQLContainer<>("postgres:16-alpine");
 
     @BeforeEach
     void migrateContainerToPreviousMigration() throws Exception {
         Flyway flyway = Flyway.configure()
-                .dataSource(JDBC_URL, DB_USERNAME, DB_PASSWORD)
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
@@ -173,7 +176,7 @@ class LifecycleApprovalTemplateUniquenessMigrationPostgresTest {
 
     private void migrateLatest() {
         Flyway.configure()
-                .dataSource(JDBC_URL, DB_USERNAME, DB_PASSWORD)
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
@@ -275,9 +278,9 @@ class LifecycleApprovalTemplateUniquenessMigrationPostgresTest {
 
     private Connection testConnection() throws SQLException {
         return DriverManager.getConnection(
-                JDBC_URL,
-                DB_USERNAME,
-                DB_PASSWORD
+                POSTGRES.getJdbcUrl(),
+                POSTGRES.getUsername(),
+                POSTGRES.getPassword()
         );
     }
 

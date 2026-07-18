@@ -336,6 +336,8 @@ class PlannedShutdownLifecycleServiceTest {
                 "SHUTDOWN_REVIEWER_BETA");
 
         var result = service.finalizeApprovalFromApprovalRequest(id, approval);
+        verify(repository).findByIdAndIsDeletedFalseForUpdate(id);
+        clearInvocations(repository);
         when(approvalRequestRepository.findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
                 ApprovalTargetType.PLANNED_SHUTDOWN.name(), id, ApprovalActionType.APPROVE.name(),
                 ApprovalStatus.APPROVED.name())).thenReturn(List.of(approval));

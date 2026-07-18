@@ -121,6 +121,7 @@ import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.service.maintanance.WorkOrderSparePartRequirementService;
+import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import com.toir.service.sparepartlifecycle.SparePartLifecycleService;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.security.ScopeAccessService;
@@ -351,6 +352,9 @@ class WorkOrderServiceTest {
 
     @Mock
     OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
+
+    @Mock
+    ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
 
     @InjectMocks
     WorkOrderService service;
