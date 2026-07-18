@@ -21,6 +21,7 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
+import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,7 @@ public class MaintenanceDispatcherService {
     private final WorkOrderRepository workOrderRepository;
     private final BrigadeMemberRepository brigadeMemberRepository;
     private final EquipmentRepository equipmentRepository;
+    private final ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
 
     @Transactional(readOnly = true)
     public MaintenanceDispatcherSummary summary() {
@@ -126,6 +128,7 @@ public class MaintenanceDispatcherService {
                     .orElseThrow(() -> RestException.badRequest("Performer is not linked to an active brigade member: " + request.ownerId()));
             workOrder.setPerformer(performer);
             workOrderRepository.save(workOrder);
+            erpWorkOrderDeltas.queueDelta(workOrder.getId());
             return actionResponse("ASSIGN", objectType, request);
         }
         if ("DEFECT".equals(objectType)) {
@@ -153,6 +156,7 @@ public class MaintenanceDispatcherService {
                     .orElseThrow(() -> RestException.notFound("Work order not found: " + request.objectId()));
             workOrder.setPriority(PriorityLevel.EMERGENCY);
             workOrderRepository.save(workOrder);
+            erpWorkOrderDeltas.queueDelta(workOrder.getId());
             return actionResponse("ESCALATE", objectType, request);
         }
         if ("DEFECT".equals(objectType)) {

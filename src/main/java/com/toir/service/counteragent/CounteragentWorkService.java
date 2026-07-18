@@ -19,6 +19,7 @@ import com.toir.repository.contarctor.ContractorWorkRepository;
 import com.toir.service.CounteragentService;
 import com.toir.service.FinanceScopeService;
 import com.toir.service.repair.RepairCampaignBudgetLineResolver;
+import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -52,6 +53,7 @@ public class CounteragentWorkService {
     private final CounteragentService counteragentService;
     private final AuditBuilderService auditBuilderService;
     private final RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
+    private final ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
 
     @Transactional(readOnly = true)
     public List<CounteragentWorkDto> findByCounteragent(UUID counteragentId) {
@@ -166,6 +168,7 @@ public class CounteragentWorkService {
         if (!Objects.equals(workOrder.getCounteragentId(), counteragentId)) {
             workOrder.setCounteragentId(counteragentId);
             workOrderRepository.save(workOrder);
+            erpWorkOrderDeltas.queueDelta(workOrder.getId());
         }
     }
 

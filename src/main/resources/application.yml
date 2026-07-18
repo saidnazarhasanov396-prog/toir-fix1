@@ -19,6 +19,18 @@ springdoc:
 
 app:
   integrations:
+    erp:
+      enabled: ${ERP_INTEGRATION_ENABLED:false}
+      base-url: ${ERP_INTEGRATION_BASE_URL:}
+      bearer-token: ${ERP_INTEGRATION_BEARER_TOKEN:}
+      allowed-hosts: ${ERP_INTEGRATION_ALLOWED_HOSTS:}
+      outbox-dispatch-delay-ms: ${ERP_INTEGRATION_OUTBOX_DISPATCH_DELAY_MS:15000}
+    atil:
+      enabled: ${ATIL_INTEGRATION_ENABLED:false}
+      base-url: ${ATIL_INTEGRATION_BASE_URL:}
+      bearer-token: ${ATIL_INTEGRATION_BEARER_TOKEN:}
+      allowed-hosts: ${ATIL_INTEGRATION_ALLOWED_HOSTS:}
+      outbox-dispatch-delay-ms: ${ATIL_INTEGRATION_OUTBOX_DISPATCH_DELAY_MS:15000}
     faktura-uz:
       endpoints:
         auth: https://account.faktura.uz/token

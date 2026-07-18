@@ -16,6 +16,7 @@ import com.toir.repository.defects.DefectRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,6 +55,9 @@ class MaintenanceDispatcherServiceTest {
 
     @Mock
     EquipmentRepository equipmentRepository;
+
+    @Mock
+    ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
 
     @InjectMocks
     MaintenanceDispatcherService service;
@@ -120,7 +124,8 @@ class MaintenanceDispatcherServiceTest {
                 defectRepository,
                 workOrderRepository,
                 brigadeMemberRepository,
-                equipmentRepository
+                equipmentRepository,
+                erpWorkOrderDeltas
         );
         MaintenanceWorkspaceFilter filter = new MaintenanceWorkspaceFilter(
                 "pump",
@@ -583,7 +588,8 @@ class MaintenanceDispatcherServiceTest {
                 defectRepository,
                 workOrderRepository,
                 brigadeMemberRepository,
-                equipmentRepository
+                equipmentRepository,
+                erpWorkOrderDeltas
         );
     }
 

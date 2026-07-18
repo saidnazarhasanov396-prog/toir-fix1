@@ -13,9 +13,9 @@ ON CONFLICT (code) DO NOTHING;
 -- 06. Equipment and maintenance regulations.
 INSERT INTO equipment (id, created_at, updated_at, is_deleted, code, name, inventory_number, technical_number, serial_number, model, equipment_type_id, department_id, location_id, parent_id, criticality_class_id, responsible_id, manufacturer, status, category, commissioned_at, warranty_until, description)
 VALUES
-('00000000-0000-0000-0000-000000010001', now(), now(), false, 'NAV-AMM-CMP-01', 'Synthesis gas compressor K-1', 'NAV-INV-1001', 'NAV-TN-1001', 'NAV-SN-CMP-001', 'K-500 industrial', '00000000-0000-0000-0000-00000000f002', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a102', NULL, '00000000-0000-0000-0000-00000000c601', '00000000-0000-0000-0000-00000000a004', 'Navoiyazot Compressor Works', 'ACTIVE', 'PRODUCTION_EQUIPMENT', DATE '2020-02-10', DATE '2027-02-10', 'Critical compressor for ammonia synthesis'),
-('00000000-0000-0000-0000-000000010002', now(), now(), false, 'NAV-AMM-PMP-01', 'Condensate pump P-101', 'NAV-INV-1010', 'NAV-TN-1010', 'NAV-SN-PMP-001', 'P-250 industrial', '00000000-0000-0000-0000-00000000f001', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a102', NULL, '00000000-0000-0000-0000-00000000c601', '00000000-0000-0000-0000-00000000a004', 'Navoiyazot Pump Works', 'IN_REPAIR', 'PRODUCTION_EQUIPMENT', DATE '2021-04-15', DATE '2026-04-15', 'Navoiyazot pump with active repair workflow'),
-('00000000-0000-0000-0000-000000010003', now(), now(), false, 'NAV-UREA-RCT-01', 'Urea reactor R-2', 'NAV-INV-2001', 'NAV-TN-2001', 'NAV-SN-RCT-001', 'R-1000 industrial', '00000000-0000-0000-0000-00000000f003', '00000000-0000-0000-0000-00000000d003', '00000000-0000-0000-0000-00000000a103', NULL, '00000000-0000-0000-0000-00000000c601', '00000000-0000-0000-0000-00000000a009', 'Navoiyazot Reactor Works', 'ACTIVE', 'PRODUCTION_EQUIPMENT', DATE '2019-08-01', DATE '2029-08-01', 'Navoiyazot static equipment for inspection and knowledge flows')
+('00000000-0000-0000-0000-000000010001', now(), now(), false, 'NAV-AMM-CMP-01', 'Synthesis gas compressor K-1', 'NAV-INV-1001', 'NAV-TN-1001', 'NAV-SN-CMP-001', 'K-500 industrial', '00000000-0000-0000-0000-00000000f002', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a102', NULL, '00000000-0000-0000-0000-00000000c601', '00000000-0000-0000-0000-00000000e004', 'Navoiyazot Compressor Works', 'ACTIVE', 'PRODUCTION_EQUIPMENT', DATE '2020-02-10', DATE '2027-02-10', 'Critical compressor for ammonia synthesis'),
+('00000000-0000-0000-0000-000000010002', now(), now(), false, 'NAV-AMM-PMP-01', 'Condensate pump P-101', 'NAV-INV-1010', 'NAV-TN-1010', 'NAV-SN-PMP-001', 'P-250 industrial', '00000000-0000-0000-0000-00000000f001', '00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a102', NULL, '00000000-0000-0000-0000-00000000c601', '00000000-0000-0000-0000-00000000e004', 'Navoiyazot Pump Works', 'IN_REPAIR', 'PRODUCTION_EQUIPMENT', DATE '2021-04-15', DATE '2026-04-15', 'Navoiyazot pump with active repair workflow'),
+('00000000-0000-0000-0000-000000010003', now(), now(), false, 'NAV-UREA-RCT-01', 'Urea reactor R-2', 'NAV-INV-2001', 'NAV-TN-2001', 'NAV-SN-RCT-001', 'R-1000 industrial', '00000000-0000-0000-0000-00000000f003', '00000000-0000-0000-0000-00000000d003', '00000000-0000-0000-0000-00000000a103', NULL, '00000000-0000-0000-0000-00000000c601', '00000000-0000-0000-0000-00000000e009', 'Navoiyazot Reactor Works', 'ACTIVE', 'PRODUCTION_EQUIPMENT', DATE '2019-08-01', DATE '2029-08-01', 'Navoiyazot static equipment for inspection and knowledge flows')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO maintenance_regulations (id, created_at, updated_at, is_deleted, code, name, description, equipment_type_id, maintenance_kind, normative_labor_hours, is_active, periodicity_unit, periodicity_value, tolerance_days, requires_shutdown, trigger_meter_type, trigger_meter_interval)
@@ -73,7 +73,7 @@ SELECT ('00000000-0000-0000-0000-' || '00000001' || lpad(gs::text, 4, '0'))::uui
        typ.model, typ.type_id, wk.department_id, wk.location_id,
        CASE WHEN gs BETWEEN 4 AND 8 THEN '00000000-0000-0000-0000-000000010001'::uuid WHEN gs BETWEEN 9 AND 12 THEN '00000000-0000-0000-0000-000000010003'::uuid ELSE NULL END,
        '00000000-0000-0000-0000-00000000c601'::uuid,
-       (ARRAY['00000000-0000-0000-0000-00000000a004','00000000-0000-0000-0000-00000000a009','00000000-0000-0000-0000-00000000a011'])[1 + ((gs - 1) % 3)]::uuid,
+       (ARRAY['00000000-0000-0000-0000-00000000e004','00000000-0000-0000-0000-00000000e009','00000000-0000-0000-0000-00000000e011'])[1 + ((gs - 1) % 3)]::uuid,
        'Navoiyazot Industrial Equipment Works',
        (ARRAY['ACTIVE','ACTIVE','ACTIVE','STANDBY','IN_REPAIR','ACTIVE','CONSERVATION'])[1 + ((gs - 1) % 7)],
        CASE WHEN gs >= 55 THEN 'VEHICLE' ELSE typ.category END,
@@ -170,7 +170,7 @@ SELECT ('10000000-0000-0000-0000-' || '00000012' || lpad(gs::text, 4, '0'))::uui
        '00000000-0000-0000-0000-00000000a111'::uuid,
        NULL,
        '00000000-0000-0000-0000-00000000c601'::uuid,
-       '00000000-0000-0000-0000-00000000a006'::uuid,
+       '00000000-0000-0000-0000-00000000e006'::uuid,
        'Navoiy Machinery Plant',
        'ACTIVE',
        'VEHICLE',
@@ -532,4 +532,3 @@ SELECT ('10000000-0000-0000-0000-' || '00000024' || lpad(gs::text, 4, '0'))::uui
        (ARRAY['ACTIVE','FULFILLED','CANCELLED'])[1 + ((gs - 1) % 3)]
 FROM generate_series(1, 24) AS gs
 ON CONFLICT (id) DO NOTHING;
-
