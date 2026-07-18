@@ -229,11 +229,12 @@ class PlannedShutdownLifecycleServiceTest {
         assertThat(payload.getValue()).isEqualTo(
                 "{\"scopeVersion\":3,\"scopeHash\":\"" + pending.approvalScopeHash() + "\"}");
 
-        ApprovalRequest approval = approval(actor, UUID.randomUUID(), UUID.randomUUID());
+        ApprovalRequest approval = approvedRoleRoute(actor, "REVIEWER_ALPHA", "REVIEWER_BETA");
         approval.setPayloadJson("{\"scopeVersion\":3,\"scopeHash\":\"" + pending.approvalScopeHash() + "\"}");
         service.finalizeApprovalFromApprovalRequest(id, approval);
-        when(approvalRequestRepository.findAllByTargetTypeAndTargetIdAndIsDeletedFalse(anyString(), eq(id)))
-                .thenReturn(List.of(approval));
+        when(approvalRequestRepository.findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), id, ApprovalActionType.APPROVE.name(),
+                ApprovalStatus.APPROVED.name())).thenReturn(List.of(approval));
 
         service.prepare(id, command());
         service.startShutdown(id, command());
@@ -280,15 +281,14 @@ class PlannedShutdownLifecycleServiceTest {
         shutdown.setApprovedEndAt(shutdown.getPlannedEndAt());
         shutdown.setApprovalScopeVersion(shutdown.getScopeVersion());
         shutdown.setApprovalScopeHash(currentScopeHash());
-        ApprovalRequest approval = approval(actor, UUID.randomUUID(), UUID.randomUUID());
-        when(approvalRequestRepository.findAllByTargetTypeAndTargetIdAndIsDeletedFalse(anyString(), eq(id)))
-                .thenReturn(List.of(approval));
+        ApprovalRequest approval = approvedRoleRoute(actor, "REVIEWER_ALPHA", "REVIEWER_BETA");
+        when(approvalRequestRepository.findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), id, ApprovalActionType.APPROVE.name(),
+                ApprovalStatus.APPROVED.name())).thenReturn(List.of(approval));
         Instant extendedEnd = shutdown.getApprovedEndAt().plusSeconds(1800);
         var proceed = new com.toir.dto.plannedshutdown.PlannedShutdownReadinessAssessment(true, List.of());
         when(readinessPolicy.evaluateSafeState(any())).thenAnswer(invocation -> {
             PlannedShutdownReadinessPolicy.Facts facts = invocation.getArgument(0);
-            assertThat(facts.productionApproved()).isTrue();
-            assertThat(facts.hseApproved()).isTrue();
             assertThat(facts.approvalScopeCurrent()).isTrue();
             assertThat(facts.approvedEndAt()).isEqualTo(extendedEnd);
             return proceed;
@@ -326,48 +326,150 @@ class PlannedShutdownLifecycleServiceTest {
     }
 
     @Test
-    void approvalFinalizationRequiresCurrentProductionAndHseStepsWithSeparationOfDuty() {
+    void arbitraryTwoStepRuntimeCanFinalizeAndPrepare() {
         shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
         shutdown.setApprovalScopeVersion(3L);
         shutdown.setApprovalScopeHash(currentScopeHash());
-        ApprovalRequest approval = approval(actor, UUID.randomUUID(), UUID.randomUUID());
+        ApprovalRequest approval = approvedRoleRoute(
+                actor,
+                "SHUTDOWN_REVIEWER_ALPHA",
+                "SHUTDOWN_REVIEWER_BETA");
 
         var result = service.finalizeApprovalFromApprovalRequest(id, approval);
+        when(approvalRequestRepository.findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), id, ApprovalActionType.APPROVE.name(),
+                ApprovalStatus.APPROVED.name())).thenReturn(List.of(approval));
+        var prepared = service.prepare(id, command());
 
         assertThat(result.status()).isEqualTo(PlannedShutdownStatus.APPROVED);
+        assertThat(prepared.status()).isEqualTo(PlannedShutdownStatus.PREPARATION);
         verify(repository).findByIdAndIsDeletedFalseForUpdate(id);
+    }
+
+    @Test
+    void arbitraryThreeRoleRuntimeCanFinalizeAndPrepare() {
+        shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
+        shutdown.setApprovalScopeVersion(3L);
+        shutdown.setApprovalScopeHash(currentScopeHash());
+        ApprovalRequest approval = approvedRoleRoute(actor,
+                "LIFECYCLE_REVIEWER_ALPHA", "LIFECYCLE_REVIEWER_BETA", "LIFECYCLE_REVIEWER_GAMMA");
+
+        service.finalizeApprovalFromApprovalRequest(id, approval);
+        when(approvalRequestRepository.findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), id, ApprovalActionType.APPROVE.name(),
+                ApprovalStatus.APPROVED.name())).thenReturn(List.of(approval));
+
+        assertThat(service.prepare(id, command()).status()).isEqualTo(PlannedShutdownStatus.PREPARATION);
+        verifyNoInteractions(approvalService);
+        verify(approvalServiceProvider, never()).getObject();
+    }
+
+    @Test
+    void oneStepExplicitRuntimeCanFinalizeAndPrepare() {
+        shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
+        shutdown.setApprovalScopeVersion(3L);
+        shutdown.setApprovalScopeHash(currentScopeHash());
+        ApprovalRequest approval = approvedExplicitRoute(actor, UUID.randomUUID());
+
+        service.finalizeApprovalFromApprovalRequest(id, approval);
+        when(approvalRequestRepository.findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), id, ApprovalActionType.APPROVE.name(),
+                ApprovalStatus.APPROVED.name())).thenReturn(List.of(approval));
+
+        assertThat(service.prepare(id, command()).status()).isEqualTo(PlannedShutdownStatus.PREPARATION);
+        verifyNoInteractions(approvalService);
+        verify(approvalServiceProvider, never()).getObject();
+    }
+
+    @Test
+    void newerOtherScopeApprovalIsIgnoredForCurrentScopePreparation() {
+        shutdown.setStatus(PlannedShutdownStatus.APPROVED);
+        shutdown.setApprovalScopeVersion(3L);
+        shutdown.setApprovalScopeHash(currentScopeHash());
+        ApprovalRequest newerOtherScope = approvedRoleRoute(actor, "NEWER_OTHER_SCOPE_ROLE");
+        newerOtherScope.setPayloadJson("{\"scopeVersion\":2,\"scopeHash\":\""
+                + "0".repeat(64) + "\"}");
+        ApprovalRequest currentScope = approvedRoleRoute(actor, "CURRENT_SCOPE_ROLE");
+        currentScope.setTargetType(null);
+        currentScope.setTargetId(null);
+        currentScope.setActionType(null);
+        when(approvalRequestRepository.findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), id, ApprovalActionType.APPROVE.name(),
+                ApprovalStatus.APPROVED.name())).thenReturn(List.of(newerOtherScope, currentScope));
+
+        assertThat(service.prepare(id, command()).status()).isEqualTo(PlannedShutdownStatus.PREPARATION);
+        verifyNoInteractions(approvalService);
+        verify(approvalServiceProvider, never()).getObject();
+    }
+
+    @Test
+    void malformedAndIncompleteCurrentScopeEvidenceCannotPrepare() {
+        shutdown.setStatus(PlannedShutdownStatus.APPROVED);
+        shutdown.setApprovalScopeVersion(3L);
+        shutdown.setApprovalScopeHash(currentScopeHash());
+        ApprovalRequest malformed = approvedRoleRoute(actor, "REVIEWER_ALPHA", "REVIEWER_BETA");
+        malformed.getSteps().get(1).setStepNumber(1);
+        when(approvalRequestRepository.findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), id, ApprovalActionType.APPROVE.name(),
+                ApprovalStatus.APPROVED.name())).thenReturn(List.of(malformed));
+
+        assertThatThrownBy(() -> service.prepare(id, command()))
+                .hasMessageContaining("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
+
+        ApprovalRequest incomplete = approvedRoleRoute(actor, "REVIEWER_ALPHA", "REVIEWER_BETA");
+        incomplete.getSteps().getLast().setDecision(ApprovalDecision.PENDING);
+        when(approvalRequestRepository.findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc(
+                ApprovalTargetType.PLANNED_SHUTDOWN.name(), id, ApprovalActionType.APPROVE.name(),
+                ApprovalStatus.APPROVED.name())).thenReturn(List.of(incomplete));
+
+        assertThatThrownBy(() -> service.prepare(id, command()))
+                .hasMessageContaining("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
+        verifyNoInteractions(approvalService);
+        verify(approvalServiceProvider, never()).getObject();
     }
 
     @Test
     void approvalFinalizationRejectsStaleScopeAndRequesterSelfApproval() {
         shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
         shutdown.setApprovalScopeVersion(2L);
-        ApprovalRequest approval = approval(actor, UUID.randomUUID(), UUID.randomUUID());
+        ApprovalRequest approval = approvedRoleRoute(actor, "REVIEWER_ALPHA", "REVIEWER_BETA");
         assertThatThrownBy(() -> service.finalizeApprovalFromApprovalRequest(id, approval))
                 .hasMessageContaining("APPROVAL_SCOPE_STALE");
 
         shutdown.setApprovalScopeVersion(3L);
         shutdown.setApprovalScopeHash(currentScopeHash());
-        ApprovalRequest selfApproved = approval(actor, actor, UUID.randomUUID());
+        ApprovalRequest selfApproved = approvedRoleRoute(actor, "REVIEWER_ALPHA", "REVIEWER_BETA");
+        selfApproved.getSteps().getFirst().setDecidedById(actor);
         assertThatThrownBy(() -> service.finalizeApprovalFromApprovalRequest(id, selfApproved))
-                .hasMessageContaining("APPROVAL_PRODUCTION_MISSING");
+                .hasMessageContaining("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
     }
 
     @Test
-    void approvalRejectsSubstringRoleAndSameActorAcrossProductionAndHse() {
+    void legacyEffectiveTargetIdAndNullApproveActionCanFinalizeFromPersistedRuntime() {
         shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
         shutdown.setApprovalScopeVersion(3L);
         shutdown.setApprovalScopeHash(currentScopeHash());
-        ApprovalRequest substring = approval(actor, UUID.randomUUID(), UUID.randomUUID());
-        substring.getSteps().getFirst().setApproverRole("FAKE_"
-                + PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE);
-        assertThatThrownBy(() -> service.finalizeApprovalFromApprovalRequest(id, substring))
-                .hasMessageContaining("APPROVAL_PRODUCTION_MISSING");
+        ApprovalRequest approval = approvedRoleRoute(actor, "LEGACY_RUNTIME_REVIEWER");
+        approval.setTargetType(null);
+        approval.setTargetId(null);
+        approval.setActionType(null);
 
+        assertThat(service.finalizeApprovalFromApprovalRequest(id, approval).status())
+                .isEqualTo(PlannedShutdownStatus.APPROVED);
+        verify(approvalServiceProvider, never()).getObject();
+    }
+
+    @Test
+    void approvalRejectsRepeatedApprovedActorWithoutInspectingRoleNames() {
+        shutdown.setStatus(PlannedShutdownStatus.PENDING_APPROVAL);
+        shutdown.setApprovalScopeVersion(3L);
+        shutdown.setApprovalScopeHash(currentScopeHash());
         UUID sameActor = UUID.randomUUID();
-        ApprovalRequest same = approval(actor, sameActor, sameActor);
+        ApprovalRequest same = approvedRoleRoute(actor, "ANY_ROLE", "ANY_OTHER_ROLE");
+        same.getSteps().forEach(step -> step.setDecidedById(sameActor));
+
         assertThatThrownBy(() -> service.finalizeApprovalFromApprovalRequest(id, same))
-                .hasMessageContaining("APPROVAL_SEPARATION_OF_DUTY_REQUIRED");
+                .hasMessageContaining("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
     }
 
     @Test
@@ -378,7 +480,7 @@ class PlannedShutdownLifecycleServiceTest {
         shutdown.setApprovedEndAt(shutdown.getPlannedEndAt());
         String approvedHash = approvalScopeHasher.hash(shutdown, List.of(), List.of(), List.of(), List.of());
         shutdown.setApprovalScopeHash(approvedHash);
-        ApprovalRequest approval = approval(actor, UUID.randomUUID(), UUID.randomUUID());
+        ApprovalRequest approval = approvedRoleRoute(actor, "REVIEWER_ALPHA", "REVIEWER_BETA");
         approval.setPayloadJson("{\"scopeVersion\":3,\"scopeHash\":\"" + approvedHash + "\"}");
         shutdown.setObjective("mutated after approval request");
 
@@ -573,7 +675,7 @@ class PlannedShutdownLifecycleServiceTest {
         return point;
     }
 
-    private ApprovalRequest approval(UUID requester, UUID productionActor, UUID hseActor) {
+    private ApprovalRequest approvedRoleRoute(UUID requester, String... roles) {
         ApprovalRequest request = new ApprovalRequest();
         request.setId(UUID.randomUUID());
         request.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
@@ -582,15 +684,39 @@ class PlannedShutdownLifecycleServiceTest {
         request.setRequesterId(requester);
         request.setStatus(ApprovalStatus.APPROVED);
         request.setPayloadJson("{\"scopeVersion\":3,\"scopeHash\":\"" + shutdown.getApprovalScopeHash() + "\"}");
-        request.setSteps(List.of(step(request, PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE, productionActor),
-                step(request, PlannedShutdownApprovalScopeHasher.HSE_APPROVER_ROLE, hseActor)));
+        java.util.ArrayList<ApprovalStep> steps = new java.util.ArrayList<>();
+        for (int index = 0; index < roles.length; index++) {
+            steps.add(approvedRoleStep(request, index + 1, roles[index], UUID.randomUUID()));
+        }
+        request.setSteps(steps);
+        request.setCurrentStep(steps.size());
         return request;
     }
 
-    private ApprovalStep step(ApprovalRequest request, String role, UUID decidedBy) {
+    private ApprovalRequest approvedExplicitRoute(UUID requester, UUID approverId) {
+        ApprovalRequest request = new ApprovalRequest();
+        request.setId(UUID.randomUUID());
+        request.setTargetType(ApprovalTargetType.PLANNED_SHUTDOWN);
+        request.setTargetId(id);
+        request.setActionType(ApprovalActionType.APPROVE);
+        request.setRequesterId(requester);
+        request.setStatus(ApprovalStatus.APPROVED);
+        request.setPayloadJson("{\"scopeVersion\":3,\"scopeHash\":\"" + shutdown.getApprovalScopeHash() + "\"}");
         ApprovalStep step = new ApprovalStep();
         step.setRequest(request);
-        step.setStepNumber(role.equals(PlannedShutdownApprovalScopeHasher.PRODUCTION_APPROVER_ROLE) ? 1 : 2);
+        step.setStepNumber(1);
+        step.setApproverId(approverId);
+        step.setDecision(ApprovalDecision.APPROVED);
+        step.setDecidedById(approverId);
+        request.setSteps(List.of(step));
+        request.setCurrentStep(1);
+        return request;
+    }
+
+    private ApprovalStep approvedRoleStep(ApprovalRequest request, int order, String role, UUID decidedBy) {
+        ApprovalStep step = new ApprovalStep();
+        step.setRequest(request);
+        step.setStepNumber(order);
         step.setApproverRole(role);
         step.setDecision(ApprovalDecision.APPROVED);
         step.setDecidedById(decidedBy);

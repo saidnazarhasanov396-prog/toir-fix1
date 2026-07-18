@@ -11,6 +11,8 @@ import com.toir.dto.approval.ReturnApprovalRequest;
 import com.toir.dto.approval.UpdateApprovalRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
+import com.toir.entity.ApprovalTemplate;
+import com.toir.entity.ApprovalTemplateStep;
 import com.toir.entity.users.Role;
 import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
@@ -38,8 +40,6 @@ import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.approval.LifecycleRouteResolution;
 import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.service.repair.RepairRequestService;
-import com.toir.service.repair.RepairCampaignApprovalRouteValidator;
-import com.toir.service.plannedshutdown.PlannedShutdownApprovalRouteValidator;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -57,6 +57,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.TransactionException;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
@@ -106,8 +107,6 @@ public class ApprovalService implements ApprovalOrchestrator {
     private final UserRepository userRepository;
     @Autowired
     private LifecycleApprovalRoutePolicy lifecycleApprovalRoutePolicy = new LifecycleApprovalRoutePolicy();
-    private final RepairCampaignApprovalRouteValidator repairCampaignApprovalRouteValidator;
-    private final PlannedShutdownApprovalRouteValidator plannedShutdownApprovalRouteValidator;
     private final ObjectProvider<WorkOrderService> workOrderServiceProvider;
     private final ObjectProvider<PprPlanService> pprPlanServiceProvider;
     private final ObjectProvider<ProcurementRequestService> procurementRequestServiceProvider;
@@ -756,6 +755,21 @@ public class ApprovalService implements ApprovalOrchestrator {
                 reason);
     }
 
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void cancelPendingLifecycleApproval(
+            ApprovalTargetType targetType, UUID targetId, String reason) {
+        if (targetId == null
+                || !lifecycleApprovalRoutePolicy.supports(targetType, ApprovalActionType.APPROVE)) {
+            throw RestException.badRequest("Unsupported lifecycle approval target/action");
+        }
+        lockApprovalTargetAction(targetType.name(), targetId, ApprovalActionType.APPROVE);
+        UUID changedBy = scopeAccessService.currentUserIdOrNull();
+        requestRepository.findAllPendingByTargetAndAction(
+                        targetType.name(), targetId,
+                        ApprovalActionType.APPROVE.name(), ApprovalStatus.PENDING.name())
+                .forEach(request -> cancelLifecyclePending(request, changedBy, reason));
+    }
+
     private void requireValidLifecyclePlanIdentity(LifecycleApprovalStartPlan plan) {
         if (plan == null) {
             throw RestException.badRequest("Lifecycle approval plan is required");
@@ -1054,7 +1068,7 @@ public class ApprovalService implements ApprovalOrchestrator {
 
     @Transactional
     public ApprovalRequestDto returnToStep(UUID requestId, ReturnApprovalRequest returnRequest) {
-        ApprovalRequest request = getOrThrow(requestId);
+        ApprovalRequest request = lockLifecycleMutationRequest(requestId);
         UUID actorId = effectiveDecisionActor(returnRequest == null ? null : returnRequest.approverId());
         expireIfNeeded(request);
         if (request.getStatus() != ApprovalStatus.PENDING) {
@@ -1127,7 +1141,7 @@ public class ApprovalService implements ApprovalOrchestrator {
 
     @Transactional
     public ApprovalRequestDto cancel(UUID requestId) {
-        ApprovalRequest request = getOrThrow(requestId);
+        ApprovalRequest request = lockLifecycleMutationRequest(requestId);
         approvalScopeService.assertCanCancelApproval(request);
         if (request.getStatus() != ApprovalStatus.PENDING) {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
@@ -1163,7 +1177,7 @@ public class ApprovalService implements ApprovalOrchestrator {
     }
 
     private ApprovalRequestDto applyDecision(UUID requestId, UUID expectedStepId, DecisionRequest decision, ApprovalDecision outcome) {
-        ApprovalRequest request = getOrThrow(requestId);
+        ApprovalRequest request = lockLifecycleMutationRequest(requestId);
         UUID actorId = effectiveDecisionActor(decision);
         if (request.getStatus() == ApprovalStatus.FAILED) {
             if (expectedStepId != null && !expectedStepId.equals(currentStepOrThrow(request).getId())) {
@@ -1194,10 +1208,12 @@ public class ApprovalService implements ApprovalOrchestrator {
             isTerminal = true;
         } else {
             int next = request.getCurrentStep() + 1;
-            boolean hasNext = request.getSteps().stream().anyMatch(s -> s.getStepNumber() == next);
+            boolean hasNext = request.getSteps().stream()
+                    .anyMatch(step -> !step.isDeleted() && step.getStepNumber() == next);
             if (hasNext) {
                 request.setCurrentStep(next);
             } else {
+                validatePersistedLifecycleCompletion(request);
                 request.setStatus(ApprovalStatus.APPROVED);
                 request.setCompletedAt(Instant.now());
                 isTerminal = true;
@@ -1232,6 +1248,55 @@ public class ApprovalService implements ApprovalOrchestrator {
 
         return toDto(request);
     }
+
+    private ApprovalRequest lockLifecycleMutationRequest(UUID requestId) {
+        List<LifecycleDecisionIdentity> identities = jdbcTemplate.query(
+                """
+                SELECT COALESCE(target_type, document_type) AS target_type,
+                       COALESCE(target_id, document_id) AS target_id,
+                       COALESCE(action_type, 'APPROVE') AS action_type
+                FROM approval_requests
+                WHERE id = ? AND is_deleted = false
+                """,
+                (rs, rowNum) -> new LifecycleDecisionIdentity(
+                        ApprovalTargetType.fromDocumentType(rs.getString("target_type")),
+                        rs.getObject("target_id", UUID.class),
+                        ApprovalActionType.valueOf(rs.getString("action_type"))),
+                requestId);
+        if (identities.isEmpty()) {
+            return getOrThrow(requestId);
+        }
+        LifecycleDecisionIdentity identity = identities.getFirst();
+        if (!lifecycleApprovalRoutePolicy.supports(identity.targetType(), identity.actionType())
+                || identity.targetId() == null) {
+            return getOrThrow(requestId);
+        }
+
+        lockLifecycleDomainRow(identity.targetType(), identity.targetId());
+        lockApprovalTargetAction(identity.targetType().name(), identity.targetId(), identity.actionType());
+        return requestRepository.findByIdAndIsDeletedFalseForUpdate(requestId)
+                .orElseThrow(() -> RestException.notFound("Approval request not found: " + requestId));
+    }
+
+    private void lockLifecycleDomainRow(ApprovalTargetType targetType, UUID targetId) {
+        String sql = switch (targetType) {
+            case REPAIR_CAMPAIGN ->
+                    "SELECT id FROM repair_campaigns WHERE id = ? AND is_deleted = false FOR UPDATE";
+            case PLANNED_SHUTDOWN ->
+                    "SELECT id FROM planned_shutdowns WHERE id = ? AND is_deleted = false FOR UPDATE";
+            default -> throw RestException.badRequest("Unsupported lifecycle approval target/action");
+        };
+        List<UUID> locked = jdbcTemplate.query(
+                sql,
+                (rs, rowNum) -> rs.getObject("id", UUID.class),
+                targetId);
+        if (locked.isEmpty()) {
+            throw RestException.notFound("Lifecycle approval target not found: " + targetId);
+        }
+    }
+
+    private record LifecycleDecisionIdentity(
+            ApprovalTargetType targetType, UUID targetId, ApprovalActionType actionType) {}
 
     private ApprovalRequestDto retryFailedFinalization(ApprovalRequest request,
                                                        DecisionRequest decision,
@@ -1352,10 +1417,38 @@ public class ApprovalService implements ApprovalOrchestrator {
         };
     }
 
+    private void validatePersistedLifecycleCompletion(ApprovalRequest request) {
+        if (!isLifecycleApproval(request)) {
+            return;
+        }
+        LifecycleApprovalRoutePolicy.ValidationResult completion = lifecycleApprovalRoutePolicy
+                .validateCompletion(normalizedLifecycleRuntimeView(request));
+        if (!completion.valid()) {
+            throw mapLifecycleCompletionFailure(request, completion.reason());
+        }
+    }
+
+    private RestException mapLifecycleCompletionFailure(ApprovalRequest request,
+                                                        LifecycleApprovalRoutePolicy.Reason reason) {
+        if (effectiveTargetType(request) == ApprovalTargetType.REPAIR_CAMPAIGN) {
+            if (reason == LifecycleApprovalRoutePolicy.Reason.RUNTIME_INCOMPLETE
+                    || reason == LifecycleApprovalRoutePolicy.Reason.DECISION_ACTOR_MISSING) {
+                return RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_INCOMPLETE_DISCIPLINE_ROUTE");
+            }
+            if (reason == LifecycleApprovalRoutePolicy.Reason.REQUESTER_DECISION
+                    || reason == LifecycleApprovalRoutePolicy.Reason.REPEATED_APPROVING_ACTOR) {
+                return RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SEPARATION_OF_DUTY_FAILURE");
+            }
+            return RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_STALE");
+        }
+        return RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
+    }
+
     private void executeTerminalAction(ApprovalRequest request, ApprovalDecision outcome) {
         if (request.isExecuted()) {
             return;
         }
+        boolean lifecycleFinalization = isLifecycleApproval(request);
         ApprovalActionType originalActionType = request.getActionType();
         boolean isMaintenanceDueEvent = effectiveTargetType(request) == ApprovalTargetType.MAINTENANCE_DUE_EVENT;
         boolean preserveActionType = isMaintenanceDueEvent
@@ -1370,7 +1463,7 @@ public class ApprovalService implements ApprovalOrchestrator {
             request.setResultJson(executeOnce(request));
             request.setFailureReason(null);
         } catch (RuntimeException ex) {
-            if (shouldPropagateFinalizerFailure(ex)) {
+            if (lifecycleFinalization || shouldPropagateFinalizerFailure(ex)) {
                 throw ex;
             }
             request.setStatus(ApprovalStatus.FAILED);
@@ -1688,22 +1781,15 @@ public class ApprovalService implements ApprovalOrchestrator {
             }
             throw RestException.badRequest("At least one approval step is required");
         }
-        if (repairCampaignApproval) {
-            RepairCampaignApprovalRouteValidator.ValidationResult validation =
-                    repairCampaignApprovalRouteValidator.validateInputs(effectiveSteps);
+        if (domainValidatedApproval) {
+            LifecycleApprovalRoutePolicy.ValidationResult validation = validateLifecycleInputs(
+                    targetType, actionType, effectiveSteps);
             if (!validation.valid()) {
-                log.warn("Repair campaign approval route is not configured: targetId={} reason={} detail={}",
-                        targetId, validation.reason(), validation.detail());
-                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_NOT_CONFIGURED");
-            }
-        }
-        if (plannedShutdownApproval) {
-            PlannedShutdownApprovalRouteValidator.ValidationResult validation =
-                    plannedShutdownApprovalRouteValidator.validateInputs(effectiveSteps);
-            if (!validation.valid()) {
-                log.warn("Planned shutdown approval route is not configured: targetId={} reason={} detail={}",
-                        targetId, validation.reason(), validation.detail());
-                throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_ROUTE_NOT_CONFIGURED");
+                log.warn("Lifecycle approval route is not configured: targetType={} targetId={} reason={}",
+                        targetType, targetId, validation.reason());
+                throw RestException.conflict(repairCampaignApproval
+                        ? "REPAIR_CAMPAIGN_APPROVAL_ROUTE_NOT_CONFIGURED"
+                        : "PLANNED_SHUTDOWN_APPROVAL_ROUTE_NOT_CONFIGURED");
             }
         }
 
@@ -1738,6 +1824,25 @@ public class ApprovalService implements ApprovalOrchestrator {
         );
 
         return toDto(saved);
+    }
+
+    private LifecycleApprovalRoutePolicy.ValidationResult validateLifecycleInputs(
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType,
+            List<CreateApprovalRequest.StepInput> inputs) {
+        ApprovalTemplate candidate = new ApprovalTemplate();
+        candidate.setTargetType(targetType);
+        candidate.setActionType(effectiveActionType(actionType));
+        int order = 1;
+        for (CreateApprovalRequest.StepInput input : inputs) {
+            ApprovalTemplateStep step = new ApprovalTemplateStep();
+            step.setTemplate(candidate);
+            step.setStepOrder(order++);
+            step.setApproverId(input.approverId());
+            step.setApproverRole(input.approverRole());
+            candidate.getSteps().add(step);
+        }
+        return lifecycleApprovalRoutePolicy.validateTemplate(candidate);
     }
 
     private List<CreateApprovalRequest.StepInput> normalizeStepInputs(List<CreateApprovalRequest.StepInput> steps) {

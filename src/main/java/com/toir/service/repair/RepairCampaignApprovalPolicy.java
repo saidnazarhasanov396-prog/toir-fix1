@@ -2,6 +2,9 @@ package com.toir.service.repair;
 
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.repair.RepairCampaign;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalStatus;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.exception.RestException;
 import com.toir.service.approval.LifecycleApprovalRoutePolicy;
@@ -11,7 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 
 @Component
@@ -19,20 +22,18 @@ public class RepairCampaignApprovalPolicy {
 
     private static final Logger log = LoggerFactory.getLogger(RepairCampaignApprovalPolicy.class);
 
-    public static final List<String> DISCIPLINE_ROLES = RepairCampaignApprovalRouteValidator.REQUIRED_DISCIPLINE_ROLES;
-
     private final RepairCampaignApprovalScopeHasher scopeHasher;
-    private final RepairCampaignApprovalRouteValidator routeValidator;
+    private final LifecycleApprovalRoutePolicy lifecyclePolicy;
 
     @Autowired
     public RepairCampaignApprovalPolicy(RepairCampaignApprovalScopeHasher scopeHasher,
-                                        RepairCampaignApprovalRouteValidator routeValidator) {
+                                        LifecycleApprovalRoutePolicy lifecyclePolicy) {
         this.scopeHasher = scopeHasher;
-        this.routeValidator = routeValidator;
+        this.lifecyclePolicy = lifecyclePolicy;
     }
 
     public RepairCampaignApprovalPolicy(RepairCampaignApprovalScopeHasher scopeHasher) {
-        this(scopeHasher, new RepairCampaignApprovalRouteValidator());
+        this(scopeHasher, new LifecycleApprovalRoutePolicy());
     }
 
     public String validateRequestScope(RepairCampaign campaign, Long expectedScopeVersion) {
@@ -93,12 +94,26 @@ public class RepairCampaignApprovalPolicy {
                 || reason == LifecycleApprovalRoutePolicy.Reason.DUPLICATE_EXPLICIT_APPROVER;
     }
 
-    public void validateDecision(RepairCampaign campaign, ApprovalRequest request) {
+    public void validateCompletion(RepairCampaign campaign, ApprovalRequest request) {
         if (request == null) {
             throw routeStale("approval request is null");
         }
         if (campaign.getStatus() != RepairCampaignStatus.PENDING_APPROVAL) {
             throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_CAMPAIGN_STATUS_MISMATCH");
+        }
+        ApprovalTargetType effectiveTarget = request.getTargetType() == null
+                ? ApprovalTargetType.fromDocumentType(request.getDocumentType())
+                : request.getTargetType();
+        java.util.UUID effectiveTargetId = request.getTargetId() == null
+                ? request.getDocumentId()
+                : request.getTargetId();
+        ApprovalActionType effectiveAction = request.getActionType() == null
+                ? ApprovalActionType.APPROVE
+                : request.getActionType();
+        if (effectiveTarget != ApprovalTargetType.REPAIR_CAMPAIGN
+                || !Objects.equals(effectiveTargetId, campaign.getId())
+                || effectiveAction != ApprovalActionType.APPROVE) {
+            throw routeStale("approval request target/action mismatch");
         }
         if (campaign.getApprovalScopeHash() == null) {
             throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SCOPE_HASH_MISMATCH");
@@ -117,25 +132,57 @@ public class RepairCampaignApprovalPolicy {
             }
             throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_PAYLOAD_MISMATCH");
         }
-        RepairCampaignApprovalRouteValidator.ValidationResult route = routeValidator.validateCompleted(request);
-        if (!route.valid()) {
-            if (route.reason() == RepairCampaignApprovalRouteValidator.RouteValidationReason.INCOMPLETE_DISCIPLINE_ROUTE) {
-                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_INCOMPLETE_DISCIPLINE_ROUTE");
-            }
-            if (route.reason() == RepairCampaignApprovalRouteValidator.RouteValidationReason.SEPARATION_OF_DUTY_FAILURE) {
-                throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SEPARATION_OF_DUTY_FAILURE");
-            }
-            throw routeStale(route.detail());
+        if (request.getStatus() != ApprovalStatus.APPROVED) {
+            throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_INCOMPLETE_DISCIPLINE_ROUTE");
         }
+        LifecycleApprovalRoutePolicy.ValidationResult result = lifecyclePolicy.validateCompletion(
+                normalizedCompletionView(request, effectiveTarget, effectiveTargetId, effectiveAction));
+        if (!result.valid()) {
+            throw mapRuntimeCompletionFailure(result.reason());
+        }
+    }
+
+    public void validateDecision(RepairCampaign campaign, ApprovalRequest request) {
+        validateCompletion(campaign, request);
+    }
+
+    private ApprovalRequest normalizedCompletionView(ApprovalRequest request,
+                                                     ApprovalTargetType effectiveTarget,
+                                                     java.util.UUID effectiveTargetId,
+                                                     ApprovalActionType effectiveAction) {
+        if (request.getTargetType() != null
+                && request.getTargetId() != null
+                && request.getActionType() != null) {
+            return request;
+        }
+        ApprovalRequest normalized = new ApprovalRequest();
+        normalized.setTargetType(effectiveTarget);
+        normalized.setTargetId(effectiveTargetId);
+        normalized.setActionType(effectiveAction);
+        normalized.setRequesterId(request.getRequesterId());
+        normalized.setStatus(request.getStatus());
+        normalized.setCurrentStep(request.getCurrentStep());
+        normalized.setSteps(request.getSteps() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(request.getSteps()));
+        return normalized;
+    }
+
+    private RestException mapRuntimeCompletionFailure(LifecycleApprovalRoutePolicy.Reason reason) {
+        if (reason == LifecycleApprovalRoutePolicy.Reason.RUNTIME_INCOMPLETE
+                || reason == LifecycleApprovalRoutePolicy.Reason.DECISION_ACTOR_MISSING) {
+            return RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_INCOMPLETE_DISCIPLINE_ROUTE");
+        }
+        if (reason == LifecycleApprovalRoutePolicy.Reason.REQUESTER_DECISION
+                || reason == LifecycleApprovalRoutePolicy.Reason.REPEATED_APPROVING_ACTOR) {
+            return RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_SEPARATION_OF_DUTY_FAILURE");
+        }
+        return routeStale(reason == null ? "runtime completion reason is null" : reason.name());
     }
 
     private RestException routeStale(String detail) {
         log.warn("Repair campaign approval route stale: {}", detail);
         return RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_STALE");
-    }
-
-    public static boolean hasCanonicalDisciplineRoute(ApprovalRequest request) {
-        return new RepairCampaignApprovalRouteValidator().validate(request).valid();
     }
 
     public static String payload(RepairCampaign campaign) {

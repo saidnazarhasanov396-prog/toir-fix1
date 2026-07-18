@@ -32,12 +32,14 @@ public class PlannedShutdownReadinessPolicy {
         facts.work().stream().filter(work -> !work.performerOrContractorAssigned())
                 .forEach(work -> add(blockers, "PERFORMER_OR_CONTRACTOR_MISSING",
                         "Work has no eligible performer or contractor", "WORK_ITEM", work.id()));
-        addUnless(blockers, facts.productionApproved(), "APPROVAL_PRODUCTION_MISSING",
-                "Current production approval is missing", "PLANNED_SHUTDOWN", facts.shutdownId());
-        addUnless(blockers, facts.hseApproved(), "APPROVAL_HSE_MISSING",
-                "Current HSE approval is missing", "PLANNED_SHUTDOWN", facts.shutdownId());
-        addUnless(blockers, facts.approvalScopeCurrent(), "APPROVAL_SCOPE_STALE",
-                "Approval does not match the current shutdown scope", "PLANNED_SHUTDOWN", facts.shutdownId());
+        if (!facts.approvalScopeCurrent()) {
+            add(blockers, "APPROVAL_SCOPE_STALE", "Approval does not match the current shutdown scope",
+                    "PLANNED_SHUTDOWN", facts.shutdownId());
+        } else {
+            addUnless(blockers, facts.approvalComplete(), "PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE",
+                    "Persisted runtime approval route is incomplete or malformed",
+                    "PLANNED_SHUTDOWN", facts.shutdownId());
+        }
         facts.isolation().stream().filter(point -> !point.configured())
                 .forEach(point -> add(blockers, "ISOLATION_POINT_MISSING",
                         "Required isolation point is missing", "ISOLATION_POINT", point.id()));
@@ -94,8 +96,8 @@ public class PlannedShutdownReadinessPolicy {
     }
 
     public record Facts(UUID shutdownId, boolean hasBoundary, boolean hasResponsibleOwner, boolean hasWork,
-                        List<WorkFact> work, boolean productionApproved, boolean hseApproved,
-                        boolean approvalScopeCurrent, boolean criticalReadinessComplete,
+                        List<WorkFact> work, boolean approvalComplete, boolean approvalScopeCurrent,
+                        boolean criticalReadinessComplete,
                         List<IsolationFact> isolation, boolean permitsActive, boolean approvedWindowPresent,
                         Instant approvedStartAt, Instant approvedEndAt, Instant evaluatedAt) {
         public Facts {

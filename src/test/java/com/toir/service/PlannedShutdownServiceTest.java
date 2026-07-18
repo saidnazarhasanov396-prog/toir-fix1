@@ -50,8 +50,10 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.jpa.repository.Query;
 
 import java.time.Instant;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.UUID;
 
@@ -139,6 +141,23 @@ class PlannedShutdownServiceTest {
 
         verify(scopeAccessService).assertCanAccessDepartment(departmentId);
         verify(workOrderService).findByPlannedShutdown(id, departmentId);
+    }
+
+    @Test
+    void approvedRuntimeEvidenceQueryUsesDeterministicCreatedAtAndIdOrdering() throws Exception {
+        Method queryMethod = com.toir.repository.ApprovalRequestRepository.class.getMethod(
+                "findAllApprovedByTargetAndActionOrderByCreatedAtDescIdDesc",
+                String.class, UUID.class, String.class, String.class);
+
+        String sql = queryMethod.getAnnotation(Query.class).value().replaceAll("\\s+", " ").trim();
+
+        assertThat(sql).contains("ORDER BY created_at DESC, id DESC");
+        assertThat(sql).contains(
+                "COALESCE(target_type, document_type) = :targetType",
+                "COALESCE(target_id, document_id) = cast(:targetId as uuid)",
+                "COALESCE(action_type, 'APPROVE') = :actionType",
+                "status = :status",
+                "is_deleted = false");
     }
 
     @Test
@@ -1004,6 +1023,62 @@ class PlannedShutdownServiceTest {
                 plannedShutdownPayload(5L, scopeHash));
         verify(repository, never()).saveAndFlush(any(PlannedShutdown.class));
         verify(statusHistoryRepository, never()).saveAndFlush(any());
+        verify(approvalService, never()).materializeLifecycleApproval(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void pendingRescheduleCancelsRuntimeBeforeClearingSnapshotAndReturnsToReadiness() {
+        UUID id = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        PlannedShutdown shutdown = shutdown(id, UUID.randomUUID(), 6L, PlannedShutdownStatus.PENDING_APPROVAL);
+        shutdown.setScopeVersion(9L);
+        shutdown.setApprovalScopeVersion(9L);
+        shutdown.setApprovalScopeHash("persisted-scope-hash");
+        shutdown.setApprovedStartAt(shutdown.getPlannedStartAt());
+        shutdown.setApprovedEndAt(shutdown.getPlannedEndAt());
+        Instant approvedStart = shutdown.getApprovedStartAt();
+        Instant approvedEnd = shutdown.getApprovedEndAt();
+        when(repository.findByIdAndIsDeletedFalseForUpdate(id)).thenReturn(java.util.Optional.of(shutdown));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+        when(repository.saveAndFlush(shutdown)).thenReturn(shutdown);
+        when(statusHistoryRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of());
+        when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
+                .thenReturn(List.of());
+        doAnswer(invocation -> {
+            assertThat(shutdown.getLifecycleStatus()).isEqualTo(PlannedShutdownStatus.PENDING_APPROVAL);
+            assertThat(shutdown.getScopeVersion()).isEqualTo(9L);
+            assertThat(shutdown.getApprovalScopeVersion()).isEqualTo(9L);
+            assertThat(shutdown.getApprovalScopeHash()).isEqualTo("persisted-scope-hash");
+            assertThat(shutdown.getApprovedStartAt()).isEqualTo(approvedStart);
+            assertThat(shutdown.getApprovedEndAt()).isEqualTo(approvedEnd);
+            return null;
+        }).when(approvalService).cancelPendingLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                id,
+                "PLANNED_SHUTDOWN_APPROVAL_SCOPE_INVALIDATED");
+
+        var response = service.reschedule(id, new com.toir.dto.plannedshutdown.PlannedShutdownRescheduleRequest(
+                6L,
+                Instant.parse("2026-08-03T00:00:00Z"),
+                Instant.parse("2026-08-04T00:00:00Z"),
+                "Scope window changed",
+                "reschedule-pending"));
+
+        assertThat(response.status()).isEqualTo(PlannedShutdownStatus.READINESS_CHECK);
+        assertThat(shutdown.getScopeVersion()).isEqualTo(10L);
+        assertThat(shutdown.getApprovalScopeVersion()).isNull();
+        assertThat(shutdown.getApprovalScopeHash()).isNull();
+        assertThat(shutdown.getApprovedStartAt()).isNull();
+        assertThat(shutdown.getApprovedEndAt()).isNull();
+        InOrder order = inOrder(approvalService, repository);
+        order.verify(approvalService).cancelPendingLifecycleApproval(
+                ApprovalTargetType.PLANNED_SHUTDOWN,
+                id,
+                "PLANNED_SHUTDOWN_APPROVAL_SCOPE_INVALIDATED");
+        order.verify(repository).saveAndFlush(shutdown);
+        verify(approvalService, never()).planLifecycleApproval(any(), any(), any(), anyBoolean(), any());
         verify(approvalService, never()).materializeLifecycleApproval(any(), any(), any(), any(), any());
     }
 
