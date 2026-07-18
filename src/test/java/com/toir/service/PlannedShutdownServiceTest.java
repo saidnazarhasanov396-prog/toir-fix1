@@ -1046,6 +1046,8 @@ class PlannedShutdownServiceTest {
                 .thenReturn(List.of());
         when(workItemRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(id))
                 .thenReturn(List.of());
+        when(readinessPolicy.evaluateReadiness(any()))
+                .thenReturn(new PlannedShutdownReadinessAssessment(true, List.of()));
         doAnswer(invocation -> {
             assertThat(shutdown.getLifecycleStatus()).isEqualTo(PlannedShutdownStatus.PENDING_APPROVAL);
             assertThat(shutdown.getScopeVersion()).isEqualTo(9L);
