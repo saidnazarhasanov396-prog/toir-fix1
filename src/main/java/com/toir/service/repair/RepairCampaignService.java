@@ -52,6 +52,7 @@ import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.repository.repair.RepairCampaignStageRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.service.WorkOrderService;
+import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
 import lombok.RequiredArgsConstructor;
@@ -116,6 +117,7 @@ public class RepairCampaignService {
     private final ScopeAccessService scopeAccessService;
     private final ObjectProvider<ApprovalService> approvalServiceProvider;
     private final RepairCampaignMutationImpactService mutationImpactService;
+    private final ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findAll() {
@@ -528,6 +530,7 @@ public class RepairCampaignService {
             validateWorkOrderBudgetLineBelongsToCampaign(campaign, workOrder.getBudgetLineId());
         }
         WorkOrder saved = workOrderRepository.save(workOrder);
+        erpWorkOrderDeltas.queueDelta(saved.getId());
         return workOrderService.findById(saved.getId());
     }
 
@@ -563,6 +566,7 @@ public class RepairCampaignService {
             workOrder.setBudgetLineId(null);
         }
         WorkOrder saved = workOrderRepository.save(workOrder);
+        erpWorkOrderDeltas.queueDelta(saved.getId());
         return workOrderService.findById(saved.getId());
     }
 

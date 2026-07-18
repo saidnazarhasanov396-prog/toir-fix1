@@ -8,6 +8,8 @@ import com.toir.enums.EquipmentStatusSource;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentStatusHistoryRepository;
+import com.toir.service.integration.ErpEquipmentStatusOutboxService;
+import com.toir.service.integration.AtilEquipmentStatusOutboxService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -34,6 +36,12 @@ class EquipmentStatusLifecycleServiceTest {
 
     @Mock
     EquipmentStatusHistoryRepository historyRepository;
+
+    @Mock
+    ErpEquipmentStatusOutboxService erpEquipmentStatusOutboxService;
+
+    @Mock
+    AtilEquipmentStatusOutboxService atilEquipmentStatusOutboxService;
 
     @InjectMocks
     EquipmentStatusLifecycleService service;
@@ -63,6 +71,8 @@ class EquipmentStatusLifecycleServiceTest {
         assertThat(history.getSource()).isEqualTo(EquipmentStatusSource.MANUAL);
         assertThat(history.getChangedBy()).isEqualTo(changedBy);
         assertThat(history.getChangedAt()).isNotNull();
+        verify(erpEquipmentStatusOutboxService).queue(equipment, history);
+        verify(atilEquipmentStatusOutboxService).queue(equipment, history);
     }
 
     @Test

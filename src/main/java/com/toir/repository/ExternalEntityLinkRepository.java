@@ -19,4 +19,12 @@ public interface ExternalEntityLinkRepository extends JpaRepository<ExternalEnti
             String targetEntityType,
             UUID targetEntityId
     );
+
+    Optional<ExternalEntityLink> findBySourceSystemAndSourceEntityTypeAndTargetSystemAndTargetEntityTypeAndTargetEntityIdAndIsDeletedFalse(
+            String sourceSystem,
+            String sourceEntityType,
+            String targetSystem,
+            String targetEntityType,
+            UUID targetEntityId
+    );
 }

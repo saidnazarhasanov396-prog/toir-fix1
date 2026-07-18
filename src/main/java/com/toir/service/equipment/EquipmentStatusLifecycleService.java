@@ -9,6 +9,8 @@ import com.toir.enums.EquipmentStatusSource;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentStatusHistoryRepository;
+import com.toir.service.integration.ErpEquipmentStatusOutboxService;
+import com.toir.service.integration.AtilEquipmentStatusOutboxService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +33,8 @@ public class EquipmentStatusLifecycleService {
 
     private final EquipmentRepository equipmentRepository;
     private final EquipmentStatusHistoryRepository historyRepository;
+    private final ErpEquipmentStatusOutboxService erpEquipmentStatusOutboxService;
+    private final AtilEquipmentStatusOutboxService atilEquipmentStatusOutboxService;
 
     @Transactional
     public EquipmentStatusHistoryResponse changeStatusManually(UUID equipmentId,
@@ -198,7 +202,12 @@ public class EquipmentStatusLifecycleService {
         history.setRelatedEntityType(relatedEntityType);
         history.setRelatedEntityId(relatedEntityId);
         history.setNote(note);
-        return EquipmentStatusHistoryResponse.from(historyRepository.save(history));
+        EquipmentStatusHistory saved = historyRepository.save(history);
+        if (fromStatus != toStatus) {
+            erpEquipmentStatusOutboxService.queue(equipment, saved);
+            atilEquipmentStatusOutboxService.queue(equipment, saved);
+        }
+        return EquipmentStatusHistoryResponse.from(saved);
     }
 
     private Equipment equipmentOrThrow(UUID equipmentId) {
