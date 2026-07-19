@@ -1,18 +1,18 @@
 package com.toir.service.repair;
 
 import com.toir.dto.repaircampaign.CampaignMutationImpact;
+import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.RepairCampaignMutationType;
 import com.toir.enums.RepairCampaignStatus;
-import com.toir.entity.ApprovalRequest;
 import com.toir.entity.repair.RepairCampaign;
-import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.repair.RepairCampaignRepository;
 import com.toir.security.ScopeAccessService;
+import com.toir.service.ApprovalService;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.EnumSet;
-import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,7 +58,7 @@ class RepairCampaignMutationImpactServiceTest {
     void scopeOnlyAuthorityCannotPreviewFinanceMutation() {
         RepairCampaignRepository campaigns = mock(RepairCampaignRepository.class);
         ScopeAccessService scope = mock(ScopeAccessService.class);
-        ApprovalRequestRepository approvals = mock(ApprovalRequestRepository.class);
+        ObjectProvider<ApprovalService> approvals = approvalServiceProvider(mock(ApprovalService.class));
         RepairCampaignMutationImpactService service = new RepairCampaignMutationImpactService(campaigns, scope, approvals);
         RepairCampaign campaign = approvedCampaign();
         when(scope.hasAuthority(com.toir.security.PermissionConstants.REPAIR_CAMPAIGN_MANAGE_SCOPE)).thenReturn(true);
@@ -68,17 +68,26 @@ class RepairCampaignMutationImpactServiceTest {
     }
 
     @Test
-    void previewAndCommitUseIdenticalImpactAndCommitRetiresApprovalFacts() {
+    void pendingScopeMutationCancelsRuntimeBeforeResettingApprovalFactsAndReadiness() {
         RepairCampaignRepository campaigns = mock(RepairCampaignRepository.class);
         ScopeAccessService scope = mock(ScopeAccessService.class);
-        ApprovalRequestRepository approvals = mock(ApprovalRequestRepository.class);
+        ApprovalService approvalService = mock(ApprovalService.class);
+        ObjectProvider<ApprovalService> approvals = approvalServiceProvider(approvalService);
         RepairCampaignMutationImpactService service = new RepairCampaignMutationImpactService(campaigns, scope, approvals);
         RepairCampaign campaign = approvedCampaign();
-        ApprovalRequest pending = new ApprovalRequest();
-        pending.setStatus(com.toir.enums.ApprovalStatus.PENDING);
+        campaign.setStatus(RepairCampaignStatus.PENDING_APPROVAL);
         when(scope.hasAuthority(com.toir.security.PermissionConstants.REPAIR_CAMPAIGN_MANAGE_FINANCE)).thenReturn(true);
-        when(approvals.findAllByTargetTypeAndTargetIdAndIsDeletedFalse("REPAIR_CAMPAIGN", campaign.getId()))
-                .thenReturn(List.of(pending));
+        org.mockito.Mockito.doAnswer(invocation -> {
+            assertThat(campaign.getStatus()).isEqualTo(RepairCampaignStatus.PENDING_APPROVAL);
+            assertThat(campaign.getScopeVersion()).isEqualTo(3L);
+            assertThat(campaign.getApprovalScopeVersion()).isEqualTo(3L);
+            assertThat(campaign.getApprovalScopeHash()).isEqualTo("hash");
+            assertThat(campaign.getApprovedAt()).isNotNull();
+            return null;
+        }).when(approvalService).cancelPendingLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                campaign.getId(),
+                "REPAIR_CAMPAIGN_APPROVAL_SCOPE_INVALIDATED");
 
         CampaignMutationImpact preview = service.preview(campaign, RepairCampaignMutationType.FX, 9L, 3L);
         CampaignMutationImpact committed = service.apply(campaign, RepairCampaignMutationType.FX);
@@ -89,8 +98,10 @@ class RepairCampaignMutationImpactServiceTest {
         assertThat(campaign.getApprovalScopeVersion()).isNull();
         assertThat(campaign.getApprovalScopeHash()).isNull();
         assertThat(campaign.getApprovedAt()).isNull();
-        assertThat(pending.getStatus()).isEqualTo(com.toir.enums.ApprovalStatus.CANCELLED);
-        verify(approvals).save(pending);
+        verify(approvalService).cancelPendingLifecycleApproval(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                campaign.getId(),
+                "REPAIR_CAMPAIGN_APPROVAL_SCOPE_INVALIDATED");
     }
 
     private RepairCampaign approvedCampaign() {
@@ -103,5 +114,12 @@ class RepairCampaignMutationImpactServiceTest {
         campaign.setApprovalScopeHash("hash");
         campaign.setApprovedAt(java.time.Instant.now());
         return campaign;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ObjectProvider<ApprovalService> approvalServiceProvider(ApprovalService approvalService) {
+        ObjectProvider<ApprovalService> provider = mock(ObjectProvider.class);
+        when(provider.getObject()).thenReturn(approvalService);
+        return provider;
     }
 }

@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/toir_migration_test
+    url: jdbc:postgresql://localhost:5433/toir_demo
     username: postgres
     password: root123
     driver-class-name: org.postgresql.Driver
@@ -9,6 +9,10 @@ spring:
 
   flyway:
     enabled: false
+
+  security:
+    jwt:
+      secret: test-only-lifecycle-approval-jwt-secret-0123456789abcdef0123456789abcdef
 
   sql:
     init:

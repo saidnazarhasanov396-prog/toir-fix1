@@ -97,6 +97,7 @@ class PlannedShutdownWorkItemServiceTest {
         shutdown.setScopeVersion(2L);
         shutdown.setStatus(PlannedShutdownStatus.SCOPE_FORMATION);
         lenient().when(shutdownRepository.findByIdAndIsDeletedFalseForUpdate(shutdownId)).thenReturn(Optional.of(shutdown));
+        lenient().when(approvalServiceProvider.getObject()).thenReturn(approvalService);
         PlannedShutdownAsset asset = new PlannedShutdownAsset();
         asset.setEquipmentId(equipmentId);
         lenient().when(assetRepository.findAllByPlannedShutdownIdAndIsDeletedFalseOrderByOrderNumberAsc(shutdownId))
