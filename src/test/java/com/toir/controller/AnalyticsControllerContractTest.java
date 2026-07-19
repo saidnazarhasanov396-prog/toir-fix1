@@ -1,6 +1,8 @@
 package com.toir.controller;
 
+import com.toir.dto.analytics.AnalyticsOverview;
 import com.toir.service.AnalyticsService;
+import com.toir.service.InventoryAnalyticsService;
 import com.toir.service.ReliabilityPassportService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,11 +15,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.UUID;
+import java.util.List;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 @ExtendWith(MockitoExtension.class)
 class AnalyticsControllerContractTest {
@@ -28,12 +32,18 @@ class AnalyticsControllerContractTest {
     @Mock
     ReliabilityPassportService reliabilityPassportService;
 
+    @Mock
+    InventoryAnalyticsService inventoryAnalyticsService;
+
     MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AnalyticsController(service, reliabilityPassportService))
+                .standaloneSetup(
+                        new AnalyticsController(service, reliabilityPassportService),
+                        new DashboardIntegrationController(service, inventoryAnalyticsService)
+                )
                 .build();
     }
 
@@ -50,5 +60,24 @@ class AnalyticsControllerContractTest {
                 .andExpect(status().isOk());
 
         verify(service).downtimeEvents(departmentId, 2, 15);
+    }
+
+    @Test
+    void exposesCanonicalDashboardIntegrationContract() throws Exception {
+        when(service.overview()).thenReturn(new AnalyticsOverview(
+                new AnalyticsOverview.Totals(1, 2, 3, 4),
+                new AnalyticsOverview.Kpis(1, 2, 3, 4, 5, 6, 7, 8),
+                List.of(), List.of(), List.of(), List.of(), List.of()
+        ));
+        when(inventoryAnalyticsService.stockoutRisk()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/analytics/dashboard/v1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.schemaVersion").value("1.0"))
+                .andExpect(jsonPath("$.moduleCode").value("TOIR_GENERAL"))
+                .andExpect(jsonPath("$.sourceSystem").value("TOIR_GENERAL"))
+                .andExpect(jsonPath("$.sourceRevision").isNumber())
+                .andExpect(jsonPath("$.freshness.status").value("FRESH"))
+                .andExpect(jsonPath("$.datasets[0].type").value("toir.equipment.v1"));
     }
 }

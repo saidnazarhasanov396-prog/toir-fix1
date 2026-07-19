@@ -14,13 +14,15 @@ import lombok.Setter;
 /** Durable TOIR clearance receipt for HR offboarding. */
 @Entity
 @Table(name = "erp_employee_clearance_outbox", indexes = {
-        @Index(name = "idx_erp_employee_clearance_outbox_ready", columnList = "status,next_attempt_at,created_at")
+        @Index(name = "idx_erp_employee_clearance_outbox_ready", columnList = "status,next_attempt_at,created_at"),
+        @Index(name = "idx_erp_employee_clearance_outbox_case", columnList = "offboarding_case_id,source_revision")
 })
 @Getter
 @Setter
 @NoArgsConstructor
 public class ErpEmployeeClearanceOutboxEvent extends BaseEntity {
     @Column(name = "employee_id", nullable = false) private UUID employeeId;
+    @Column(name = "offboarding_case_id") private UUID offboardingCaseId;
     @Column(name = "module_code", nullable = false, length = 40) private String moduleCode;
     @Column(name = "source_revision", nullable = false) private long sourceRevision;
     @Column(nullable = false) private boolean cleared;
