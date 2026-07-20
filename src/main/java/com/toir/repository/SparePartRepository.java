@@ -18,6 +18,8 @@ public interface SparePartRepository extends JpaRepository<SparePart, UUID> {
     @Query(value = "SELECT * FROM spare_parts WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<SparePart> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    Optional<SparePart> findFirstByCodeIgnoreCaseAndIsDeletedFalse(String code);
+
     @Query(value = "SELECT * FROM spare_parts WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<SparePart> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
