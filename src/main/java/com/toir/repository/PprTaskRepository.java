@@ -208,6 +208,16 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
     @Query(value = "SELECT * FROM ppr_tasks WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<PprTask> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
+    @Query("""
+            select distinct t
+            from PprTask t
+            join fetch t.plan p
+            where t.id in :ids
+              and t.isDeleted = false
+              and p.isDeleted = false
+            """)
+    List<PprTask> findAllByIdInAndIsDeletedFalseWithPlan(@Param("ids") Collection<UUID> ids);
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM ppr_tasks WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 
