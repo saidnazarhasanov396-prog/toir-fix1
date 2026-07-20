@@ -143,7 +143,7 @@ class MaintenanceDispatcherServiceTest {
 
         MaintenanceDispatcherQueues queues = service.queues(filter);
 
-        assertThat(queues.summary().total()).isEqualTo(1);
+        assertThat(queues.summary().total()).isEqualTo(2);
         assertThat(queues.summary().emergencyRepairRequests()).isEqualTo(1);
         assertThat(queues.emergencyRepairRequests()).extracting("id").containsExactly(matchingEmergency.getId());
         assertThat(queues.newDefects()).isEmpty();

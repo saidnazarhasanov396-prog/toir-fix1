@@ -32,6 +32,8 @@ springdoc:
     path: /swagger-ui.html
 
 app:
+  dashboard-detail:
+    canonical-site-id: ${DASHBOARD_CANONICAL_SITE_ID:10000000-0000-0000-0000-000000000001}
   security:
     jwt:
       # Local/dev/demo only. Production must use TOIR_JWT_SECRET from the environment or secret manager.
