@@ -7,6 +7,7 @@ import com.toir.dto.repaircampaign.CampaignMutationImpact;
 import com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
+import com.toir.dto.repaircampaign.RepairCampaignWorkOrderEligibilityResult;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.Department;
@@ -30,6 +31,7 @@ import com.toir.enums.RepairCampaignPriority;
 import com.toir.enums.RepairCampaignMutationType;
 import com.toir.enums.RepairCampaignStatus;
 import com.toir.enums.RepairCampaignStageStatus;
+import com.toir.enums.RepairCampaignWorkOrderEligibilityCode;
 import com.toir.enums.WorkOrderStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
@@ -51,6 +53,7 @@ import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import com.toir.service.repair.RepairCampaignApprovalPolicy;
 import com.toir.service.repair.RepairCampaignApprovalScopeHasher;
 import com.toir.service.repair.RepairCampaignService;
+import com.toir.service.repair.RepairCampaignWorkOrderEligibilityPolicy;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,6 +64,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -147,6 +152,9 @@ class RepairCampaignServiceTest {
 
     @Mock
     private com.toir.service.repair.RepairCampaignMutationImpactService mutationImpactService;
+
+    @Mock
+    private RepairCampaignWorkOrderEligibilityPolicy workOrderEligibilityPolicy;
 
     @Mock
     private ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
@@ -1349,9 +1357,122 @@ class RepairCampaignServiceTest {
 
         service.attachWorkOrder(campaignId, stageId, workOrderId);
 
+        verify(workOrderEligibilityPolicy).assertEligible(campaign, stage, workOrder);
         assertThat(workOrder.getRepairCampaignId()).isEqualTo(campaignId);
         assertThat(workOrder.getRepairCampaignStageId()).isEqualTo(stageId);
         assertThat(workOrder.getBudgetLineId()).isEqualTo(budgetLineId);
+    }
+
+    @Test
+    void attachWorkOrderRejectionPreventsMutationImpactSaveAndErpEnqueue() {
+        UUID campaignId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        RepairCampaignStage stage = new RepairCampaignStage();
+        stage.setId(stageId);
+        stage.setCampaign(campaign);
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setType(com.toir.enums.WorkOrderType.INSPECTION);
+
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        doThrow(new RestException(
+                "Campaign work order type must be OVERHAUL, MEDIUM_REPAIR, or CAPITAL_REPAIR",
+                HttpStatus.BAD_REQUEST,
+                RepairCampaignWorkOrderEligibilityCode.REPAIR_CAMPAIGN_WORK_ORDER_TYPE_NOT_ALLOWED.name()))
+                .when(workOrderEligibilityPolicy).assertEligible(campaign, stage, workOrder);
+
+        assertThatThrownBy(() -> service.attachWorkOrder(campaignId, stageId, workOrderId))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getErrorCode()).isEqualTo(
+                            RepairCampaignWorkOrderEligibilityCode
+                                    .REPAIR_CAMPAIGN_WORK_ORDER_TYPE_NOT_ALLOWED.name());
+                });
+
+        verify(mutationImpactService, never()).assertMutationPermission(any());
+        verify(mutationImpactService, never()).apply(any(), any());
+        verify(workOrderRepository, never()).save(any());
+        verify(erpWorkOrderDeltas, never()).queueDelta(any());
+        assertThat(workOrder.getRepairCampaignId()).isNull();
+        assertThat(workOrder.getRepairCampaignStageId()).isNull();
+        assertThat(workOrder.getBudgetLineId()).isNull();
+    }
+
+    @Test
+    void attachWorkOrderEvaluatesEligibilityBeforeMutationImpactAndPersistence() {
+        UUID campaignId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        RepairCampaignStage stage = new RepairCampaignStage();
+        stage.setId(stageId);
+        stage.setCampaign(campaign);
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setType(com.toir.enums.WorkOrderType.OVERHAUL);
+
+        when(repository.findLockedByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(workOrderRepository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(workOrderService.findById(workOrderId)).thenReturn(null);
+
+        service.attachWorkOrder(campaignId, stageId, workOrderId);
+
+        InOrder order = inOrder(
+                workOrderEligibilityPolicy, mutationImpactService, workOrderRepository, erpWorkOrderDeltas);
+        order.verify(workOrderEligibilityPolicy).assertEligible(campaign, stage, workOrder);
+        order.verify(mutationImpactService).assertMutationPermission(RepairCampaignMutationType.WORK_ITEMS);
+        order.verify(mutationImpactService).apply(campaign, RepairCampaignMutationType.WORK_ITEMS);
+        order.verify(workOrderRepository).save(workOrder);
+        order.verify(erpWorkOrderDeltas).queueDelta(workOrderId);
+    }
+
+    @Test
+    void workOrderCandidatesArePagedSearchedAndMappedThroughSharedPolicy() {
+        UUID campaignId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        RepairCampaign campaign = campaign(campaignId, null);
+        RepairCampaignStage stage = new RepairCampaignStage();
+        stage.setId(stageId);
+        stage.setCampaign(campaign);
+        WorkOrder eligible = new WorkOrder();
+        eligible.setId(UUID.randomUUID());
+        eligible.setNumber("WO-1");
+        eligible.setTitle("Pump repair");
+        eligible.setType(com.toir.enums.WorkOrderType.OVERHAUL);
+        eligible.setStatus(WorkOrderStatus.DRAFT);
+        WorkOrder rejected = new WorkOrder();
+        rejected.setId(UUID.randomUUID());
+        rejected.setNumber("WO-2");
+        rejected.setTitle("Pump inspection");
+        rejected.setType(com.toir.enums.WorkOrderType.INSPECTION);
+        rejected.setStatus(WorkOrderStatus.PLANNED);
+
+        when(repository.findByIdAndIsDeletedFalse(campaignId)).thenReturn(Optional.of(campaign));
+        when(stageRepository.findByIdAndIsDeletedFalse(stageId)).thenReturn(Optional.of(stage));
+        when(workOrderRepository.findRepairCampaignWorkOrderCandidates(eq("pump"), any()))
+                .thenReturn(new PageImpl<>(List.of(eligible, rejected), PageRequest.of(1, 2), 3));
+        when(workOrderEligibilityPolicy.evaluate(campaign, stage, eligible))
+                .thenReturn(RepairCampaignWorkOrderEligibilityResult.allowed());
+        when(workOrderEligibilityPolicy.evaluate(campaign, stage, rejected))
+                .thenReturn(RepairCampaignWorkOrderEligibilityResult.ineligible(
+                        RepairCampaignWorkOrderEligibilityCode.REPAIR_CAMPAIGN_WORK_ORDER_TYPE_NOT_ALLOWED));
+
+        var result = service.findWorkOrderCandidates(campaignId, stageId, "  pump  ", 1, 2);
+
+        assertThat(result.getTotalElements()).isEqualTo(3);
+        assertThat(result.getContent()).extracting("id", "eligible", "ineligibleReasonCode")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(eligible.getId(), true, null),
+                        org.assertj.core.groups.Tuple.tuple(rejected.getId(), false,
+                                RepairCampaignWorkOrderEligibilityCode.REPAIR_CAMPAIGN_WORK_ORDER_TYPE_NOT_ALLOWED));
+        verify(scopeAccessService).assertCanAccessDepartment(campaign.getDepartmentId());
+        verify(workOrderRepository).findRepairCampaignWorkOrderCandidates(eq("pump"), any());
     }
 
     @Test

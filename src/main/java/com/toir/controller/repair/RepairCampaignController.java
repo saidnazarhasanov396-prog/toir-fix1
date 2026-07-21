@@ -16,6 +16,7 @@ import com.toir.dto.repaircampaign.RepairCampaignShutdownLinkRequest;
 import com.toir.dto.repaircampaign.RepairCampaignShutdownLinkResponse;
 import com.toir.dto.repaircampaign.RepairCampaignWorkItemWindowRequest;
 import com.toir.dto.repaircampaign.RepairCampaignWorkItemWindowResponse;
+import com.toir.dto.repaircampaign.RepairCampaignWorkOrderCandidateDto;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.dto.defect.DefectResponse;
@@ -377,6 +378,18 @@ public class RepairCampaignController {
             @PathVariable UUID workOrderId
     ) {
         return ResponseEntity.ok(service.attachWorkOrder(id, stageId, workOrderId));
+    }
+
+    @GetMapping("/{id}/stages/{stageId}/work-order-candidates")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('REPAIR_CAMPAIGN_MANAGE_WORK')")
+    public ResponseEntity<Page<RepairCampaignWorkOrderCandidateDto>> workOrderCandidates(
+            @PathVariable UUID id,
+            @PathVariable UUID stageId,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(service.findWorkOrderCandidates(id, stageId, search, page, size));
     }
 
     @PostMapping("/{id}/work-orders/{workOrderId}/detach")

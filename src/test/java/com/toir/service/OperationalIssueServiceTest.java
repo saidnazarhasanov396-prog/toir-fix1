@@ -4,6 +4,7 @@ import com.toir.entity.Department;
 import com.toir.entity.OperationalIssue;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.NotificationSeverity;
+import com.toir.enums.OperationalIssueTargetType;
 import com.toir.enums.OperationalIssueStatus;
 import com.toir.enums.OperationalIssueType;
 import com.toir.repository.OperationalIssueRepository;
@@ -49,6 +50,9 @@ class OperationalIssueServiceTest {
 
     @Spy
     OperationalIssueI18nService i18nService = new OperationalIssueI18nService();
+
+    @Mock
+    OperationalIssueTargetResolver targetResolver;
 
     @InjectMocks
     OperationalIssueService service;
@@ -199,6 +203,37 @@ class OperationalIssueServiceTest {
         assertThat(dto.titleParams()).containsEntry("requestNumber", "RR-2026-105814");
         assertThat(dto.messageKey()).isEqualTo("operationalIssues.messages.OVERDUE_REPAIR_REQUEST");
         assertThat(dto.messageParams()).containsEntry("targetCompletionAt", "2026-06-20T08:00:00Z");
+    }
+
+    @Test
+    void searchReturnsSemanticNavigationTargetAlongsideLegacySourceReference() {
+        UUID issueId = UUID.randomUUID();
+        UUID repairRequestId = UUID.randomUUID();
+        OperationalIssue issue = issue(issueId, null, null);
+        issue.setType(OperationalIssueType.OVERDUE_REPAIR_REQUEST);
+        issue.setSourceType("RepairRequest");
+        issue.setSourceId(repairRequestId);
+        var target = new com.toir.dto.operationalissue.OperationalIssueTarget(
+                OperationalIssueTargetType.REPAIR_REQUEST,
+                repairRequestId,
+                "RR-001",
+                null,
+                null
+        );
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.search(
+                eq(null), eq(null), eq(null), eq(null), eq(null), eq(null), eq(null), eq(false), any(), any()
+        )).thenReturn(new PageImpl<>(List.of(issue)));
+        when(targetResolver.resolveAll(List.of(issue))).thenReturn(java.util.Map.of(issueId, target));
+
+        var dto = service.search(null, null, null, null, null, null, 0, 20, "detectedAt", "desc")
+                .getContent().getFirst();
+
+        assertThat(dto.sourceType()).isEqualTo("RepairRequest");
+        assertThat(dto.sourceId()).isEqualTo(repairRequestId);
+        assertThat(dto.targetType()).isEqualTo(OperationalIssueTargetType.REPAIR_REQUEST);
+        assertThat(dto.targetId()).isEqualTo(repairRequestId);
+        assertThat(dto.targetCode()).isEqualTo("RR-001");
     }
 
     @Test

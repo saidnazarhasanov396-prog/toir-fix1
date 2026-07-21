@@ -2,6 +2,7 @@ package com.toir.controller.maintenance;
 
 import com.toir.dto.maintenancedue.CancelMaintenanceDueEventRequest;
 import com.toir.dto.maintenancedue.MaintenanceDueEventDto;
+import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.enums.MaintenanceDueEventStatus;
 import com.toir.enums.MaintenanceDueStatus;
 import com.toir.security.ScopeAccessService;
@@ -58,6 +59,18 @@ public class MaintenanceDueEventController {
                 size,
                 lang != null ? lang : acceptLanguage
         ));
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_EVENT_READ')")
+    public ResponseEntity<MaintenanceDueEventDto> get(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String lang,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage
+    ) {
+        MaintenanceDueEvent event = service.getOrThrow(id);
+        service.assertCanAccessEvent(event);
+        return ResponseEntity.ok(service.toDto(event, lang != null ? lang : acceptLanguage));
     }
 
     @PostMapping("/{id}/cancel")

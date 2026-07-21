@@ -6,6 +6,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentRiskLevel;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.OperationalIssueStatus;
+import com.toir.enums.OperationalIssueTargetType;
 import com.toir.enums.OperationalIssueType;
 import java.time.Instant;
 import java.util.Map;
@@ -26,6 +27,11 @@ public record OperationalIssueDto(
         Instant resolvedAt,
         String sourceType,
         UUID sourceId,
+        OperationalIssueTargetType targetType,
+        UUID targetId,
+        String targetCode,
+        OperationalIssueTargetType parentTargetType,
+        UUID parentTargetId,
         Map<String, Object> metadata,
         EquipmentRiskLevel equipmentRiskLevel,
         String titleKey,
@@ -43,6 +49,16 @@ public record OperationalIssueDto(
             Department department,
             OperationalIssueTextI18n textI18n
     ) {
+        return from(issue, equipment, department, textI18n, null);
+    }
+
+    public static OperationalIssueDto from(
+            OperationalIssue issue,
+            Equipment equipment,
+            Department department,
+            OperationalIssueTextI18n textI18n,
+            OperationalIssueTarget target
+    ) {
         return new OperationalIssueDto(
                 issue.getId(),
                 issue.getType(),
@@ -58,6 +74,11 @@ public record OperationalIssueDto(
                 issue.getResolvedAt(),
                 issue.getSourceType(),
                 issue.getSourceId(),
+                target == null ? null : target.targetType(),
+                target == null ? null : target.targetId(),
+                target == null ? null : target.targetCode(),
+                target == null ? null : target.parentTargetType(),
+                target == null ? null : target.parentTargetId(),
                 issue.getMetadata(),
                 issue.getEquipmentRiskLevel(),
                 textI18n == null ? null : textI18n.titleKey(),
