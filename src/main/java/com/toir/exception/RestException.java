@@ -8,14 +8,24 @@ import org.springframework.http.HttpStatus;
 public class RestException extends RuntimeException {
 
     private final HttpStatus status;
+    private final String errorCode;
 
     public RestException(String message, HttpStatus status) {
+        this(message, status, null);
+    }
+
+    public RestException(String message, HttpStatus status, String errorCode) {
         super(message);
         this.status = status;
+        this.errorCode = errorCode;
     }
 
     public static RestException badRequest(String message) {
         return new RestException(message, HttpStatus.BAD_REQUEST);
+    }
+
+    public static RestException badRequest(String message, String errorCode) {
+        return new RestException(message, HttpStatus.BAD_REQUEST, errorCode);
     }
 
     public static RestException unauthorized(String message) {

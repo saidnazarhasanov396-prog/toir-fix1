@@ -11,6 +11,8 @@ import com.toir.dto.repaircampaign.RepairCampaignGenerateWorkOrdersRequest;
 import com.toir.dto.repaircampaign.RepairCampaignRequest;
 import com.toir.dto.repaircampaign.RepairCampaignStageDto;
 import com.toir.dto.repaircampaign.RepairCampaignSummaryDto;
+import com.toir.dto.repaircampaign.RepairCampaignWorkOrderCandidateDto;
+import com.toir.dto.repaircampaign.RepairCampaignWorkOrderEligibilityResult;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.entity.Department;
@@ -55,11 +57,14 @@ import com.toir.service.WorkOrderService;
 import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.CodeGenerationUtils;
+import com.toir.util.PaginationUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import com.toir.service.ApprovalService;
 import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.enums.ApprovalActionType;
@@ -70,7 +75,6 @@ import com.toir.security.ScopeAccessService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Currency;
@@ -90,12 +94,9 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 public class RepairCampaignService {
 
-    private static final ZoneId CAMPAIGN_DATE_ZONE = ZoneId.of("Asia/Tashkent");
     private static final Set<WorkOrderStatus> ACTIVE_WORK_ORDER_STATUSES =
             EnumSet.of(WorkOrderStatus.DRAFT, WorkOrderStatus.PLANNED, WorkOrderStatus.APPROVED,
                     WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.SUSPENDED);
-    private static final Set<WorkOrderType> CAMPAIGN_WORK_ORDER_TYPES =
-            EnumSet.of(WorkOrderType.OVERHAUL, WorkOrderType.MEDIUM_REPAIR, WorkOrderType.CAPITAL_REPAIR);
     private static final Set<ContractorWorkStatus> OPEN_CONTRACTOR_WORK_STATUSES =
             EnumSet.of(ContractorWorkStatus.DRAFT, ContractorWorkStatus.IN_PROGRESS, ContractorWorkStatus.COMPLETED);
 
@@ -118,6 +119,7 @@ public class RepairCampaignService {
     private final ObjectProvider<ApprovalService> approvalServiceProvider;
     private final RepairCampaignMutationImpactService mutationImpactService;
     private final ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
+    private final RepairCampaignWorkOrderEligibilityPolicy workOrderEligibilityPolicy;
 
     @Transactional(readOnly = true)
     public List<RepairCampaignDto> findAll() {
@@ -505,6 +507,29 @@ public class RepairCampaignService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public Page<RepairCampaignWorkOrderCandidateDto> findWorkOrderCandidates(
+            UUID campaignId,
+            UUID stageId,
+            String search,
+            int page,
+            int size
+    ) {
+        RepairCampaign campaign = getOrThrow(campaignId);
+        RepairCampaignStage stage = getStageOrThrow(stageId);
+        workOrderEligibilityPolicy.assertStageBelongsToCampaign(campaign, stage);
+        scopeAccessService.assertCanAccessDepartment(campaign.getDepartmentId());
+        String normalizedSearch = search == null || search.isBlank() ? null : search.trim();
+        return workOrderRepository.findRepairCampaignWorkOrderCandidates(
+                        normalizedSearch,
+                        PaginationUtils.pageRequest(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"))
+                )
+                .map(workOrder -> toCandidateDto(
+                        workOrder,
+                        workOrderEligibilityPolicy.evaluate(campaign, stage, workOrder)
+                ));
+    }
+
     @Transactional
     public WorkOrderDto createWorkOrder(UUID campaignId, UUID stageId, WorkOrderRequest request) {
         getStageForCampaign(campaignId, stageId);
@@ -514,11 +539,11 @@ public class RepairCampaignService {
     @Transactional
     public WorkOrderDto attachWorkOrder(UUID campaignId, UUID stageId, UUID workOrderId) {
         RepairCampaign campaign = getLockedOrThrow(campaignId);
-        RepairCampaignStage stage = getStageForCampaign(campaignId, stageId);
-        assertCampaignAcceptsWorkOrders(campaign);
+        RepairCampaignStage stage = getStageOrThrow(stageId);
+        workOrderEligibilityPolicy.assertStageBelongsToCampaign(campaign, stage);
         WorkOrder workOrder = workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)
                 .orElseThrow(() -> RestException.notFound("Work order not found: " + workOrderId));
-        validateWorkOrderCampaignCompatibility(campaign, stage, workOrder);
+        workOrderEligibilityPolicy.assertEligible(campaign, stage, workOrder);
         mutationImpactService.assertMutationPermission(com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
         mutationImpactService.apply(campaign, com.toir.enums.RepairCampaignMutationType.WORK_ITEMS);
 
@@ -526,8 +551,6 @@ public class RepairCampaignService {
         workOrder.setRepairCampaignStageId(stageId);
         if (workOrder.getBudgetLineId() == null) {
             workOrder.setBudgetLineId(stage.getBudgetLineId());
-        } else {
-            validateWorkOrderBudgetLineBelongsToCampaign(campaign, workOrder.getBudgetLineId());
         }
         WorkOrder saved = workOrderRepository.save(workOrder);
         erpWorkOrderDeltas.queueDelta(saved.getId());
@@ -1003,73 +1026,6 @@ public class RepairCampaignService {
         }
     }
 
-    private void assertCampaignAcceptsWorkOrders(RepairCampaign campaign) {
-        if (campaign.getStatus() == RepairCampaignStatus.CLOSED || campaign.getStatus() == RepairCampaignStatus.CANCELLED) {
-            throw RestException.badRequest("Cannot link work orders to closed/cancelled campaign");
-        }
-    }
-
-    private void validateWorkOrderCampaignCompatibility(
-            RepairCampaign campaign,
-            RepairCampaignStage stage,
-            WorkOrder workOrder
-    ) {
-        if (!CAMPAIGN_WORK_ORDER_TYPES.contains(workOrder.getType())) {
-            throw RestException.badRequest("Campaign work order type must be OVERHAUL, MEDIUM_REPAIR, or CAPITAL_REPAIR");
-        }
-        validateCampaignDepartment(campaign, workOrder.getDepartmentId());
-        validateWorkOrderDates(stage, workOrder);
-    }
-
-    private void validateWorkOrderBudgetLineBelongsToCampaign(RepairCampaign campaign, UUID budgetLineId) {
-        if (budgetLineId == null) {
-            return;
-        }
-        UUID maintenanceBudgetId = campaign.getMaintenanceBudgetId();
-        if (maintenanceBudgetId == null) {
-            throw RestException.badRequest("Campaign must be linked to a maintenance budget before assigning work order budget lines");
-        }
-        BudgetLine line = requireBudgetLine(budgetLineId);
-        if (line.getBudget() == null || !maintenanceBudgetId.equals(line.getBudget().getId())) {
-            throw RestException.badRequest("Work order budget line must belong to the repair campaign maintenance budget");
-        }
-    }
-
-    private void validateCampaignDepartment(RepairCampaign campaign, UUID workOrderDepartmentId) {
-        if (workOrderDepartmentId == null) {
-            return;
-        }
-        if (campaign.getScopeType() == RepairCampaignScopeType.CROSS_DEPARTMENT) {
-            if (workOrderDepartmentId.equals(campaign.getDepartmentId())
-                    || campaignDepartmentRepository.existsByCampaignIdAndDepartmentIdAndIsDeletedFalse(
-                    campaign.getId(), workOrderDepartmentId)) {
-                return;
-            }
-            throw RestException.badRequest("Work order department is not a campaign participant");
-        }
-        if (campaign.getDepartmentId() != null && !campaign.getDepartmentId().equals(workOrderDepartmentId)) {
-            throw RestException.badRequest("Work order department must match repair campaign department");
-        }
-    }
-
-    private void validateWorkOrderDates(RepairCampaignStage stage, WorkOrder workOrder) {
-        validatePlannedDate(stage, workOrder.getStartPlannedAt() == null
-                ? null
-                : workOrder.getStartPlannedAt().atZone(CAMPAIGN_DATE_ZONE).toLocalDate());
-        validatePlannedDate(stage, workOrder.getEndPlannedAt() == null
-                ? null
-                : workOrder.getEndPlannedAt().atZone(CAMPAIGN_DATE_ZONE).toLocalDate());
-    }
-
-    private void validatePlannedDate(RepairCampaignStage stage, LocalDate plannedDate) {
-        if (plannedDate == null || stage.getStartDate() == null || stage.getEndDate() == null) {
-            return;
-        }
-        if (plannedDate.isBefore(stage.getStartDate()) || plannedDate.isAfter(stage.getEndDate())) {
-            throw RestException.badRequest("Work order planned dates must fit repair campaign stage dates");
-        }
-    }
-
     private void assertNoActiveWorkOrders(List<WorkOrder> workOrders, String message) {
         if (safeList(workOrders).stream().anyMatch(workOrder -> ACTIVE_WORK_ORDER_STATUSES.contains(workOrder.getStatus()))) {
             throw RestException.badRequest(message);
@@ -1184,12 +1140,16 @@ public class RepairCampaignService {
     }
 
     private RepairCampaignStage getStageForCampaign(UUID campaignId, UUID stageId) {
-        RepairCampaignStage stage = stageRepository.findByIdAndIsDeletedFalse(stageId)
-                .orElseThrow(() -> RestException.notFound("Stage not found: " + stageId));
+        RepairCampaignStage stage = getStageOrThrow(stageId);
         if (stage.getCampaign() == null || !campaignId.equals(stage.getCampaign().getId())) {
             throw RestException.badRequest("Stage does not belong to repair campaign");
         }
         return stage;
+    }
+
+    private RepairCampaignStage getStageOrThrow(UUID stageId) {
+        return stageRepository.findByIdAndIsDeletedFalse(stageId)
+                .orElseThrow(() -> RestException.notFound("Stage not found: " + stageId));
     }
 
     private RepairCampaignDto toDto(RepairCampaign c) {
@@ -1266,6 +1226,24 @@ public class RepairCampaignService {
                 budgetLine == null ? BigDecimal.ZERO : decimal(budgetLine.getPlannedAmount()),
                 budgetLine == null ? BigDecimal.ZERO : decimal(budgetLine.getActualAmount()),
                 budgetLine == null ? BigDecimal.ZERO : decimal(budgetLine.getPlannedAmount()).subtract(decimal(budgetLine.getActualAmount()))
+        );
+    }
+
+    private RepairCampaignWorkOrderCandidateDto toCandidateDto(
+            WorkOrder workOrder,
+            RepairCampaignWorkOrderEligibilityResult eligibility
+    ) {
+        return new RepairCampaignWorkOrderCandidateDto(
+                workOrder.getId(),
+                workOrder.getNumber(),
+                workOrder.getTitle(),
+                workOrder.getType(),
+                workOrder.getStatus(),
+                workOrder.getDepartmentId(),
+                workOrder.getStartPlannedAt(),
+                workOrder.getEndPlannedAt(),
+                eligibility.eligible(),
+                eligibility.eligible() ? null : eligibility.reasonCode()
         );
     }
 

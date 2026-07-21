@@ -26,6 +26,19 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
 
     Optional<WorkOrder> findByGenerationKeyAndIsDeletedFalse(String generationKey);
 
+    @Query("""
+            select workOrder
+            from WorkOrder workOrder
+            where workOrder.isDeleted = false
+              and (:search is null
+                or lower(workOrder.number) like lower(concat('%', :search, '%'))
+                or lower(workOrder.title) like lower(concat('%', :search, '%')))
+            """)
+    Page<WorkOrder> findRepairCampaignWorkOrderCandidates(
+            @Param("search") String search,
+            Pageable pageable
+    );
+
     Optional<WorkOrder> findByShutdownWorkItemIdAndIsDeletedFalse(UUID shutdownWorkItemId);
 
     @Query(value = "SELECT pg_advisory_xact_lock(hashtextextended(:generationKey, 0))", nativeQuery = true)

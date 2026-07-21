@@ -40,7 +40,7 @@ public class GlobalExceptionHandler {
                     ex.getMessage(), request.getRequestURI(), LocalDateTime.now(), ex.getStatus().value(),
                     blocker.getVersion(), blocker.getBlockers()));
         }
-        return build(ex.getStatus(), ex.getMessage(), request);
+        return build(ex.getStatus(), ex.getMessage(), ex.getErrorCode(), request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -147,11 +147,20 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, HttpServletRequest request) {
+        return build(status, message, null, request);
+    }
+
+    private ResponseEntity<ErrorResponse> build(
+            HttpStatus status,
+            String message,
+            String errorCode,
+            HttpServletRequest request
+    ) {
         String safeMessage = (message == null || message.isBlank())
                 ? status.getReasonPhrase()
                 : message;
         return ResponseEntity.status(status)
-                .body(ErrorResponse.of(safeMessage, request.getRequestURI(), status.value()));
+                .body(ErrorResponse.of(safeMessage, request.getRequestURI(), status.value(), errorCode));
     }
 
     private String buildUnreadableMessage(HttpMessageNotReadableException ex) {
