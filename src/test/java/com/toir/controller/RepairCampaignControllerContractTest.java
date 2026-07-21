@@ -63,11 +63,69 @@ class RepairCampaignControllerContractTest {
 
     @Test
     void stageAndLegacyWorkOrderMutationsRequireManageWork() {
-        for (String name : java.util.List.of("addStage", "updateStage", "attachWorkOrder", "detachWorkOrder")) {
+        for (String name : java.util.List.of("addStage", "updateStage", "attachWorkOrder", "detachWorkOrder",
+                "workOrderCandidates")) {
             var method = java.util.Arrays.stream(RepairCampaignController.class.getDeclaredMethods())
                     .filter(candidate -> candidate.getName().equals(name)).findFirst().orElseThrow();
             assertThat(method.getAnnotation(PreAuthorize.class).value()).contains("REPAIR_CAMPAIGN_MANAGE_WORK");
         }
+    }
+
+    @Test
+    void workOrderCandidatesForwardPaginationAndSearch() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        var candidate = new com.toir.dto.repaircampaign.RepairCampaignWorkOrderCandidateDto(
+                UUID.randomUUID(), "WO-1", "Pump", com.toir.enums.WorkOrderType.OVERHAUL,
+                com.toir.enums.WorkOrderStatus.DRAFT, UUID.randomUUID(), null, null,
+                false,
+                com.toir.enums.RepairCampaignWorkOrderEligibilityCode.REPAIR_CAMPAIGN_WORK_ORDER_DEPARTMENT_NOT_ALLOWED);
+        when(service.findWorkOrderCandidates(campaignId, stageId, "pump", 1, 25))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(candidate),
+                        org.springframework.data.domain.PageRequest.of(1, 25), 26));
+
+        mockMvc.perform(get("/api/v1/repair-campaigns/{id}/stages/{stageId}/work-order-candidates",
+                        campaignId, stageId)
+                        .param("search", "pump")
+                        .param("page", "1")
+                        .param("size", "25"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].eligible").value(false))
+                .andExpect(jsonPath("$.content[0].ineligibleReasonCode")
+                        .value("REPAIR_CAMPAIGN_WORK_ORDER_DEPARTMENT_NOT_ALLOWED"));
+
+        verify(service).findWorkOrderCandidates(campaignId, stageId, "pump", 1, 25);
+    }
+
+    @Test
+    void workOrderCandidatesDefaultToFirstPageOfTwentyWithoutSearch() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        when(service.findWorkOrderCandidates(campaignId, stageId, null, 0, 20))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/v1/repair-campaigns/{id}/stages/{stageId}/work-order-candidates",
+                        campaignId, stageId))
+                .andExpect(status().isOk());
+
+        verify(service).findWorkOrderCandidates(campaignId, stageId, null, 0, 20);
+    }
+
+    @Test
+    void attachRejectionReturnsNumericAndSemanticCodes() throws Exception {
+        UUID campaignId = UUID.randomUUID();
+        UUID stageId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        when(service.attachWorkOrder(campaignId, stageId, workOrderId)).thenThrow(new RestException(
+                "Campaign work order type must be OVERHAUL, MEDIUM_REPAIR, or CAPITAL_REPAIR",
+                org.springframework.http.HttpStatus.BAD_REQUEST,
+                "REPAIR_CAMPAIGN_WORK_ORDER_TYPE_NOT_ALLOWED"));
+
+        mockMvc.perform(post("/api/v1/repair-campaigns/{id}/stages/{stageId}/work-orders/{workOrderId}/attach",
+                        campaignId, stageId, workOrderId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.errorCode").value("REPAIR_CAMPAIGN_WORK_ORDER_TYPE_NOT_ALLOWED"));
     }
 
     @Test

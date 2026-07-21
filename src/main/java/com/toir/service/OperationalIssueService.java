@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.entity.OperationalIssue;
 import com.toir.dto.operationalissue.OperationalIssueDto;
+import com.toir.dto.operationalissue.OperationalIssueTarget;
 import com.toir.entity.Department;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentRiskLevel;
@@ -52,6 +53,7 @@ public class OperationalIssueService {
     private final DepartmentRepository departmentRepository;
     private final ScopeAccessService scopeAccessService;
     private final OperationalIssueI18nService i18nService;
+    private final OperationalIssueTargetResolver targetResolver;
 
     @Transactional(readOnly = true)
     public Page<OperationalIssueDto> search(OperationalIssueStatus status,
@@ -214,11 +216,13 @@ public class OperationalIssueService {
                 ? Map.of()
                 : departmentRepository.findAllByIdInAndIsDeletedFalse(departmentIds).stream()
                 .collect(Collectors.toMap(Department::getId, Function.identity(), (left, right) -> left));
+        Map<UUID, OperationalIssueTarget> targetsByIssueId = targetResolver.resolveAll(issues);
         return page.map(issue -> OperationalIssueDto.from(
                 issue,
                 issue.getEquipmentId() == null ? null : equipmentById.get(issue.getEquipmentId()),
                 issue.getDepartmentId() == null ? null : departmentById.get(issue.getDepartmentId()),
-                i18nService.build(issue)
+                i18nService.build(issue),
+                targetsByIssueId.get(issue.getId())
         ));
     }
 
@@ -229,7 +233,8 @@ public class OperationalIssueService {
         Department department = issue.getDepartmentId() == null
                 ? null
                 : departmentRepository.findByIdAndIsDeletedFalse(issue.getDepartmentId()).orElse(null);
-        return OperationalIssueDto.from(issue, equipment, department, i18nService.build(issue));
+        OperationalIssueTarget target = targetResolver.resolveAll(List.of(issue)).get(issue.getId());
+        return OperationalIssueDto.from(issue, equipment, department, i18nService.build(issue), target);
     }
 
     private PageRequest pageRequest(int page, int size, String sort, String direction) {
