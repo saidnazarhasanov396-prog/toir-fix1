@@ -2,6 +2,7 @@ package com.toir.service.maintanance;
 
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewItem;
+import com.toir.dto.maintenanceschedule.MaintenanceScheduleOption;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewRequest;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewResponse;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewSummary;
@@ -12,8 +13,6 @@ import com.toir.enums.MaintenanceScheduleScopeType;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.exception.RestException;
-import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.service.equipment.OperationalEquipmentPolicy;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -25,8 +24,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,41 +38,61 @@ public class MaintenanceScheduleService {
     private static final int MAX_SCOPE_IDS = 1_000;
     private static final int MAX_OCCURRENCES = 100_000;
 
-    private final EquipmentRepository equipmentRepository;
     private final EquipmentMaintenanceEffectiveRuleResolver ruleResolver;
     private final MaintenanceDueCalculationService dueCalculationService;
-    private final OperationalEquipmentPolicy operationalEquipmentPolicy;
+    private final MaintenanceScheduleEligibilitySelector eligibilitySelector;
     private final ZoneId zoneId;
 
     @Autowired
     public MaintenanceScheduleService(
-            EquipmentRepository equipmentRepository,
             EquipmentMaintenanceEffectiveRuleResolver ruleResolver,
             MaintenanceDueCalculationService dueCalculationService,
-            OperationalEquipmentPolicy operationalEquipmentPolicy
+            MaintenanceScheduleEligibilitySelector eligibilitySelector
     ) {
-        this(equipmentRepository, ruleResolver, dueCalculationService,
-                operationalEquipmentPolicy, ZoneId.systemDefault());
+        this(ruleResolver, dueCalculationService, eligibilitySelector, ZoneId.systemDefault());
     }
 
     MaintenanceScheduleService(
-            EquipmentRepository equipmentRepository,
             EquipmentMaintenanceEffectiveRuleResolver ruleResolver,
             MaintenanceDueCalculationService dueCalculationService,
-            OperationalEquipmentPolicy operationalEquipmentPolicy,
+            MaintenanceScheduleEligibilitySelector eligibilitySelector,
             ZoneId zoneId
     ) {
-        this.equipmentRepository = equipmentRepository;
         this.ruleResolver = ruleResolver;
         this.dueCalculationService = dueCalculationService;
-        this.operationalEquipmentPolicy = operationalEquipmentPolicy;
+        this.eligibilitySelector = eligibilitySelector;
         this.zoneId = zoneId;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<MaintenanceScheduleOption> options(
+            MaintenanceScheduleScopeType scopeType,
+            UUID departmentId,
+            String search,
+            int page,
+            int size
+    ) {
+        if (scopeType == null) {
+            throw RestException.badRequest("scopeType is required");
+        }
+        if (page < 0) {
+            throw RestException.badRequest("page must be zero or greater");
+        }
+        if (size < 1 || size > 100) {
+            throw RestException.badRequest("size must be between 1 and 100");
+        }
+        return eligibilitySelector.findOptions(
+                scopeType,
+                departmentId,
+                search,
+                PageRequest.of(page, size)
+        );
     }
 
     @Transactional(readOnly = true)
     public MaintenanceSchedulePreviewResponse preview(MaintenanceSchedulePreviewRequest request) {
         validate(request);
-        List<Equipment> equipment = selectEquipment(request);
+        List<Equipment> equipment = eligibilitySelector.selectForPreview(request);
         List<MaintenanceSchedulePreviewItem> items = new ArrayList<>();
         Set<RuleSignature> missingMeters = new HashSet<>();
         Set<UUID> matchedEquipment = new HashSet<>();
@@ -116,41 +136,6 @@ public class MaintenanceScheduleService {
                         equipment.size() - matchedEquipment.size()
                 )
         );
-    }
-
-    private List<Equipment> selectEquipment(MaintenanceSchedulePreviewRequest request) {
-        List<Equipment> candidates;
-        if (request.scopeType() == MaintenanceScheduleScopeType.EQUIPMENT) {
-            candidates = equipmentRepository.findAllByIdInAndIsDeletedFalse(request.equipmentIds());
-            Set<UUID> resolvedIds = candidates.stream()
-                    .map(Equipment::getId)
-                    .collect(Collectors.toSet());
-            request.equipmentIds().stream()
-                    .filter(id -> !resolvedIds.contains(id))
-                    .findFirst()
-                    .ifPresent(id -> {
-                        throw RestException.badRequest("Equipment not found: " + id);
-                    });
-        } else {
-            Set<UUID> typeIds = Set.copyOf(request.equipmentTypeIds());
-            candidates = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                    .filter(item -> typeIds.contains(item.getEquipmentTypeId()))
-                    .toList();
-        }
-        return candidates.stream()
-                .filter(operationalEquipmentPolicy::isOperational)
-                .filter(item -> request.departmentId() == null
-                        || request.departmentId().equals(equipmentScopeDepartment(item)))
-                .sorted(Comparator
-                        .comparing(Equipment::getCode, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
-                        .thenComparing(Equipment::getId))
-                .toList();
-    }
-
-    private UUID equipmentScopeDepartment(Equipment equipment) {
-        return equipment.getResponsibleDepartmentId() != null
-                ? equipment.getResponsibleDepartmentId()
-                : equipment.getDepartmentId();
     }
 
     private List<LocalDate> occurrenceDates(
