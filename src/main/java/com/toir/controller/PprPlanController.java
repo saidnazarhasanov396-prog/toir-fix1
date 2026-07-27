@@ -337,7 +337,8 @@ public class PprPlanController {
                 request.scopeType(),
                 request.equipmentIds(),
                 request.equipmentTypeIds(),
-                request.regulationIds()
+                request.regulationIds(),
+                request.anchorMode()
         );
     }
 }

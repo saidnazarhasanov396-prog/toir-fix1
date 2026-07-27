@@ -904,8 +904,13 @@ public class PprPlanService {
     }
 
     private void applyPlanContractFields(PprPlan plan, PprPlanRequest request) {
-        PprType pprType = request.pprType() != null ? request.pprType() : PprType.PREVENTIVE_MAINTENANCE;
-        PprScheduleType scheduleType = request.scheduleType() != null ? request.scheduleType() : PprScheduleType.CALENDAR;
+        boolean scheduleBuilder = request.anchorMode() != null;
+        PprType pprType = scheduleBuilder && request.pprType() == null
+                ? null
+                : request.pprType() != null ? request.pprType() : PprType.PREVENTIVE_MAINTENANCE;
+        PprScheduleType scheduleType = request.scheduleType() != null
+                ? request.scheduleType()
+                : PprScheduleType.CALENDAR;
         PprScopeType scopeType = request.scopeType() != null
                 ? request.scopeType()
                 : (request.departmentId() != null ? PprScopeType.DEPARTMENT : PprScopeType.ENTERPRISE);
@@ -915,9 +920,10 @@ public class PprPlanService {
 
         plan.setPprType(pprType);
         plan.setScheduleType(scheduleType);
-        plan.setFrequency(scheduleType == PprScheduleType.CALENDAR ? request.frequency() : null);
+        plan.setFrequency(scheduleType == PprScheduleType.CALENDAR && !scheduleBuilder ? request.frequency() : null);
         plan.setIntervalHours(scheduleType == PprScheduleType.OPERATING_HOURS ? request.intervalHours() : null);
         plan.setScopeType(scopeType);
+        plan.setAnchorMode(request.anchorMode());
     }
 
     private void validateSchedule(PprScheduleType scheduleType, PprFrequency frequency, Long intervalHours) {

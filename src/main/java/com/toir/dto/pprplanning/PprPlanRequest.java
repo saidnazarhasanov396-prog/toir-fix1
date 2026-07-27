@@ -1,5 +1,6 @@
 package com.toir.dto.pprplanning;
 
+import com.toir.enums.MaintenanceScheduleAnchorMode;
 import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprScopeType;
@@ -25,8 +26,30 @@ public record PprPlanRequest(
         PprScopeType scopeType,
         List<UUID> equipmentIds,
         List<UUID> equipmentTypeIds,
-        List<UUID> regulationIds
+        List<UUID> regulationIds,
+        MaintenanceScheduleAnchorMode anchorMode
 ) {
+    public PprPlanRequest(
+            String name,
+            UUID departmentId,
+            UUID createdById,
+            String notes,
+            LocalDate fromDate,
+            LocalDate toDate,
+            PprType pprType,
+            PprScheduleType scheduleType,
+            PprFrequency frequency,
+            Long intervalHours,
+            PprScopeType scopeType,
+            List<UUID> equipmentIds,
+            List<UUID> equipmentTypeIds,
+            List<UUID> regulationIds
+    ) {
+        this(name, departmentId, createdById, notes, fromDate, toDate,
+                pprType, scheduleType, frequency, intervalHours, scopeType,
+                equipmentIds, equipmentTypeIds, regulationIds, null);
+    }
+
     public PprPlanRequest(
             String name,
             UUID departmentId,
@@ -43,7 +66,8 @@ public record PprPlanRequest(
             List<UUID> equipmentTypeIds
     ) {
         this(name, departmentId, createdById, notes, fromDate, toDate,
-                pprType, scheduleType, frequency, intervalHours, scopeType, equipmentIds, equipmentTypeIds, null);
+                pprType, scheduleType, frequency, intervalHours, scopeType,
+                equipmentIds, equipmentTypeIds, null, null);
     }
 
     public PprPlanRequest(
@@ -55,6 +79,6 @@ public record PprPlanRequest(
             LocalDate toDate
     ) {
         this(name, departmentId, createdById, notes, fromDate, toDate,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null);
     }
 }
