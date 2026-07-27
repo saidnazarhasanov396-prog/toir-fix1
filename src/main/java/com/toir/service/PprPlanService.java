@@ -78,6 +78,7 @@ public class PprPlanService {
     private final AuditSerializationService auditSerializationService;
     private final RepairMaterialUsageService repairMaterialUsageService;
     private final EntityManager entityManager;
+    private final PprPlanVisibilityPolicy visibilityPolicy;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
     private static final int MAX_TASK_CODE_GENERATION_ATTEMPTS = 50;
     private static final String CLIENT_CODE_REJECT_MESSAGE =
@@ -97,6 +98,11 @@ public class PprPlanService {
     @Transactional(readOnly = true)
     public List<PprPlanDto> findAll(Integer year, Integer month, Integer day, UUID departmentId) {
         validateDateFilterParts(year, month, day);
+        List<String> visibleStatuses = visibleStatusNames(Set.of(), false);
+        if (visibleStatuses != null) {
+            return toDtos(planRepository.searchPlansByStatuses(
+                    year, month, day, departmentId, null, visibleStatuses));
+        }
         return toDtos(planRepository.searchPlans(year, month, day, departmentId));
     }
 
@@ -106,6 +112,11 @@ public class PprPlanService {
             return findAll(year, month, day, departmentId);
         }
         validateDateFilterParts(year, month, day);
+        List<String> visibleStatuses = visibleStatusNames(Set.of(), false);
+        if (visibleStatuses != null) {
+            return toDtos(planRepository.searchPlansByStatuses(
+                    year, month, day, departmentId, equipmentId, visibleStatuses), equipmentId);
+        }
         return toDtos(planRepository.searchPlans(year, month, day, departmentId, equipmentId), equipmentId);
     }
 
@@ -147,13 +158,12 @@ public class PprPlanService {
             return PaginationUtils.page(sortIfRequested(findAll(year, month, day, departmentId), sortBy, sortDir), page, size);
         }
         validateDateFilterParts(year, month, day);
-        Page<PprPlan> plans = planRepository.searchPlans(
-                        year,
-                        month,
-                        day,
-                        departmentId,
-                        PaginationUtils.pageRequest(page, size)
-                );
+        PageRequest pageable = PaginationUtils.pageRequest(page, size);
+        List<String> visibleStatuses = visibleStatusNames(Set.of(), false);
+        Page<PprPlan> plans = visibleStatuses == null
+                ? planRepository.searchPlans(year, month, day, departmentId, pageable)
+                : planRepository.searchPlansByStatuses(
+                        year, month, day, departmentId, null, visibleStatuses, pageable);
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans.getContent());
         List<PprTask> tasks = collectTasks(plans.getContent());
         Map<UUID, String> equipmentNames = resolveEquipmentNames(plans.getContent(), tasks);
@@ -184,14 +194,12 @@ public class PprPlanService {
             return PaginationUtils.page(sortIfRequested(findAll(year, month, day, departmentId, equipmentId), sortBy, sortDir), page, size);
         }
         validateDateFilterParts(year, month, day);
-        Page<PprPlan> plans = planRepository.searchPlans(
-                        year,
-                        month,
-                        day,
-                        departmentId,
-                        equipmentId,
-                        PaginationUtils.pageRequest(page, size)
-                );
+        PageRequest pageable = PaginationUtils.pageRequest(page, size);
+        List<String> visibleStatuses = visibleStatusNames(Set.of(), false);
+        Page<PprPlan> plans = visibleStatuses == null
+                ? planRepository.searchPlans(year, month, day, departmentId, equipmentId, pageable)
+                : planRepository.searchPlansByStatuses(
+                        year, month, day, departmentId, equipmentId, visibleStatuses, pageable);
         Map<UUID, String> departmentNames = resolveDepartmentNames(plans.getContent());
         List<PprTask> tasks = collectTasks(plans.getContent(), equipmentId);
         Map<UUID, String> equipmentNames = resolveEquipmentNames(plans.getContent(), tasks);
@@ -207,6 +215,87 @@ public class PprPlanService {
                 regulationNames,
                 equipmentId
         ));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprPlanDto> findAllUnpaged(
+            Integer year,
+            Integer month,
+            Integer day,
+            UUID departmentId,
+            UUID equipmentId,
+            String sortBy,
+            String sortDir,
+            Set<PlanStatus> requestedStatuses
+    ) {
+        validateDateFilterParts(year, month, day);
+        List<String> visibleStatuses = visibleStatusNames(requestedStatuses, true);
+        if (visibleStatuses.isEmpty()) {
+            return Page.empty();
+        }
+        List<PprPlanDto> plans = equipmentId == null
+                ? toDtos(planRepository.searchPlansByStatuses(
+                        year, month, day, departmentId, null, visibleStatuses))
+                : toDtos(planRepository.searchPlansByStatuses(
+                        year, month, day, departmentId, equipmentId, visibleStatuses), equipmentId);
+        plans = sortIfRequested(plans, sortBy, sortDir);
+        return PaginationUtils.page(plans, 0,
+                PaginationUtils.pageSizeFromList(0, plans.size()), plans.size());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprPlanDto> findAll(
+            Integer year,
+            Integer month,
+            Integer day,
+            UUID departmentId,
+            UUID equipmentId,
+            int page,
+            int size,
+            String sortBy,
+            String sortDir,
+            Set<PlanStatus> requestedStatuses
+    ) {
+        if (isListSort(sortBy)) {
+            Page<PprPlanDto> all = findAllUnpaged(
+                    year, month, day, departmentId, equipmentId, sortBy, sortDir, requestedStatuses);
+            return PaginationUtils.page(all.getContent(), page, size);
+        }
+        validateDateFilterParts(year, month, day);
+        PageRequest pageable = PaginationUtils.pageRequest(page, size);
+        List<String> visibleStatuses = visibleStatusNames(requestedStatuses, true);
+        if (visibleStatuses.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        Page<PprPlan> plans = planRepository.searchPlansByStatuses(
+                year, month, day, departmentId, equipmentId, visibleStatuses, pageable);
+        Map<UUID, String> departmentNames = resolveDepartmentNames(plans.getContent());
+        List<PprTask> tasks = equipmentId == null
+                ? collectTasks(plans.getContent())
+                : collectTasks(plans.getContent(), equipmentId);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(plans.getContent(), tasks);
+        Map<UUID, String> equipmentTypeNames = resolveEquipmentTypeNames(plans.getContent());
+        Map<UUID, String> regulationNames = resolveRegulationNames(plans.getContent(), tasks);
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
+        return plans.map(plan -> equipmentId == null
+                ? PprPlanDto.from(plan, departmentName(departmentNames, plan), ruleById,
+                        equipmentNames, equipmentTypeNames, regulationNames)
+                : PprPlanDto.from(plan, departmentName(departmentNames, plan), ruleById,
+                        equipmentNames, equipmentTypeNames, regulationNames, equipmentId));
+    }
+
+    private List<String> visibleStatusNames(Set<PlanStatus> requestedStatuses, boolean explicitFilter) {
+        if (visibilityPolicy == null) {
+            if (!explicitFilter) {
+                return null;
+            }
+            return requestedStatuses.stream().map(Enum::name).sorted().toList();
+        }
+        Set<PlanStatus> visible = visibilityPolicy.visibleStatuses(requestedStatuses);
+        if (!explicitFilter && visible.size() == PlanStatus.values().length) {
+            return null;
+        }
+        return visible.stream().map(Enum::name).sorted().toList();
     }
 
     private boolean isListSort(String sortBy) {
@@ -249,6 +338,23 @@ public class PprPlanService {
     @Transactional(readOnly = true)
     public PprPlanStatsResponse getStats(Integer year, Integer month, Integer day, UUID departmentId) {
         validateDateFilterParts(year, month, day);
+        List<String> visibleStatuses = visibleStatusNames(Set.of(), false);
+        if (visibleStatuses != null) {
+            List<PprPlan> plans = planRepository.searchPlansByStatuses(
+                    year, month, day, departmentId, null, visibleStatuses);
+            List<PprTask> tasks = collectTasks(plans);
+            LocalDateTime now = LocalDateTime.now();
+            return new PprPlanStatsResponse(
+                    plans.size(),
+                    plans.stream().filter(plan -> plan.getStatus() == PlanStatus.DRAFT).count(),
+                    plans.stream().filter(plan -> plan.getStatus() == PlanStatus.GENERATED).count(),
+                    plans.stream().filter(plan -> plan.getStatus() == PlanStatus.APPROVED).count(),
+                    tasks.stream().filter(task -> task.getStatus() == PprTaskStatus.PLANNED).count(),
+                    tasks.stream().filter(task -> task.getStatus() == PprTaskStatus.IN_PROGRESS).count(),
+                    tasks.stream().filter(task -> task.getStatus() == PprTaskStatus.COMPLETED).count(),
+                    tasks.stream().filter(task -> isOverdue(task, now)).count()
+            );
+        }
         PprPlanStatsProjection stats = planRepository.getStats(year, month, day, departmentId);
         if (stats == null) {
             return new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0, 0);
@@ -263,6 +369,17 @@ public class PprPlanService {
                 safe(stats.getCompletedTasks()),
                 safe(stats.getOverdueTasks())
         );
+    }
+
+    private boolean isOverdue(PprTask task, LocalDateTime now) {
+        return task.getStatus() == PprTaskStatus.OVERDUE
+                || (task.getDueDate() != null
+                && task.getDueDate().isBefore(now)
+                && EnumSet.of(
+                        PprTaskStatus.PLANNED,
+                        PprTaskStatus.APPROVED,
+                        PprTaskStatus.IN_PROGRESS
+                ).contains(task.getStatus()));
     }
 
     @Transactional(readOnly = true)
@@ -285,6 +402,27 @@ public class PprPlanService {
                 departmentId,
                 equipmentId,
                 status,
+                overdue,
+                PageRequest.of(page, size)
+        );
+        List<PprTask> content = tasks.getContent();
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(content);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(List.of(), content);
+        Map<UUID, String> regulationNames = resolveRegulationNames(List.of(), content);
+        return tasks.map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PprTaskDto> findTasksByStatuses(UUID departmentId,
+                                      UUID equipmentId,
+                                      Set<PprTaskStatus> statuses,
+                                      boolean overdue,
+                                      int page,
+                                      int size) {
+        Page<PprTask> tasks = pprTaskQueryService.findTasksByStatuses(
+                departmentId,
+                equipmentId,
+                statuses,
                 overdue,
                 PageRequest.of(page, size)
         );

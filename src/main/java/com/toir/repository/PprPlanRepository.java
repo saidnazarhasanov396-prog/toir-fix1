@@ -175,6 +175,102 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
     }
 
     @Query(value = """
+            SELECT p.*
+            FROM ppr_plans p
+            WHERE p.is_deleted = false
+              AND p.status IN (:visibleStatuses)
+              AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
+              AND (
+                    cast(:equipmentId as uuid) IS NULL
+                    OR EXISTS (
+                        SELECT 1 FROM ppr_tasks t
+                        WHERE t.plan_id = p.id
+                          AND t.is_deleted = false
+                          AND t.equipment_id = cast(:equipmentId as uuid)
+                    )
+              )
+              AND (
+                    (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
+                    OR EXISTS (
+                        SELECT 1 FROM generate_series(p.start_date, p.end_date, interval '1' day) AS d(value)
+                        WHERE (cast(:year as integer) IS NULL OR extract(year from d.value)::integer = cast(:year as integer))
+                          AND (cast(:month as integer) IS NULL OR extract(month from d.value)::integer = cast(:month as integer))
+                          AND (cast(:day as integer) IS NULL OR extract(day from d.value)::integer = cast(:day as integer))
+                    )
+              )
+            ORDER BY p.start_date DESC, p.updated_at DESC, p.id ASC
+            """,
+            countQuery = """
+            SELECT count(*)
+            FROM ppr_plans p
+            WHERE p.is_deleted = false
+              AND p.status IN (:visibleStatuses)
+              AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
+              AND (
+                    cast(:equipmentId as uuid) IS NULL
+                    OR EXISTS (
+                        SELECT 1 FROM ppr_tasks t
+                        WHERE t.plan_id = p.id
+                          AND t.is_deleted = false
+                          AND t.equipment_id = cast(:equipmentId as uuid)
+                    )
+              )
+              AND (
+                    (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
+                    OR EXISTS (
+                        SELECT 1 FROM generate_series(p.start_date, p.end_date, interval '1' day) AS d(value)
+                        WHERE (cast(:year as integer) IS NULL OR extract(year from d.value)::integer = cast(:year as integer))
+                          AND (cast(:month as integer) IS NULL OR extract(month from d.value)::integer = cast(:month as integer))
+                          AND (cast(:day as integer) IS NULL OR extract(day from d.value)::integer = cast(:day as integer))
+                    )
+              )
+            """, nativeQuery = true)
+    Page<PprPlan> searchPlansByStatuses(
+            @Param("year") Integer year,
+            @Param("month") Integer month,
+            @Param("day") Integer day,
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("visibleStatuses") Collection<String> visibleStatuses,
+            Pageable pageable
+    );
+
+    @Query(value = """
+            SELECT p.*
+            FROM ppr_plans p
+            WHERE p.is_deleted = false
+              AND p.status IN (:visibleStatuses)
+              AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
+              AND (
+                    cast(:equipmentId as uuid) IS NULL
+                    OR EXISTS (
+                        SELECT 1 FROM ppr_tasks t
+                        WHERE t.plan_id = p.id
+                          AND t.is_deleted = false
+                          AND t.equipment_id = cast(:equipmentId as uuid)
+                    )
+              )
+              AND (
+                    (cast(:year as integer) IS NULL AND cast(:month as integer) IS NULL AND cast(:day as integer) IS NULL)
+                    OR EXISTS (
+                        SELECT 1 FROM generate_series(p.start_date, p.end_date, interval '1' day) AS d(value)
+                        WHERE (cast(:year as integer) IS NULL OR extract(year from d.value)::integer = cast(:year as integer))
+                          AND (cast(:month as integer) IS NULL OR extract(month from d.value)::integer = cast(:month as integer))
+                          AND (cast(:day as integer) IS NULL OR extract(day from d.value)::integer = cast(:day as integer))
+                    )
+              )
+            ORDER BY p.start_date DESC, p.updated_at DESC, p.id ASC
+            """, nativeQuery = true)
+    List<PprPlan> searchPlansByStatuses(
+            @Param("year") Integer year,
+            @Param("month") Integer month,
+            @Param("day") Integer day,
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("visibleStatuses") Collection<String> visibleStatuses
+    );
+
+    @Query(value = """
             select
                 count(distinct p.id) as "totalPlans",
                 count(distinct p.id) filter (where p.status = 'DRAFT') as "draftPlans",
