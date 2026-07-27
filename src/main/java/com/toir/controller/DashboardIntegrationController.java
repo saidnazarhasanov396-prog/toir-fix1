@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.analytics.AnalyticsOverview;
 import com.toir.dto.analytics.DashboardIntegrationResponse;
 import com.toir.service.AnalyticsService;
+import com.toir.service.ErpPresentationDatasetProvider;
 import com.toir.service.InventoryAnalyticsService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
@@ -22,6 +23,7 @@ public class DashboardIntegrationController {
 
     private final AnalyticsService analyticsService;
     private final InventoryAnalyticsService inventoryAnalyticsService;
+    private final ErpPresentationDatasetProvider presentationDatasets;
 
     @GetMapping("/dashboard/v1")
     public DashboardIntegrationResponse dashboardV1() {
@@ -44,7 +46,13 @@ public class DashboardIntegrationController {
                         new DashboardIntegrationResponse.SourceDataset(
                                 "toir.spare-parts-demand.v1", sparePartsDemand),
                         new DashboardIntegrationResponse.SourceDataset(
-                                "toir.dashboard-signals.v1", overview)
+                                "toir.dashboard-signals.v1", overview),
+                        new DashboardIntegrationResponse.SourceDataset(
+                                "toir.maintenance-page.v1",
+                                presentationDatasets.get("toir.maintenance-page.v1")),
+                        new DashboardIntegrationResponse.SourceDataset(
+                                "toir.executive-presentation.v1",
+                                presentationDatasets.get("toir.executive-presentation.v1"))
                 )
         );
     }

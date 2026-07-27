@@ -3,6 +3,7 @@ package com.toir.controller;
 import com.toir.dto.analytics.AnalyticsOverview;
 import com.toir.service.AnalyticsService;
 import com.toir.service.InventoryAnalyticsService;
+import com.toir.service.ErpPresentationDatasetProvider;
 import com.toir.service.ReliabilityPassportService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,9 @@ class AnalyticsControllerContractTest {
     @Mock
     InventoryAnalyticsService inventoryAnalyticsService;
 
+    @Mock
+    ErpPresentationDatasetProvider presentationDatasets;
+
     MockMvc mockMvc;
 
     @BeforeEach
@@ -42,7 +46,7 @@ class AnalyticsControllerContractTest {
         mockMvc = MockMvcBuilders
                 .standaloneSetup(
                         new AnalyticsController(service, reliabilityPassportService),
-                        new DashboardIntegrationController(service, inventoryAnalyticsService)
+                        new DashboardIntegrationController(service, inventoryAnalyticsService, presentationDatasets)
                 )
                 .build();
     }
@@ -70,6 +74,10 @@ class AnalyticsControllerContractTest {
                 List.of(), List.of(), List.of(), List.of(), List.of()
         ));
         when(inventoryAnalyticsService.stockoutRisk()).thenReturn(List.of());
+        when(presentationDatasets.get("toir.maintenance-page.v1"))
+                .thenReturn(new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode());
+        when(presentationDatasets.get("toir.executive-presentation.v1"))
+                .thenReturn(new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode());
 
         mockMvc.perform(get("/api/analytics/dashboard/v1"))
                 .andExpect(status().isOk())
@@ -78,6 +86,8 @@ class AnalyticsControllerContractTest {
                 .andExpect(jsonPath("$.sourceSystem").value("TOIR_GENERAL"))
                 .andExpect(jsonPath("$.sourceRevision").isNumber())
                 .andExpect(jsonPath("$.freshness.status").value("FRESH"))
-                .andExpect(jsonPath("$.datasets[0].type").value("toir.equipment.v1"));
+                .andExpect(jsonPath("$.datasets[0].type").value("toir.equipment.v1"))
+                .andExpect(jsonPath("$.datasets[6].type").value("toir.maintenance-page.v1"))
+                .andExpect(jsonPath("$.datasets[7].type").value("toir.executive-presentation.v1"));
     }
 }
