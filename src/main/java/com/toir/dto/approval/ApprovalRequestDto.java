@@ -2,12 +2,14 @@ package com.toir.dto.approval;
 
 import com.toir.entity.ApprovalRequest;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.Set;
 
 public record ApprovalRequestDto(
         UUID id,
@@ -44,7 +46,18 @@ public record ApprovalRequestDto(
         String lastReturnComment,
         boolean actionable,
         boolean stale,
-        String staleReason
+        String staleReason,
+        ApprovalFlowType flowType,
+        int approvalRound,
+        UUID templateId,
+        Long templateVersion,
+        int totalApprovers,
+        int approvedCount,
+        int pendingCount,
+        int rejectedCount,
+        int cancelledCount,
+        UUID currentUserTaskId,
+        Set<String> allowedActions
 ) {
     public ApprovalRequestDto(UUID id,
                               String documentType,
@@ -77,7 +90,8 @@ public record ApprovalRequestDto(
         this(id, documentType, documentId, title, requesterId, status, currentStep, completedAt, description,
                 createdAt, steps, targetType, targetId, actionType, requesterName, currentApproverName, totalSteps,
                 expiresAt, escalated, overdue, targetDisplayName, targetUrl, resultJson, failureReason,
-                canApprove, canReject, canCancel, targetSummary, false, null, null, null, false, false, null);
+                canApprove, canReject, canCancel, targetSummary, false, null, null, null, false, false, null,
+                ApprovalFlowType.SEQUENTIAL, 1, null, null, totalSteps, 0, totalSteps, 0, 0, null, Set.of());
     }
 
     public ApprovalRequestDto(UUID id,
@@ -93,7 +107,9 @@ public record ApprovalRequestDto(
                               List<ApprovalStepDto> steps) {
         this(id, documentType, documentId, title, requesterId, status, currentStep, completedAt, description,
                 createdAt, steps, null, null, null, null, null, steps == null ? 0 : steps.size(), null, false,
-                false, title, null, null, null, false, false, false, null, false, null, null, null, false, false, null);
+                false, title, null, null, null, false, false, false, null, false, null, null, null, false, false, null,
+                ApprovalFlowType.SEQUENTIAL, 1, null, null, steps == null ? 0 : steps.size(), 0,
+                steps == null ? 0 : steps.size(), 0, 0, null, Set.of());
     }
 
     public static ApprovalRequestDto from(ApprovalRequest r) {
@@ -136,7 +152,18 @@ public record ApprovalRequestDto(
                 r.getLastReturnComment(),
                 false,
                 false,
-                null);
+                null,
+                r.getFlowType() == null ? ApprovalFlowType.SEQUENTIAL : r.getFlowType(),
+                r.getApprovalRound(),
+                r.getTemplateId(),
+                r.getTemplateVersion(),
+                stepDtos.size(),
+                (int) stepDtos.stream().filter(step -> step.decision() == com.toir.enums.ApprovalDecision.APPROVED).count(),
+                (int) stepDtos.stream().filter(step -> step.decision() == com.toir.enums.ApprovalDecision.PENDING).count(),
+                (int) stepDtos.stream().filter(step -> step.decision() == com.toir.enums.ApprovalDecision.REJECTED).count(),
+                (int) stepDtos.stream().filter(step -> step.decision() == com.toir.enums.ApprovalDecision.CANCELLED).count(),
+                null,
+                Set.of());
     }
 
     private static String targetUrl(String targetType, UUID targetId) {

@@ -7,6 +7,7 @@ import com.toir.entity.users.Role;
 import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.UserStatus;
@@ -161,6 +162,98 @@ class ApprovalServiceTest {
                 "Approval request updated",
                 ApprovalActionType.UPDATED
         );
+    }
+
+    @Test
+    void parallelAllStaysPendingUntilLastTaskApprovesThenFinalizesOnce() {
+        UUID approvalId = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        ApprovalRequest approval = parallelApproval(approvalId, 2, first, second);
+        stubParallelLock(approvalId, approval);
+        when(requestRepository.save(any(ApprovalRequest.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(approvalActionExecutor.execute(approval)).thenReturn("{\"approved\":true}");
+
+        ApprovalRequestDto partial = service.approveStep(
+                approvalId, approval.getSteps().getFirst().getId(), new DecisionRequest(first, "ok"));
+        ApprovalRequestDto completed = service.approveStep(
+                approvalId, approval.getSteps().get(1).getId(), new DecisionRequest(second, "ok"));
+
+        assertThat(partial.status()).isEqualTo(ApprovalStatus.PENDING);
+        assertThat(partial.approvedCount()).isEqualTo(1);
+        assertThat(completed.status()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(completed.approvedCount()).isEqualTo(2);
+        verify(approvalActionExecutor, times(1)).execute(approval);
+    }
+
+    @Test
+    void parallelAllFirstRejectCancelsRemainingTasksAndRequiresComment() {
+        UUID approvalId = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        ApprovalRequest approval = parallelApproval(approvalId, 3, first, second);
+        stubParallelLock(approvalId, approval);
+        when(requestRepository.save(any(ApprovalRequest.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(approvalActionExecutor.execute(approval)).thenReturn("{\"rejected\":true}");
+
+        assertThatThrownBy(() -> service.rejectStep(
+                approvalId, approval.getSteps().getFirst().getId(), new DecisionRequest(first, " ")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("comment is required");
+
+        ApprovalRequestDto rejected = service.rejectStep(
+                approvalId, approval.getSteps().getFirst().getId(), new DecisionRequest(first, "risk"));
+
+        assertThat(rejected.status()).isEqualTo(ApprovalStatus.REJECTED);
+        assertThat(rejected.steps()).extracting(ApprovalStepDto::decision)
+                .containsExactly(ApprovalDecision.REJECTED, ApprovalDecision.CANCELLED);
+    }
+
+    @Test
+    void parallelAllRejectsDecisionOnAnotherUsersTask() {
+        UUID approvalId = UUID.randomUUID();
+        UUID owner = UUID.randomUUID();
+        ApprovalRequest approval = parallelApproval(approvalId, 1, owner);
+        stubParallelLock(approvalId, approval);
+
+        assertThatThrownBy(() -> service.approveStep(
+                approvalId, approval.getSteps().getFirst().getId(),
+                new DecisionRequest(UUID.randomUUID(), "not mine")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("Only assigned approver");
+    }
+
+    @Test
+    void parallelAllDoesNotSupportReturn() {
+        UUID approvalId = UUID.randomUUID();
+        UUID owner = UUID.randomUUID();
+        ApprovalRequest approval = parallelApproval(approvalId, 1, owner);
+        stubParallelLock(approvalId, approval);
+
+        assertThatThrownBy(() -> service.returnToStep(
+                approvalId, new ReturnApprovalRequest(owner, 1, "return")))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("PARALLEL_APPROVAL_RETURN_NOT_SUPPORTED");
+    }
+
+    @Test
+    void parallelAllRuntimeSnapshotCannotBeEditedAfterStart() {
+        UUID approvalId = UUID.randomUUID();
+        ApprovalRequest approval = parallelApproval(approvalId, 4, UUID.randomUUID());
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+
+        assertThatThrownBy(() -> service.update(
+                approvalId,
+                new UpdateApprovalRequest(
+                        "Changed",
+                        null,
+                        List.of(new CreateApprovalRequest.StepInput(UUID.randomUUID(), null)))))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("cannot be updated after the approval process has started");
+
+        verify(requestRepository, never()).saveAndFlush(any(ApprovalRequest.class));
     }
 
     @Test
@@ -601,7 +694,7 @@ class ApprovalServiceTest {
     }
 
     @Test
-    void unrelatedIdentityUsesExistingRequestPathWithoutLifecycleLocks() {
+    void unrelatedIdentityUsesRowLockWithoutLifecycleDomainLocks() {
         UUID approvalId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
         ApprovalRequest workOrder = pendingMultiStepApproval(
@@ -617,14 +710,13 @@ class ApprovalServiceTest {
                     when(rs.getString("action_type")).thenReturn(ApprovalActionType.APPROVE.name());
                     return List.of(mapper.mapRow(rs, 0));
                 });
-        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(workOrder));
+        when(requestRepository.findByIdAndIsDeletedFalseForUpdate(approvalId)).thenReturn(Optional.of(workOrder));
         when(requestRepository.save(workOrder)).thenReturn(workOrder);
 
         ApprovalRequestDto result = service.cancel(approvalId);
 
         assertThat(result.status()).isEqualTo(ApprovalStatus.CANCELLED);
-        verify(requestRepository).findByIdAndIsDeletedFalse(approvalId);
-        verify(requestRepository, never()).findByIdAndIsDeletedFalseForUpdate(any());
+        verify(requestRepository).findByIdAndIsDeletedFalseForUpdate(approvalId);
         verify(jdbcTemplate, never()).query(
                 eq("SELECT pg_advisory_xact_lock(?, ?)"),
                 any(PreparedStatementSetter.class), any(ResultSetExtractor.class));
@@ -2433,6 +2525,34 @@ class ApprovalServiceTest {
             approval.getSteps().add(step);
         }
         return approval;
+    }
+
+    private ApprovalRequest parallelApproval(UUID id, int round, UUID... approverIds) {
+        ApprovalRequest approval = pendingApproval(id, UUID.randomUUID(), UUID.randomUUID());
+        approval.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        approval.setApprovalRound(round);
+        approval.setCurrentStep(0);
+        approval.getSteps().clear();
+        for (int index = 0; index < approverIds.length; index++) {
+            ApprovalStep step = new ApprovalStep();
+            step.setId(UUID.randomUUID());
+            step.setRequest(approval);
+            step.setStepNumber(index + 1);
+            step.setApprovalRound(round);
+            step.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+            step.setApproverId(approverIds[index]);
+            step.setDecision(ApprovalDecision.PENDING);
+            approval.getSteps().add(step);
+        }
+        return approval;
+    }
+
+    private void stubParallelLock(UUID approvalId, ApprovalRequest approval) {
+        org.mockito.Mockito.lenient().when(requestRepository.findByIdAndIsDeletedFalseForUpdate(approvalId))
+                .thenReturn(Optional.of(approval));
+        org.mockito.Mockito.lenient().when(requestRepository.findByIdAndIsDeletedFalse(approvalId))
+                .thenReturn(Optional.of(approval));
+        org.mockito.Mockito.lenient().when(userRepository.findByIdAndIsDeletedFalse(any(UUID.class))).thenReturn(Optional.empty());
     }
 
     private ApprovalRequest pendingRoleOnlyApproval(UUID id, UUID requesterId, String approverRole) {

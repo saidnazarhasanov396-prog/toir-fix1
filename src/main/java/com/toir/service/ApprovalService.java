@@ -17,6 +17,7 @@ import com.toir.entity.users.Role;
 import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.AuditAction;
@@ -34,6 +35,7 @@ import com.toir.service.approval.ApprovalActionExecutor;
 import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalOrchestrator;
 import com.toir.service.approval.ApprovalRouteResolver;
+import com.toir.service.approval.ApprovalRouteSnapshot;
 import com.toir.service.approval.ApprovalSlaPolicyService;
 import com.toir.service.approval.LifecycleApprovalRoutePolicy;
 import com.toir.service.approval.LifecycleApprovalStartPlan;
@@ -63,6 +65,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -128,6 +131,17 @@ public class ApprovalService implements ApprovalOrchestrator {
         return requestRepository.findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalStatus.PENDING).stream()
                 .filter(approvalScopeService::canReadApproval)
                 .map(this::toDto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ApprovalRequestDto> myTasks() {
+        return requestRepository.findAllByStatusAndIsDeletedFalseOrderByCreatedAtDesc(ApprovalStatus.PENDING).stream()
+                .filter(approvalScopeService::canReadApproval)
+                .map(this::toDto)
+                .filter(dto -> dto.currentUserTaskId() != null)
+                .filter(dto -> dto.allowedActions().contains("APPROVE")
+                        || dto.allowedActions().contains("REJECT"))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -239,7 +253,9 @@ public class ApprovalService implements ApprovalOrchestrator {
                 && request.getStatus() != ApprovalStatus.DRAFT) {
             throw RestException.badRequest("Only pending or draft approval requests can be updated");
         }
-        boolean processStarted = request.getCurrentStep() > 1
+        boolean processStarted = (request.getStatus() == ApprovalStatus.PENDING
+                && effectiveFlowType(request) == ApprovalFlowType.PARALLEL_ALL)
+                || request.getCurrentStep() > 1
                 || request.getLastReturnedAt() != null
                 || request.isExecuted()
                 || request.getSteps().stream()
@@ -616,7 +632,10 @@ public class ApprovalService implements ApprovalOrchestrator {
                 effectiveAction,
                 null,
                 resolution.steps(),
-                resolution.reason());
+                resolution.reason(),
+                resolution.flowType(),
+                resolution.templateId(),
+                resolution.templateVersion());
     }
 
     @Transactional
@@ -657,8 +676,12 @@ public class ApprovalService implements ApprovalOrchestrator {
         request.setRequesterId(requesterId);
         request.setDescription(description);
         request.setPayloadJson(payloadAfterFlush);
+        request.setFlowType(plan.flowType());
+        request.setTemplateId(plan.templateId());
+        request.setTemplateVersion(plan.templateVersion());
+        request.setApprovalRound(nextApprovalRound(plan.targetType(), plan.targetId(), effectivePlanAction));
         request.setStatus(ApprovalStatus.PENDING);
-        request.setCurrentStep(1);
+        request.setCurrentStep(plan.flowType() == ApprovalFlowType.PARALLEL_ALL ? 0 : 1);
         request.setExpiresAt(Instant.now().plus(slaPolicyService.slaFor(request)));
 
         int stepNumber = 1;
@@ -666,6 +689,8 @@ public class ApprovalService implements ApprovalOrchestrator {
             ApprovalStep step = new ApprovalStep();
             step.setRequest(request);
             step.setStepNumber(stepNumber++);
+            step.setApprovalRound(request.getApprovalRound());
+            step.setFlowType(effectiveFlowType(request));
             step.setApproverId(input.approverId());
             step.setApproverRole(input.approverRole());
             step.setDecision(ApprovalDecision.PENDING);
@@ -702,6 +727,21 @@ public class ApprovalService implements ApprovalOrchestrator {
                 failure);
     }
 
+    private LifecycleApprovalStartPlan lifecyclePlan(
+            ApprovalTargetType targetType,
+            UUID targetId,
+            ApprovalActionType actionType,
+            ApprovalRequest reusableRequest,
+            List<CreateApprovalRequest.StepInput> frozenSteps,
+            LifecycleApprovalRoutePolicy.Reason failure,
+            ApprovalFlowType flowType,
+            UUID templateId,
+            Long templateVersion) {
+        return new LifecycleApprovalStartPlan(
+                targetType, targetId, actionType, reusableRequest, frozenSteps, failure,
+                flowType, templateId, templateVersion);
+    }
+
     private LifecycleApprovalRoutePolicy.Reason lifecycleReuseFailure(
             ApprovalRequest request,
             ApprovalTargetType targetType,
@@ -736,6 +776,8 @@ public class ApprovalService implements ApprovalOrchestrator {
         normalized.setRequesterId(request.getRequesterId());
         normalized.setStatus(request.getStatus());
         normalized.setCurrentStep(request.getCurrentStep());
+        normalized.setFlowType(effectiveFlowType(request));
+        normalized.setApprovalRound(request.getApprovalRound());
         normalized.setSteps(request.getSteps() == null
                 ? new ArrayList<>()
                 : new ArrayList<>(request.getSteps()));
@@ -809,6 +851,12 @@ public class ApprovalService implements ApprovalOrchestrator {
 
     private ApprovalActionType effectiveActionType(ApprovalActionType actionType) {
         return actionType == null ? ApprovalActionType.APPROVE : actionType;
+    }
+
+    private ApprovalFlowType effectiveFlowType(ApprovalRequest request) {
+        return request.getFlowType() == null
+                ? ApprovalFlowType.SEQUENTIAL
+                : request.getFlowType();
     }
 
     @Transactional
@@ -1069,6 +1117,9 @@ public class ApprovalService implements ApprovalOrchestrator {
     @Transactional
     public ApprovalRequestDto returnToStep(UUID requestId, ReturnApprovalRequest returnRequest) {
         ApprovalRequest request = lockLifecycleMutationRequest(requestId);
+        if (effectiveFlowType(request) == ApprovalFlowType.PARALLEL_ALL) {
+            throw RestException.conflict("PARALLEL_APPROVAL_RETURN_NOT_SUPPORTED");
+        }
         UUID actorId = effectiveDecisionActor(returnRequest == null ? null : returnRequest.approverId());
         expireIfNeeded(request);
         if (request.getStatus() != ApprovalStatus.PENDING) {
@@ -1179,6 +1230,7 @@ public class ApprovalService implements ApprovalOrchestrator {
     private ApprovalRequestDto applyDecision(UUID requestId, UUID expectedStepId, DecisionRequest decision, ApprovalDecision outcome) {
         ApprovalRequest request = lockLifecycleMutationRequest(requestId);
         UUID actorId = effectiveDecisionActor(decision);
+        String decisionComment = decision == null ? null : decision.comment();
         if (request.getStatus() == ApprovalStatus.FAILED) {
             if (expectedStepId != null && !expectedStepId.equals(currentStepOrThrow(request).getId())) {
                 throw RestException.conflict("Only current pending step can be acted on");
@@ -1190,6 +1242,12 @@ public class ApprovalService implements ApprovalOrchestrator {
             throw RestException.conflict("Request is not pending: " + request.getStatus());
         }
         assertActionableRoute(request);
+        if (effectiveFlowType(request) == ApprovalFlowType.PARALLEL_ALL) {
+            return applyParallelDecision(request, expectedStepId, decision, outcome, actorId);
+        }
+        if (outcome == ApprovalDecision.REJECTED && !StringUtils.hasText(decisionComment)) {
+            throw RestException.badRequest("comment is required for rejection");
+        }
         ApprovalStep current = currentStepOrThrow(request);
         if (expectedStepId != null && !expectedStepId.equals(current.getId())) {
             throw RestException.conflict("Only current pending step can be acted on");
@@ -1199,7 +1257,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         current.setDecidedById(actorId);
         current.setDelegatedForId(delegateApprover ? current.getApproverId() : null);
         current.setDecidedAt(Instant.now());
-        current.setComment(decision.comment());
+        current.setComment(decisionComment);
 
         boolean isTerminal = false;
         if (outcome == ApprovalDecision.REJECTED) {
@@ -1227,7 +1285,7 @@ public class ApprovalService implements ApprovalOrchestrator {
 
         ApprovalRequest saved = requestRepository.save(request);
         if (isTerminal) {
-            governanceService.record(saved, oldStatus, saved.getStatus(), actorId, decision.comment());
+            governanceService.record(saved, oldStatus, saved.getStatus(), actorId, decisionComment);
         }
         if (isTerminal) {
             notifyFinalDecision(saved, outcome);
@@ -1249,6 +1307,95 @@ public class ApprovalService implements ApprovalOrchestrator {
         return toDto(request);
     }
 
+    private ApprovalRequestDto applyParallelDecision(
+            ApprovalRequest request,
+            UUID expectedStepId,
+            DecisionRequest decision,
+            ApprovalDecision outcome,
+            UUID actorId) {
+        String decisionComment = decision == null ? null : decision.comment();
+        if (outcome == ApprovalDecision.REJECTED && !StringUtils.hasText(decisionComment)) {
+            throw RestException.badRequest("comment is required for rejection");
+        }
+        ApprovalStep task = currentRoundSteps(request).stream()
+                .filter(step -> expectedStepId == null
+                        ? Objects.equals(step.getApproverId(), actorId)
+                        : Objects.equals(step.getId(), expectedStepId))
+                .findFirst()
+                .orElseThrow(() -> RestException.conflict("Parallel approval task not found in current round"));
+        if (!Objects.equals(task.getApproverId(), actorId)) {
+            throw RestException.forbidden("Only assigned approver can act on this parallel task");
+        }
+        if (task.getDecision() != ApprovalDecision.PENDING) {
+            throw RestException.conflict("Approval task is already completed: " + task.getDecision());
+        }
+        approvalScopeService.assertCanDecideApproval(request, task);
+
+        Instant actedAt = Instant.now();
+        task.setDecision(outcome);
+        task.setDecidedById(actorId);
+        task.setDelegatedForId(null);
+        task.setDecidedAt(actedAt);
+        task.setComment(decisionComment);
+
+        ApprovalStatus oldStatus = request.getStatus();
+        boolean terminal = false;
+        if (outcome == ApprovalDecision.REJECTED) {
+            currentRoundSteps(request).stream()
+                    .filter(step -> step != task && step.getDecision() == ApprovalDecision.PENDING)
+                    .forEach(step -> {
+                        step.setDecision(ApprovalDecision.CANCELLED);
+                        step.setDecidedAt(actedAt);
+                        step.setComment("Cancelled after rejection by another approver");
+                    });
+            request.setStatus(ApprovalStatus.REJECTED);
+            request.setCompletedAt(actedAt);
+            terminal = true;
+        } else {
+            boolean allApproved = currentRoundSteps(request).stream()
+                    .allMatch(step -> step.getDecision() == ApprovalDecision.APPROVED);
+            if (allApproved) {
+                validatePersistedLifecycleCompletion(request);
+                request.setStatus(ApprovalStatus.APPROVED);
+                request.setCompletedAt(actedAt);
+                terminal = true;
+            }
+        }
+
+        if (terminal) {
+            executeTerminalAction(request, outcome);
+        }
+        ApprovalRequest saved = requestRepository.save(request);
+        governanceService.record(
+                saved,
+                oldStatus,
+                saved.getStatus(),
+                actorId,
+                decisionComment,
+                outcome == ApprovalDecision.APPROVED
+                        ? ApprovalActionType.APPROVE
+                        : ApprovalActionType.REJECT);
+        if (terminal) {
+            notifyFinalDecision(saved, outcome);
+        }
+        auditBuilderService.log(
+                "approval_request",
+                saved.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.APPROVAL_REQUEST,
+                "Parallel approval task decided",
+                null,
+                saved);
+        return toDto(saved);
+    }
+
+    private List<ApprovalStep> currentRoundSteps(ApprovalRequest request) {
+        return request.getSteps().stream()
+                .filter(step -> !step.isDeleted())
+                .filter(step -> step.getApprovalRound() == request.getApprovalRound())
+                .toList();
+    }
+
     private ApprovalRequest lockLifecycleMutationRequest(UUID requestId) {
         List<LifecycleDecisionIdentity> identities = jdbcTemplate.query(
                 """
@@ -1264,17 +1411,23 @@ public class ApprovalService implements ApprovalOrchestrator {
                         ApprovalActionType.valueOf(rs.getString("action_type"))),
                 requestId);
         if (identities.isEmpty()) {
-            return getOrThrow(requestId);
+            return lockRequestForUpdate(requestId);
         }
         LifecycleDecisionIdentity identity = identities.getFirst();
         if (!lifecycleApprovalRoutePolicy.supports(identity.targetType(), identity.actionType())
                 || identity.targetId() == null) {
-            return getOrThrow(requestId);
+            return lockRequestForUpdate(requestId);
         }
 
         lockLifecycleDomainRow(identity.targetType(), identity.targetId());
         lockApprovalTargetAction(identity.targetType().name(), identity.targetId(), identity.actionType());
         return requestRepository.findByIdAndIsDeletedFalseForUpdate(requestId)
+                .orElseThrow(() -> RestException.notFound("Approval request not found: " + requestId));
+    }
+
+    private ApprovalRequest lockRequestForUpdate(UUID requestId) {
+        return requestRepository.findByIdAndIsDeletedFalseForUpdate(requestId)
+                .or(() -> requestRepository.findByIdAndIsDeletedFalse(requestId))
                 .orElseThrow(() -> RestException.notFound("Approval request not found: " + requestId));
     }
 
@@ -1748,7 +1901,6 @@ public class ApprovalService implements ApprovalOrchestrator {
         request.setRequesterId(requesterId);
         request.setDescription(description);
         request.setStatus(ApprovalStatus.PENDING);
-        request.setCurrentStep(1);
         request.setActionType(actionType);
         if (targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
             PlannedShutdownApprovalSnapshot snapshot = loadPlannedShutdownApprovalSnapshot(targetId);
@@ -1766,12 +1918,16 @@ public class ApprovalService implements ApprovalOrchestrator {
         boolean plannedShutdownApproval = targetType == ApprovalTargetType.PLANNED_SHUTDOWN
                 && (actionType == null || actionType == ApprovalActionType.APPROVE);
         boolean domainValidatedApproval = repairCampaignApproval || plannedShutdownApproval;
-        List<CreateApprovalRequest.StepInput> effectiveSteps = domainValidatedApproval
+        List<CreateApprovalRequest.StepInput> suppliedSteps = domainValidatedApproval
                 ? List.of()
                 : normalizeStepInputs(steps);
-        if (effectiveSteps.isEmpty()) {
-            effectiveSteps = normalizeStepInputs(routeResolver.resolveRoute(request));
+        ApprovalRouteSnapshot routeSnapshot = suppliedSteps.isEmpty()
+                ? routeResolver.resolveRouteSnapshot(request)
+                : ApprovalRouteSnapshot.sequential(suppliedSteps);
+        if (routeSnapshot == null) {
+            routeSnapshot = ApprovalRouteSnapshot.sequential(routeResolver.resolveRoute(request));
         }
+        List<CreateApprovalRequest.StepInput> effectiveSteps = normalizeStepInputs(routeSnapshot.steps());
         if (effectiveSteps.isEmpty()) {
             if (repairCampaignApproval) {
                 throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_NOT_CONFIGURED");
@@ -1781,9 +1937,16 @@ public class ApprovalService implements ApprovalOrchestrator {
             }
             throw RestException.badRequest("At least one approval step is required");
         }
+        request.setFlowType(routeSnapshot.flowType());
+        request.setTemplateId(routeSnapshot.templateId());
+        request.setTemplateVersion(routeSnapshot.templateVersion());
+        ApprovalActionType roundAction = effectiveActionType(actionType);
+        lockApprovalTargetAction(targetType.name(), targetId, roundAction);
+        request.setApprovalRound(nextApprovalRound(targetType, targetId, roundAction));
+        request.setCurrentStep(routeSnapshot.flowType() == ApprovalFlowType.PARALLEL_ALL ? 0 : 1);
         if (domainValidatedApproval) {
             LifecycleApprovalRoutePolicy.ValidationResult validation = validateLifecycleInputs(
-                    targetType, actionType, effectiveSteps);
+                    targetType, actionType, routeSnapshot.flowType(), effectiveSteps);
             if (!validation.valid()) {
                 log.warn("Lifecycle approval route is not configured: targetType={} targetId={} reason={}",
                         targetType, targetId, validation.reason());
@@ -1801,6 +1964,8 @@ public class ApprovalService implements ApprovalOrchestrator {
             ApprovalStep step = new ApprovalStep();
             step.setRequest(request);
             step.setStepNumber(idx++);
+            step.setApprovalRound(request.getApprovalRound());
+            step.setFlowType(effectiveFlowType(request));
             step.setApproverId(input.approverId());
             step.setApproverRole(input.approverRole());
             step.setDecision(ApprovalDecision.PENDING);
@@ -1826,13 +1991,24 @@ public class ApprovalService implements ApprovalOrchestrator {
         return toDto(saved);
     }
 
+    private int nextApprovalRound(
+            ApprovalTargetType targetType,
+            UUID targetId,
+            ApprovalActionType actionType) {
+        Integer current = requestRepository.findMaxApprovalRound(
+                targetType.name(), targetId, effectiveActionType(actionType).name());
+        return current == null ? 1 : Math.addExact(current, 1);
+    }
+
     private LifecycleApprovalRoutePolicy.ValidationResult validateLifecycleInputs(
             ApprovalTargetType targetType,
             ApprovalActionType actionType,
+            ApprovalFlowType flowType,
             List<CreateApprovalRequest.StepInput> inputs) {
         ApprovalTemplate candidate = new ApprovalTemplate();
         candidate.setTargetType(targetType);
         candidate.setActionType(effectiveActionType(actionType));
+        candidate.setFlowType(flowType);
         int order = 1;
         for (CreateApprovalRequest.StepInput input : inputs) {
             ApprovalTemplateStep step = new ApprovalTemplateStep();
@@ -1892,6 +2068,18 @@ public class ApprovalService implements ApprovalOrchestrator {
     }
 
     private void notifyCurrentStep(ApprovalRequest request) {
+        if (effectiveFlowType(request) == ApprovalFlowType.PARALLEL_ALL) {
+            currentRoundSteps(request).stream()
+                    .filter(step -> step.getDecision() == ApprovalDecision.PENDING)
+                    .forEach(step -> notifyStepApprovers(
+                            step,
+                            "Approval requested: " + request.getTitle(),
+                            "Approval request " + request.getTitle() + " requires your decision.",
+                            NotificationSeverity.INFO,
+                            "ApprovalRequest",
+                            request.getId() == null ? null : request.getId().toString()));
+            return;
+        }
         request.getSteps().stream()
                 .filter(step -> step.getStepNumber() == request.getCurrentStep())
                 .filter(step -> step.getDecision() == ApprovalDecision.PENDING)
@@ -2038,10 +2226,18 @@ public class ApprovalService implements ApprovalOrchestrator {
                         step.getDecidedById(),
                         userName(step.getDecidedById()),
                         step.getDelegatedForId(),
-                        userName(step.getDelegatedForId())))
+                        userName(step.getDelegatedForId()),
+                        step.getApprovalRound(),
+                        userName(step.getApproverId())))
                 .toList();
+        ApprovalFlowType flowType = effectiveFlowType(request);
+        UUID actorId = currentAuthenticatedActorId();
         ApprovalStep currentStep = request.getSteps().stream()
-                .filter(step -> step.getStepNumber() == request.getCurrentStep())
+                .filter(step -> flowType == ApprovalFlowType.PARALLEL_ALL
+                        ? step.getApprovalRound() == request.getApprovalRound()
+                                && step.getDecision() == ApprovalDecision.PENDING
+                                && Objects.equals(step.getApproverId(), actorId)
+                        : step.getStepNumber() == request.getCurrentStep())
                 .findFirst()
                 .orElse(null);
         String targetTypeName = effectiveTargetTypeName(request);
@@ -2049,7 +2245,6 @@ public class ApprovalService implements ApprovalOrchestrator {
         String targetUrl = targetUrl(targetTypeName, targetId);
         boolean staleRoute = routeStale(effectiveTargetType(request), request);
         boolean actionableRoute = !staleRoute;
-        UUID actorId = currentAuthenticatedActorId();
         boolean lifecycleApproval = isLifecycleApproval(request);
         boolean canDecide = !lifecycleApproval
                 && request.getStatus() == ApprovalStatus.PENDING
@@ -2069,6 +2264,24 @@ public class ApprovalService implements ApprovalOrchestrator {
                 && actionableRoute
                 && actorId != null
                 && hasCancellationPermission(request);
+        int approvedCount = (int) steps.stream()
+                .filter(step -> step.decision() == ApprovalDecision.APPROVED).count();
+        int pendingCount = (int) steps.stream()
+                .filter(step -> step.decision() == ApprovalDecision.PENDING).count();
+        int rejectedCount = (int) steps.stream()
+                .filter(step -> step.decision() == ApprovalDecision.REJECTED).count();
+        int cancelledCount = (int) steps.stream()
+                .filter(step -> step.decision() == ApprovalDecision.CANCELLED).count();
+        Set<String> allowedActions = new LinkedHashSet<>();
+        if (canApprove) {
+            allowedActions.add("APPROVE");
+        }
+        if (canReject) {
+            allowedActions.add("REJECT");
+        }
+        if (canCancel) {
+            allowedActions.add("CANCEL");
+        }
 
         return new ApprovalRequestDto(
                 request.getId(),
@@ -2113,7 +2326,18 @@ public class ApprovalService implements ApprovalOrchestrator {
                 request.getLastReturnComment(),
                 request.getStatus() == ApprovalStatus.PENDING && actionableRoute,
                 staleRoute,
-                staleRoute ? "NONCANONICAL_ROUTE" : null);
+                staleRoute ? "NONCANONICAL_ROUTE" : null,
+                flowType,
+                request.getApprovalRound(),
+                request.getTemplateId(),
+                request.getTemplateVersion(),
+                steps.size(),
+                approvedCount,
+                pendingCount,
+                rejectedCount,
+                cancelledCount,
+                currentStep == null ? null : currentStep.getId(),
+                Set.copyOf(allowedActions));
     }
 
     private String currentApproverLabel(ApprovalStep currentStep) {

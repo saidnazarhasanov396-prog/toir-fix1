@@ -12,6 +12,7 @@ import com.toir.entity.repair.RepairRequest;
 import com.toir.entity.users.Role;
 import com.toir.entity.users.User;
 import com.toir.enums.ApprovalDecision;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.UserStatus;
@@ -107,11 +108,15 @@ public class ApprovalScopeService {
     }
 
     public void assertCanDecideApproval(ApprovalRequest approval, ApprovalStep currentStep, UUID delegatedForId) {
+        boolean parallel = approval != null
+                && effectiveFlowType(approval) == ApprovalFlowType.PARALLEL_ALL;
         if (approval == null
                 || approval.getStatus() != ApprovalStatus.PENDING
                 || currentStep == null
                 || currentStep.getDecision() != ApprovalDecision.PENDING
-                || currentStep.getStepNumber() != approval.getCurrentStep()) {
+                || (parallel
+                ? currentStep.getApprovalRound() != approval.getApprovalRound()
+                : currentStep.getStepNumber() != approval.getCurrentStep())) {
             throw forbidden();
         }
         if (!scopeAccessService.isScopeAdmin()
@@ -172,11 +177,19 @@ public class ApprovalScopeService {
             return false;
         }
         return approval.getSteps().stream()
-                .filter(step -> step.getStepNumber() == approval.getCurrentStep())
+                .filter(step -> effectiveFlowType(approval) == ApprovalFlowType.PARALLEL_ALL
+                        ? step.getApprovalRound() == approval.getApprovalRound()
+                        : step.getStepNumber() == approval.getCurrentStep())
                 .filter(step -> step.getDecision() == ApprovalDecision.PENDING)
                 .findFirst()
                 .map(this::canCurrentPrincipalActOnStep)
                 .orElse(false);
+    }
+
+    private ApprovalFlowType effectiveFlowType(ApprovalRequest approval) {
+        return approval.getFlowType() == null
+                ? ApprovalFlowType.SEQUENTIAL
+                : approval.getFlowType();
     }
 
     private boolean canCurrentPrincipalActOnStep(ApprovalStep step) {

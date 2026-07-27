@@ -5,8 +5,10 @@ import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.UserStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.repository.users.UserRepository;
@@ -20,6 +22,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -95,13 +98,20 @@ public class ApprovalRuleService {
     public ApprovalRuleDto updateRule(UUID id, ApprovalRuleDto request) {
         ApprovalTemplate template = templateRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Approval template not found"));
+        if (request != null
+                && request.version() != null
+                && !Objects.equals(request.version(), template.getVersion())) {
+            throw RestException.conflict("APPROVAL_TEMPLATE_VERSION_CONFLICT");
+        }
         ApprovalRuleDto effectiveRequest = new ApprovalRuleDto(
                 request.targetType() == null ? template.getTargetType() : request.targetType(),
                 request.actionType() == null ? effectiveActionType(template) : request.actionType(),
                 StringUtils.hasText(request.documentName()) ? request.documentName() : template.getName(),
                 request.stepsCount(),
                 request.steps(),
-                request.active()
+                request.active(),
+                request.flowType() == null ? template.getFlowType() : request.flowType(),
+                request.version()
         );
         validateRule(effectiveRequest);
         return saveRule(template, effectiveRequest);
@@ -118,12 +128,14 @@ public class ApprovalRuleService {
     private ApprovalRuleDto saveRule(ApprovalTemplate template, ApprovalRuleDto request) {
         ApprovalActionType actionType = effectiveActionType(request.actionType());
         String code = ruleCode(request.targetType(), actionType);
-        boolean lifecycleRule = lifecycleRoutePolicy.supports(request.targetType(), actionType);
+        ApprovalFlowType flowType = effectiveFlowType(request.flowType());
+        boolean lifecycleTarget = lifecycleRoutePolicy.supports(request.targetType(), actionType);
+        boolean lifecycleRule = lifecycleTarget && flowType == ApprovalFlowType.SEQUENTIAL;
         LifecycleApprovalRoutePolicy.ValidationResult lifecycleValidation = lifecycleRule
                 ? validateLifecycleCandidate(request)
                 : null;
 
-        if (lifecycleRule && request.active()) {
+        if (lifecycleTarget && request.active()) {
             rejectOtherActiveLifecycleTemplates(template, request.targetType(), actionType);
         }
 
@@ -138,11 +150,16 @@ public class ApprovalRuleService {
                 : documentName(request.targetType()));
         template.setTargetType(request.targetType());
         template.setActionType(actionType);
+        template.setFlowType(flowType);
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
         if (lifecycleRule) {
             LifecycleApprovalRoutePolicy.RouteStep first = lifecycleValidation.orderedSteps().getFirst();
             template.setApproverId(first.approverId());
             template.setApproverRole(first.approverRole());
+        } else if (flowType == ApprovalFlowType.PARALLEL_ALL) {
+            ApprovalRuleDto.Step first = request.steps().getFirst();
+            template.setApproverId(first.approverId());
+            template.setApproverRole(null);
         } else {
             template.setApproverId(null);
             template.setApproverRole(normalizedRole(request.steps().getFirst().approverRole()));
@@ -184,8 +201,12 @@ public class ApprovalRuleService {
                             ApprovalTemplateStep step = new ApprovalTemplateStep();
                             step.setTemplate(template);
                             step.setStepOrder(stepRequest.order());
-                            step.setApproverId(null);
-                            step.setApproverRole(normalizedRole(stepRequest.approverRole()));
+                            step.setApproverId(flowType == ApprovalFlowType.PARALLEL_ALL
+                                    ? stepRequest.approverId()
+                                    : null);
+                            step.setApproverRole(flowType == ApprovalFlowType.PARALLEL_ALL
+                                    ? null
+                                    : normalizedRole(stepRequest.approverRole()));
                             template.getSteps().add(step);
                         });
             }
@@ -242,7 +263,9 @@ public class ApprovalRuleService {
                 documentName(template),
                 steps.size(),
                 steps,
-                template.isActive()
+                template.isActive(),
+                effectiveFlowType(template.getFlowType()),
+                template.getVersion()
         );
     }
 
@@ -252,6 +275,10 @@ public class ApprovalRuleService {
         }
         if (request.targetType() == null) {
             throw RestException.badRequest("targetType is required");
+        }
+        if (effectiveFlowType(request.flowType()) == ApprovalFlowType.PARALLEL_ALL) {
+            validateParallelRule(request);
+            return;
         }
         if (lifecycleRoutePolicy.supports(
                 request.targetType(), effectiveActionType(request.actionType()))) {
@@ -274,6 +301,36 @@ public class ApprovalRuleService {
             }
             if (!StringUtils.hasText(step.approverRole())) {
                 throw RestException.badRequest("approverRole is required for role-based approval templates");
+            }
+        }
+    }
+
+    private void validateParallelRule(ApprovalRuleDto request) {
+        if (request.steps() == null || request.steps().isEmpty()) {
+            throw RestException.badRequest("PARALLEL_APPROVERS_REQUIRED");
+        }
+        Set<Integer> orders = new java.util.HashSet<>();
+        Set<UUID> approverIds = new java.util.LinkedHashSet<>();
+        for (ApprovalRuleDto.Step step : request.steps()) {
+            if (step == null || step.order() < 1 || !orders.add(step.order())) {
+                throw RestException.badRequest("PARALLEL_APPROVER_ORDER_INVALID");
+            }
+            if (step.approverType() != ApprovalRuleDto.ApproverType.USER
+                    || step.approverId() == null
+                    || StringUtils.hasText(step.approverRole())) {
+                throw RestException.badRequest("PARALLEL_APPROVERS_MUST_BE_USERS");
+            }
+            if (!approverIds.add(step.approverId())) {
+                throw RestException.badRequest("PARALLEL_APPROVERS_MUST_BE_UNIQUE");
+            }
+        }
+        List<User> users = userRepository.findAllByIdInAndIsDeletedFalse(approverIds);
+        Map<UUID, User> usersById = users.stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+        for (UUID approverId : approverIds) {
+            User user = usersById.get(approverId);
+            if (user == null || user.isDeleted() || user.getStatus() != UserStatus.ACTIVE) {
+                throw RestException.badRequest("PARALLEL_APPROVER_NOT_ACTIVE: " + approverId);
             }
         }
     }
@@ -413,6 +470,10 @@ public class ApprovalRuleService {
 
     private ApprovalActionType effectiveActionType(ApprovalActionType actionType) {
         return actionType == null ? ApprovalActionType.APPROVE : actionType;
+    }
+
+    private ApprovalFlowType effectiveFlowType(ApprovalFlowType flowType) {
+        return flowType == null ? ApprovalFlowType.SEQUENTIAL : flowType;
     }
 
     private String ruleCode(ApprovalTargetType targetType, ApprovalActionType actionType) {

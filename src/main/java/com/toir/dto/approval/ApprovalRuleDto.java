@@ -1,6 +1,7 @@
 package com.toir.dto.approval;
 
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalTargetType;
 
 import java.util.List;
@@ -13,8 +14,23 @@ public record ApprovalRuleDto(
         String documentName,
         int stepsCount,
         List<Step> steps,
-        boolean active
+        boolean active,
+        ApprovalFlowType flowType,
+        Long version
 ) {
+    public ApprovalRuleDto(
+            UUID id,
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType,
+            String documentName,
+            int stepsCount,
+            List<Step> steps,
+            boolean active
+    ) {
+        this(id, targetType, actionType, documentName, stepsCount, steps, active,
+                ApprovalFlowType.SEQUENTIAL, null);
+    }
+
     public ApprovalRuleDto(
             ApprovalTargetType targetType,
             ApprovalActionType actionType,
@@ -23,7 +39,21 @@ public record ApprovalRuleDto(
             List<Step> steps,
             boolean active
     ) {
-        this(null, targetType, actionType, documentName, stepsCount, steps, active);
+        this(null, targetType, actionType, documentName, stepsCount, steps, active,
+                ApprovalFlowType.SEQUENTIAL, null);
+    }
+
+    public ApprovalRuleDto(
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType,
+            String documentName,
+            int stepsCount,
+            List<Step> steps,
+            boolean active,
+            ApprovalFlowType flowType,
+            Long version
+    ) {
+        this(null, targetType, actionType, documentName, stepsCount, steps, active, flowType, version);
     }
 
     public record Step(

@@ -1,6 +1,7 @@
 package com.toir.entity;
 
 import com.toir.enums.ApprovalDecision;
+import com.toir.enums.ApprovalFlowType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -9,7 +10,9 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "approval_steps",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"request_id", "step_number"}))
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"request_id", "step_number"})
+        })
 @Getter
 @Setter
 @AllArgsConstructor
@@ -23,6 +26,13 @@ public class ApprovalStep extends BaseEntity {
 
     @Column(name = "step_number", nullable = false)
     private int stepNumber;
+
+    @Column(name = "approval_round", nullable = false)
+    private int approvalRound = 1;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "flow_type", nullable = false)
+    private ApprovalFlowType flowType = ApprovalFlowType.SEQUENTIAL;
 
     @Column(name = "approver_id")
     private UUID approverId;

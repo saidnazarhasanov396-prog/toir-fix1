@@ -63,6 +63,14 @@ public class ApprovalController {
         ));
     }
 
+    @GetMapping("/my-tasks")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_READ')")
+    public ResponseEntity<Page<ApprovalRequestDto>> myTasks(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(PaginationUtils.page(service.myTasks(), page, size));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_READ')")
     public ResponseEntity<ApprovalRequestDto> get(@PathVariable UUID id) {

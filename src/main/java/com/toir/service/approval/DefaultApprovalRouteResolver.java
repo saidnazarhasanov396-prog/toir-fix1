@@ -5,6 +5,7 @@ import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.security.ApprovalDomainPermissions;
@@ -29,14 +30,24 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
 
     @Override
     public List<CreateApprovalRequest.StepInput> resolveRoute(ApprovalRequest request) {
+        return resolveRouteSnapshot(request).steps();
+    }
+
+    @Override
+    public ApprovalRouteSnapshot resolveRouteSnapshot(ApprovalRequest request) {
         if (request == null || request.getTargetType() == null) {
-            return List.of();
+            return ApprovalRouteSnapshot.sequential(List.of());
         }
         ApprovalActionType actionType = request.getActionType() == null
                 ? ApprovalActionType.APPROVE
                 : request.getActionType();
         if (lifecycleRoutePolicy.supports(request.getTargetType(), actionType)) {
-            return resolveLifecycleRoute(request.getTargetType(), actionType).steps();
+            LifecycleRouteResolution resolution = resolveLifecycleRoute(request.getTargetType(), actionType);
+            return new ApprovalRouteSnapshot(
+                    resolution.flowType(),
+                    resolution.templateId(),
+                    resolution.templateVersion(),
+                    resolution.steps());
         }
         return templateRepository
                 .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
@@ -47,9 +58,13 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                         .findFirstByTargetTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
                                 request.getTargetType()
                         ))
-                .map(this::stepsFromTemplate)
-                .filter(steps -> !steps.isEmpty())
-                .orElseGet(() -> permissionFallbackSteps(request));
+                .map(template -> new ApprovalRouteSnapshot(
+                        effectiveFlowType(template),
+                        template.getId(),
+                        template.getVersion(),
+                        stepsFromTemplate(template)))
+                .filter(snapshot -> !snapshot.steps().isEmpty())
+                .orElseGet(() -> ApprovalRouteSnapshot.sequential(permissionFallbackSteps(request)));
     }
 
     @Override
@@ -91,7 +106,13 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                         step.approverId(),
                         step.approverRole()))
                 .toList();
-        return new LifecycleRouteResolution(frozenSteps, validation.reason());
+        ApprovalTemplate template = templates.getFirst();
+        return new LifecycleRouteResolution(
+                frozenSteps,
+                validation.reason(),
+                effectiveFlowType(template),
+                template.getId(),
+                template.getVersion());
     }
 
     private List<CreateApprovalRequest.StepInput> permissionFallbackSteps(ApprovalRequest request) {
@@ -119,5 +140,11 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
             return List.of();
         }
         return List.of(new CreateApprovalRequest.StepInput(null, template.getApproverRole().trim()));
+    }
+
+    private ApprovalFlowType effectiveFlowType(ApprovalTemplate template) {
+        return template.getFlowType() == null
+                ? ApprovalFlowType.SEQUENTIAL
+                : template.getFlowType();
     }
 }

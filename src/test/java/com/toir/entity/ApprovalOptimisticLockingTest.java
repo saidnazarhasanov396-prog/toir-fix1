@@ -11,5 +11,6 @@ class ApprovalOptimisticLockingTest {
     void approvalRequestAndStepHaveVersionFields() throws Exception {
         assertThat(ApprovalRequest.class.getDeclaredField("version").isAnnotationPresent(Version.class)).isTrue();
         assertThat(ApprovalStep.class.getDeclaredField("version").isAnnotationPresent(Version.class)).isTrue();
+        assertThat(ApprovalTemplate.class.getDeclaredField("version").isAnnotationPresent(Version.class)).isTrue();
     }
 }

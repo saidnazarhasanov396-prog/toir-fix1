@@ -5,10 +5,12 @@ import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.repository.ApprovalTemplateRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -208,6 +210,34 @@ class DefaultApprovalRouteResolverTest {
 
         assertThat(resolver.resolveRoute(request)).containsExactly(
                 new CreateApprovalRequest.StepInput(null, "USTA"));
+    }
+
+    @Test
+    void genericParallelRouteFreezesFlowAndTemplateProvenance() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        UUID templateId = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        ApprovalTemplate template = new ApprovalTemplate();
+        ReflectionTestUtils.setField(template, "id", templateId);
+        template.setVersion(7L);
+        template.setTargetType(ApprovalTargetType.WORK_ORDER);
+        template.setActionType(ApprovalActionType.APPROVE);
+        template.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        template.getSteps().add(explicitStep(1, first));
+        template.getSteps().add(explicitStep(2, second));
+        ApprovalRequest request = request(ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE);
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE)).thenReturn(Optional.of(template));
+
+        ApprovalRouteSnapshot snapshot = resolver.resolveRouteSnapshot(request);
+
+        assertThat(snapshot.flowType()).isEqualTo(ApprovalFlowType.PARALLEL_ALL);
+        assertThat(snapshot.templateId()).isEqualTo(templateId);
+        assertThat(snapshot.templateVersion()).isEqualTo(7L);
+        assertThat(snapshot.steps()).extracting(CreateApprovalRequest.StepInput::approverId)
+                .containsExactly(first, second);
     }
 
     @Test
