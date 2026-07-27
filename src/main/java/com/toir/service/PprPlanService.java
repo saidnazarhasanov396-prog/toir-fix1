@@ -1043,6 +1043,15 @@ public class PprPlanService {
 
     private void applyPlanContractFields(PprPlan plan, PprPlanRequest request) {
         boolean scheduleBuilder = request.anchorMode() != null;
+        if (scheduleBuilder && (request.pprType() != null || request.frequency() != null)) {
+            throw RestException.badRequest(
+                    "Maintenance schedule builder does not accept pprType or frequency; preview is mixed-kind");
+        }
+        if (scheduleBuilder
+                && request.scheduleType() != null
+                && request.scheduleType() != PprScheduleType.CALENDAR) {
+            throw RestException.badRequest("Maintenance schedule builder requires CALENDAR scheduleType");
+        }
         PprType pprType = scheduleBuilder && request.pprType() == null
                 ? null
                 : request.pprType() != null ? request.pprType() : PprType.PREVENTIVE_MAINTENANCE;
@@ -1113,6 +1122,18 @@ public class PprPlanService {
         validateNoDuplicateIds("equipmentIds", request.equipmentIds(), equipmentIds);
         validateNoDuplicateIds("equipmentTypeIds", request.equipmentTypeIds(), equipmentTypeIds);
         validateNoDuplicateIds("regulationIds", request.regulationIds(), regulationIds);
+
+        if (plan.getAnchorMode() != null && !regulationIds.isEmpty()) {
+            throw RestException.badRequest(
+                    "Maintenance schedule builder does not accept regulationIds; preview includes all effective rules");
+        }
+
+        if (plan.getAnchorMode() != null
+                && !equipmentIds.isEmpty()
+                && !equipmentTypeIds.isEmpty()) {
+            throw RestException.badRequest(
+                    "Maintenance schedule builder accepts either equipmentIds or equipmentTypeIds, not both");
+        }
 
         Map<UUID, Equipment> equipmentById = resolveEquipmentTargets(equipmentIds, plan.getDepartmentId());
         validateEquipmentTypeTargets(equipmentTypeIds);

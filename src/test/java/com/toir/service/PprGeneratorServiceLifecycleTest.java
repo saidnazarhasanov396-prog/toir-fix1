@@ -113,7 +113,7 @@ class PprGeneratorServiceLifecycleTest {
     void generateForPlanSucceedsForDraftAndGeneratedPlans() {
         for (PlanStatus status : new PlanStatus[]{PlanStatus.DRAFT, PlanStatus.GENERATED}) {
             UUID planId = UUID.randomUUID();
-            when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, status)));
+            when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId)).thenReturn(Optional.of(plan(planId, status)));
             when(regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
             when(equipmentMaintenanceRuleRepository.findAllActive()).thenReturn(List.of());
             when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
@@ -137,7 +137,7 @@ class PprGeneratorServiceLifecycleTest {
         plan.setEndDate(LocalDate.of(2026, 12, 31));
         plan.setAnchorMode(com.toir.enums.MaintenanceScheduleAnchorMode.CURRENT);
         plan.getTargets().add(equipmentTarget(plan, equipmentId));
-        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId)).thenReturn(Optional.of(plan));
         when(taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(maintenanceScheduleService.preview(any())).thenReturn(new MaintenanceSchedulePreviewResponse(
                 List.of(
@@ -162,6 +162,7 @@ class PprGeneratorServiceLifecycleTest {
                 .containsExactly(LocalDate.of(2026, 2, 15), LocalDate.of(2026, 3, 15));
         assertThat(captor.getAllValues()).allMatch(task ->
                 task.getDueDate().toLocalDate().equals(task.getScheduledStart().toLocalDate()));
+        verify(planRepository).findByIdAndIsDeletedFalseForUpdate(planId);
     }
 
     @Test
@@ -176,7 +177,7 @@ class PprGeneratorServiceLifecycleTest {
         plan.getTargets().add(equipmentTarget(plan, equipmentId));
         PprTask existing = approvedTask(plan, regulationId, equipmentId);
         existing.setScheduledStart(LocalDate.of(2026, 2, 15).atTime(9, 0));
-        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId)).thenReturn(Optional.of(plan));
         when(taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(existing));
         when(maintenanceScheduleService.preview(any())).thenReturn(new MaintenanceSchedulePreviewResponse(
                 List.of(
@@ -202,6 +203,49 @@ class PprGeneratorServiceLifecycleTest {
     }
 
     @Test
+    void scheduleBuilderHonorsPprTypeAndRegulationTargets() {
+        UUID planId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID selectedRegulationId = UUID.randomUUID();
+        UUID otherRegulationId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.DRAFT);
+        plan.setStartDate(LocalDate.of(2026, 1, 1));
+        plan.setEndDate(LocalDate.of(2026, 12, 31));
+        plan.setAnchorMode(com.toir.enums.MaintenanceScheduleAnchorMode.CURRENT);
+        plan.setPprType(PprType.PLANNED_REPAIR);
+        plan.getTargets().add(equipmentTarget(plan, equipmentId));
+        plan.getTargets().add(regulationTarget(plan, selectedRegulationId));
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId)).thenReturn(Optional.of(plan));
+        when(taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(maintenanceScheduleService.preview(any())).thenReturn(new MaintenanceSchedulePreviewResponse(
+                List.of(
+                        scheduleItem(equipmentId, selectedRegulationId,
+                                LocalDate.of(2026, 2, 1), MaintenanceKind.MEDIUM_REPAIR),
+                        scheduleItem(equipmentId, otherRegulationId,
+                                LocalDate.of(2026, 3, 1), MaintenanceKind.MEDIUM_REPAIR),
+                        scheduleItem(equipmentId, selectedRegulationId,
+                                LocalDate.of(2026, 4, 1), MaintenanceKind.PREVENTIVE)
+                ),
+                new MaintenanceSchedulePreviewSummary(1, 3, 0, 0)
+        ));
+        when(taskRepository.save(any(PprTask.class))).thenAnswer(invocation -> {
+            PprTask task = invocation.getArgument(0);
+            task.setId(UUID.randomUUID());
+            return task;
+        });
+        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PprGeneratorService.GenerationResult result = service.generateForPlan(planId);
+
+        assertThat(result.created()).isEqualTo(1);
+        ArgumentCaptor<PprTask> captor = ArgumentCaptor.forClass(PprTask.class);
+        verify(taskRepository).save(captor.capture());
+        assertThat(captor.getValue().getRegulationId()).isEqualTo(selectedRegulationId);
+        assertThat(captor.getValue().getScheduledStart().toLocalDate())
+                .isEqualTo(LocalDate.of(2026, 2, 1));
+    }
+
+    @Test
     void generateForPlanBlockedForApprovedInProgressClosedAndCancelledPlans() {
         for (PlanStatus status : new PlanStatus[]{
                 PlanStatus.APPROVED,
@@ -210,7 +254,7 @@ class PprGeneratorServiceLifecycleTest {
                 PlanStatus.CANCELLED
         }) {
             UUID planId = UUID.randomUUID();
-            when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, status)));
+            when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId)).thenReturn(Optional.of(plan(planId, status)));
 
             assertThatThrownBy(() -> service.generateForPlan(planId))
                     .isInstanceOfSatisfying(RestException.class, ex -> {
@@ -396,7 +440,7 @@ class PprGeneratorServiceLifecycleTest {
         plan.setPprType(PprType.PLANNED_REPAIR);
         plan.setScheduleType(PprScheduleType.OPERATING_HOURS);
         plan.setIntervalHours(10_000L);
-        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId)).thenReturn(Optional.of(plan));
         when(regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
         when(equipmentMaintenanceRuleRepository.findAllActive()).thenReturn(List.of());
         when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
@@ -671,6 +715,15 @@ class PprGeneratorServiceLifecycleTest {
             UUID regulationId,
             LocalDate plannedDate
     ) {
+        return scheduleItem(equipmentId, regulationId, plannedDate, MaintenanceKind.PREVENTIVE);
+    }
+
+    private MaintenanceSchedulePreviewItem scheduleItem(
+            UUID equipmentId,
+            UUID regulationId,
+            LocalDate plannedDate,
+            MaintenanceKind maintenanceKind
+    ) {
         return new MaintenanceSchedulePreviewItem(
                 equipmentId,
                 "EQ-1",
@@ -678,7 +731,7 @@ class PprGeneratorServiceLifecycleTest {
                 regulationId,
                 null,
                 "Monthly maintenance",
-                MaintenanceKind.PREVENTIVE,
+                maintenanceKind,
                 PeriodicityUnit.MONTH,
                 1,
                 plannedDate,
@@ -779,7 +832,7 @@ class PprGeneratorServiceLifecycleTest {
                                 List<Equipment> equipment,
                                 List<PprTask> existingTasks,
                                 boolean stubWrites) {
-        when(planRepository.findByIdAndIsDeletedFalse(plan.getId())).thenReturn(Optional.of(plan));
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(plan.getId())).thenReturn(Optional.of(plan));
         when(regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(regulations);
         when(equipmentMaintenanceRuleRepository.findAllActive()).thenReturn(List.of());
         when(conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of());

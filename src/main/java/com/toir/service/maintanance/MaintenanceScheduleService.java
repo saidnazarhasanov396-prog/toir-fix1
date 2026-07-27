@@ -16,6 +16,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.service.equipment.OperationalEquipmentPolicy;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class MaintenanceScheduleService {
 
     private static final String MISSING_ACTIVE_METER = "MISSING_ACTIVE_METER";
+    private static final long MAX_HORIZON_DAYS = 366;
+    private static final int MAX_SCOPE_IDS = 1_000;
+    private static final int MAX_OCCURRENCES = 100_000;
 
     private final EquipmentRepository equipmentRepository;
     private final EquipmentMaintenanceEffectiveRuleResolver ruleResolver;
@@ -84,6 +89,10 @@ public class MaintenanceScheduleService {
                     matchedEquipment.add(item.getId());
                 }
                 for (LocalDate plannedDate : dates) {
+                    if (items.size() >= MAX_OCCURRENCES) {
+                        throw RestException.badRequest(
+                                "Maintenance schedule exceeds maximum occurrence count: " + MAX_OCCURRENCES);
+                    }
                     items.add(toItem(item, rule, plannedDate, request.anchorMode()));
                 }
             }
@@ -113,6 +122,15 @@ public class MaintenanceScheduleService {
         List<Equipment> candidates;
         if (request.scopeType() == MaintenanceScheduleScopeType.EQUIPMENT) {
             candidates = equipmentRepository.findAllByIdInAndIsDeletedFalse(request.equipmentIds());
+            Set<UUID> resolvedIds = candidates.stream()
+                    .map(Equipment::getId)
+                    .collect(Collectors.toSet());
+            request.equipmentIds().stream()
+                    .filter(id -> !resolvedIds.contains(id))
+                    .findFirst()
+                    .ifPresent(id -> {
+                        throw RestException.badRequest("Equipment not found: " + id);
+                    });
         } else {
             Set<UUID> typeIds = Set.copyOf(request.equipmentTypeIds());
             candidates = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -122,11 +140,17 @@ public class MaintenanceScheduleService {
         return candidates.stream()
                 .filter(operationalEquipmentPolicy::isOperational)
                 .filter(item -> request.departmentId() == null
-                        || request.departmentId().equals(item.getDepartmentId()))
+                        || request.departmentId().equals(equipmentScopeDepartment(item)))
                 .sorted(Comparator
                         .comparing(Equipment::getCode, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
                         .thenComparing(Equipment::getId))
                 .toList();
+    }
+
+    private UUID equipmentScopeDepartment(Equipment equipment) {
+        return equipment.getResponsibleDepartmentId() != null
+                ? equipment.getResponsibleDepartmentId()
+                : equipment.getDepartmentId();
     }
 
     private List<LocalDate> occurrenceDates(
@@ -198,9 +222,15 @@ public class MaintenanceScheduleService {
     }
 
     private boolean hasMissingMeter(MaintenanceDueCalculationDto due) {
-        return due != null
-                && due.structuredExplanation() != null
-                && MISSING_ACTIVE_METER.equals(due.structuredExplanation().blockingCode());
+        if (due == null || due.structuredExplanation() == null) {
+            return false;
+        }
+        var explanation = due.structuredExplanation();
+        return MISSING_ACTIVE_METER.equals(explanation.blockingCode())
+                || MISSING_ACTIVE_METER.equals(explanation.reasonCode())
+                || (explanation.supportingReasonKeys() != null
+                && explanation.supportingReasonKeys().stream()
+                .anyMatch(key -> key != null && key.endsWith("." + MISSING_ACTIVE_METER)));
     }
 
     private void validate(MaintenanceSchedulePreviewRequest request) {
@@ -212,6 +242,10 @@ public class MaintenanceScheduleService {
         }
         if (request.fromDate().isAfter(request.toDate())) {
             throw RestException.badRequest("fromDate must be on or before toDate");
+        }
+        if (ChronoUnit.DAYS.between(request.fromDate(), request.toDate()) > MAX_HORIZON_DAYS) {
+            throw RestException.badRequest(
+                    "Maintenance schedule preview is limited to an annual horizon");
         }
         if (request.scopeType() == null) {
             throw RestException.badRequest("scopeType is required");
@@ -234,6 +268,9 @@ public class MaintenanceScheduleService {
         }
         if (ids.stream().anyMatch(Objects::isNull)) {
             throw RestException.badRequest(field + " must not contain null values");
+        }
+        if (ids.size() > MAX_SCOPE_IDS) {
+            throw RestException.badRequest(field + " must contain at most " + MAX_SCOPE_IDS + " values");
         }
         if (new LinkedHashSet<>(ids).size() != ids.size()) {
             throw RestException.badRequest(field + " must not contain duplicate values");

@@ -162,4 +162,3 @@ Mutation permissions and the approval lifecycle remain unchanged.
 - Migration contract-test the nullable enum-like column and constraint.
 - Service/controller/repository tests status parameters and enforced worker visibility for plans, tasks, stats, and direct reads.
 - Run targeted tests first, then the full non-container Maven suite that is viable in the local environment.
-

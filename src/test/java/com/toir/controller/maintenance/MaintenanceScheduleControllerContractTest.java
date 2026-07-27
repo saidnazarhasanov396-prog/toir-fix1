@@ -4,6 +4,7 @@ import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewRequest;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewResponse;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewSummary;
 import com.toir.enums.MaintenanceScheduleScopeType;
+import com.toir.exception.GlobalExceptionHandler;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.maintanance.MaintenanceScheduleService;
 import java.util.List;
@@ -40,6 +41,7 @@ class MaintenanceScheduleControllerContractTest {
         UUID scopedDepartmentId = UUID.randomUUID();
         when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId))
                 .thenReturn(scopedDepartmentId);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(scopedDepartmentId);
         when(service.preview(any())).thenReturn(new MaintenanceSchedulePreviewResponse(
                 List.of(),
                 new MaintenanceSchedulePreviewSummary(0, 0, 0, 1)
@@ -69,5 +71,32 @@ class MaintenanceScheduleControllerContractTest {
         org.mockito.Mockito.verify(service).preview(captor.capture());
         assertThat(captor.getValue().departmentId()).isEqualTo(scopedDepartmentId);
         assertThat(captor.getValue().scopeType()).isEqualTo(MaintenanceScheduleScopeType.EQUIPMENT);
+    }
+
+    @Test
+    void previewDeniesNonAdminWithoutDepartmentScope() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(any())).thenReturn(UUID.randomUUID());
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(null);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                        new MaintenanceScheduleController(service, scopeAccessService)
+                )
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        mvc.perform(post("/api/v1/maintenance-schedule/preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fromDate": "2026-01-01",
+                                  "toDate": "2026-12-31",
+                                  "scopeType": "EQUIPMENT",
+                                  "equipmentIds": ["%s"],
+                                  "departmentId": "%s",
+                                  "anchorMode": "CURRENT"
+                                }
+                                """.formatted(equipmentId, UUID.randomUUID())))
+                .andExpect(status().isForbidden());
     }
 }

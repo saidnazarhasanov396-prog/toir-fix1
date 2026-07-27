@@ -1,6 +1,7 @@
 package com.toir.service.maintanance;
 
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
+import com.toir.dto.maintenanceplanning.MaintenanceDueStructuredExplanationDto;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewRequest;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentStatus;
@@ -9,12 +10,14 @@ import com.toir.enums.MaintenanceScheduleAnchorMode;
 import com.toir.enums.MaintenanceScheduleScopeType;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.PeriodicityUnit;
+import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.service.equipment.OperationalEquipmentPolicy;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +26,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -119,6 +123,92 @@ class MaintenanceScheduleServiceTest {
                 item.anchorSource().name().equals("EXISTING_DUE_DATE"));
     }
 
+    @Test
+    void explicitEquipmentScopeRejectsUnknownIdsInsteadOfReturningPartialPreview() {
+        UUID existingId = UUID.randomUUID();
+        UUID missingId = UUID.randomUUID();
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(existingId, missingId)))
+                .thenReturn(List.of(equipment(existingId, "EQ-1")));
+
+        assertThatThrownBy(() -> service.preview(new MaintenanceSchedulePreviewRequest(
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31),
+                MaintenanceScheduleScopeType.EQUIPMENT,
+                List.of(existingId, missingId),
+                null,
+                null,
+                MaintenanceScheduleAnchorMode.CURRENT
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains(missingId.toString()));
+    }
+
+    @Test
+    void departmentFilterUsesResponsibleDepartmentBeforePhysicalPlacement() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID responsibleDepartmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "EQ-1");
+        equipment.setResponsibleDepartmentId(responsibleDepartmentId);
+        equipment.setDepartmentId(UUID.randomUUID());
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment));
+        when(operationalEquipmentPolicy.isOperational(equipment)).thenReturn(true);
+        when(ruleResolver.resolveApplicable(equipmentId)).thenReturn(List.of());
+
+        var response = service.preview(new MaintenanceSchedulePreviewRequest(
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31),
+                MaintenanceScheduleScopeType.EQUIPMENT,
+                List.of(equipmentId),
+                null,
+                responsibleDepartmentId,
+                MaintenanceScheduleAnchorMode.CURRENT
+        ));
+
+        assertThat(response.summary().unmatchedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void missingMeterIsCountedWhenCalendarSignalWinsForAnyPolicy() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "EQ-1");
+        EquipmentMaintenanceEffectiveRule rule = rule(equipmentId, PeriodicityUnit.MONTH, 1);
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
+                .thenReturn(List.of(equipment));
+        when(operationalEquipmentPolicy.isOperational(equipment)).thenReturn(true);
+        when(ruleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(rule));
+        when(dueCalculationService.calculate(rule)).thenReturn(dueWithSupportingMissingMeter(
+                Instant.parse("2026-02-01T09:00:00Z")));
+
+        var response = service.preview(new MaintenanceSchedulePreviewRequest(
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 3, 31),
+                MaintenanceScheduleScopeType.EQUIPMENT,
+                List.of(equipmentId),
+                null,
+                null,
+                MaintenanceScheduleAnchorMode.CURRENT
+        ));
+
+        assertThat(response.summary().missingMetersCount()).isEqualTo(1);
+        assertThat(response.items()).hasSize(2);
+    }
+
+    @Test
+    void previewRejectsRangesLongerThanAnnualHorizon() {
+        assertThatThrownBy(() -> service.preview(new MaintenanceSchedulePreviewRequest(
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2036, 1, 1),
+                MaintenanceScheduleScopeType.EQUIPMENT,
+                List.of(UUID.randomUUID()),
+                null,
+                null,
+                MaintenanceScheduleAnchorMode.CURRENT
+        )))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("annual horizon"));
+    }
+
     private Equipment equipment(UUID id, String code) {
         Equipment equipment = new Equipment();
         equipment.setId(id);
@@ -177,6 +267,24 @@ class MaintenanceScheduleServiceTest {
                 null, null, null, null, false, false, null, nextCalendarDueAt,
                 nextCalendarDueAt, null, null, null, null, null, null, null,
                 null, null
+        );
+    }
+
+    private MaintenanceDueCalculationDto dueWithSupportingMissingMeter(Instant nextCalendarDueAt) {
+        MaintenanceDueStructuredExplanationDto explanation = new MaintenanceDueStructuredExplanationDto(
+                null, null, null, null, null, null, null,
+                null, null, 0, MaintenanceTriggerPolicy.ANY, null,
+                null, null, null,
+                "CALENDAR_UPCOMING",
+                "maintenanceDue.reasons.CALENDAR_UPCOMING",
+                Map.of(),
+                List.of("maintenanceDue.reasons.MISSING_ACTIVE_METER"),
+                List.of(Map.of())
+        );
+        return new MaintenanceDueCalculationDto(
+                null, null, null, null, false, false, null, nextCalendarDueAt,
+                nextCalendarDueAt, null, null, null, null, null, null, null,
+                null, null, explanation
         );
     }
 }

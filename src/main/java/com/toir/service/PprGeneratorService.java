@@ -77,7 +77,7 @@ public class PprGeneratorService {
             EnumSet.of(PlanStatus.APPROVED, PlanStatus.IN_PROGRESS);
     @Transactional
     public GenerationResult generateForPlan(UUID planId) {
-        PprPlan plan = planRepository.findByIdAndIsDeletedFalse(planId)
+        PprPlan plan = planRepository.findByIdAndIsDeletedFalseForUpdate(planId)
                 .orElseThrow(() -> RestException.notFound("PPR plan not found: " + planId));
         if (!PLAN_TASK_GENERATION_STATUSES.contains(plan.getStatus())) {
             log.info("PPR generation rejected: planId={} planCode={} status={} reason={}",
@@ -146,6 +146,14 @@ public class PprGeneratorService {
         int created = 0;
         int sequence = 1;
         for (MaintenanceSchedulePreviewItem item : schedule.items()) {
+            if (!targets.matchesRegulation(item.regulationId())) {
+                tracker.skip(SkipReason.SKIP_TARGET);
+                continue;
+            }
+            if (!isAllowedForPprType(plan, item.maintenanceKind())) {
+                tracker.skip(SkipReason.SKIP_SCHEDULE_TYPE);
+                continue;
+            }
             ScheduleTaskSignature signature = new ScheduleTaskSignature(
                     plan.getId(),
                     item.regulationId(),

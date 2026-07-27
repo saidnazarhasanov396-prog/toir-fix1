@@ -17,6 +17,9 @@ import org.springframework.stereotype.Repository;
 public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
     Optional<PprPlan> findByIdAndIsDeletedFalse(UUID id);
 
+    @Query(value = "SELECT * FROM ppr_plans WHERE id = :id AND is_deleted = false FOR UPDATE", nativeQuery = true)
+    Optional<PprPlan> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
+
     @Query(value = "SELECT * FROM ppr_plans WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<PprPlan> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 

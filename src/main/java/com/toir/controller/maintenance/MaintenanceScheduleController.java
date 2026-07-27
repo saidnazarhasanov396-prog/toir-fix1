@@ -6,8 +6,10 @@ import com.toir.security.ScopeAccessService;
 import com.toir.service.maintanance.MaintenanceScheduleService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,9 +39,18 @@ public class MaintenanceScheduleController {
                 request.scopeType(),
                 request.equipmentIds(),
                 request.equipmentTypeIds(),
-                scopeAccessService.enforceDepartmentScope(request.departmentId()),
+                scopedDepartment(request.departmentId()),
                 request.anchorMode()
         );
         return ResponseEntity.ok(service.preview(scopedRequest));
+    }
+
+    private UUID scopedDepartment(UUID requestedDepartmentId) {
+        UUID scopedDepartmentId = scopeAccessService.enforceDepartmentScope(requestedDepartmentId);
+        if (!scopeAccessService.isScopeAdmin()
+                && scopeAccessService.currentDepartmentIdOrNull() == null) {
+            throw new AccessDeniedException("Access denied by maintenance schedule department scope");
+        }
+        return scopedDepartmentId;
     }
 }

@@ -170,7 +170,7 @@ class PprGeneratorDynamicConditionTest {
         MaintenanceRegulation regulation = regulation(regulationId, typeId);
         EquipmentAttributeDefinition motorPower = definition(motorPowerDefinitionId, typeId, "motor_power");
 
-        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId)).thenReturn(Optional.of(plan));
         when(regulationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(regulation));
         when(equipmentMaintenanceRuleRepository.findAllActive()).thenReturn(List.of());
         when(conditionRepository.findAllByRegulationIdInAndIsDeletedFalse(List.of(regulationId))).thenReturn(conditions);
