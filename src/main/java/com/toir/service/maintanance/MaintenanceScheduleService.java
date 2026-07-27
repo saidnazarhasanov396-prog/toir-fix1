@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +39,7 @@ public class MaintenanceScheduleService {
     private final OperationalEquipmentPolicy operationalEquipmentPolicy;
     private final ZoneId zoneId;
 
+    @Autowired
     public MaintenanceScheduleService(
             EquipmentRepository equipmentRepository,
             EquipmentMaintenanceEffectiveRuleResolver ruleResolver,
