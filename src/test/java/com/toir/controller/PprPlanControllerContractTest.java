@@ -252,6 +252,21 @@ class PprPlanControllerContractTest {
     }
 
     @Test
+    void ordinaryWorkerGetsNotFoundForDraftPlanDetail() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        PprPlan draft = plan(planId, departmentId);
+        draft.setStatus(PlanStatus.DRAFT);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(draft));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/{id}", planId))
+                .andExpect(status().isNotFound());
+
+        verify(service, never()).findById(planId);
+    }
+
+    @Test
     void listWithoutPaginationReturnsAllPlansAndTaskCount() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();

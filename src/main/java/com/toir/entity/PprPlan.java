@@ -1,5 +1,6 @@
 package com.toir.entity;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.MaintenanceScheduleAnchorMode;
 import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprScopeType;
@@ -65,6 +66,10 @@ public class PprPlan extends ActorStampedEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "scope_type")
     private PprScopeType scopeType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "anchor_mode")
+    private MaintenanceScheduleAnchorMode anchorMode;
 
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
     @BatchSize(size = 50)

@@ -85,7 +85,9 @@ class PprPlanEndpointSecurityTest {
     void pprPlanReadAuthorityCanReadDetail() throws Exception {
         UUID id = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
-        when(pprPlanRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(planEntity(id, departmentId)));
+        PprPlan approvedPlan = planEntity(id, departmentId);
+        approvedPlan.setStatus(PlanStatus.APPROVED);
+        when(pprPlanRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(approvedPlan));
         when(pprPlanService.findById(id)).thenReturn(planDto(id));
 
         mockMvc.perform(get("/api/v1/ppr-plans/{id}", id))
@@ -115,6 +117,7 @@ class PprPlanEndpointSecurityTest {
     void systemAdminCanReadAndMutate() throws Exception {
         UUID id = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(pprPlanRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(planEntity(id, departmentId)));
         when(pprPlanService.findById(id)).thenReturn(planDto(id));
         when(pprPlanService.create(any())).thenReturn(planDto(UUID.randomUUID()));
@@ -142,6 +145,7 @@ class PprPlanEndpointSecurityTest {
     void wildcardAuthorityCanReadAndMutate() throws Exception {
         UUID id = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(pprPlanRepository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(planEntity(id, departmentId)));
         when(pprPlanService.findById(id)).thenReturn(planDto(id));
         when(pprPlanService.create(any())).thenReturn(planDto(UUID.randomUUID()));

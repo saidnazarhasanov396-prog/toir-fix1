@@ -11,6 +11,7 @@ import com.toir.dto.pprplanning.PprTaskStatsResponse;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
 import com.toir.enums.PprTaskStatus;
+import com.toir.enums.PlanStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
@@ -35,6 +36,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -89,12 +92,35 @@ public class PprPlanController {
             @RequestParam(required = false) Integer day,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) PlanStatus status,
+            @RequestParam(required = false) List<PlanStatus> statuses,
             @Parameter(description = "Optional page index. Must be provided together with size. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer page,
             @Parameter(description = "Optional page size. Must be provided together with page. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer size,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "asc") String sortDir) {
         UUID scopedDepartmentId = scopedDepartment(departmentId);
         boolean sortingRequested = sortBy != null && !sortBy.isBlank();
+        Set<PlanStatus> requestedStatuses = new LinkedHashSet<>();
+        if (status != null) {
+            requestedStatuses.add(status);
+        }
+        if (statuses != null) {
+            requestedStatuses.addAll(statuses);
+        }
+        if (!requestedStatuses.isEmpty()) {
+            if (page == null && size == null) {
+                return ResponseEntity.ok(service.findAllUnpaged(
+                        year, month, day, scopedDepartmentId, equipmentId,
+                        sortBy, sortDir, requestedStatuses));
+            }
+            if (page == null || size == null) {
+                throw RestException.badRequest(
+                        "Both page and size must be provided for paginated PPR plan list");
+            }
+            return ResponseEntity.ok(service.findAll(
+                    year, month, day, scopedDepartmentId, equipmentId,
+                    page, size, sortBy, sortDir, requestedStatuses));
+        }
         if (page == null && size == null) {
             if (equipmentId == null) {
                 if (!sortingRequested) {
@@ -138,10 +164,22 @@ public class PprPlanController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) PprTaskStatus status,
+            @RequestParam(required = false) List<PprTaskStatus> statuses,
             @RequestParam(defaultValue = "false") boolean overdue,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(service.findTasks(scopedDepartment(departmentId), equipmentId, status, overdue, page, size));
+        if (statuses != null && !statuses.isEmpty()) {
+            Set<PprTaskStatus> requestedStatuses = new LinkedHashSet<>();
+            if (status != null) {
+                requestedStatuses.add(status);
+            }
+            requestedStatuses.addAll(statuses);
+            return ResponseEntity.ok(service.findTasksByStatuses(
+                    scopedDepartment(departmentId), equipmentId,
+                    requestedStatuses, overdue, page, size));
+        }
+        return ResponseEntity.ok(service.findTasks(
+                scopedDepartment(departmentId), equipmentId, status, overdue, page, size));
     }
 
     @GetMapping("/tasks/stats")
@@ -285,6 +323,10 @@ public class PprPlanController {
     }
 
     private void assertCanAccessPlan(PprPlan plan) {
+        if ((plan.getStatus() == PlanStatus.DRAFT || plan.getStatus() == PlanStatus.GENERATED)
+                && !canViewUnapprovedPlans()) {
+            throw RestException.notFound("PPR plan not found: " + plan.getId());
+        }
         if (plan.getDepartmentId() == null) {
             if (!scopeAccessService.isScopeAdmin()) {
                 throw new AccessDeniedException("Access denied by PPR department scope");
@@ -292,6 +334,12 @@ public class PprPlanController {
             return;
         }
         scopeAccessService.assertCanAccessDepartment(plan.getDepartmentId());
+    }
+
+    private boolean canViewUnapprovedPlans() {
+        return scopeAccessService.isScopeAdmin()
+                || scopeAccessService.hasAuthority("PPR_PLAN_GENERATE")
+                || scopeAccessService.hasAuthority("PPR_PLAN_APPROVE");
     }
 
     private void assertCanAccessRequestedDepartment(UUID departmentId) {
@@ -337,7 +385,8 @@ public class PprPlanController {
                 request.scopeType(),
                 request.equipmentIds(),
                 request.equipmentTypeIds(),
-                request.regulationIds()
+                request.regulationIds(),
+                request.anchorMode()
         );
     }
 }

@@ -2,6 +2,7 @@ package com.toir.repository;
 
 import com.toir.entity.PprTask;
 import com.toir.enums.PprTaskStatus;
+import com.toir.enums.PlanStatus;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -160,6 +161,94 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
                 Set.of(PprTaskStatus.PLANNED, PprTaskStatus.APPROVED, PprTaskStatus.IN_PROGRESS)
         );
     }
+
+    @Query(value = """
+            select distinct t
+            from PprTask t
+            join fetch t.plan p
+            left join Equipment e on e.id = t.equipmentId and e.isDeleted = false
+            where t.isDeleted = false
+              and p.isDeleted = false
+              and p.status in :planStatuses
+              and t.status in :taskStatuses
+              and (:departmentId is null or e.departmentId = :departmentId)
+              and (:equipmentId is null or t.equipmentId = :equipmentId)
+              and (
+                    :overdue = false
+                    or t.status = :overdueStatus
+                    or (
+                        t.dueDate is not null
+                        and t.dueDate < :now
+                        and t.status in :dueDateOverdueStatuses
+                    )
+              )
+            order by t.scheduledStart desc, t.id asc
+            """,
+            countQuery = """
+            select count(distinct t.id)
+            from PprTask t
+            join t.plan p
+            left join Equipment e on e.id = t.equipmentId and e.isDeleted = false
+            where t.isDeleted = false
+              and p.isDeleted = false
+              and p.status in :planStatuses
+              and t.status in :taskStatuses
+              and (:departmentId is null or e.departmentId = :departmentId)
+              and (:equipmentId is null or t.equipmentId = :equipmentId)
+              and (
+                    :overdue = false
+                    or t.status = :overdueStatus
+                    or (
+                        t.dueDate is not null
+                        and t.dueDate < :now
+                        and t.status in :dueDateOverdueStatuses
+                    )
+              )
+            """)
+    Page<PprTask> searchVisibleTasks(
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("taskStatuses") Set<PprTaskStatus> taskStatuses,
+            @Param("planStatuses") Set<PlanStatus> planStatuses,
+            @Param("overdue") boolean overdue,
+            @Param("now") LocalDateTime now,
+            @Param("overdueStatus") PprTaskStatus overdueStatus,
+            @Param("dueDateOverdueStatuses") Set<PprTaskStatus> dueDateOverdueStatuses,
+            Pageable pageable
+    );
+
+    @Query("""
+            select distinct t
+            from PprTask t
+            join fetch t.plan p
+            left join Equipment e on e.id = t.equipmentId and e.isDeleted = false
+            where t.isDeleted = false
+              and p.isDeleted = false
+              and p.status in :planStatuses
+              and t.status in :taskStatuses
+              and (:departmentId is null or e.departmentId = :departmentId)
+              and (:equipmentId is null or t.equipmentId = :equipmentId)
+              and (
+                    :overdue = false
+                    or t.status = :overdueStatus
+                    or (
+                        t.dueDate is not null
+                        and t.dueDate < :now
+                        and t.status in :dueDateOverdueStatuses
+                    )
+              )
+            order by t.scheduledStart asc, t.id asc
+            """)
+    List<PprTask> searchVisibleTasks(
+            @Param("departmentId") UUID departmentId,
+            @Param("equipmentId") UUID equipmentId,
+            @Param("taskStatuses") Set<PprTaskStatus> taskStatuses,
+            @Param("planStatuses") Set<PlanStatus> planStatuses,
+            @Param("overdue") boolean overdue,
+            @Param("now") LocalDateTime now,
+            @Param("overdueStatus") PprTaskStatus overdueStatus,
+            @Param("dueDateOverdueStatuses") Set<PprTaskStatus> dueDateOverdueStatuses
+    );
 
     default List<PprTask> searchTasks(UUID departmentId,
                                       UUID equipmentId,

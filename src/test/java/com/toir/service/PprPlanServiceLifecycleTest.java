@@ -13,6 +13,7 @@ import com.toir.entity.equipment.EquipmentType;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.MaintenanceScheduleAnchorMode;
 import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprScopeType;
@@ -158,6 +159,62 @@ class PprPlanServiceLifecycleTest {
         assertThat(result.frequency()).isNull();
         assertThat(result.scopeType()).isEqualTo(PprScopeType.DEPARTMENT);
         assertThat(result.targets()).isEmpty();
+    }
+
+    @Test
+    void builderPlanRejectsNonCalendarSchedule() {
+        PprPlanRequest request = new PprPlanRequest(
+                "Annual builder",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31),
+                null,
+                PprScheduleType.OPERATING_HOURS,
+                null,
+                100L,
+                PprScopeType.DEPARTMENT,
+                List.of(UUID.randomUUID()),
+                null,
+                null,
+                MaintenanceScheduleAnchorMode.CURRENT
+        );
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("CALENDAR");
+                });
+        verify(planRepository, never()).saveAndFlush(any(PprPlan.class));
+    }
+
+    @Test
+    void builderPlanRejectsMixedEquipmentAndEquipmentTypeScopes() {
+        PprPlanRequest request = new PprPlanRequest(
+                "Annual builder",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31),
+                null,
+                PprScheduleType.CALENDAR,
+                null,
+                null,
+                PprScopeType.DEPARTMENT,
+                List.of(UUID.randomUUID()),
+                List.of(UUID.randomUUID()),
+                null,
+                MaintenanceScheduleAnchorMode.RESET_TO_PLAN_START
+        );
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(ex.getMessage()).contains("equipmentIds").contains("equipmentTypeIds");
+                });
+        verify(planRepository, never()).saveAndFlush(any(PprPlan.class));
     }
 
     @Test

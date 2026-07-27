@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.entity.PprTask;
 import com.toir.enums.PprTaskStatus;
+import com.toir.enums.PlanStatus;
 import com.toir.repository.PprTaskRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -27,6 +28,7 @@ public class PprTaskQueryService {
     );
 
     private final PprTaskRepository taskRepository;
+    private final PprPlanVisibilityPolicy visibilityPolicy;
     private Clock clock = Clock.systemDefaultZone();
 
     public Page<PprTask> findTasks(UUID departmentId,
@@ -34,6 +36,9 @@ public class PprTaskQueryService {
                                    PprTaskStatus status,
                                    boolean overdue,
                                    Pageable pageable) {
+        if (visibilityPolicy != null) {
+            return findTasksByStatuses(departmentId, equipmentId, taskStatuses(status), overdue, pageable);
+        }
         return taskRepository.searchTasks(
                 departmentId,
                 equipmentId,
@@ -46,10 +51,37 @@ public class PprTaskQueryService {
         );
     }
 
+    public Page<PprTask> findTasksByStatuses(UUID departmentId,
+                                   UUID equipmentId,
+                                   Set<PprTaskStatus> taskStatuses,
+                                   boolean overdue,
+                                   Pageable pageable) {
+        Set<PlanStatus> planStatuses = visibilityPolicy == null
+                ? EnumSet.allOf(PlanStatus.class)
+                : visibilityPolicy.visibleStatuses(Set.of());
+        if (planStatuses.isEmpty() || taskStatuses == null || taskStatuses.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        return taskRepository.searchVisibleTasks(
+                departmentId,
+                equipmentId,
+                taskStatuses,
+                planStatuses,
+                overdue,
+                now(),
+                OVERDUE_STATUS,
+                DUE_DATE_OVERDUE_STATUSES,
+                pageable
+        );
+    }
+
     public List<PprTask> findTasks(UUID departmentId,
                                    UUID equipmentId,
                                    PprTaskStatus status,
                                    boolean overdue) {
+        if (visibilityPolicy != null) {
+            return findTasksByStatuses(departmentId, equipmentId, taskStatuses(status), overdue);
+        }
         return taskRepository.searchTasks(
                 departmentId,
                 equipmentId,
@@ -61,7 +93,32 @@ public class PprTaskQueryService {
         );
     }
 
+    public List<PprTask> findTasksByStatuses(UUID departmentId,
+                                   UUID equipmentId,
+                                   Set<PprTaskStatus> taskStatuses,
+                                   boolean overdue) {
+        Set<PlanStatus> planStatuses = visibilityPolicy == null
+                ? EnumSet.allOf(PlanStatus.class)
+                : visibilityPolicy.visibleStatuses(Set.of());
+        if (planStatuses.isEmpty() || taskStatuses == null || taskStatuses.isEmpty()) {
+            return List.of();
+        }
+        return taskRepository.searchVisibleTasks(
+                departmentId,
+                equipmentId,
+                taskStatuses,
+                planStatuses,
+                overdue,
+                now(),
+                OVERDUE_STATUS,
+                DUE_DATE_OVERDUE_STATUSES
+        );
+    }
+
     public long countOverdueTasks(UUID departmentId, UUID equipmentId, PprTaskStatus status) {
+        if (visibilityPolicy != null) {
+            return findTasksByStatuses(departmentId, equipmentId, taskStatuses(status), true).size();
+        }
         return taskRepository.countTasks(
                 departmentId,
                 equipmentId,
@@ -71,6 +128,10 @@ public class PprTaskQueryService {
                 OVERDUE_STATUS,
                 DUE_DATE_OVERDUE_STATUSES
         );
+    }
+
+    private Set<PprTaskStatus> taskStatuses(PprTaskStatus status) {
+        return status == null ? EnumSet.allOf(PprTaskStatus.class) : EnumSet.of(status);
     }
 
     private LocalDateTime now() {
