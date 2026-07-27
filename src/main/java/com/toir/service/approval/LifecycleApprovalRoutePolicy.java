@@ -6,6 +6,7 @@ import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import org.springframework.stereotype.Component;
@@ -84,7 +85,13 @@ public final class LifecycleApprovalRoutePolicy {
                 .map(step -> new RouteStep(
                         step.getStepOrder(), step.getApproverId(), step.getApproverRole()))
                 .toList();
-        return validateOrdered(route, true);
+        ValidationResult structure = validateOrdered(route, true);
+        if (!structure.valid() || effectiveFlowType(template.getFlowType()) != ApprovalFlowType.PARALLEL_ALL) {
+            return structure;
+        }
+        return route.stream().allMatch(step -> step.approverId() != null && step.approverRole() == null)
+                ? structure
+                : ValidationResult.invalid(Reason.INVALID_ASSIGNMENT);
     }
 
     public ValidationResult validateRuntime(ApprovalRequest request) {
@@ -111,6 +118,18 @@ public final class LifecycleApprovalRoutePolicy {
         if (request.getStatus() != ApprovalStatus.PENDING) {
             return ValidationResult.invalid(Reason.REQUEST_STATUS_INCONSISTENT);
         }
+        if (effectiveFlowType(request.getFlowType()) == ApprovalFlowType.PARALLEL_ALL) {
+            ApprovalStep persisted = activeRuntimeSteps(request).stream()
+                    .filter(candidate -> representsPersistedStep(step, candidate))
+                    .findFirst()
+                    .orElse(null);
+            if (persisted == null
+                    || persisted.getApprovalRound() != request.getApprovalRound()
+                    || persisted.getDecision() != ApprovalDecision.PENDING) {
+                return ValidationResult.invalid(Reason.CURRENT_STEP_ONLY);
+            }
+            return validateDecisionActor(request, actor, outcome, assignmentSatisfied, runtime);
+        }
         ApprovalStep persistedCurrent = activeRuntimeSteps(request).get(request.getCurrentStep() - 1);
         if (step == null
                 || step.isDeleted()
@@ -118,22 +137,7 @@ public final class LifecycleApprovalRoutePolicy {
                 || !representsPersistedStep(step, persistedCurrent)) {
             return ValidationResult.invalid(Reason.CURRENT_STEP_ONLY);
         }
-        if (outcome != ApprovalDecision.APPROVED && outcome != ApprovalDecision.REJECTED) {
-            return ValidationResult.invalid(Reason.REQUEST_STATUS_INCONSISTENT);
-        }
-        if (actor == null) {
-            return ValidationResult.invalid(Reason.DECISION_ACTOR_MISSING);
-        }
-        if (!assignmentSatisfied) {
-            return ValidationResult.invalid(Reason.ACTOR_INELIGIBLE);
-        }
-        if (Objects.equals(actor, request.getRequesterId())) {
-            return ValidationResult.invalid(Reason.REQUESTER_DECISION);
-        }
-        if (outcome == ApprovalDecision.APPROVED && approvedActors(request).contains(actor)) {
-            return ValidationResult.invalid(Reason.REPEATED_APPROVING_ACTOR);
-        }
-        return ValidationResult.valid(runtime.orderedSteps());
+        return validateDecisionActor(request, actor, outcome, assignmentSatisfied, runtime);
     }
 
     public ValidationResult validateCompletion(ApprovalRequest request) {
@@ -148,6 +152,20 @@ public final class LifecycleApprovalRoutePolicy {
         ValidationResult structure = validateOrdered(route, false);
         if (!structure.valid()) {
             return structure;
+        }
+        if (effectiveFlowType(request.getFlowType()) == ApprovalFlowType.PARALLEL_ALL) {
+            if (steps.stream().anyMatch(step -> step.getDecision() != ApprovalDecision.APPROVED)) {
+                return ValidationResult.invalid(Reason.RUNTIME_INCOMPLETE);
+            }
+            ValidationResult evidence = validateApprovedDecisionEvidence(request, steps);
+            if (!evidence.valid()) {
+                return evidence;
+            }
+            if (request.getStatus() != ApprovalStatus.PENDING
+                    && request.getStatus() != ApprovalStatus.APPROVED) {
+                return ValidationResult.invalid(Reason.REQUEST_STATUS_INCONSISTENT);
+            }
+            return ValidationResult.valid(structure.orderedSteps());
         }
         if (request.getCurrentStep() != steps.size()) {
             return ValidationResult.invalid(Reason.CURRENT_STEP_INVALID);
@@ -254,6 +272,10 @@ public final class LifecycleApprovalRoutePolicy {
             return decisionEvidence;
         }
 
+        if (effectiveFlowType(request.getFlowType()) == ApprovalFlowType.PARALLEL_ALL) {
+            return validateParallelRuntimeState(request, steps, route);
+        }
+
         if (status == ApprovalStatus.APPROVED) {
             if (request.getCurrentStep() != steps.size()) {
                 return ValidationResult.invalid(Reason.CURRENT_STEP_INVALID);
@@ -296,6 +318,57 @@ public final class LifecycleApprovalRoutePolicy {
             }
         }
         return ValidationResult.valid(route);
+    }
+
+    private ValidationResult validateParallelRuntimeState(ApprovalRequest request,
+                                                            List<ApprovalStep> steps,
+                                                            List<RouteStep> route) {
+        if (request.getCurrentStep() != 0
+                || steps.stream().anyMatch(step -> step.getApprovalRound() != request.getApprovalRound())) {
+            return ValidationResult.invalid(Reason.CURRENT_STEP_INVALID);
+        }
+        return switch (request.getStatus()) {
+            case PENDING -> steps.stream().anyMatch(step -> step.getDecision() == ApprovalDecision.PENDING)
+                    && steps.stream().noneMatch(step -> step.getDecision() == ApprovalDecision.REJECTED
+                    || step.getDecision() == ApprovalDecision.CANCELLED)
+                    ? ValidationResult.valid(route)
+                    : ValidationResult.invalid(Reason.REQUEST_STATUS_INCONSISTENT);
+            case APPROVED -> steps.stream().allMatch(step -> step.getDecision() == ApprovalDecision.APPROVED)
+                    ? ValidationResult.valid(route)
+                    : ValidationResult.invalid(Reason.REQUEST_STATUS_INCONSISTENT);
+            case REJECTED -> steps.stream().anyMatch(step -> step.getDecision() == ApprovalDecision.REJECTED)
+                    && steps.stream().noneMatch(step -> step.getDecision() == ApprovalDecision.PENDING)
+                    && steps.stream().allMatch(step -> step.getDecision() == ApprovalDecision.APPROVED
+                    || step.getDecision() == ApprovalDecision.REJECTED
+                    || step.getDecision() == ApprovalDecision.CANCELLED)
+                    ? ValidationResult.valid(route)
+                    : ValidationResult.invalid(Reason.REQUEST_STATUS_INCONSISTENT);
+            case CANCELLED -> ValidationResult.valid(route);
+            default -> ValidationResult.invalid(Reason.REQUEST_STATUS_INCONSISTENT);
+        };
+    }
+
+    private ValidationResult validateDecisionActor(ApprovalRequest request,
+                                                     UUID actor,
+                                                     ApprovalDecision outcome,
+                                                     boolean assignmentSatisfied,
+                                                     ValidationResult runtime) {
+        if (outcome != ApprovalDecision.APPROVED && outcome != ApprovalDecision.REJECTED) {
+            return ValidationResult.invalid(Reason.REQUEST_STATUS_INCONSISTENT);
+        }
+        if (actor == null) {
+            return ValidationResult.invalid(Reason.DECISION_ACTOR_MISSING);
+        }
+        if (!assignmentSatisfied) {
+            return ValidationResult.invalid(Reason.ACTOR_INELIGIBLE);
+        }
+        if (Objects.equals(actor, request.getRequesterId())) {
+            return ValidationResult.invalid(Reason.REQUESTER_DECISION);
+        }
+        if (outcome == ApprovalDecision.APPROVED && approvedActors(request).contains(actor)) {
+            return ValidationResult.invalid(Reason.REPEATED_APPROVING_ACTOR);
+        }
+        return ValidationResult.valid(runtime.orderedSteps());
     }
 
     private ValidationResult validateApprovedDecisionEvidence(ApprovalRequest request,
@@ -359,6 +432,10 @@ public final class LifecycleApprovalRoutePolicy {
 
     private static ApprovalActionType effectiveAction(ApprovalActionType action) {
         return action == null ? ApprovalActionType.APPROVE : action;
+    }
+
+    private static ApprovalFlowType effectiveFlowType(ApprovalFlowType flowType) {
+        return flowType == null ? ApprovalFlowType.SEQUENTIAL : flowType;
     }
 
     private static String normalizeRole(String role) {
