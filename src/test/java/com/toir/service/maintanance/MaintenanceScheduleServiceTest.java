@@ -11,8 +11,6 @@ import com.toir.enums.MaintenanceScheduleScopeType;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.exception.RestException;
-import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.service.equipment.OperationalEquipmentPolicy;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -27,13 +25,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class MaintenanceScheduleServiceTest {
-
-    @Mock
-    EquipmentRepository equipmentRepository;
 
     @Mock
     EquipmentMaintenanceEffectiveRuleResolver ruleResolver;
@@ -42,17 +38,16 @@ class MaintenanceScheduleServiceTest {
     MaintenanceDueCalculationService dueCalculationService;
 
     @Mock
-    OperationalEquipmentPolicy operationalEquipmentPolicy;
+    MaintenanceScheduleEligibilitySelector eligibilitySelector;
 
     MaintenanceScheduleService service;
 
     @BeforeEach
     void setUp() {
         service = new MaintenanceScheduleService(
-                equipmentRepository,
                 ruleResolver,
                 dueCalculationService,
-                operationalEquipmentPolicy,
+                eligibilitySelector,
                 ZoneId.of("UTC")
         );
     }
@@ -62,9 +57,7 @@ class MaintenanceScheduleServiceTest {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "EQ-1");
         EquipmentMaintenanceEffectiveRule rule = rule(equipmentId, PeriodicityUnit.MONTH, 1);
-        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
-                .thenReturn(List.of(equipment));
-        when(operationalEquipmentPolicy.isOperational(equipment)).thenReturn(true);
+        when(eligibilitySelector.selectForPreview(any())).thenReturn(List.of(equipment));
         when(ruleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(rule));
         when(dueCalculationService.calculate(rule)).thenReturn(due(null));
 
@@ -97,9 +90,7 @@ class MaintenanceScheduleServiceTest {
         Equipment equipment = equipment(equipmentId, "EQ-1");
         EquipmentMaintenanceEffectiveRule rule = rule(equipmentId, PeriodicityUnit.MONTH, 1);
         Instant existingDue = Instant.parse("2025-11-15T09:00:00Z");
-        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
-                .thenReturn(List.of(equipment));
-        when(operationalEquipmentPolicy.isOperational(equipment)).thenReturn(true);
+        when(eligibilitySelector.selectForPreview(any())).thenReturn(List.of(equipment));
         when(ruleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(rule));
         when(dueCalculationService.calculate(rule)).thenReturn(due(existingDue));
 
@@ -127,8 +118,9 @@ class MaintenanceScheduleServiceTest {
     void explicitEquipmentScopeRejectsUnknownIdsInsteadOfReturningPartialPreview() {
         UUID existingId = UUID.randomUUID();
         UUID missingId = UUID.randomUUID();
-        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(existingId, missingId)))
-                .thenReturn(List.of(equipment(existingId, "EQ-1")));
+        when(eligibilitySelector.selectForPreview(any())).thenThrow(
+                RestException.badRequest("Equipment not found: " + missingId)
+        );
 
         assertThatThrownBy(() -> service.preview(new MaintenanceSchedulePreviewRequest(
                 LocalDate.of(2026, 1, 1),
@@ -150,9 +142,7 @@ class MaintenanceScheduleServiceTest {
         Equipment equipment = equipment(equipmentId, "EQ-1");
         equipment.setResponsibleDepartmentId(responsibleDepartmentId);
         equipment.setDepartmentId(UUID.randomUUID());
-        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
-                .thenReturn(List.of(equipment));
-        when(operationalEquipmentPolicy.isOperational(equipment)).thenReturn(true);
+        when(eligibilitySelector.selectForPreview(any())).thenReturn(List.of(equipment));
         when(ruleResolver.resolveApplicable(equipmentId)).thenReturn(List.of());
 
         var response = service.preview(new MaintenanceSchedulePreviewRequest(
@@ -173,9 +163,7 @@ class MaintenanceScheduleServiceTest {
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, "EQ-1");
         EquipmentMaintenanceEffectiveRule rule = rule(equipmentId, PeriodicityUnit.MONTH, 1);
-        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(List.of(equipmentId)))
-                .thenReturn(List.of(equipment));
-        when(operationalEquipmentPolicy.isOperational(equipment)).thenReturn(true);
+        when(eligibilitySelector.selectForPreview(any())).thenReturn(List.of(equipment));
         when(ruleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(rule));
         when(dueCalculationService.calculate(rule)).thenReturn(dueWithSupportingMissingMeter(
                 Instant.parse("2026-02-01T09:00:00Z")));
