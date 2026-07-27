@@ -34,4 +34,17 @@ public interface ApprovalStepRepository extends JpaRepository<ApprovalStep, UUID
 
     @Query(value = "SELECT * FROM approval_steps WHERE approver_id = :approverId AND decision = :decision AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<ApprovalStep> findAllByApproverIdAndDecisionAndIsDeletedFalse(@Param("approverId") UUID approverId, @Param("decision") ApprovalDecision decision);
+
+    @Query(value = """
+            SELECT *
+            FROM approval_steps
+            WHERE request_id = cast(:requestId as uuid)
+              AND approval_round = :approvalRound
+              AND is_deleted = false
+            ORDER BY step_number ASC
+            """, nativeQuery = true)
+    List<ApprovalStep> findAllByRequestAndRound(
+            @Param("requestId") UUID requestId,
+            @Param("approvalRound") int approvalRound
+    );
 }

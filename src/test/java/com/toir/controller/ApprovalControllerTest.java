@@ -207,6 +207,20 @@ class ApprovalControllerTest {
                 .andExpect(jsonPath("$.canCancel").value(false));
     }
 
+    @Test
+    void myTasksReturnsPagedPrincipalWorklist() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        ApprovalRequestDto response = response(approvalId, UUID.randomUUID(), UUID.randomUUID());
+        when(service.myTasks()).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/v1/approvals/my-tasks?page=0&size=10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(approvalId.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1));
+
+        verify(service).myTasks();
+    }
+
     private ApprovalRequestDto response(UUID id, UUID requesterId, UUID targetId) {
         ApprovalRequest approval = new ApprovalRequest();
         ReflectionTestUtils.setField(approval, "id", id);

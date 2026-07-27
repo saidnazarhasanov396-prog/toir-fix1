@@ -1,6 +1,7 @@
 package com.toir.entity;
 
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
 import jakarta.persistence.*;
@@ -22,6 +23,19 @@ import java.util.UUID;
 @NoArgsConstructor
 @Builder
 public class ApprovalRequest extends BaseEntity {
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "flow_type", nullable = false)
+    private ApprovalFlowType flowType = ApprovalFlowType.SEQUENTIAL;
+
+    @Column(name = "approval_round", nullable = false)
+    private int approvalRound = 1;
+
+    @Column(name = "template_id")
+    private UUID templateId;
+
+    @Column(name = "template_version")
+    private Long templateVersion;
 
     @Column(name = "document_type", nullable = false)
     private String documentType;

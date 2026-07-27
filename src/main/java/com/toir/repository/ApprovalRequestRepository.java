@@ -124,6 +124,20 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
     long countEscalated();
 
     @Query(value = """
+            SELECT COALESCE(MAX(approval_round), 0)
+            FROM approval_requests
+            WHERE is_deleted = false
+              AND COALESCE(target_type, document_type) = :targetType
+              AND COALESCE(target_id, document_id) = cast(:targetId as uuid)
+              AND COALESCE(action_type, 'APPROVE') = :actionType
+            """, nativeQuery = true)
+    Integer findMaxApprovalRound(
+            @Param("targetType") String targetType,
+            @Param("targetId") UUID targetId,
+            @Param("actionType") String actionType
+    );
+
+    @Query(value = """
             SELECT *
             FROM approval_requests
             WHERE is_deleted = false

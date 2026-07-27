@@ -5,8 +5,10 @@ import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.UserStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.repository.users.UserRepository;
@@ -41,6 +43,99 @@ class ApprovalRuleServiceTest {
             userRepository,
             new LifecycleApprovalRoutePolicy()
     );
+
+    @Test
+    void parallelAllPersistsUniqueActiveExplicitUsers() {
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        User first = User.builder().id(firstId).fullName("First User").status(UserStatus.ACTIVE).build();
+        User second = User.builder().id(secondId).fullName("Second User").status(UserStatus.ACTIVE).build();
+        when(userRepository.findAllByIdInAndIsDeletedFalse(java.util.Set.of(firstId, secondId)))
+                .thenReturn(List.of(first, second));
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE)).thenReturn(Optional.empty());
+        when(templateRepository.findByCode("WORK_ORDER_APPROVE")).thenReturn(Optional.empty());
+        when(templateRepository.findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
+                ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE)).thenReturn(List.of());
+        when(templateRepository.saveAndFlush(any(ApprovalTemplate.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ApprovalRuleDto saved = service.saveRule(parallelRule(firstId, secondId));
+
+        assertThat(saved.flowType()).isEqualTo(ApprovalFlowType.PARALLEL_ALL);
+        assertThat(saved.steps()).extracting(ApprovalRuleDto.Step::approverId)
+                .containsExactly(firstId, secondId);
+    }
+
+    @Test
+    void parallelAllRejectsDuplicateUsers() {
+        UUID userId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.saveRule(parallelRule(userId, userId)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("PARALLEL_APPROVERS_MUST_BE_UNIQUE");
+    }
+
+    @Test
+    void parallelAllRejectsInactiveUser() {
+        UUID userId = UUID.randomUUID();
+        User inactive = User.builder().id(userId).fullName("Inactive").status(UserStatus.INACTIVE).build();
+        when(userRepository.findAllByIdInAndIsDeletedFalse(java.util.Set.of(userId)))
+                .thenReturn(List.of(inactive));
+
+        assertThatThrownBy(() -> service.saveRule(parallelRule(userId)))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("PARALLEL_APPROVER_NOT_ACTIVE");
+    }
+
+    @Test
+    void parallelAllRejectsRoleAssignment() {
+        ApprovalRuleDto invalid = new ApprovalRuleDto(
+                null,
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE,
+                "Parallel",
+                1,
+                List.of(roleStep(1, "MANAGER")),
+                true,
+                ApprovalFlowType.PARALLEL_ALL,
+                null);
+
+        assertThatThrownBy(() -> service.saveRule(invalid))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("PARALLEL_APPROVERS_MUST_BE_USERS");
+    }
+
+    @Test
+    void updateRejectsStaleTemplateVersion() {
+        UUID templateId = UUID.randomUUID();
+        ApprovalTemplate template = template(
+                "WORK_ORDER_APPROVE",
+                "Work Order",
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE
+        );
+        ReflectionTestUtils.setField(template, "id", templateId);
+        ReflectionTestUtils.setField(template, "version", 7L);
+        when(templateRepository.findByIdAndIsDeletedFalse(templateId)).thenReturn(Optional.of(template));
+
+        ApprovalRuleDto stale = new ApprovalRuleDto(
+                templateId,
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE,
+                "Work Order",
+                1,
+                List.of(roleStep(1, "MANAGER")),
+                true,
+                ApprovalFlowType.SEQUENTIAL,
+                6L
+        );
+
+        assertThatThrownBy(() -> service.updateRule(templateId, stale))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("APPROVAL_TEMPLATE_VERSION_CONFLICT");
+        verify(templateRepository, never()).saveAndFlush(any(ApprovalTemplate.class));
+    }
 
     @Test
     void returnsTemplateRulesWithRoleAndUserStepsAndCorrectCount() {
@@ -570,6 +665,22 @@ class ApprovalRuleServiceTest {
                 steps,
                 active
         );
+    }
+
+    private ApprovalRuleDto parallelRule(UUID... userIds) {
+        List<ApprovalRuleDto.Step> steps = java.util.stream.IntStream.range(0, userIds.length)
+                .mapToObj(index -> userStep(index + 1, userIds[index]))
+                .toList();
+        return new ApprovalRuleDto(
+                null,
+                ApprovalTargetType.WORK_ORDER,
+                ApprovalActionType.APPROVE,
+                "Parallel",
+                steps.size(),
+                steps,
+                true,
+                ApprovalFlowType.PARALLEL_ALL,
+                null);
     }
 
     private ApprovalRuleDto.Step roleStep(int order, String role) {

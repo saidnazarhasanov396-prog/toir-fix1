@@ -11,6 +11,10 @@ import java.util.Optional;
 public interface ApprovalRouteResolver {
     List<CreateApprovalRequest.StepInput> resolveRoute(ApprovalRequest request);
 
+    default ApprovalRouteSnapshot resolveRouteSnapshot(ApprovalRequest request) {
+        return ApprovalRouteSnapshot.sequential(resolveRoute(request));
+    }
+
     LifecycleRouteResolution resolveLifecycleRoute(
             ApprovalTargetType targetType,
             ApprovalActionType actionType);

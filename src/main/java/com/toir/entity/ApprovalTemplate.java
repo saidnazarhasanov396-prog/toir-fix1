@@ -1,6 +1,7 @@
 package com.toir.entity;
 
 import com.toir.enums.ApprovalRoutePolicy;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.NotificationSeverity;
@@ -13,6 +14,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -24,6 +26,14 @@ import java.util.List;
 @Getter
 @Setter
 public class ApprovalTemplate extends BaseEntity {
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "flow_type", nullable = false)
+    private ApprovalFlowType flowType = ApprovalFlowType.SEQUENTIAL;
 
     @Column(nullable = false, unique = true)
     private String code;
