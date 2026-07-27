@@ -348,7 +348,7 @@ class PprPbacScopeTest {
         plan.setName("May PPR");
         plan.setStartDate(LocalDate.of(2026, 5, 1));
         plan.setEndDate(LocalDate.of(2026, 5, 31));
-        plan.setStatus(PlanStatus.DRAFT);
+        plan.setStatus(PlanStatus.APPROVED);
         plan.setDepartmentId(departmentId);
         plan.setCreatedById(UUID.randomUUID());
         return plan;
@@ -376,7 +376,7 @@ class PprPbacScopeTest {
                 id,
                 "PPR-2026-0001",
                 "May PPR",
-                PlanStatus.DRAFT,
+                PlanStatus.APPROVED,
                 departmentId,
                 "Maintenance",
                 UUID.randomUUID(),

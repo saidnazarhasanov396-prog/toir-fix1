@@ -1,6 +1,7 @@
 package com.toir.dto.pprplanning;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.toir.enums.MaintenanceScheduleAnchorMode;
 import com.toir.enums.PlanStatus;
 import com.toir.entity.PprPlan;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
@@ -39,8 +40,37 @@ public record PprPlanDto(
         PprScopeType scopeType,
         List<PprPlanTargetDto> targets,
         String generationMessage,
-        PprGeneratorService.GenerationDiagnostics generationDiagnostics
+        PprGeneratorService.GenerationDiagnostics generationDiagnostics,
+        MaintenanceScheduleAnchorMode anchorMode
 ) {
+    public PprPlanDto(
+            UUID id,
+            String code,
+            String name,
+            PlanStatus status,
+            UUID departmentId,
+            String departmentName,
+            UUID createdById,
+            UUID approvedById,
+            String notes,
+            List<PprTaskDto> tasks,
+            long taskCount,
+            LocalDate fromDate,
+            LocalDate toDate,
+            PprType pprType,
+            PprScheduleType scheduleType,
+            PprFrequency frequency,
+            Long intervalHours,
+            PprScopeType scopeType,
+            List<PprPlanTargetDto> targets,
+            String generationMessage,
+            PprGeneratorService.GenerationDiagnostics generationDiagnostics
+    ) {
+        this(id, code, name, status, departmentId, departmentName, createdById, approvedById,
+                notes, tasks, taskCount, fromDate, toDate, pprType, scheduleType, frequency,
+                intervalHours, scopeType, targets, generationMessage, generationDiagnostics, null);
+    }
+
     public PprPlanDto(
             UUID id,
             String code,
@@ -197,7 +227,8 @@ public record PprPlanDto(
                         ))
                         .toList(),
                 null,
-                null
+                null,
+                p.getAnchorMode()
         );
     }
 
@@ -223,7 +254,8 @@ public record PprPlanDto(
                 scopeType,
                 targets,
                 message,
-                generationDiagnostics
+                generationDiagnostics,
+                anchorMode
         );
     }
 
@@ -249,7 +281,8 @@ public record PprPlanDto(
                 scopeType,
                 targets,
                 generationMessage,
-                diagnostics
+                diagnostics,
+                anchorMode
         );
     }
 
