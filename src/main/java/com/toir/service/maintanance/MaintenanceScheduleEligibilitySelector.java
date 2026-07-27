@@ -3,10 +3,7 @@ package com.toir.service.maintanance;
 import com.toir.dto.maintenanceschedule.MaintenanceScheduleOption;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewRequest;
 import com.toir.entity.equipment.Equipment;
-import com.toir.entity.equipment.EquipmentCommissioningAct;
 import com.toir.entity.equipment.EquipmentType;
-import com.toir.enums.EquipmentCommissioningStatus;
-import com.toir.enums.EquipmentLocationType;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceScheduleScopeType;
 import com.toir.exception.RestException;
@@ -14,13 +11,11 @@ import com.toir.repository.equipment.EquipmentRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Tuple;
 import jakarta.persistence.TypedQuery;
-import jakarta.persistence.criteria.CommonAbstractCriteria;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
-import jakarta.persistence.criteria.Subquery;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -77,9 +72,7 @@ public class MaintenanceScheduleEligibilitySelector {
         CriteriaBuilder builder = entityManager.getCriteriaBuilder();
         CriteriaQuery<Equipment> query = builder.createQuery(Equipment.class);
         Root<Equipment> equipment = query.from(Equipment.class);
-        List<Predicate> predicates = eligibilityPredicates(
-                builder, query, equipment, departmentId
-        );
+        List<Predicate> predicates = eligibilityPredicates(builder, equipment, departmentId);
         addEquipmentSearch(builder, predicates, equipment, search);
         query.select(equipment)
                 .where(predicates.toArray(Predicate[]::new))
@@ -98,7 +91,7 @@ public class MaintenanceScheduleEligibilitySelector {
         CriteriaQuery<Long> countQuery = builder.createQuery(Long.class);
         Root<Equipment> countEquipment = countQuery.from(Equipment.class);
         List<Predicate> countPredicates = eligibilityPredicates(
-                builder, countQuery, countEquipment, departmentId
+                builder, countEquipment, departmentId
         );
         addEquipmentSearch(builder, countPredicates, countEquipment, search);
         countQuery.select(builder.count(countEquipment))
@@ -117,7 +110,7 @@ public class MaintenanceScheduleEligibilitySelector {
         Root<EquipmentType> type = query.from(EquipmentType.class);
         Root<Equipment> equipment = query.from(Equipment.class);
         List<Predicate> predicates = typeOptionPredicates(
-                builder, query, type, equipment, departmentId, search
+                builder, type, equipment, departmentId, search
         );
         query.multiselect(
                         type.get("id").alias("id"),
@@ -148,7 +141,6 @@ public class MaintenanceScheduleEligibilitySelector {
         Root<Equipment> countEquipment = countQuery.from(Equipment.class);
         List<Predicate> countPredicates = typeOptionPredicates(
                 builder,
-                countQuery,
                 countType,
                 countEquipment,
                 departmentId,
@@ -168,9 +160,7 @@ public class MaintenanceScheduleEligibilitySelector {
         CriteriaBuilder builder = entityManager.getCriteriaBuilder();
         CriteriaQuery<Equipment> query = builder.createQuery(Equipment.class);
         Root<Equipment> equipment = query.from(Equipment.class);
-        List<Predicate> predicates = eligibilityPredicates(
-                builder, query, equipment, departmentId
-        );
+        List<Predicate> predicates = eligibilityPredicates(builder, equipment, departmentId);
         if (equipmentIds != null) {
             predicates.add(equipment.get("id").in(equipmentIds));
         }
@@ -185,15 +175,12 @@ public class MaintenanceScheduleEligibilitySelector {
 
     private List<Predicate> typeOptionPredicates(
             CriteriaBuilder builder,
-            CommonAbstractCriteria query,
             Root<EquipmentType> type,
             Root<Equipment> equipment,
             UUID departmentId,
             String search
     ) {
-        List<Predicate> predicates = eligibilityPredicates(
-                builder, query, equipment, departmentId
-        );
+        List<Predicate> predicates = eligibilityPredicates(builder, equipment, departmentId);
         predicates.add(builder.isFalse(type.get("isDeleted")));
         predicates.add(builder.equal(equipment.get("equipmentTypeId"), type.get("id")));
         String pattern = searchPattern(search);
@@ -208,17 +195,12 @@ public class MaintenanceScheduleEligibilitySelector {
 
     private List<Predicate> eligibilityPredicates(
             CriteriaBuilder builder,
-            CommonAbstractCriteria query,
             Root<Equipment> equipment,
             UUID departmentId
     ) {
         List<Predicate> predicates = new ArrayList<>();
         predicates.add(builder.isFalse(equipment.get("isDeleted")));
         predicates.add(builder.equal(equipment.get("status"), EquipmentStatus.ACTIVE));
-        predicates.add(builder.equal(
-                equipment.get("currentLocationType"), EquipmentLocationType.DEPARTMENT
-        ));
-        predicates.add(builder.isNotNull(equipment.get("operationStartDate")));
         if (departmentId != null) {
             predicates.add(builder.equal(
                     builder.coalesce(
@@ -228,17 +210,6 @@ public class MaintenanceScheduleEligibilitySelector {
                     departmentId
             ));
         }
-
-        Subquery<Integer> approvedAct = query.subquery(Integer.class);
-        Root<EquipmentCommissioningAct> act = approvedAct.from(
-                EquipmentCommissioningAct.class
-        );
-        approvedAct.select(builder.literal(1)).where(
-                builder.equal(act.get("equipmentId"), equipment.get("id")),
-                builder.isFalse(act.get("isDeleted")),
-                builder.equal(act.get("status"), EquipmentCommissioningStatus.APPROVED)
-        );
-        predicates.add(builder.exists(approvedAct));
         return predicates;
     }
 
