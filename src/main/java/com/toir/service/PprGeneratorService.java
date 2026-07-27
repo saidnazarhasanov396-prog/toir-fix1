@@ -10,6 +10,9 @@ import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.MaintenanceRegulationAttributeCondition;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
+import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewItem;
+import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewRequest;
+import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewResponse;
 import com.toir.enums.*;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
@@ -22,6 +25,7 @@ import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRe
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.service.maintanance.MaintenanceDueCalculationService;
+import com.toir.service.maintanance.MaintenanceScheduleService;
 import com.toir.service.equipment.OperationalEquipmentPolicy;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -66,6 +70,7 @@ public class PprGeneratorService {
     private final WorkOrderNumberService workOrderNumberService;
     private final MaintenanceDueCalculationService maintenanceDueCalculationService;
     private final OperationalEquipmentPolicy operationalEquipmentPolicy;
+    private final MaintenanceScheduleService maintenanceScheduleService;
     private static final Set<PlanStatus> PLAN_TASK_GENERATION_STATUSES =
             EnumSet.of(PlanStatus.DRAFT, PlanStatus.GENERATED);
     private static final Set<PlanStatus> PLAN_WORK_ORDER_GENERATION_STATUSES =
@@ -87,7 +92,139 @@ public class PprGeneratorService {
                     plan.getId(), plan.getCode(), planStart, planEnd, "SKIP_MISSING_DATE");
             throw RestException.badRequest("PPR plan date range is required before generating tasks");
         }
+        if (plan.getAnchorMode() != null) {
+            return generateScheduleBuilderPlan(plan, planStart, planEnd);
+        }
         return generateForPlanFixed(plan, planStart, planEnd);
+    }
+
+    private GenerationResult generateScheduleBuilderPlan(PprPlan plan, LocalDate planStart, LocalDate planEnd) {
+        TargetContext targets = targetContext(plan);
+        MaintenanceScheduleScopeType scopeType;
+        List<UUID> equipmentIds = null;
+        List<UUID> equipmentTypeIds = null;
+        if (!targets.equipmentIds().isEmpty()) {
+            scopeType = MaintenanceScheduleScopeType.EQUIPMENT;
+            equipmentIds = targets.equipmentIds().stream().sorted().toList();
+        } else if (!targets.equipmentTypeIds().isEmpty()) {
+            scopeType = MaintenanceScheduleScopeType.EQUIPMENT_TYPE;
+            equipmentTypeIds = targets.equipmentTypeIds().stream().sorted().toList();
+        } else {
+            throw RestException.badRequest(
+                    "Maintenance schedule plan requires equipment or equipment type targets");
+        }
+
+        MaintenanceSchedulePreviewResponse schedule = maintenanceScheduleService.preview(
+                new MaintenanceSchedulePreviewRequest(
+                        planStart,
+                        planEnd,
+                        scopeType,
+                        equipmentIds,
+                        equipmentTypeIds,
+                        plan.getDepartmentId(),
+                        plan.getAnchorMode()
+                )
+        );
+        GenerationTracker tracker = new GenerationTracker(generationPlanFields(plan));
+        tracker.candidateCounts(new GenerationCandidateCounts(
+                0,
+                0,
+                schedule.summary().equipmentCount(),
+                schedule.summary().equipmentCount()
+        ));
+
+        List<PprTask> existingTasks = taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        Set<String> existingCodes = existingTasks.stream()
+                .map(PprTask::getCode)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
+        Set<ScheduleTaskSignature> existingSignatures = existingTasks.stream()
+                .map(PprGeneratorService::scheduleTaskSignature)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
+
+        int created = 0;
+        int sequence = 1;
+        for (MaintenanceSchedulePreviewItem item : schedule.items()) {
+            ScheduleTaskSignature signature = new ScheduleTaskSignature(
+                    plan.getId(),
+                    item.regulationId(),
+                    item.equipmentMaintenanceRuleId(),
+                    item.equipmentId(),
+                    item.plannedDate()
+            );
+            if (existingSignatures.contains(signature)) {
+                tracker.skip(SkipReason.SKIP_DUPLICATE_SIGNATURE);
+                continue;
+            }
+            String sourceCode = item.regulationId() != null
+                    ? item.regulationId().toString().substring(0, 8)
+                    : item.equipmentMaintenanceRuleId().toString().substring(0, 8);
+            String code = uniqueTaskCode(
+                    existingCodes,
+                    plan.getCode(),
+                    sourceCode,
+                    item.equipmentCode(),
+                    sequence++
+            );
+            PprTask saved = saveGeneratedScheduleTask(plan, code, item, planEnd);
+            created++;
+            existingCodes.add(saved.getCode());
+            existingSignatures.add(signature);
+            tracker.created(saved.getId(), saved.getCode());
+        }
+
+        if (created > 0 && plan.getStatus() == PlanStatus.DRAFT) {
+            plan.setStatus(PlanStatus.GENERATED);
+            PprPlan savedPlan = planRepository.save(plan);
+            auditBuilderService.log(
+                    "ppr_plan",
+                    savedPlan.getId().toString(),
+                    AuditAction.UPDATE,
+                    AuditModule.PPR_PLAN,
+                    "План ППР обновлён",
+                    plan,
+                    savedPlan
+            );
+        }
+        return tracker.result(plan, created);
+    }
+
+    private PprTask saveGeneratedScheduleTask(
+            PprPlan plan,
+            String code,
+            MaintenanceSchedulePreviewItem item,
+            LocalDate planEnd
+    ) {
+        LocalDate calculatedEnd = item.plannedDate().plusDays(
+                Math.max(1, (int) Math.ceil(item.normativeLaborHours() / 8)));
+        LocalDate scheduledEndDate = calculatedEnd.isAfter(planEnd) ? planEnd : calculatedEnd;
+        PprTask task = new PprTask();
+        task.setCode(code);
+        task.setPlan(plan);
+        task.setRegulationId(item.regulationId());
+        task.setEquipmentMaintenanceRuleId(item.equipmentMaintenanceRuleId());
+        task.setEquipmentId(item.equipmentId());
+        task.setTitle(item.regulationName() + " — " + item.equipmentCode());
+        task.setScheduledStart(item.plannedDate().atTime(LocalTime.of(9, 0)));
+        task.setScheduledEnd(scheduledEndDate.atTime(scheduledEndTime()));
+        task.setDueDate(item.plannedDate().atTime(LocalTime.of(18, 0)));
+        task.setPlannedLaborHours(item.normativeLaborHours());
+        task.setPriority(PriorityLevel.MEDIUM);
+        task.setStatus(PprTaskStatus.PLANNED);
+
+        plan.getTasks().add(task);
+        PprTask saved = taskRepository.save(task);
+        auditBuilderService.log(
+                "ppr_task",
+                saved.getId().toString(),
+                AuditAction.CREATE,
+                AuditModule.PPR_TASK,
+                "Задача ППР создана",
+                null,
+                saved
+        );
+        return saved;
     }
     private GenerationResult generateForPlanFixed(PprPlan plan, LocalDate planStart, LocalDate planEnd) {
         YearMonth planMonth = YearMonth.from(planStart);
@@ -957,6 +1094,14 @@ public class PprGeneratorService {
 
     private record TaskSignature(UUID planId, UUID regulationId, UUID equipmentMaintenanceRuleId, UUID equipmentId) {}
 
+    private record ScheduleTaskSignature(
+            UUID planId,
+            UUID regulationId,
+            UUID equipmentMaintenanceRuleId,
+            UUID equipmentId,
+            LocalDate plannedDate
+    ) {}
+
     private static TaskSignature taskSignature(PprTask task) {
         if (task == null || task.getPlan() == null || task.getPlan().getId() == null) {
             return null;
@@ -969,6 +1114,23 @@ public class PprGeneratorService {
                 task.getRegulationId(),
                 task.getEquipmentMaintenanceRuleId(),
                 task.getEquipmentId()
+        );
+    }
+
+    private static ScheduleTaskSignature scheduleTaskSignature(PprTask task) {
+        if (task == null || task.getPlan() == null || task.getPlan().getId() == null
+                || task.getScheduledStart() == null) {
+            return null;
+        }
+        if (task.getRegulationId() == null && task.getEquipmentMaintenanceRuleId() == null) {
+            return null;
+        }
+        return new ScheduleTaskSignature(
+                task.getPlan().getId(),
+                task.getRegulationId(),
+                task.getEquipmentMaintenanceRuleId(),
+                task.getEquipmentId(),
+                task.getScheduledStart().toLocalDate()
         );
     }
 

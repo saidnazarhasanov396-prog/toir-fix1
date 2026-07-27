@@ -7,6 +7,9 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderRequest;
+import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewItem;
+import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewResponse;
+import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewSummary;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceKind;
@@ -29,6 +32,7 @@ import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.service.maintanance.MaintenanceDueCalculationService;
+import com.toir.service.maintanance.MaintenanceScheduleService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -99,6 +103,9 @@ class PprGeneratorServiceLifecycleTest {
     @Mock
     MaintenanceDueCalculationService maintenanceDueCalculationService;
 
+    @Mock
+    MaintenanceScheduleService maintenanceScheduleService;
+
     @InjectMocks
     PprGeneratorService service;
 
@@ -118,6 +125,80 @@ class PprGeneratorServiceLifecycleTest {
             assertThat(result.created()).isZero();
             assertThat(result.skipped()).isZero();
         }
+    }
+
+    @Test
+    void scheduleBuilderPlanGeneratesEveryPreviewOccurrenceAndKeepsOccurrenceDates() {
+        UUID planId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.DRAFT);
+        plan.setStartDate(LocalDate.of(2026, 1, 1));
+        plan.setEndDate(LocalDate.of(2026, 12, 31));
+        plan.setAnchorMode(com.toir.enums.MaintenanceScheduleAnchorMode.CURRENT);
+        plan.getTargets().add(equipmentTarget(plan, equipmentId));
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(maintenanceScheduleService.preview(any())).thenReturn(new MaintenanceSchedulePreviewResponse(
+                List.of(
+                        scheduleItem(equipmentId, regulationId, LocalDate.of(2026, 2, 15)),
+                        scheduleItem(equipmentId, regulationId, LocalDate.of(2026, 3, 15))
+                ),
+                new MaintenanceSchedulePreviewSummary(1, 2, 0, 0)
+        ));
+        when(taskRepository.save(any(PprTask.class))).thenAnswer(invocation -> {
+            PprTask task = invocation.getArgument(0);
+            task.setId(UUID.randomUUID());
+            return task;
+        });
+        when(planRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PprGeneratorService.GenerationResult result = service.generateForPlan(planId);
+
+        assertThat(result.created()).isEqualTo(2);
+        ArgumentCaptor<PprTask> captor = ArgumentCaptor.forClass(PprTask.class);
+        verify(taskRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues()).extracting(task -> task.getScheduledStart().toLocalDate())
+                .containsExactly(LocalDate.of(2026, 2, 15), LocalDate.of(2026, 3, 15));
+        assertThat(captor.getAllValues()).allMatch(task ->
+                task.getDueDate().toLocalDate().equals(task.getScheduledStart().toLocalDate()));
+    }
+
+    @Test
+    void scheduleBuilderDuplicateSignatureIncludesOccurrenceDate() {
+        UUID planId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.GENERATED);
+        plan.setStartDate(LocalDate.of(2026, 1, 1));
+        plan.setEndDate(LocalDate.of(2026, 12, 31));
+        plan.setAnchorMode(com.toir.enums.MaintenanceScheduleAnchorMode.CURRENT);
+        plan.getTargets().add(equipmentTarget(plan, equipmentId));
+        PprTask existing = approvedTask(plan, regulationId, equipmentId);
+        existing.setScheduledStart(LocalDate.of(2026, 2, 15).atTime(9, 0));
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(taskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(existing));
+        when(maintenanceScheduleService.preview(any())).thenReturn(new MaintenanceSchedulePreviewResponse(
+                List.of(
+                        scheduleItem(equipmentId, regulationId, LocalDate.of(2026, 2, 15)),
+                        scheduleItem(equipmentId, regulationId, LocalDate.of(2026, 3, 15))
+                ),
+                new MaintenanceSchedulePreviewSummary(1, 2, 0, 0)
+        ));
+        when(taskRepository.save(any(PprTask.class))).thenAnswer(invocation -> {
+            PprTask task = invocation.getArgument(0);
+            task.setId(UUID.randomUUID());
+            return task;
+        });
+
+        PprGeneratorService.GenerationResult result = service.generateForPlan(planId);
+
+        assertThat(result.created()).isEqualTo(1);
+        assertThat(result.skippedReasons()).containsEntry("SKIP_DUPLICATE_SIGNATURE", 1);
+        ArgumentCaptor<PprTask> captor = ArgumentCaptor.forClass(PprTask.class);
+        verify(taskRepository).save(captor.capture());
+        assertThat(captor.getValue().getScheduledStart().toLocalDate())
+                .isEqualTo(LocalDate.of(2026, 3, 15));
     }
 
     @Test
@@ -583,6 +664,28 @@ class PprGeneratorServiceLifecycleTest {
         plan.setFrequency(PprFrequency.MONTHLY);
         plan.setScopeType(PprScopeType.DEPARTMENT);
         return plan;
+    }
+
+    private MaintenanceSchedulePreviewItem scheduleItem(
+            UUID equipmentId,
+            UUID regulationId,
+            LocalDate plannedDate
+    ) {
+        return new MaintenanceSchedulePreviewItem(
+                equipmentId,
+                "EQ-1",
+                "Equipment EQ-1",
+                regulationId,
+                null,
+                "Monthly maintenance",
+                MaintenanceKind.PREVENTIVE,
+                PeriodicityUnit.MONTH,
+                1,
+                plannedDate,
+                com.toir.enums.MaintenanceScheduleAnchorSource.EXISTING_DUE_DATE,
+                4,
+                false
+        );
     }
 
     private PprPlan executablePlan(UUID id, PprType pprType, UUID departmentId) {
