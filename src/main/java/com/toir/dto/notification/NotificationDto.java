@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 public record NotificationDto(
@@ -20,6 +21,9 @@ public record NotificationDto(
         NotificationSeverity severity,
         String entityType,
         String entityId,
+        String eventType,
+        String actionUrl,
+        Map<String, Object> metadata,
         Instant readAt,
         Instant createdAt,
         Instant acknowledgedAt,
@@ -37,9 +41,30 @@ public record NotificationDto(
             String entityType,
             String entityId,
             Instant readAt,
+            Instant createdAt,
+            Instant acknowledgedAt,
+            UUID acknowledgedById,
+            String acknowledgementComment
+    ) {
+        this(id, recipientId, title, message, channel, status, severity, entityType, entityId,
+                null, null, null, readAt, createdAt, acknowledgedAt, acknowledgedById, acknowledgementComment);
+    }
+
+    public NotificationDto(
+            UUID id,
+            @NotNull UUID recipientId,
+            @NotBlank String title,
+            @NotBlank String message,
+            NotificationChannel channel,
+            NotificationStatus status,
+            NotificationSeverity severity,
+            String entityType,
+            String entityId,
+            Instant readAt,
             Instant createdAt
     ) {
-        this(id, recipientId, title, message, channel, status, severity, entityType, entityId, readAt, createdAt, null, null, null);
+        this(id, recipientId, title, message, channel, status, severity, entityType, entityId,
+                null, null, null, readAt, createdAt, null, null, null);
     }
 
     public NotificationDto(
@@ -54,7 +79,27 @@ public record NotificationDto(
             String entityId,
             Instant readAt
     ) {
-        this(id, recipientId, title, message, channel, status, severity, entityType, entityId, readAt, null, null, null, null);
+        this(id, recipientId, title, message, channel, status, severity, entityType, entityId,
+                null, null, null, readAt, null, null, null, null);
+    }
+
+    public NotificationDto(
+            UUID id,
+             UUID recipientId,
+             String title,
+             String message,
+            NotificationChannel channel,
+            NotificationStatus status,
+            NotificationSeverity severity,
+            String entityType,
+            String entityId,
+            String eventType,
+            String actionUrl,
+            Map<String, Object> metadata,
+            Instant readAt
+    ) {
+        this(id, recipientId, title, message, channel, status, severity, entityType, entityId,
+                eventType, actionUrl, metadata, readAt, null, null, null, null);
     }
 
     public NotificationDto {
@@ -65,7 +110,8 @@ public record NotificationDto(
 
     public static NotificationDto from(Notification n) {
         return new NotificationDto(n.getId(), n.getRecipientId(), n.getTitle(), n.getMessage(),
-                n.getChannel(), n.getStatus(), n.getSeverity(), n.getEntityType(), n.getEntityId(), n.getReadAt(),
+                n.getChannel(), n.getStatus(), n.getSeverity(), n.getEntityType(), n.getEntityId(),
+                n.getEventType(), n.getActionUrl(), n.getMetadata(), n.getReadAt(),
                 n.getCreatedAt(), n.getAcknowledgedAt(), n.getAcknowledgedById(), n.getAcknowledgementComment());
     }
 }

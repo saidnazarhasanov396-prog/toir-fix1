@@ -387,6 +387,7 @@ class ActualCostReviewFacadeServiceTest {
                 anyString(),
                 anyString(),
                 eq(NotificationSeverity.WARNING),
+                eq(com.toir.enums.NotificationEventType.ACTUAL_COST_REVIEW_REMINDER),
                 eq("ACTUAL_COST"),
                 eq(overdue.getId().toString())
         )).thenReturn(List.of(notification(overdue.getId())));
@@ -396,6 +397,7 @@ class ActualCostReviewFacadeServiceTest {
                 anyString(),
                 anyString(),
                 eq(NotificationSeverity.INFO),
+                eq(com.toir.enums.NotificationEventType.ACTUAL_COST_REVIEW_REMINDER),
                 eq("ACTUAL_COST"),
                 eq(dueSoon.getId().toString())
         )).thenReturn(List.of());

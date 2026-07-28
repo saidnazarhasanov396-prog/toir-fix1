@@ -23,6 +23,7 @@ import com.toir.entity.projects.FinancialApprovalRule;
 import com.toir.entity.projects.MaintenanceBudget;
 import com.toir.entity.repair.RepairRequest;
 import com.toir.enums.ActualCostStatus;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.exception.RestException;
 import com.toir.repository.CostCategoryRepository;
@@ -546,7 +547,8 @@ public class ActualCostReviewFacadeService {
                     title,
                     message,
                     severity,
-                    "ACTUAL_COST",
+                    NotificationEventType.ACTUAL_COST_REVIEW_REMINDER,
+                    NotificationEntityTypes.ACTUAL_COST,
                     item.id().toString()
             );
             if (notifications == null || notifications.isEmpty()) {

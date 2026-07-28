@@ -159,12 +159,18 @@ public class FirebasePushNotificationSender {
                 notification.id(), notification.recipientId(), token.getId(), errorCode, ex.getMessage());
     }
 
-    private Map<String, String> payload(NotificationDto notification) {
+    Map<String, String> payload(NotificationDto notification) {
         Map<String, String> data = new LinkedHashMap<>();
         data.put("title", value(notification.title()));
         data.put("body", value(notification.message()));
         data.put("notificationId", notification.id() != null ? notification.id().toString() : "");
-        data.put("type", value(notification.severity() != null ? notification.severity().name() : null));
+        String severity = value(notification.severity() != null ? notification.severity().name() : null);
+        data.put("type", severity);
+        data.put("severity", severity);
+        data.put("eventType", value(notification.eventType()));
+        data.put("entityType", value(notification.entityType()));
+        data.put("entityId", value(notification.entityId()));
+        data.put("actionUrl", value(notification.actionUrl()));
         data.put("targetType", value(notification.entityType()));
         data.put("targetId", value(notification.entityId()));
         data.put("createdAt", notification.createdAt() != null ? notification.createdAt().toString() : Instant.now().toString());

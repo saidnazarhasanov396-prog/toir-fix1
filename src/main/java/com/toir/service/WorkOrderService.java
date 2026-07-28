@@ -80,6 +80,7 @@ import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.MeterReadingContext;
 import com.toir.enums.MeterSource;
 import com.toir.enums.MeterType;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.RequestStatus;
@@ -931,7 +932,8 @@ public class WorkOrderService {
                 "WorkOrder biriktirildi: " + workOrder.getNumber(),
                 performerNotificationMessage(workOrder, equipment),
                 NotificationSeverity.INFO,
-                ENTITY,
+                NotificationEventType.WORK_ORDER_ASSIGNED,
+                NotificationEntityTypes.WORK_ORDER,
                 workOrder.getId().toString()
         );
     }

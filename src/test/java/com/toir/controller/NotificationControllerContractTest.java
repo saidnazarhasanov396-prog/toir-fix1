@@ -30,6 +30,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -252,6 +253,27 @@ class NotificationControllerContractTest {
         mockMvc.perform(post("/api/v1/notifications/{id}/read", notificationId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(NotificationStatus.READ.name()));
+    }
+
+    @Test
+    void getByIdUsesCurrentRecipientScopeAndReturnsNavigationContract() throws Exception {
+        UUID currentUserId = UUID.randomUUID();
+        UUID notificationId = UUID.randomUUID();
+        authenticate(currentUserId, "MAINTENANCE_FOREMAN", List.of("NOTIFICATION_READ"));
+        NotificationDto dto = new NotificationDto(
+                notificationId, currentUserId, "Assigned", "Open work order",
+                null, NotificationStatus.SENT, NotificationSeverity.INFO,
+                "WORK_ORDER", "work-order-1", "WORK_ORDER_ASSIGNED",
+                "/work-orders/work-order-1", Map.of(), null
+        );
+        when(service.findById(notificationId, currentUserId, false)).thenReturn(dto);
+
+        mockMvc.perform(get("/api/v1/notifications/{id}", notificationId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("1eventType").value("WORK_ORDER_ASSIGNED"))
+                .andExpect(jsonPath("1actionUrl").value("/work-orders/work-order-1"));
+
+        verify(service).findById(notificationId, currentUserId, false);
     }
 
     @Test

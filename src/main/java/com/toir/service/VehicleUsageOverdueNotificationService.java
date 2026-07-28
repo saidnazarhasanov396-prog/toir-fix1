@@ -2,6 +2,7 @@ package com.toir.service;
 
 import com.toir.entity.equipment.EquipmentUsageSession;
 import com.toir.enums.EquipmentUsageSessionStatus;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.repository.EquipmentUsageSessionRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class VehicleUsageOverdueNotificationService {
 
-    static final String ENTITY_TYPE = "EquipmentUsageSession";
+    static final String ENTITY_TYPE = NotificationEntityTypes.EQUIPMENT_USAGE_SESSION;
     static final String TITLE = "Vehicle return overdue";
 
     private final EquipmentUsageSessionRepository sessionRepository;
@@ -40,6 +41,7 @@ public class VehicleUsageOverdueNotificationService {
                     TITLE,
                     message,
                     NotificationSeverity.WARNING,
+                    NotificationEventType.VEHICLE_RETURN_OVERDUE,
                     ENTITY_TYPE,
                     entityId
             );
@@ -50,6 +52,7 @@ public class VehicleUsageOverdueNotificationService {
                         TITLE,
                         message,
                         NotificationSeverity.WARNING,
+                        NotificationEventType.VEHICLE_RETURN_OVERDUE,
                         ENTITY_TYPE,
                         entityId
                 );

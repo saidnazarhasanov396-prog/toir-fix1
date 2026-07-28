@@ -1,0 +1,4 @@
+ALTER TABLE notifications
+    ADD COLUMN IF NOT EXISTS event_type VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS action_url TEXT,
+    ADD COLUMN IF NOT EXISTS metadata JSONB;

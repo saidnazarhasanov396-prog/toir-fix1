@@ -5,8 +5,11 @@ import com.toir.enums.NotificationStatus;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -44,6 +47,16 @@ public class Notification extends BaseEntity {
 
     @Column(name = "entity_id")
     private String entityId;
+
+    @Column(name = "event_type")
+    private String eventType;
+
+    @Column(name = "action_url", columnDefinition = "text")
+    private String actionUrl;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "metadata", columnDefinition = "jsonb")
+    private Map<String, Object> metadata;
 
     @Column(name = "read_at")
     private Instant readAt;
