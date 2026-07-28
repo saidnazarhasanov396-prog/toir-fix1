@@ -781,6 +781,7 @@ public class PprPlanService {
     }
 
     private PprPlan reloadPlan(UUID id) {
+        entityManager.flush();
         entityManager.clear();
         return getPlan(id);
     }
