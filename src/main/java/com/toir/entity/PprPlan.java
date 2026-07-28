@@ -1,6 +1,7 @@
 package com.toir.entity;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.MaintenanceScheduleAnchorMode;
+import com.toir.enums.MaintenanceScheduleRecurrenceAnchor;
 import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprScopeType;
@@ -11,9 +12,12 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.BatchSize;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -71,6 +75,26 @@ public class PprPlan extends ActorStampedEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "anchor_mode")
     private MaintenanceScheduleAnchorMode anchorMode;
+
+    @Builder.Default
+    @Column(name = "shift_from_excluded_weekdays", nullable = false)
+    private boolean shiftFromExcludedWeekdays = false;
+
+    @Builder.Default
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "ppr_plan_excluded_weekdays",
+            joinColumns = @JoinColumn(name = "plan_id")
+    )
+    @Enumerated(EnumType.STRING)
+    @Column(name = "weekday", nullable = false)
+    private Set<DayOfWeek> excludedWeekdays = new HashSet<>();
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "maintenance_recurrence_anchor", nullable = false)
+    private MaintenanceScheduleRecurrenceAnchor recurrenceAnchor =
+            MaintenanceScheduleRecurrenceAnchor.REGULATION_DATE;
 
     @Builder.Default
     @Enumerated(EnumType.STRING)

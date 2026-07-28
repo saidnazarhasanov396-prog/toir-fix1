@@ -7,13 +7,16 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceScheduleAnchorMode;
+import com.toir.enums.MaintenanceScheduleRecurrenceAnchor;
 import com.toir.enums.MaintenanceScheduleScopeType;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.exception.RestException;
 import java.time.Instant;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -195,6 +198,108 @@ class MaintenanceScheduleServiceTest {
         )))
                 .isInstanceOfSatisfying(RestException.class, ex ->
                         assertThat(ex.getMessage()).contains("annual horizon"));
+    }
+
+    @Test
+    void excludedSundayMovesOccurrencesToMondayWithoutMovingRegulationCycle() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "EQ-1");
+        EquipmentMaintenanceEffectiveRule rule = rule(equipmentId, PeriodicityUnit.DAY, 7);
+        when(eligibilitySelector.selectForPreview(any())).thenReturn(List.of(equipment));
+        when(ruleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(rule));
+        when(dueCalculationService.calculate(rule)).thenReturn(due(null));
+
+        var response = service.preview(new MaintenanceSchedulePreviewRequest(
+                LocalDate.of(2026, 8, 2),
+                LocalDate.of(2026, 8, 25),
+                MaintenanceScheduleScopeType.EQUIPMENT,
+                List.of(equipmentId),
+                null,
+                null,
+                MaintenanceScheduleAnchorMode.RESET_TO_PLAN_START,
+                true,
+                EnumSet.of(DayOfWeek.SUNDAY),
+                MaintenanceScheduleRecurrenceAnchor.REGULATION_DATE
+        ));
+
+        assertThat(response.items())
+                .extracting(item -> Map.entry(item.regulationDate(), item.plannedDate()))
+                .containsExactly(
+                        Map.entry(LocalDate.of(2026, 8, 9), LocalDate.of(2026, 8, 10)),
+                        Map.entry(LocalDate.of(2026, 8, 16), LocalDate.of(2026, 8, 17)),
+                        Map.entry(LocalDate.of(2026, 8, 23), LocalDate.of(2026, 8, 24))
+                );
+        assertThat(response.items()).allSatisfy(item -> {
+            assertThat(item.shiftedFromExcludedWeekday()).isTrue();
+            assertThat(item.shiftDays()).isEqualTo(1);
+        });
+    }
+
+    @Test
+    void shiftedDateBecomesTheNextRecurrenceAnchorWhenSelected() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment(equipmentId, "EQ-1");
+        EquipmentMaintenanceEffectiveRule rule = rule(equipmentId, PeriodicityUnit.DAY, 7);
+        when(eligibilitySelector.selectForPreview(any())).thenReturn(List.of(equipment));
+        when(ruleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(rule));
+        when(dueCalculationService.calculate(rule)).thenReturn(due(null));
+
+        var response = service.preview(new MaintenanceSchedulePreviewRequest(
+                LocalDate.of(2026, 8, 2),
+                LocalDate.of(2026, 8, 25),
+                MaintenanceScheduleScopeType.EQUIPMENT,
+                List.of(equipmentId),
+                null,
+                null,
+                MaintenanceScheduleAnchorMode.RESET_TO_PLAN_START,
+                true,
+                EnumSet.of(DayOfWeek.SUNDAY),
+                MaintenanceScheduleRecurrenceAnchor.SHIFTED_DATE
+        ));
+
+        assertThat(response.items())
+                .extracting(item -> Map.entry(item.regulationDate(), item.plannedDate()))
+                .containsExactly(
+                        Map.entry(LocalDate.of(2026, 8, 9), LocalDate.of(2026, 8, 10)),
+                        Map.entry(LocalDate.of(2026, 8, 17), LocalDate.of(2026, 8, 17)),
+                        Map.entry(LocalDate.of(2026, 8, 24), LocalDate.of(2026, 8, 24))
+                );
+    }
+
+    @Test
+    void enabledWeekdayShiftRejectsAnEmptyOrCompleteExcludedWeekdaySet() {
+        UUID equipmentId = UUID.randomUUID();
+        MaintenanceSchedulePreviewRequest empty = new MaintenanceSchedulePreviewRequest(
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31),
+                MaintenanceScheduleScopeType.EQUIPMENT,
+                List.of(equipmentId),
+                null,
+                null,
+                MaintenanceScheduleAnchorMode.CURRENT,
+                true,
+                EnumSet.noneOf(DayOfWeek.class),
+                MaintenanceScheduleRecurrenceAnchor.REGULATION_DATE
+        );
+        MaintenanceSchedulePreviewRequest complete = new MaintenanceSchedulePreviewRequest(
+                empty.fromDate(),
+                empty.toDate(),
+                empty.scopeType(),
+                empty.equipmentIds(),
+                empty.equipmentTypeIds(),
+                empty.departmentId(),
+                empty.anchorMode(),
+                true,
+                EnumSet.allOf(DayOfWeek.class),
+                MaintenanceScheduleRecurrenceAnchor.REGULATION_DATE
+        );
+
+        assertThatThrownBy(() -> service.preview(empty))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("excludedWeekdays"));
+        assertThatThrownBy(() -> service.preview(complete))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).contains("all weekdays"));
     }
 
     private Equipment equipment(UUID id, String code) {
