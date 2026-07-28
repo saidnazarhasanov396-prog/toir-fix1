@@ -601,6 +601,19 @@ class LifecycleApprovalRoutePolicyTest {
     }
 
     @Test
+    void completionRejectsRoleBasedParallelRuntimeSteps() {
+        UUID requester = UUID.randomUUID();
+        ApprovalStep approved = pendingRoleStep(1, "CAMPAIGN_APPROVER");
+        approved.setDecision(ApprovalDecision.APPROVED);
+        approved.setDecidedById(UUID.randomUUID());
+        ApprovalRequest request = request(ApprovalStatus.PENDING, requester, approved);
+        request.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        request.setCurrentStep(0);
+
+        assertThat(policy.validateCompletion(request).reason()).isEqualTo(INVALID_ASSIGNMENT);
+    }
+
+    @Test
     void pendingRuntimeIsIncompleteForCompletion() {
         ApprovalRequest request = pendingRequest(UUID.randomUUID(),
                 approvedStep(1, UUID.randomUUID()), pendingRoleStep(2, "SECOND"));

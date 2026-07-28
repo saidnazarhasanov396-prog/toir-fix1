@@ -155,6 +155,9 @@ public final class LifecycleApprovalRoutePolicy {
             return structure;
         }
         if (effectiveFlowType(request.getFlowType()) == ApprovalFlowType.PARALLEL_ALL) {
+            if (route.stream().anyMatch(step -> step.approverId() == null)) {
+                return ValidationResult.invalid(Reason.INVALID_ASSIGNMENT);
+            }
             if (steps.stream().anyMatch(step -> step.getDecision() != ApprovalDecision.APPROVED)) {
                 return ValidationResult.invalid(Reason.RUNTIME_INCOMPLETE);
             }
