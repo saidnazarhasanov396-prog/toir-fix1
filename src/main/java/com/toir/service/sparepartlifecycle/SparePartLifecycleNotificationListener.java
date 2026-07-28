@@ -1,8 +1,10 @@
 package com.toir.service.sparepartlifecycle;
 
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.security.PermissionConstants;
+import com.toir.service.NotificationEntityTypes;
 import com.toir.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,7 +32,8 @@ public class SparePartLifecycleNotificationListener {
                         "Installed spare-part service life: " + event.state(),
                         "Installation " + event.installationId() + " requires action " + event.action(),
                         severity(event),
-                        "SparePartDueEvent",
+                        NotificationEventType.SPARE_PART_DUE,
+                        NotificationEntityTypes.SPARE_PART_DUE_EVENT,
                         event.dueEventId().toString()
                 );
             } catch (RuntimeException exception) {

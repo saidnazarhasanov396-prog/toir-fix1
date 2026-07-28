@@ -750,7 +750,8 @@ class ActualCostServiceTest {
                 contains("Actual cost pending review"),
                 contains(result.id().toString()),
                 eq(com.toir.enums.NotificationSeverity.INFO),
-                eq("ActualCost"),
+                eq(com.toir.enums.NotificationEventType.ACTUAL_COST_PENDING_REVIEW),
+                eq("ACTUAL_COST"),
                 eq(result.id().toString())
         );
     }

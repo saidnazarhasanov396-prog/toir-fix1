@@ -7,6 +7,7 @@ import com.toir.repository.users.UserCertificationRepository;
 import com.toir.entity.EscalationEvent;
 import com.toir.repository.EscalationEventRepository;
 import com.toir.enums.EscalationStatus;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.NotificationStatus;
 import com.toir.entity.PprTask;
@@ -24,6 +25,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.enums.WorkOrderStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -50,9 +52,11 @@ public class OverdueDetectorService {
     private final UserRepository userRepository;
     private final CalibrationRecordRepository calibrationRecordRepository;
     private final UserCertificationRepository userCertificationRepository;
+    private final NotificationNavigationBuilder navigationBuilder;
 
 
 
+    @Transactional
     public EvaluationResult evaluate() {
         LocalDateTime nowLdt = LocalDateTime.now(ZoneOffset.UTC);
         Instant now = Instant.now();
@@ -69,7 +73,23 @@ public class OverdueDetectorService {
         java.util.UUID adminId = userRepository.findByUsernameAndIsDeletedFalse("admin").map(User::getId).orElse(null);
 
         // 1) PPR tasks overdue
-        for (PprTask task : pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()) {
+        List<PprTask> pprTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
+        List<java.util.UUID> overdueTaskIds = pprTasks.stream()
+                .filter(task -> task.getDueDate() != null)
+                .filter(task -> task.getStatus() != PprTaskStatus.COMPLETED
+                        && task.getStatus() != PprTaskStatus.CANCELLED
+                        && task.getStatus() != PprTaskStatus.OVERDUE)
+                .filter(task -> task.getDueDate().isBefore(nowLdt))
+                .map(PprTask::getId)
+                .toList();
+        java.util.Map<java.util.UUID, List<java.util.UUID>> workOrderIdsByTask = overdueTaskIds.isEmpty()
+                ? java.util.Map.of()
+                : workOrderRepository.findAllByPprTaskIdInAndIsDeletedFalse(overdueTaskIds).stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        WorkOrder::getPprTaskId,
+                        java.util.stream.Collectors.mapping(WorkOrder::getId, java.util.stream.Collectors.toList())
+                ));
+        for (PprTask task : pprTasks) {
             if (task.getDueDate() == null) continue;
             if (task.getStatus() == PprTaskStatus.COMPLETED
                     || task.getStatus() == PprTaskStatus.CANCELLED
@@ -83,8 +103,12 @@ public class OverdueDetectorService {
                             "Просроченная задача ППР " + task.getCode(),
                             "Срок " + task.getDueDate() + " прошёл, работы не закрыты",
                             NotificationSeverity.WARNING,
-                            "PprTask",
-                            task.getId().toString());
+                            navigationBuilder.forPprTask(
+                                    NotificationEventType.PPR_TASK_OVERDUE,
+                                    task.getId(),
+                                    task.getPlan().getId(),
+                                    workOrderIdsByTask.getOrDefault(task.getId(), List.of())
+                            ));
                 }
                 escalationsCreated += raiseEscalation("PprTask", task.getId().toString(), SlaTriggerType.PPR_OVERDUE);
             }
@@ -102,8 +126,11 @@ public class OverdueDetectorService {
                             "Просроченная заявка " + r.getNumber(),
                             "Плановая дата устранения " + r.getTargetCompletionAt() + " прошла",
                             NotificationSeverity.CRITICAL,
-                            "RepairRequest",
-                            r.getId().toString());
+                            navigationBuilder.forEntity(
+                                    NotificationEventType.REPAIR_REQUEST_OVERDUE,
+                                    NotificationEntityTypes.REPAIR_REQUEST,
+                                    r.getId()
+                            ));
                 }
                 escalationsCreated += raiseEscalation("RepairRequest", r.getId().toString(),
                         "EMERGENCY".equals(r.getPriority().name())
@@ -124,8 +151,11 @@ public class OverdueDetectorService {
                             "Просроченный наряд " + w.getNumber(),
                             "Плановая дата завершения " + w.getEndPlannedAt() + " прошла",
                             NotificationSeverity.WARNING,
-                            "WorkOrder",
-                            w.getId().toString());
+                            navigationBuilder.forEntity(
+                                    NotificationEventType.WORK_ORDER_OVERDUE,
+                                    NotificationEntityTypes.WORK_ORDER,
+                                    w.getId()
+                            ));
                 }
                 escalationsCreated += raiseEscalation("WorkOrder", w.getId().toString(),
                         SlaTriggerType.WORK_ORDER_OVERDUE);
@@ -147,8 +177,11 @@ public class OverdueDetectorService {
                         "Просрочена поверка " + c.getCertificateNumber(),
                         "Срок поверки оборудования " + c.getEquipmentId() + " истёк " + c.getNextDueAt(),
                         NotificationSeverity.WARNING,
-                        "CalibrationRecord",
-                        c.getId().toString());
+                        navigationBuilder.forEntity(
+                                NotificationEventType.CALIBRATION_OVERDUE,
+                                "CALIBRATION_RECORD",
+                                c.getId()
+                        ));
             }
         }
 
@@ -165,8 +198,11 @@ public class OverdueDetectorService {
                         "Истёк сертификат " + uc.getTypeCode(),
                         "Сертификат сотрудника " + uc.getUserId() + " истёк " + uc.getExpiresAt(),
                         NotificationSeverity.CRITICAL,
-                        "UserCertification",
-                        uc.getId().toString());
+                        navigationBuilder.forEntity(
+                                NotificationEventType.USER_CERTIFICATION_EXPIRED,
+                                "USER_CERTIFICATION",
+                                uc.getId()
+                        ));
             }
         }
 
@@ -176,14 +212,14 @@ public class OverdueDetectorService {
     }
 
     private int createNotification(java.util.UUID recipientId, String title, String message,
-                                   NotificationSeverity severity, String entityType, String entityId) {
+                                   NotificationSeverity severity, NotificationNavigation navigation) {
         // idempotent: skip if we already have an open notification for the same entity
         boolean exists = notificationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
-                .anyMatch(n -> entityType.equals(n.getEntityType())
-                        && entityId.equals(n.getEntityId())
+                .anyMatch(n -> java.util.Objects.equals(navigation.entityType(), NotificationEntityTypes.normalize(n.getEntityType()))
+                        && java.util.Objects.equals(navigation.entityId(), n.getEntityId())
                         && (n.getStatus() == NotificationStatus.PENDING || n.getStatus() == NotificationStatus.SENT));
         if (exists) return 0;
-        return notificationService.notifyUser(recipientId, title, message, severity, entityType, entityId)
+        return notificationService.notifyUser(recipientId, title, message, severity, navigation)
                 .map(ignored -> 1)
                 .orElse(0);
     }

@@ -353,7 +353,8 @@ class ApprovalPbacScopeTest {
                 org.mockito.ArgumentMatchers.contains("Approval requested"),
                 org.mockito.ArgumentMatchers.contains("requires your decision"),
                 eq(com.toir.enums.NotificationSeverity.INFO),
-                eq("ApprovalRequest"),
+                eq(com.toir.enums.NotificationEventType.APPROVAL_REQUESTED),
+                eq("APPROVAL_REQUEST"),
                 org.mockito.ArgumentMatchers.anyString()
         );
     }
@@ -457,13 +458,15 @@ class ApprovalPbacScopeTest {
 
         verify(approvalScopeService).assertCanDecideApproval(approval, approval.getSteps().getFirst());
         assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.APPROVED);
-        verify(notificationService).notifyUser(
+        verify(notificationService).notifyApprovalResult(
                 eq(approval.getRequesterId()),
                 org.mockito.ArgumentMatchers.contains("Approval approved"),
                 org.mockito.ArgumentMatchers.contains("approved"),
                 eq(com.toir.enums.NotificationSeverity.INFO),
-                eq("WorkOrder"),
-                eq(approval.getDocumentId().toString())
+                eq(com.toir.enums.NotificationEventType.APPROVAL_APPROVED),
+                eq("WORK_ORDER"),
+                eq(approval.getDocumentId()),
+                eq(approval.getId())
         );
     }
 

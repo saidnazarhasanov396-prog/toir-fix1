@@ -13,6 +13,7 @@ import com.toir.enums.AuditModule;
 import com.toir.enums.CriticalityLevel;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.InspectionRoundStatus;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.RequestSource;
@@ -491,7 +492,8 @@ public class InspectionService {
                 "Inspection FAIL triage created",
                 "Inspection failure " + defect.getCode() + " requires defect triage.",
                 NotificationSeverity.WARNING,
-                "Defect",
+                NotificationEventType.DEFECT_CREATED_FROM_INSPECTION,
+                NotificationEntityTypes.DEFECT,
                 defect.getId().toString()
         );
         if (recipients.isEmpty()) {
@@ -501,7 +503,8 @@ public class InspectionService {
                     "Inspection FAIL triage created",
                     "Inspection failure " + defect.getCode() + " requires maintenance triage.",
                     NotificationSeverity.WARNING,
-                    "Defect",
+                    NotificationEventType.DEFECT_CREATED_FROM_INSPECTION,
+                    NotificationEntityTypes.DEFECT,
                     defect.getId().toString()
             );
         }

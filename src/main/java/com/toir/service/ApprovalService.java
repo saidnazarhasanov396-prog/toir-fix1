@@ -22,6 +22,7 @@ import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.UserStatus;
 import com.toir.exception.RestException;
@@ -2081,7 +2082,8 @@ public class ApprovalService implements ApprovalOrchestrator {
                             "Approval requested: " + request.getTitle(),
                             "Approval request " + request.getTitle() + " requires your decision.",
                             NotificationSeverity.INFO,
-                            "ApprovalRequest",
+                            NotificationEventType.APPROVAL_REQUESTED,
+                            NotificationEntityTypes.APPROVAL_REQUEST,
                             request.getId() == null ? null : request.getId().toString()));
             return;
         }
@@ -2094,7 +2096,8 @@ public class ApprovalService implements ApprovalOrchestrator {
                         "Approval requested: " + request.getTitle(),
                         "Approval request " + request.getTitle() + " requires your decision.",
                         NotificationSeverity.INFO,
-                        "ApprovalRequest",
+                        NotificationEventType.APPROVAL_REQUESTED,
+                        NotificationEntityTypes.APPROVAL_REQUEST,
                         request.getId() == null ? null : request.getId().toString()
                 ));
     }
@@ -2106,25 +2109,29 @@ public class ApprovalService implements ApprovalOrchestrator {
             case CANCELLED -> "cancelled";
             default -> outcome == ApprovalDecision.APPROVED ? "approved" : "rejected";
         };
-        notificationService.notifyUser(
+        notificationService.notifyApprovalResult(
                 request.getRequesterId(),
                 "Approval " + decisionText + ": " + request.getTitle(),
                 "Approval request " + request.getTitle() + " was " + decisionText + ".",
                 request.getStatus() == ApprovalStatus.APPROVED ? NotificationSeverity.INFO : NotificationSeverity.WARNING,
+                finalDecisionEvent(request, outcome),
                 notificationEntityType(effectiveTargetType(request)),
-                effectiveTargetId(request) == null ? null : effectiveTargetId(request).toString()
+                effectiveTargetId(request),
+                request.getId()
         );
     }
 
     private void notifyReturned(ApprovalRequest request, int fromStep, int returnToStep) {
         String message = "Approval was returned to step " + returnToStep + " for correction.";
-        notificationService.notifyUser(
+        notificationService.notifyApprovalResult(
                 request.getRequesterId(),
                 "Approval returned: " + request.getTitle(),
                 message,
                 NotificationSeverity.WARNING,
+                NotificationEventType.APPROVAL_RETURNED_TO_REQUESTER,
                 notificationEntityType(effectiveTargetType(request)),
-                effectiveTargetId(request) == null ? null : effectiveTargetId(request).toString()
+                effectiveTargetId(request),
+                request.getId()
         );
         request.getSteps().stream()
                 .filter(step -> step.getStepNumber() == returnToStep)
@@ -2134,7 +2141,8 @@ public class ApprovalService implements ApprovalOrchestrator {
                         "Approval returned to your step: " + request.getTitle(),
                         message,
                         NotificationSeverity.INFO,
-                        "ApprovalRequest",
+                        NotificationEventType.APPROVAL_RETURNED_TO_APPROVER,
+                        NotificationEntityTypes.APPROVAL_REQUEST,
                         request.getId() == null ? null : request.getId().toString()
                 ));
     }
@@ -2143,35 +2151,48 @@ public class ApprovalService implements ApprovalOrchestrator {
                                      String title,
                                      String message,
                                      NotificationSeverity severity,
+                                     NotificationEventType eventType,
                                      String entityType,
                                      String entityId) {
         if (step.getApproverId() != null) {
-            notificationService.notifyUser(step.getApproverId(), title, message, severity, entityType, entityId);
+            notificationService.notifyUser(step.getApproverId(), title, message, severity, eventType, entityType, entityId);
             return;
         }
         activeUsersWithRole(step.getApproverRole())
-                .forEach(user -> notificationService.notifyUser(user.getId(), title, message, severity, entityType, entityId));
+                .forEach(user -> notificationService.notifyUser(user.getId(), title, message, severity, eventType, entityType, entityId));
+    }
+
+    private NotificationEventType finalDecisionEvent(ApprovalRequest request, ApprovalDecision outcome) {
+        return switch (request.getStatus()) {
+            case FAILED -> NotificationEventType.APPROVAL_FAILED;
+            case EXPIRED -> NotificationEventType.APPROVAL_EXPIRED;
+            case CANCELLED -> NotificationEventType.APPROVAL_CANCELLED;
+            case APPROVED -> NotificationEventType.APPROVAL_APPROVED;
+            default -> outcome == ApprovalDecision.APPROVED
+                    ? NotificationEventType.APPROVAL_APPROVED
+                    : NotificationEventType.APPROVAL_REJECTED;
+        };
     }
 
     private String notificationEntityType(ApprovalTargetType targetType) {
         if (targetType == null) {
-            return "ApprovalRequest";
+            return NotificationEntityTypes.APPROVAL_REQUEST;
         }
         return switch (targetType) {
-            case WORK_ORDER -> "WorkOrder";
-            case PPR_PLAN -> "PprPlan";
-            case PROCUREMENT_REQUEST, PROCUREMENT -> "ProcurementRequest";
-            case MAINTENANCE_BUDGET, BUDGET -> "MaintenanceBudget";
-            case MAINTENANCE_DUE_EVENT -> "MaintenanceDueEvent";
-            case REPAIR_REQUEST -> "RepairRequest";
-            case MAINTENANCE_REGULATION -> "MaintenanceRegulation";
-            case REGULATION_CHANGE_PROPOSAL -> "RegulationChangeProposal";
-            case ACTUAL_COST -> "ActualCost";
-            case DEFECT_LIST -> "DefectList";
-            case PLANNED_SHUTDOWN -> "PlannedShutdown";
-            case REPAIR_CAMPAIGN -> "RepairCampaign";
-            case EQUIPMENT_COMMISSIONING -> "EquipmentCommissioningAct";
-            default -> "ApprovalRequest";
+            case WORK_ORDER -> NotificationEntityTypes.WORK_ORDER;
+            case PPR_PLAN -> NotificationEntityTypes.PPR_PLAN;
+            case PROCUREMENT_REQUEST, PROCUREMENT -> "PROCUREMENT_REQUEST";
+            case MAINTENANCE_BUDGET, BUDGET -> NotificationEntityTypes.MAINTENANCE_BUDGET;
+            case MAINTENANCE_DUE_EVENT -> NotificationEntityTypes.MAINTENANCE_DUE_EVENT;
+            case REPAIR_REQUEST -> NotificationEntityTypes.REPAIR_REQUEST;
+            case MAINTENANCE_REGULATION -> "MAINTENANCE_REGULATION";
+            case REGULATION_CHANGE_PROPOSAL -> "REGULATION_CHANGE_PROPOSAL";
+            case ACTUAL_COST -> NotificationEntityTypes.ACTUAL_COST;
+            case DEFECT_LIST -> "DEFECT_LIST";
+            case PLANNED_SHUTDOWN -> NotificationEntityTypes.PLANNED_SHUTDOWN;
+            case REPAIR_CAMPAIGN -> NotificationEntityTypes.REPAIR_CAMPAIGN;
+            case EQUIPMENT_COMMISSIONING -> "EQUIPMENT_COMMISSIONING_ACT";
+            default -> NotificationEntityTypes.APPROVAL_REQUEST;
         };
     }
 

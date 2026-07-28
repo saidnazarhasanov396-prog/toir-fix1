@@ -44,6 +44,7 @@ public class NotificationService {
     private final EmployeeRepository employeeRepository;
     private final ScopeAccessService scopeAccessService;
     private final FirebasePushNotificationSender firebasePushNotificationSender;
+    private final NotificationNavigationBuilder navigationBuilder;
 
 
     @Transactional(readOnly = true)
@@ -85,6 +86,9 @@ public class NotificationService {
         if (r.severity() != null) n.setSeverity(r.severity());
         n.setEntityType(r.entityType());
         n.setEntityId(r.entityId());
+        n.setEventType(r.eventType());
+        n.setActionUrl(r.actionUrl());
+        n.setMetadata(r.metadata());
         n.setStatus(NotificationStatus.SENT);
         NotificationDto saved = NotificationDto.from(repository.save(n));
         trySendPush(saved);
@@ -181,10 +185,57 @@ public class NotificationService {
                                                 NotificationSeverity severity,
                                                 String entityType,
                                                 String entityId) {
+        return notifyUser(recipientId, title, message, severity,
+                new NotificationNavigation(null, entityType, entityId, null, java.util.Map.of()));
+    }
+
+
+
+    @Transactional
+    public Optional<NotificationDto> notifyApprovalResult(
+            UUID recipientId,
+            String title,
+            String message,
+            NotificationSeverity severity,
+            com.toir.enums.NotificationEventType eventType,
+            String ownerEntityType,
+            UUID ownerEntityId,
+            UUID approvalRequestId
+    ) {
+        return notifyUser(recipientId, title, message, severity,
+                navigationBuilder.forApprovalResult(
+                        eventType, ownerEntityType, ownerEntityId, approvalRequestId));
+    }
+
+
+    @Transactional
+    public Optional<NotificationDto> notifyUser(
+            UUID recipientId,
+            String title,
+            String message,
+            NotificationSeverity severity,
+            com.toir.enums.NotificationEventType eventType,
+            String entityType,
+            String entityId
+    ) {
+        return notifyUser(recipientId, title, message, severity,
+                navigationBuilder.forEntity(eventType, entityType, entityId));
+    }
+
+
+    @Transactional
+    public Optional<NotificationDto> notifyUser(UUID recipientId,
+                                                String title,
+                                                String message,
+                                                NotificationSeverity severity,
+                                                NotificationNavigation navigation) {
         if (recipientId == null || !StringUtils.hasText(title) || !StringUtils.hasText(message)) {
             return Optional.empty();
         }
-        if (isDuplicateOpen(recipientId, title, entityType, entityId)) {
+        NotificationNavigation target = navigation != null
+                ? navigation
+                : new NotificationNavigation(null, null, null, null, java.util.Map.of());
+        if (isDuplicateOpen(recipientId, title, target.entityType(), target.entityId())) {
             return Optional.empty();
         }
         return Optional.of(send(new NotificationDto(
@@ -195,8 +246,11 @@ public class NotificationService {
                 NotificationChannel.WEB,
                 NotificationStatus.SENT,
                 severity != null ? severity : NotificationSeverity.INFO,
-                entityType,
-                entityId,
+                target.entityType(),
+                target.entityId(),
+                target.eventType(),
+                target.actionUrl(),
+                target.metadata(),
                 null
         )));
     }
@@ -208,12 +262,39 @@ public class NotificationService {
                                                     NotificationSeverity severity,
                                                     String entityType,
                                                     String entityId) {
+        return notifyEmployee(employeeId, title, message, severity,
+                new NotificationNavigation(null, entityType, entityId, null, java.util.Map.of()));
+    }
+
+
+
+    @Transactional
+    public Optional<NotificationDto> notifyEmployee(
+            UUID employeeId,
+            String title,
+            String message,
+            NotificationSeverity severity,
+            com.toir.enums.NotificationEventType eventType,
+            String entityType,
+            String entityId
+    ) {
+        return notifyEmployee(employeeId, title, message, severity,
+                navigationBuilder.forEntity(eventType, entityType, entityId));
+    }
+
+
+    @Transactional
+    public Optional<NotificationDto> notifyEmployee(UUID employeeId,
+                                                    String title,
+                                                    String message,
+                                                    NotificationSeverity severity,
+                                                    NotificationNavigation navigation) {
         if (employeeId == null) {
             return Optional.empty();
         }
         return employeeRepository.findByIdAndIsDeletedFalse(employeeId)
                 .map(Employee::getUserId)
-                .flatMap(userId -> notifyUser(userId, title, message, severity, entityType, entityId));
+                .flatMap(userId -> notifyUser(userId, title, message, severity, navigation));
     }
 
     @Transactional
@@ -224,6 +305,35 @@ public class NotificationService {
                                                               NotificationSeverity severity,
                                                               String entityType,
                                                               String entityId) {
+        return notifyDepartmentByPermission(departmentId, permission, title, message, severity,
+                new NotificationNavigation(null, entityType, entityId, null, java.util.Map.of()));
+    }
+
+
+
+    @Transactional
+    public List<NotificationDto> notifyDepartmentByPermission(
+            UUID departmentId,
+            String permission,
+            String title,
+            String message,
+            NotificationSeverity severity,
+            com.toir.enums.NotificationEventType eventType,
+            String entityType,
+            String entityId
+    ) {
+        return notifyDepartmentByPermission(departmentId, permission, title, message, severity,
+                navigationBuilder.forEntity(eventType, entityType, entityId));
+    }
+
+
+    @Transactional
+    public List<NotificationDto> notifyDepartmentByPermission(UUID departmentId,
+                                                              String permission,
+                                                              String title,
+                                                              String message,
+                                                              NotificationSeverity severity,
+                                                              NotificationNavigation navigation) {
         if (departmentId == null || !StringUtils.hasText(permission)) {
             return List.of();
         }
@@ -242,7 +352,7 @@ public class NotificationService {
         return recipients.stream()
                 .map(User::getId)
                 .distinct()
-                .map(userId -> notifyUser(userId, title, message, severity, entityType, entityId))
+                .map(userId -> notifyUser(userId, title, message, severity, navigation))
                 .flatMap(Optional::stream)
                 .toList();
     }

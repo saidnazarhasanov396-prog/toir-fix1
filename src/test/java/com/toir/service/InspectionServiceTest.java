@@ -416,7 +416,8 @@ class InspectionServiceTest {
                 org.mockito.ArgumentMatchers.contains("Inspection FAIL triage"),
                 org.mockito.ArgumentMatchers.contains(defect.getCode()),
                 eq(com.toir.enums.NotificationSeverity.WARNING),
-                eq("Defect"),
+                eq(com.toir.enums.NotificationEventType.DEFECT_CREATED_FROM_INSPECTION),
+                eq("DEFECT"),
                 eq(defect.getId().toString())
         );
     }

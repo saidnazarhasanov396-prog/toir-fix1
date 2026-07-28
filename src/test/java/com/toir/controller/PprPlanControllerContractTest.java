@@ -5,6 +5,7 @@ import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.dto.pprplanning.PprPlanRequest;
 import com.toir.dto.pprplanning.PprPlanStatsResponse;
 import com.toir.entity.PprPlan;
+import com.toir.entity.PprTask;
 import com.toir.dto.pprplanning.PprTaskStatsResponse;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PprFrequency;
@@ -249,6 +250,26 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.tasks[0].equipmentName").value("Pump 17"))
                 .andExpect(jsonPath("$.tasks[0].regulationId").value(regulationId.toString()))
                 .andExpect(jsonPath("$.tasks[0].regulationName").value("Monthly inspection"));
+    }
+
+    @Test
+    void getTaskByIdReturnsExactTaskWithParentPlan() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        PprPlan parent = plan(planId, UUID.randomUUID());
+        parent.setStatus(PlanStatus.APPROVED);
+        PprTask task = new PprTask();
+        task.setId(taskId);
+        task.setPlan(parent);
+        task.setCode("TASK-1");
+        task.setTitle("Inspect pump");
+        task.setStatus(PprTaskStatus.OVERDUE);
+        when(taskRepository.findByIdAndIsDeletedFalseWithPlan(taskId)).thenReturn(Optional.of(task));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/tasks/{taskId}", taskId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("1id").value(taskId.toString()))
+                .andExpect(jsonPath("1planId").value(planId.toString()));
     }
 
     @Test
