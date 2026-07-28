@@ -54,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -159,6 +160,35 @@ class PprPlanServiceLifecycleTest {
         assertThat(result.frequency()).isNull();
         assertThat(result.scopeType()).isEqualTo(PprScopeType.DEPARTMENT);
         assertThat(result.targets()).isEmpty();
+    }
+
+    @Test
+    void createFlushesGeneratedTasksBeforeClearingPersistenceContext() {
+        UUID planId = UUID.randomUUID();
+        String codePrefix = "PPR-" + Year.now().getValue() + "-";
+        String expectedCode = codePrefix + "0001";
+        when(planRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(planRepository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
+        when(planRepository.saveAndFlush(any(PprPlan.class))).thenAnswer(invocation -> {
+            PprPlan plan = invocation.getArgument(0);
+            plan.setId(planId);
+            return plan;
+        });
+        when(planRepository.findByIdAndIsDeletedFalse(planId))
+                .thenReturn(Optional.of(plan(planId, PlanStatus.GENERATED)));
+
+        service.create(new PprPlanRequest(
+                "Generated plan",
+                null,
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31)
+        ));
+
+        var persistenceOrder = inOrder(entityManager);
+        persistenceOrder.verify(entityManager).flush();
+        persistenceOrder.verify(entityManager).clear();
     }
 
     @Test
