@@ -6,6 +6,7 @@ import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
+import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.service.approval.LifecycleApprovalRoutePolicy.Reason;
@@ -146,6 +147,14 @@ class LifecycleApprovalRoutePolicyTest {
                 explicitRoute(3, EXPLICIT_APPROVER));
     }
 
+    @Test
+    void allowsRoleConfiguredParallelTemplateBeforePersonalExpansion() {
+        ApprovalTemplate template = template(roleRoute(1, "CAMPAIGN_APPROVER"));
+        template.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+
+        assertThat(policy.validateTemplate(template).reason()).isEqualTo(VALID);
+    }
+
     @ParameterizedTest(name = "template structure: {0}")
     @MethodSource("invalidTemplateRoutes")
     void rejectsInvalidTemplateStructure(String description, RouteStep[] route, Reason reason) {
@@ -228,6 +237,29 @@ class LifecycleApprovalRoutePolicyTest {
                 .containsExactly(2, 1, null, 7);
         assertThatThrownBy(() -> result.orderedSteps().clear())
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void rejectsRoleBasedParallelRuntimeStepsBeforeTheyCanBeActionable() {
+        ApprovalRequest request = pendingRequest(roleRoute(1, "CAMPAIGN_APPROVER"));
+        request.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        request.setCurrentStep(0);
+
+        assertThat(policy.validateRuntime(request).reason()).isEqualTo(INVALID_ASSIGNMENT);
+    }
+
+    @Test
+    void rejectsDecisionsOnRoleBasedParallelRuntimeSteps() {
+        ApprovalRequest request = pendingRequest(roleRoute(1, "CAMPAIGN_APPROVER"));
+        request.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        request.setCurrentStep(0);
+
+        assertThat(policy.validateDecision(
+                request,
+                request.getSteps().getFirst(),
+                UUID.randomUUID(),
+                ApprovalDecision.APPROVED,
+                true).reason()).isEqualTo(INVALID_ASSIGNMENT);
     }
 
     @Test

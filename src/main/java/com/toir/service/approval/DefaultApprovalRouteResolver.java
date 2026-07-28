@@ -19,13 +19,16 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
 
     private final ApprovalTemplateRepository templateRepository;
     private final LifecycleApprovalRoutePolicy lifecycleRoutePolicy;
+    private final ParallelApprovalAssigneeResolver parallelAssigneeResolver;
 
     @Autowired
     public DefaultApprovalRouteResolver(
             ApprovalTemplateRepository templateRepository,
-            LifecycleApprovalRoutePolicy lifecycleRoutePolicy) {
+            LifecycleApprovalRoutePolicy lifecycleRoutePolicy,
+            ParallelApprovalAssigneeResolver parallelAssigneeResolver) {
         this.templateRepository = templateRepository;
         this.lifecycleRoutePolicy = lifecycleRoutePolicy;
+        this.parallelAssigneeResolver = parallelAssigneeResolver;
     }
 
     @Override
@@ -101,12 +104,14 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
             return new LifecycleRouteResolution(List.of(), validation.reason());
         }
 
-        List<CreateApprovalRequest.StepInput> frozenSteps = validation.orderedSteps().stream()
-                .map(step -> new CreateApprovalRequest.StepInput(
-                        step.approverId(),
-                        step.approverRole()))
-                .toList();
         ApprovalTemplate template = templates.getFirst();
+        List<CreateApprovalRequest.StepInput> frozenSteps = effectiveFlowType(template) == ApprovalFlowType.PARALLEL_ALL
+                ? parallelAssigneeResolver.resolve(template)
+                : validation.orderedSteps().stream()
+                        .map(step -> new CreateApprovalRequest.StepInput(
+                                step.approverId(),
+                                step.approverRole()))
+                        .toList();
         return new LifecycleRouteResolution(
                 frozenSteps,
                 validation.reason(),
@@ -122,6 +127,13 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
     }
 
     private List<CreateApprovalRequest.StepInput> stepsFromTemplate(ApprovalTemplate template) {
+        if (effectiveFlowType(template) == ApprovalFlowType.PARALLEL_ALL) {
+            return parallelAssigneeResolver.resolve(template);
+        }
+        return configuredSequentialSteps(template);
+    }
+
+    private List<CreateApprovalRequest.StepInput> configuredSequentialSteps(ApprovalTemplate template) {
         List<CreateApprovalRequest.StepInput> configuredSteps = template.getSteps().stream()
                 .filter(step -> !step.isDeleted())
                 .sorted(java.util.Comparator.comparingInt(ApprovalTemplateStep::getStepOrder))

@@ -1376,6 +1376,44 @@ class ApprovalServiceTest {
     }
 
     @Test
+    void parallelMaterializationPersistsOnlyExplicitPersonalSteps() {
+        UUID targetId = UUID.randomUUID();
+        UUID firstApprover = UUID.randomUUID();
+        UUID secondApprover = UUID.randomUUID();
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                targetId,
+                ApprovalActionType.APPROVE,
+                null,
+                List.of(
+                        new CreateApprovalRequest.StepInput(firstApprover, null),
+                        new CreateApprovalRequest.StepInput(secondApprover, null)),
+                LifecycleApprovalRoutePolicy.Reason.VALID,
+                ApprovalFlowType.PARALLEL_ALL,
+                UUID.randomUUID(),
+                4L);
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "Campaign approval", null, "{\"scopeVersion\":89}");
+
+        ArgumentCaptor<ApprovalRequest> saved = ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getSteps()).allSatisfy(step -> {
+            assertThat(step.getApproverId()).isNotNull();
+            assertThat(step.getApproverRole()).isNull();
+            assertThat(step.getFlowType()).isEqualTo(ApprovalFlowType.PARALLEL_ALL);
+        });
+    }
+
+    @Test
     void unrelatedTargetBehaviorIsUnchanged() {
         UUID targetId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();
