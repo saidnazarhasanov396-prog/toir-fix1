@@ -103,6 +103,16 @@ public class NotificationController {
         return ResponseEntity.ok(notificationFacadeService.unreadCount(target));
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize(READ_AUTH)
+    public ResponseEntity<NotificationDto> getById(
+            @PathVariable UUID id,
+            @CurrentUser AuthenticatedUser user
+    ) {
+        UUID currentUserId = user != null ? UUID.fromString(user.id()) : null;
+        return ResponseEntity.ok(service.findById(id, currentUserId, isNotificationScopeAdmin(user)));
+    }
+
     @PostMapping
     @PreAuthorize(ADMIN_AUTH)
     public ResponseEntity<NotificationDto> send(@Valid @RequestBody NotificationDto r) {

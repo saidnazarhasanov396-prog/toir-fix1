@@ -284,6 +284,7 @@ class RepairRequestServiceTest {
                 any(),
                 any(),
                 any(),
+                any(),
                 any()
         );
     }
@@ -956,7 +957,8 @@ class RepairRequestServiceTest {
                 org.mockito.ArgumentMatchers.contains("Clarification requested"),
                 org.mockito.ArgumentMatchers.contains("Need serial number"),
                 eq(com.toir.enums.NotificationSeverity.INFO),
-                eq("RepairRequest"),
+                any(com.toir.enums.NotificationEventType.class),
+                eq("REPAIR_REQUEST"),
                 eq(id.toString())
         );
     }
@@ -984,7 +986,8 @@ class RepairRequestServiceTest {
                 org.mockito.ArgumentMatchers.contains("Clarification requested"),
                 org.mockito.ArgumentMatchers.contains("Need oil pressure trend"),
                 eq(com.toir.enums.NotificationSeverity.INFO),
-                eq("RepairRequest"),
+                any(com.toir.enums.NotificationEventType.class),
+                eq("REPAIR_REQUEST"),
                 eq(id.toString())
         );
     }
@@ -1145,7 +1148,8 @@ class RepairRequestServiceTest {
                 org.mockito.ArgumentMatchers.contains("Repair request assigned"),
                 eq("Sizga ushbu qurilma bo'yicha ta'mirlash vazifasi biriktirildi."),
                 eq(com.toir.enums.NotificationSeverity.INFO),
-                eq("RepairRequest"),
+                any(com.toir.enums.NotificationEventType.class),
+                eq("REPAIR_REQUEST"),
                 eq(id.toString())
         );
     }

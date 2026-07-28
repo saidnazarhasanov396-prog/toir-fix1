@@ -3,8 +3,10 @@ package com.toir.service.maintanance;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.enums.MaintenanceDueStatus;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.security.PermissionConstants;
+import com.toir.service.NotificationEntityTypes;
 import com.toir.service.NotificationService;
 import java.util.List;
 import java.util.UUID;
@@ -15,7 +17,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class MaintenanceAutomationNotificationService {
 
-    public static final String ENTITY_TYPE = "MaintenanceDueEvent";
+    public static final String ENTITY_TYPE = NotificationEntityTypes.MAINTENANCE_DUE_EVENT;
     public static final String MAINTENANCE_UPCOMING = "MAINTENANCE_UPCOMING";
     public static final String MAINTENANCE_DUE = "MAINTENANCE_DUE";
     public static final String MAINTENANCE_OVERDUE = "MAINTENANCE_OVERDUE";
@@ -35,6 +37,7 @@ public class MaintenanceAutomationNotificationService {
                 event,
                 rule,
                 equipment,
+                statusEventType(event.getDueStatus()),
                 statusTitle(event.getDueStatus()),
                 statusMessage(event.getDueStatus(), event.getCycleKey()),
                 statusSeverity(event.getDueStatus())
@@ -48,6 +51,7 @@ public class MaintenanceAutomationNotificationService {
                 event,
                 rule,
                 equipment,
+                NotificationEventType.MAINTENANCE_REQUIRES_APPROVAL,
                 MAINTENANCE_REQUIRES_APPROVAL,
                 "Maintenance requires approval: " + event.getCycleKey(),
                 NotificationSeverity.WARNING
@@ -61,6 +65,7 @@ public class MaintenanceAutomationNotificationService {
                 event,
                 rule,
                 equipment,
+                NotificationEventType.MAINTENANCE_WORK_ORDER_CREATED,
                 MAINTENANCE_WORK_ORDER_CREATED,
                 "Maintenance work order created: " + event.getCycleKey(),
                 NotificationSeverity.INFO
@@ -70,6 +75,7 @@ public class MaintenanceAutomationNotificationService {
     private int notifyRecipients(MaintenanceDueEvent event,
                                  EquipmentMaintenanceEffectiveRule rule,
                                  Equipment equipment,
+                                 NotificationEventType eventType,
                                  String title,
                                  String message,
                                  NotificationSeverity severity) {
@@ -83,6 +89,7 @@ public class MaintenanceAutomationNotificationService {
                     title,
                     message,
                     severity,
+                    eventType,
                     ENTITY_TYPE,
                     entityId
             ).isPresent() ? 1 : 0;
@@ -95,6 +102,7 @@ public class MaintenanceAutomationNotificationService {
                 title,
                 message,
                 severity,
+                eventType,
                 ENTITY_TYPE,
                 entityId
         );
@@ -110,6 +118,7 @@ public class MaintenanceAutomationNotificationService {
                 title,
                 message,
                 severity,
+                eventType,
                 ENTITY_TYPE,
                 entityId
         ).isPresent() ? 1 : 0;
@@ -122,6 +131,15 @@ public class MaintenanceAutomationNotificationService {
         return equipment.getResponsibleDepartmentId() != null
                 ? equipment.getResponsibleDepartmentId()
                 : equipment.getDepartmentId();
+    }
+
+    private NotificationEventType statusEventType(MaintenanceDueStatus status) {
+        return switch (status) {
+            case UPCOMING -> NotificationEventType.MAINTENANCE_UPCOMING;
+            case DUE, NOT_DUE -> NotificationEventType.MAINTENANCE_DUE;
+            case OVERDUE -> NotificationEventType.MAINTENANCE_OVERDUE;
+            case BLOCKED -> NotificationEventType.MAINTENANCE_BLOCKED;
+        };
     }
 
     private String statusTitle(MaintenanceDueStatus status) {

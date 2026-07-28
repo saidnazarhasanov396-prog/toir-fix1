@@ -182,6 +182,14 @@ public class PprPlanController {
                 scopedDepartment(departmentId), equipmentId, status, overdue, page, size));
     }
 
+    @GetMapping("/tasks/{taskId}")
+    @PreAuthorize(PPR_TASK_READ_AUTH)
+    public ResponseEntity<PprTaskDto> getTask(@PathVariable UUID taskId) {
+        PprTask task = taskOrThrow(taskId);
+        assertCanAccessTask(task);
+        return ResponseEntity.ok(PprTaskDto.from(task));
+    }
+
     @GetMapping("/tasks/stats")
     @PreAuthorize(PPR_TASK_READ_AUTH)
     public ResponseEntity<PprTaskStatsResponse> taskStats(

@@ -6,12 +6,14 @@ import com.toir.entity.ApprovalStep;
 import com.toir.entity.EscalationEvent;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalStatus;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.OperationalIssueType;
 import com.toir.enums.SlaTriggerType;
 import com.toir.repository.ApprovalHistoryRepository;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.EscalationEventRepository;
+import com.toir.service.NotificationEntityTypes;
 import com.toir.service.NotificationService;
 import com.toir.service.OperationalIssueService;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +29,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ApprovalGovernanceService {
 
-    public static final String ENTITY_TYPE = "ApprovalRequest";
+    public static final String ENTITY_TYPE = NotificationEntityTypes.APPROVAL_REQUEST;
 
     private final ApprovalRequestRepository requestRepository;
     private final ApprovalHistoryRepository historyRepository;
@@ -57,6 +59,16 @@ public class ApprovalGovernanceService {
         request.setCompletedAt(Instant.now());
         ApprovalRequest saved = requestRepository.save(request);
         record(saved, oldStatus, ApprovalStatus.EXPIRED, changedBy, comment);
+        notificationService.notifyApprovalResult(
+                saved.getRequesterId(),
+                "Approval expired: " + saved.getTitle(),
+                "Approval request " + saved.getTitle() + " expired.",
+                NotificationSeverity.WARNING,
+                NotificationEventType.APPROVAL_EXPIRED,
+                saved.getTargetType() == null ? NotificationEntityTypes.APPROVAL_REQUEST : saved.getTargetType().name(),
+                saved.getTargetId(),
+                saved.getId()
+        );
         return saved;
     }
 
@@ -143,7 +155,8 @@ public class ApprovalGovernanceService {
                 step.getApproverId(),
                 "Approval SLA exceeded: " + request.getTitle(),
                 "Approval request " + request.getTitle() + " is overdue.",
-                severity,
+                 severity,
+                NotificationEventType.APPROVAL_SLA_ESCALATED,
                 ENTITY_TYPE,
                 request.getId().toString()
         ));
@@ -151,7 +164,8 @@ public class ApprovalGovernanceService {
                 request.getRequesterId(),
                 "Approval escalated: " + request.getTitle(),
                 "Approval request " + request.getTitle() + " exceeded its SLA.",
-                severity,
+                 severity,
+                NotificationEventType.APPROVAL_SLA_ESCALATED,
                 ENTITY_TYPE,
                 request.getId().toString()
         );

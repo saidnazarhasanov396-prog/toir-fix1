@@ -58,6 +58,7 @@ class MaintenanceAutomationNotificationServiceTest {
                 eq(MaintenanceAutomationNotificationService.MAINTENANCE_DUE),
                 eq("Maintenance due: cycle-1"),
                 eq(NotificationSeverity.WARNING),
+                any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
                 eq(eventId.toString())
         )).thenReturn(Optional.of(notification(userId, MaintenanceAutomationNotificationService.MAINTENANCE_DUE, eventId)));
@@ -71,6 +72,7 @@ class MaintenanceAutomationNotificationServiceTest {
                 eq(MaintenanceAutomationNotificationService.MAINTENANCE_DUE),
                 eq("Maintenance due: cycle-1"),
                 eq(NotificationSeverity.WARNING),
+                any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
                 eq(eventId.toString())
         );
@@ -90,6 +92,7 @@ class MaintenanceAutomationNotificationServiceTest {
                 eq(MaintenanceAutomationNotificationService.MAINTENANCE_OVERDUE),
                 eq("Maintenance overdue: cycle-1"),
                 eq(NotificationSeverity.CRITICAL),
+                any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
                 eq(eventId.toString())
         )).thenReturn(List.of(notification(UUID.randomUUID(), MaintenanceAutomationNotificationService.MAINTENANCE_OVERDUE, eventId)));
@@ -115,6 +118,7 @@ class MaintenanceAutomationNotificationServiceTest {
                 eq(MaintenanceAutomationNotificationService.MAINTENANCE_BLOCKED),
                 eq("Maintenance blocked: cycle-1"),
                 eq(NotificationSeverity.CRITICAL),
+                any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
                 eq(eventId.toString())
         )).thenReturn(List.of());
@@ -123,6 +127,7 @@ class MaintenanceAutomationNotificationServiceTest {
                 eq(MaintenanceAutomationNotificationService.MAINTENANCE_BLOCKED),
                 eq("Maintenance blocked: cycle-1"),
                 eq(NotificationSeverity.CRITICAL),
+                any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
                 eq(eventId.toString())
         )).thenReturn(Optional.of(notification(UUID.randomUUID(), MaintenanceAutomationNotificationService.MAINTENANCE_BLOCKED, eventId)));
@@ -146,6 +151,7 @@ class MaintenanceAutomationNotificationServiceTest {
                 eq(MaintenanceAutomationNotificationService.MAINTENANCE_UPCOMING),
                 eq("Maintenance upcoming: cycle-1"),
                 eq(NotificationSeverity.INFO),
+                any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
                 eq(eventId.toString())
         )).thenReturn(Optional.empty());
@@ -169,6 +175,7 @@ class MaintenanceAutomationNotificationServiceTest {
                 eq(MaintenanceAutomationNotificationService.MAINTENANCE_REQUIRES_APPROVAL),
                 eq("Maintenance requires approval: cycle-1"),
                 eq(NotificationSeverity.WARNING),
+                any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
                 eq(eventId.toString())
         )).thenReturn(Optional.of(notification(UUID.randomUUID(), MaintenanceAutomationNotificationService.MAINTENANCE_REQUIRES_APPROVAL, eventId)));
@@ -177,6 +184,7 @@ class MaintenanceAutomationNotificationServiceTest {
                 eq(MaintenanceAutomationNotificationService.MAINTENANCE_WORK_ORDER_CREATED),
                 eq("Maintenance work order created: cycle-1"),
                 eq(NotificationSeverity.INFO),
+                any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
                 eq(eventId.toString())
         )).thenReturn(Optional.of(notification(UUID.randomUUID(), MaintenanceAutomationNotificationService.MAINTENANCE_WORK_ORDER_CREATED, eventId)));

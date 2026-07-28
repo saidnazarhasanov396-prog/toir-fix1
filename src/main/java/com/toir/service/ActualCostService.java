@@ -16,6 +16,7 @@ import com.toir.enums.ActualCostSourceType;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.BudgetStatus;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.StockMovementSourceType;
 import com.toir.exception.RestException;
@@ -162,7 +163,8 @@ public class ActualCostService {
                 "Actual cost pending review",
                 "Actual cost " + saved.getId() + " requires finance review.",
                 NotificationSeverity.INFO,
-                "ActualCost",
+                NotificationEventType.ACTUAL_COST_PENDING_REVIEW,
+                NotificationEntityTypes.ACTUAL_COST,
                 saved.getId().toString()
         );
         webhookService.publish("ACTUAL_COST_PENDING", ActualCostDto.from(saved));

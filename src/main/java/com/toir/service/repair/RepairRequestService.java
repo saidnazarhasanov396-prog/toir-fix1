@@ -35,6 +35,7 @@ import com.toir.enums.WarrantyHandling;
 import com.toir.enums.DefectStatus;
 import com.toir.enums.MeterReadingContext;
 import com.toir.enums.MeterSource;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.UserStatus;
 import com.toir.enums.WorkOrderStatus;
@@ -66,6 +67,7 @@ import com.toir.security.ScopeAccessService;
 import com.toir.service.MeterService;
 import com.toir.service.CounteragentService;
 import com.toir.service.attachment.AttachmentGroupService;
+import com.toir.service.NotificationEntityTypes;
 import com.toir.service.NotificationService;
 import com.toir.service.OperationalIssueLifecycleSyncService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
@@ -291,7 +293,8 @@ public class RepairRequestService {
                 "Repair request created: " + saved.getNumber(),
                 "Yangi ta'mirlash arizasi bor, ijrochi biriktirish kerak.",
                 NotificationSeverity.INFO,
-                "RepairRequest",
+                NotificationEventType.REPAIR_REQUEST_CREATED,
+                NotificationEntityTypes.REPAIR_REQUEST,
                 saved.getId().toString()
         );
 
@@ -843,7 +846,8 @@ public class RepairRequestService {
                 "Repair request assigned: " + entity.getNumber(),
                 "Sizga ushbu qurilma bo'yicha ta'mirlash vazifasi biriktirildi.",
                 NotificationSeverity.INFO,
-                "RepairRequest",
+                NotificationEventType.REPAIR_REQUEST_ASSIGNED,
+                NotificationEntityTypes.REPAIR_REQUEST,
                 entity.getId().toString()
         );
         return toDtoWithLinks(entity);
@@ -959,7 +963,8 @@ public class RepairRequestService {
                 "Clarification requested: " + entity.getNumber(),
                 comment,
                 NotificationSeverity.INFO,
-                "RepairRequest",
+                NotificationEventType.REPAIR_REQUEST_CLARIFICATION_REQUESTED,
+                NotificationEntityTypes.REPAIR_REQUEST,
                 entity.getId().toString()
         );
     }

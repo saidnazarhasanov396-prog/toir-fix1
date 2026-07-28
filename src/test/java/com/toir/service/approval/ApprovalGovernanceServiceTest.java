@@ -74,6 +74,11 @@ class ApprovalGovernanceServiceTest {
         assertThat(expired).isEqualTo(1);
         assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.EXPIRED);
         verify(historyRepository).save(any());
+        verify(notificationService).notifyApprovalResult(
+                eq(approval.getRequesterId()), any(), any(), eq(NotificationSeverity.WARNING),
+                eq(com.toir.enums.NotificationEventType.APPROVAL_EXPIRED),
+                eq("WORK_ORDER"), eq(approval.getTargetId()), eq(approval.getId())
+        );
         verify(escalationEventRepository, never()).save(any());
     }
 
@@ -88,7 +93,7 @@ class ApprovalGovernanceServiceTest {
 
         assertThat(escalated).isEqualTo(1);
         assertThat(approval.getEscalatedAt()).isNotNull();
-        verify(notificationService).notifyUser(eq(approval.getRequesterId()), any(), any(), eq(NotificationSeverity.WARNING), eq("ApprovalRequest"), eq(approval.getId().toString()));
+        verify(notificationService).notifyUser(eq(approval.getRequesterId()), any(), any(), eq(NotificationSeverity.WARNING), eq(com.toir.enums.NotificationEventType.APPROVAL_SLA_ESCALATED), eq("APPROVAL_REQUEST"), eq(approval.getId().toString()));
         verify(operationalIssueService).openOrUpdate(
                 eq(OperationalIssueType.APPROVAL_ESCALATION),
                 eq(NotificationSeverity.WARNING),

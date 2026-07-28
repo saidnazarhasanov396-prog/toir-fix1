@@ -58,6 +58,7 @@ import com.toir.enums.MaintenanceTriggerSource;
 import com.toir.enums.MeterReadingContext;
 import com.toir.enums.MeterSource;
 import com.toir.enums.MeterType;
+import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.DefectListStatus;
@@ -1296,7 +1297,8 @@ class WorkOrderServiceTest {
                 contains(request.number()),
                 contains("rejalashtirilgan vaqtda bajarishingiz kerak"),
                 eq(NotificationSeverity.INFO),
-                eq("WorkOrder"),
+                eq(NotificationEventType.WORK_ORDER_ASSIGNED),
+                eq("WORK_ORDER"),
                 eq(result.id().toString())
         );
     }
@@ -1328,7 +1330,8 @@ class WorkOrderServiceTest {
                 contains(result.number()),
                 contains("bugun bajarishingiz kerak"),
                 eq(NotificationSeverity.INFO),
-                eq("WorkOrder"),
+                eq(NotificationEventType.WORK_ORDER_ASSIGNED),
+                eq("WORK_ORDER"),
                 eq(result.id().toString())
         );
     }
@@ -1360,7 +1363,8 @@ class WorkOrderServiceTest {
                 contains(result.number()),
                 contains("bugun bajarishingiz kerak"),
                 eq(NotificationSeverity.INFO),
-                eq("WorkOrder"),
+                eq(NotificationEventType.WORK_ORDER_ASSIGNED),
+                eq("WORK_ORDER"),
                 eq(result.id().toString())
         );
     }
@@ -2386,7 +2390,8 @@ class WorkOrderServiceTest {
                 contains(workOrder.getNumber()),
                 contains("ertaga bajarishingiz kerak"),
                 eq(NotificationSeverity.INFO),
-                eq("WorkOrder"),
+                eq(NotificationEventType.WORK_ORDER_ASSIGNED),
+                eq("WORK_ORDER"),
                 eq(workOrderId.toString())
         );
     }
