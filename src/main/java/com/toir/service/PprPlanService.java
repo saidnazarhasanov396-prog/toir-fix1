@@ -16,6 +16,7 @@ import com.toir.enums.PlanStatus;
 import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprScopeType;
+import com.toir.enums.PprPlanOrigin;
 import com.toir.enums.PprTargetType;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PprType;
@@ -456,7 +457,16 @@ public class PprPlanService {
 
     @Transactional
     public PprPlanDto create(PprPlanRequest request) {
-        PprPlan saved = saveWithGeneratedPlanCode(request);
+        return createWithOrigin(request, PprPlanOrigin.MANUAL);
+    }
+
+    @Transactional
+    public PprPlanDto createScheduleCalculation(PprPlanRequest request) {
+        return createWithOrigin(request, PprPlanOrigin.MAINTENANCE_SCHEDULE);
+    }
+
+    private PprPlanDto createWithOrigin(PprPlanRequest request, PprPlanOrigin origin) {
+        PprPlan saved = saveWithGeneratedPlanCode(request, origin);
         log.info("Calling PprGeneratorService.generateForPlan after PPR plan create: planId={} planCode={} status={} departmentId={}",
                 saved.getId(), saved.getCode(), saved.getStatus(), saved.getDepartmentId());
         PprGeneratorService.GenerationResult generationResult = generatorService.generateForPlan(saved.getId());
@@ -505,6 +515,47 @@ public class PprPlanService {
                 saved
         );
         return toDto(reloadPlan(saved.getId()));
+    }
+
+    @Transactional
+    public PprPlanDto updateScheduleCalculation(UUID id, PprPlanRequest request) {
+        PprPlan plan = planRepository.findByIdAndIsDeletedFalseForUpdate(id)
+                .orElseThrow(() -> RestException.notFound("Maintenance schedule calculation not found: " + id));
+        requireScheduleCalculation(plan);
+        if (plan.getStatus() != PlanStatus.DRAFT && plan.getStatus() != PlanStatus.GENERATED) {
+            throw RestException.conflict("Approved maintenance schedule calculation cannot be changed");
+        }
+        plan.getTasks().stream()
+                .filter(task -> !task.isDeleted())
+                .forEach(task -> task.setDeleted(true));
+        taskRepository.saveAll(plan.getTasks());
+        plan.setStatus(PlanStatus.DRAFT);
+        applyPlanMutableFields(plan, request);
+        planRepository.saveAndFlush(plan);
+        PprGeneratorService.GenerationResult result = generatorService.generateForPlan(id);
+        if (result.created() <= 0) {
+            throw RestException.badRequest("Maintenance schedule calculation has no occurrences");
+        }
+        return toDto(reloadPlan(id));
+    }
+
+    @Transactional
+    public void deleteScheduleCalculation(UUID id) {
+        PprPlan plan = planRepository.findByIdAndIsDeletedFalseForUpdate(id)
+                .orElseThrow(() -> RestException.notFound("Maintenance schedule calculation not found: " + id));
+        requireScheduleCalculation(plan);
+        if (plan.getStatus() != PlanStatus.DRAFT && plan.getStatus() != PlanStatus.GENERATED) {
+            throw RestException.conflict("Approved maintenance schedule calculation cannot be deleted");
+        }
+        plan.setDeleted(true);
+        plan.getTasks().forEach(task -> task.setDeleted(true));
+        planRepository.save(plan);
+    }
+
+    private void requireScheduleCalculation(PprPlan plan) {
+        if (plan.getOrigin() != PprPlanOrigin.MAINTENANCE_SCHEDULE) {
+            throw RestException.notFound("Maintenance schedule calculation not found: " + plan.getId());
+        }
     }
 
     @Transactional
@@ -732,6 +783,10 @@ public class PprPlanService {
     private PprPlan reloadPlan(UUID id) {
         entityManager.clear();
         return getPlan(id);
+    }
+
+    public PprPlanDto toSummaryDto(PprPlan plan) {
+        return toDto(plan);
     }
 
     private PprPlanDto toDto(PprPlan plan) {
@@ -999,7 +1054,7 @@ public class PprPlanService {
                 && normalized.contains("code"));
     }
 
-    private PprPlan saveWithGeneratedPlanCode(PprPlanRequest request) {
+    private PprPlan saveWithGeneratedPlanCode(PprPlanRequest request, PprPlanOrigin origin) {
         int year = Year.now().getValue();
         String codePrefix = "PPR-" + year + "-";
         long sequence = planRepository.maxSequenceByCodePrefix(codePrefix) + 1;
@@ -1012,6 +1067,7 @@ public class PprPlanService {
 
             PprPlan plan = new PprPlan();
             plan.setCode(code);
+            plan.setOrigin(origin);
             applyPlanMutableFields(plan, request);
 
             try {

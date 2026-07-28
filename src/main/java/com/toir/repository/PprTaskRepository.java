@@ -29,6 +29,8 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
             where t.id = :id
               and t.isDeleted = false
               and p.isDeleted = false
+              and (p.origin = com.toir.enums.PprPlanOrigin.MANUAL
+                   or p.status in (com.toir.enums.PlanStatus.APPROVED, com.toir.enums.PlanStatus.IN_PROGRESS, com.toir.enums.PlanStatus.CLOSED, com.toir.enums.PlanStatus.CANCELLED))
             """)
     Optional<PprTask> findByIdAndIsDeletedFalseWithPlan(@Param("id") UUID id);
 
@@ -42,6 +44,8 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
             left join Equipment e on e.id = t.equipmentId and e.isDeleted = false
             where t.isDeleted = false
               and p.isDeleted = false
+              and (p.origin = com.toir.enums.PprPlanOrigin.MANUAL
+                   or p.status in (com.toir.enums.PlanStatus.APPROVED, com.toir.enums.PlanStatus.IN_PROGRESS, com.toir.enums.PlanStatus.CLOSED, com.toir.enums.PlanStatus.CANCELLED))
               and (:departmentId is null or e.departmentId = :departmentId)
               and (:equipmentId is null or t.equipmentId = :equipmentId)
               and (:status is null or t.status = :status)
@@ -63,6 +67,8 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
             left join Equipment e on e.id = t.equipmentId and e.isDeleted = false
             where t.isDeleted = false
               and p.isDeleted = false
+              and (p.origin = com.toir.enums.PprPlanOrigin.MANUAL
+                   or p.status in (com.toir.enums.PlanStatus.APPROVED, com.toir.enums.PlanStatus.IN_PROGRESS, com.toir.enums.PlanStatus.CLOSED, com.toir.enums.PlanStatus.CANCELLED))
               and (:departmentId is null or e.departmentId = :departmentId)
               and (:equipmentId is null or t.equipmentId = :equipmentId)
               and (:status is null or t.status = :status)
@@ -126,6 +132,8 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
             left join Equipment e on e.id = t.equipmentId and e.isDeleted = false
             where t.isDeleted = false
               and p.isDeleted = false
+              and (p.origin = com.toir.enums.PprPlanOrigin.MANUAL
+                   or p.status in (com.toir.enums.PlanStatus.APPROVED, com.toir.enums.PlanStatus.IN_PROGRESS, com.toir.enums.PlanStatus.CLOSED, com.toir.enums.PlanStatus.CANCELLED))
               and (:departmentId is null or e.departmentId = :departmentId)
               and (:equipmentId is null or t.equipmentId = :equipmentId)
               and (:status is null or t.status = :status)
@@ -169,6 +177,8 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
             left join Equipment e on e.id = t.equipmentId and e.isDeleted = false
             where t.isDeleted = false
               and p.isDeleted = false
+              and (p.origin = com.toir.enums.PprPlanOrigin.MANUAL
+                   or p.status in (com.toir.enums.PlanStatus.APPROVED, com.toir.enums.PlanStatus.IN_PROGRESS, com.toir.enums.PlanStatus.CLOSED, com.toir.enums.PlanStatus.CANCELLED))
               and p.status in :planStatuses
               and t.status in :taskStatuses
               and (:departmentId is null or e.departmentId = :departmentId)
@@ -191,6 +201,8 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
             left join Equipment e on e.id = t.equipmentId and e.isDeleted = false
             where t.isDeleted = false
               and p.isDeleted = false
+              and (p.origin = com.toir.enums.PprPlanOrigin.MANUAL
+                   or p.status in (com.toir.enums.PlanStatus.APPROVED, com.toir.enums.PlanStatus.IN_PROGRESS, com.toir.enums.PlanStatus.CLOSED, com.toir.enums.PlanStatus.CANCELLED))
               and p.status in :planStatuses
               and t.status in :taskStatuses
               and (:departmentId is null or e.departmentId = :departmentId)
@@ -224,6 +236,8 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
             left join Equipment e on e.id = t.equipmentId and e.isDeleted = false
             where t.isDeleted = false
               and p.isDeleted = false
+              and (p.origin = com.toir.enums.PprPlanOrigin.MANUAL
+                   or p.status in (com.toir.enums.PlanStatus.APPROVED, com.toir.enums.PlanStatus.IN_PROGRESS, com.toir.enums.PlanStatus.CLOSED, com.toir.enums.PlanStatus.CANCELLED))
               and p.status in :planStatuses
               and t.status in :taskStatuses
               and (:departmentId is null or e.departmentId = :departmentId)
@@ -273,6 +287,8 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
             left join Equipment e on e.id = t.equipmentId and e.isDeleted = false
             where t.isDeleted = false
               and p.isDeleted = false
+              and (p.origin = com.toir.enums.PprPlanOrigin.MANUAL
+                   or p.status in (com.toir.enums.PlanStatus.APPROVED, com.toir.enums.PlanStatus.IN_PROGRESS, com.toir.enums.PlanStatus.CLOSED, com.toir.enums.PlanStatus.CANCELLED))
               and (:departmentId is null or e.departmentId = :departmentId)
               and (:equipmentId is null or t.equipmentId = :equipmentId)
               and (:status is null or t.status = :status)
@@ -304,6 +320,8 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
             where t.id in :ids
               and t.isDeleted = false
               and p.isDeleted = false
+              and (p.origin = com.toir.enums.PprPlanOrigin.MANUAL
+                   or p.status in (com.toir.enums.PlanStatus.APPROVED, com.toir.enums.PlanStatus.IN_PROGRESS, com.toir.enums.PlanStatus.CLOSED, com.toir.enums.PlanStatus.CANCELLED))
             """)
     List<PprTask> findAllByIdInAndIsDeletedFalseWithPlan(@Param("ids") Collection<UUID> ids);
 
