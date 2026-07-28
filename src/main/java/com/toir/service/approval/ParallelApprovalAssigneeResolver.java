@@ -8,6 +8,7 @@ import com.toir.entity.users.User;
 import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.UserStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.users.RoleRepository;
 import com.toir.repository.users.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ import java.util.stream.Stream;
 public class ParallelApprovalAssigneeResolver {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
 
     public List<CreateApprovalRequest.StepInput> resolve(ApprovalTemplate template) {
         if (template == null || template.getFlowType() != ApprovalFlowType.PARALLEL_ALL) {
@@ -50,9 +52,10 @@ public class ParallelApprovalAssigneeResolver {
             if (roleCode == null) {
                 throw invalidTemplateSteps();
             }
+            requireActiveConfiguredRole(roleCode);
             List<User> members = members(activeUsers, roleCode);
             if (members.isEmpty()) {
-                throw RestException.conflict("PARALLEL_APPROVER_ROLE_HAS_NO_ACTIVE_USERS");
+                throw roleHasNoActiveUsers();
             }
             members.forEach(user -> resolved.add(user.getId()));
         }
@@ -100,7 +103,15 @@ public class ParallelApprovalAssigneeResolver {
 
     private void requireActiveExplicitUser(UUID userId, List<User> activeUsers) {
         if (activeUsers.stream().noneMatch(user -> user.getId().equals(userId))) {
-            throw invalidTemplateSteps();
+            throw RestException.badRequest("PARALLEL_APPROVER_NOT_ACTIVE");
+        }
+    }
+
+    private void requireActiveConfiguredRole(String roleCode) {
+        if (roleRepository.findByCodeAndIsDeletedFalse(roleCode)
+                .filter(role -> !role.isDeleted())
+                .isEmpty()) {
+            throw roleHasNoActiveUsers();
         }
     }
 
@@ -119,6 +130,7 @@ public class ParallelApprovalAssigneeResolver {
 
     private boolean hasRole(User user, String roleCode) {
         return roleStream(user)
+                .filter(role -> !role.isDeleted())
                 .map(Role::getCode)
                 .map(this::normalizeRole)
                 .filter(Objects::nonNull)
@@ -148,5 +160,9 @@ public class ParallelApprovalAssigneeResolver {
 
     private RestException invalidTemplateSteps() {
         return RestException.badRequest("APPROVAL_TEMPLATE_STEPS_INVALID");
+    }
+
+    private RestException roleHasNoActiveUsers() {
+        return RestException.conflict("PARALLEL_APPROVER_ROLE_HAS_NO_ACTIVE_USERS");
     }
 }

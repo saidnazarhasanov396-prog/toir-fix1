@@ -93,7 +93,16 @@ class ApprovalRuleServiceTest {
         when(userRepository.findAllByIdInAndIsDeletedFalse(java.util.Set.of(userId)))
                 .thenReturn(List.of(inactive));
 
-        assertInvalid(parallelRule(userId));
+        assertExplicitUserNotActive(parallelRule(userId));
+    }
+
+    @Test
+    void parallelAllRejectsMissingUserWithExplicitUserCode() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findAllByIdInAndIsDeletedFalse(java.util.Set.of(userId)))
+                .thenReturn(List.of());
+
+        assertExplicitUserNotActive(parallelRule(userId));
     }
 
     @Test
@@ -165,7 +174,7 @@ class ApprovalRuleServiceTest {
         UUID userId = UUID.randomUUID();
         User inactive = User.builder().id(userId).fullName("Inactive").status(UserStatus.INACTIVE).build();
         when(userRepository.findAllByIdInAndIsDeletedFalse(Set.of(userId))).thenReturn(List.of(inactive));
-        assertInvalid(sequentialRule(List.of(userStep(1, userId))));
+        assertExplicitUserNotActive(sequentialRule(List.of(userStep(1, userId))));
     }
 
     @Test
@@ -812,6 +821,12 @@ class ApprovalRuleServiceTest {
         assertThatThrownBy(() -> service.saveRule(rule))
                 .isInstanceOfSatisfying(RestException.class,
                         ex -> assertThat(ex.getMessage()).isEqualTo("APPROVAL_TEMPLATE_STEPS_INVALID"));
+    }
+
+    private void assertExplicitUserNotActive(ApprovalRuleDto rule) {
+        assertThatThrownBy(() -> service.saveRule(rule))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getMessage()).isEqualTo("PARALLEL_APPROVER_NOT_ACTIVE"));
     }
 
     private ApprovalRuleDto.Step roleStep(int order, String role) {

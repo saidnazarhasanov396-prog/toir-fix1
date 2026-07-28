@@ -12,6 +12,7 @@ import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.UserStatus;
 import com.toir.repository.ApprovalTemplateRepository;
+import com.toir.repository.users.RoleRepository;
 import com.toir.repository.users.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -27,6 +28,7 @@ import static com.toir.service.approval.LifecycleApprovalRoutePolicy.Reason.NONC
 import static com.toir.service.approval.LifecycleApprovalRoutePolicy.Reason.VALID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -352,10 +354,14 @@ class DefaultApprovalRouteResolverTest {
 
     private static DefaultApprovalRouteResolver resolver(ApprovalTemplateRepository templateRepository,
                                                          UserRepository userRepository) {
+        RoleRepository roleRepository = mock(RoleRepository.class);
+        when(roleRepository.findByCodeAndIsDeletedFalse(anyString()))
+                .thenAnswer(invocation -> Optional.of(
+                        Role.builder().code(invocation.getArgument(0)).build()));
         return new DefaultApprovalRouteResolver(
                 templateRepository,
                 new LifecycleApprovalRoutePolicy(),
-                new ParallelApprovalAssigneeResolver(userRepository));
+                new ParallelApprovalAssigneeResolver(userRepository, roleRepository));
     }
 
     private static ApprovalRequest request(ApprovalTargetType targetType,

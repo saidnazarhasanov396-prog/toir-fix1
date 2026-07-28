@@ -8,29 +8,51 @@ import com.toir.entity.users.User;
 import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.UserStatus;
 import com.toir.exception.RestException;
+import com.toir.repository.users.RoleRepository;
 import com.toir.repository.users.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class ParallelApprovalAssigneeResolverTest {
 
     private static final UUID ALICE_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID BOB_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
     private static final UUID CAROL_ID = UUID.fromString("00000000-0000-0000-0000-000000000003");
 
+    @Mock
+    UserRepository userRepository;
+
+    @Mock
+    RoleRepository roleRepository;
+
+    @InjectMocks
+    ParallelApprovalAssigneeResolver resolver;
+
+    @BeforeEach
+    void allowConfiguredRolesByDefault() {
+        lenient().when(roleRepository.findByCodeAndIsDeletedFalse(anyString()))
+                .thenAnswer(invocation -> Optional.of(role(invocation.getArgument(0))));
+    }
+
     @Test
     void resolvesPrimaryAndAdditionalRolesWithExplicitOverlapToUniquePersonalAssignments() {
-        UserRepository userRepository = mock(UserRepository.class);
-        ParallelApprovalAssigneeResolver resolver = new ParallelApprovalAssigneeResolver(userRepository);
         User alice = user(ALICE_ID, UserStatus.ACTIVE, false, "FINANCE_MANAGER", Set.of());
         User bob = user(BOB_ID, UserStatus.ACTIVE, false, null, Set.of(" FINANCE_MANAGER "));
         User carol = user(CAROL_ID, UserStatus.ACTIVE, false, "AUDITOR", Set.of());
@@ -48,8 +70,6 @@ class ParallelApprovalAssigneeResolverTest {
 
     @Test
     void sortsMembersOfEachRoleByIdRegardlessOfRepositoryOrder() {
-        UserRepository userRepository = mock(UserRepository.class);
-        ParallelApprovalAssigneeResolver resolver = new ParallelApprovalAssigneeResolver(userRepository);
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(
                 user(CAROL_ID, UserStatus.ACTIVE, false, "AUDITOR", Set.of()),
                 user(ALICE_ID, UserStatus.ACTIVE, false, "AUDITOR", Set.of()),
@@ -63,8 +83,6 @@ class ParallelApprovalAssigneeResolverTest {
 
     @Test
     void retainsFirstOccurrenceWhenOneUserMatchesMultipleRoles() {
-        UserRepository userRepository = mock(UserRepository.class);
-        ParallelApprovalAssigneeResolver resolver = new ParallelApprovalAssigneeResolver(userRepository);
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(
                 user(CAROL_ID, UserStatus.ACTIVE, false, "AUDITOR", Set.of()),
                 user(BOB_ID, UserStatus.ACTIVE, false, "FINANCE_MANAGER", Set.of()),
@@ -80,8 +98,6 @@ class ParallelApprovalAssigneeResolverTest {
 
     @Test
     void excludesInactiveAndDeletedRoleMembers() {
-        UserRepository userRepository = mock(UserRepository.class);
-        ParallelApprovalAssigneeResolver resolver = new ParallelApprovalAssigneeResolver(userRepository);
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(
                 user(ALICE_ID, UserStatus.ACTIVE, false, "REVIEWER", Set.of()),
                 user(BOB_ID, UserStatus.INACTIVE, false, "REVIEWER", Set.of()),
@@ -94,20 +110,52 @@ class ParallelApprovalAssigneeResolverTest {
 
     @Test
     void rejectsStaleExplicitUsers() {
-        UserRepository userRepository = mock(UserRepository.class);
-        ParallelApprovalAssigneeResolver resolver = new ParallelApprovalAssigneeResolver(userRepository);
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(
                 user(ALICE_ID, UserStatus.ACTIVE, false, "AUDITOR", Set.of())));
 
         assertThatThrownBy(() -> resolver.resolve(parallelTemplate(explicitStep(1, BOB_ID))))
                 .isInstanceOfSatisfying(RestException.class, ex ->
-                        assertThat(ex.getMessage()).isEqualTo("APPROVAL_TEMPLATE_STEPS_INVALID"));
+                        assertThat(ex.getMessage()).isEqualTo("PARALLEL_APPROVER_NOT_ACTIVE"));
+    }
+
+    @Test
+    void rejectsConfiguredRoleDeletedAfterTemplateSave() {
+        when(roleRepository.findByCodeAndIsDeletedFalse("RETIRED")).thenReturn(Optional.empty());
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(
+                user(ALICE_ID, UserStatus.ACTIVE, false, "RETIRED", Set.of())));
+
+        assertThatThrownBy(() -> resolver.resolve(parallelTemplate(roleStep(1, "RETIRED"))))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage())
+                                .isEqualTo("PARALLEL_APPROVER_ROLE_HAS_NO_ACTIVE_USERS"));
+    }
+
+    @Test
+    void excludesDeletedPrimaryRoleAssociation() {
+        User alice = user(ALICE_ID, UserStatus.ACTIVE, false, "RETIRED", Set.of());
+        alice.getPrimaryRole().setDeleted(true);
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(alice));
+
+        assertThatThrownBy(() -> resolver.resolve(parallelTemplate(roleStep(1, "RETIRED"))))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage())
+                                .isEqualTo("PARALLEL_APPROVER_ROLE_HAS_NO_ACTIVE_USERS"));
+    }
+
+    @Test
+    void excludesDeletedAdditionalRoleAssociation() {
+        User alice = user(ALICE_ID, UserStatus.ACTIVE, false, null, Set.of("RETIRED"));
+        alice.getRoles().iterator().next().setDeleted(true);
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(alice));
+
+        assertThatThrownBy(() -> resolver.resolve(parallelTemplate(roleStep(1, "RETIRED"))))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage())
+                                .isEqualTo("PARALLEL_APPROVER_ROLE_HAS_NO_ACTIVE_USERS"));
     }
 
     @Test
     void roleWithoutActiveUsersUsesStableConflictCode() {
-        UserRepository userRepository = mock(UserRepository.class);
-        ParallelApprovalAssigneeResolver resolver = new ParallelApprovalAssigneeResolver(userRepository);
         when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of());
 
         assertThatThrownBy(() -> resolver.resolve(parallelTemplate(roleStep(1, "EMPTY_ROLE"))))
@@ -118,8 +166,6 @@ class ParallelApprovalAssigneeResolverTest {
 
     @Test
     void rejectsNullAndNonParallelTemplates() {
-        UserRepository userRepository = mock(UserRepository.class);
-        ParallelApprovalAssigneeResolver resolver = new ParallelApprovalAssigneeResolver(userRepository);
         ApprovalTemplate sequential = parallelTemplate(roleStep(1, "AUDITOR"));
         sequential.setFlowType(ApprovalFlowType.SEQUENTIAL);
 
@@ -133,8 +179,6 @@ class ParallelApprovalAssigneeResolverTest {
 
     @Test
     void rejectsAnEmptyFinalAssignmentSet() {
-        UserRepository userRepository = mock(UserRepository.class);
-        ParallelApprovalAssigneeResolver resolver = new ParallelApprovalAssigneeResolver(userRepository);
 
         assertThatThrownBy(() -> resolver.resolve(parallelTemplate()))
                 .isInstanceOfSatisfying(RestException.class, ex ->

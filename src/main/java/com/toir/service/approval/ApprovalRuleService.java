@@ -137,6 +137,7 @@ public class ApprovalRuleService {
         if (lifecycleRule) {
             validateLifecycleCandidate(request, assignments);
         }
+        validateActiveUsers(assignments);
 
         if (lifecycleTarget && request.active()) {
             rejectOtherActiveLifecycleTemplates(template, request.targetType(), actionType);
@@ -273,7 +274,6 @@ public class ApprovalRuleService {
                 throw invalidTemplateSteps();
             }
         }
-        validateActiveUsers(assignments);
         return assignments;
     }
 
@@ -311,7 +311,7 @@ public class ApprovalRuleService {
                 .collect(Collectors.toMap(User::getId, Function.identity()));
         if (userIds.stream().map(usersById::get)
                 .anyMatch(user -> user == null || user.isDeleted() || user.getStatus() != UserStatus.ACTIVE)) {
-            throw invalidTemplateSteps();
+            throw RestException.badRequest("PARALLEL_APPROVER_NOT_ACTIVE");
         }
     }
 
