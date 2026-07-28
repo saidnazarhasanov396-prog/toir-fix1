@@ -45,7 +45,10 @@ public class MaintenanceScheduleController {
                 request.equipmentIds(),
                 request.equipmentTypeIds(),
                 scopedDepartment(request.departmentId()),
-                request.anchorMode()
+                request.anchorMode(),
+                request.shiftFromExcludedWeekdays(),
+                request.excludedWeekdays(),
+                request.recurrenceAnchor()
         );
         return ResponseEntity.ok(service.preview(scopedRequest));
     }
