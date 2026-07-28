@@ -96,9 +96,8 @@ After a successful snapshot:
 - `NOT_APPLICABLE`
 - `NOT_MATERIALIZED`
 - `MATERIALIZED`
-- `FAILED`
 
-Technical database or infrastructure exceptions roll back the transaction and do not persist `FAILED`. `FAILED` is reserved for an explicitly committed domain-level materialization outcome.
+V1 does not persist a materialization-failed status. Technical database or infrastructure exceptions roll back the transaction and preserve the previous materialization state. A persistent failure state may be introduced only with a separately designed recovery and retry workflow.
 
 ### Effective calculation lifecycle
 
@@ -110,9 +109,18 @@ The backend computes, and the frontend consumes:
 - `RETURNED`
 - `REJECTED`
 - `APPROVED`
-- `MATERIALIZATION_FAILED`
 
 `SUPERSEDED` is an approval-request history status, not a current calculation lifecycle.
+
+Effective lifecycle precedence is:
+
+1. `APPROVED`;
+2. `PENDING_APPROVAL`;
+3. `RETURNED` or `REJECTED`;
+4. `CALCULATED`;
+5. `DRAFT`.
+
+An active approval request counts as `PENDING_APPROVAL` only when its persisted revision/hash binding matches the current calculation. Creating a new content revision clears the current-lifecycle effect of older returned or rejected requests; those outcomes remain visible only in approval history.
 
 ## 5. Relational Snapshot Model
 
@@ -280,17 +288,20 @@ Additive nullable `ApprovalRequest` fields:
 - `calculation_revision`
 - `calculation_content_hash`
 - `calculation_content_hash_version`
-- `approval_template_id`
-- `approval_template_version`
 - `resolved_route_fingerprint`
 - `requester_context_fingerprint`
 - `resolution_code`
-- `resolution_reason`
-- `resolved_by`
-- `resolved_at`
 - `superseded_by_request_id`
 
 Legacy approval requests may keep these fields null.
+
+The current schema is canonical for existing approval metadata and must be reused:
+
+- route binding uses existing `template_id` and `template_version`;
+- terminal return reason, actor, and timestamp use existing `last_return_comment`, `last_returned_by`, and `last_returned_at`;
+- technical/business failure detail uses existing `failure_reason`.
+
+No duplicate approval-template or return-resolution columns are created. `resolution_code` is the only new typed terminal-reason discriminator because the current schema has no canonical typed equivalent.
 
 ### Route and context fingerprints
 
@@ -358,12 +369,13 @@ Typed cancellation resolution codes include:
 A partial unique index applies only to revision-bound pending requests:
 
 ```text
-unique(target_type, target_id, effective action)
+unique(target_type, target_id, action_type)
 where status = 'PENDING'
   and calculation_revision is not null
+  and is_deleted = false
 ```
 
-This does not retroactively affect legacy pending duplicates.
+New approval-first requests always persist `action_type = 'APPROVE'`; the index uses that real stored column and no derived “effective action” expression. This does not retroactively affect legacy pending duplicates.
 
 All Annual Maintenance Schedule mutation/finalization flows use the same transaction-scoped target/action advisory lock key:
 
@@ -557,9 +569,13 @@ In one transaction:
 6. bind every task to `sourceCalculationItemId`;
 7. set plan `APPROVED`;
 8. set `MATERIALIZED`;
-9. set approved/materialized revision;
+9. set materialized revision;
 10. store exact materialized task count;
-11. emit audit and success side effects only after state is consistent.
+11. store transactional audit/outbox records only after state is consistent.
+
+`approvedRevision` is not a separate database field. For approval-first calculations it is derived from `materializedRevision`.
+
+External notifications and events are published only after commit through the repository’s canonical outbox or after-commit mechanism. A rolled-back materialization cannot emit an externally visible approval success.
 
 Bulk Work Order generation already accepts `APPROVED` tasks and therefore requires no individual task approval.
 
@@ -780,7 +796,7 @@ Audit metadata includes actor, old/new revision and hash fingerprints, request I
 
 The existing untracked `V20260728_3__add_mixed_trigger_handling_to_ppr_plans.sql` is not renamed, edited, or merged.
 
-Use the next available versions, expected to begin at:
+The current working tree already reserves `V20260728_3`; use these exact next versions:
 
 - `V20260728_4`: plan/approval additive fields, enums/status constraints, expand/backfill/default/constrain;
 - `V20260728_5`: snapshot items and task traceability;
@@ -812,6 +828,13 @@ No migration:
 
 The new flow is protected by a server feature flag/capability.
 
+The feature flag defaults to `false`. While disabled:
+
+- create/update commands cannot create a new `APPROVAL_FIRST` record;
+- the backend does not silently fall back to creating a new legacy Annual Maintenance Schedule calculation;
+- frontend approval-first creation/review-amend actions are hidden or disabled from the server capability;
+- existing legacy records remain readable and keep their existing behavior.
+
 F-01 is not fixed by this work. Approval-first production enablement remains off until:
 
 - F-01 date semantics are corrected; or
@@ -838,6 +861,7 @@ Tests are written before production changes but are not executed in this task.
 - Review-amend/return authorization, mandatory reasons, revision conflicts, and response contracts.
 - Same-key command retry, conflicting reuse, actor isolation, and concurrent single mutation.
 - Stale state commits before HTTP 409 and emits no success side effects.
+- External success notifications/events are emitted only after commit.
 - Exact same-revision integrity verification.
 - Concurrent finalization creates one task set.
 - Transaction failure rolls back tasks and command result.
