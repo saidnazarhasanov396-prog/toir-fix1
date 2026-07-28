@@ -2,13 +2,16 @@ package com.toir.dto.maintenanceschedule;
 
 import com.toir.dto.pprplanning.PprPlanRequest;
 import com.toir.enums.MaintenanceScheduleAnchorMode;
+import com.toir.enums.MaintenanceScheduleRecurrenceAnchor;
 import com.toir.enums.MaintenanceScheduleScopeType;
 import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprScopeType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public record MaintenanceScheduleCalculationRequest(
@@ -21,8 +24,40 @@ public record MaintenanceScheduleCalculationRequest(
         List<UUID> equipmentTypeIds,
         UUID departmentId,
         UUID createdById,
-        @NotNull MaintenanceScheduleAnchorMode anchorMode
+        @NotNull MaintenanceScheduleAnchorMode anchorMode,
+        boolean shiftFromExcludedWeekdays,
+        Set<DayOfWeek> excludedWeekdays,
+        MaintenanceScheduleRecurrenceAnchor recurrenceAnchor
 ) {
+    public MaintenanceScheduleCalculationRequest(
+            String name,
+            String notes,
+            LocalDate fromDate,
+            LocalDate toDate,
+            MaintenanceScheduleScopeType scopeType,
+            List<UUID> equipmentIds,
+            List<UUID> equipmentTypeIds,
+            UUID departmentId,
+            UUID createdById,
+            MaintenanceScheduleAnchorMode anchorMode
+    ) {
+        this(
+                name,
+                notes,
+                fromDate,
+                toDate,
+                scopeType,
+                equipmentIds,
+                equipmentTypeIds,
+                departmentId,
+                createdById,
+                anchorMode,
+                false,
+                Set.of(),
+                MaintenanceScheduleRecurrenceAnchor.REGULATION_DATE
+        );
+    }
+
     public MaintenanceSchedulePreviewRequest toPreviewRequest() {
         return new MaintenanceSchedulePreviewRequest(
                 fromDate,
@@ -31,7 +66,10 @@ public record MaintenanceScheduleCalculationRequest(
                 equipmentIds,
                 equipmentTypeIds,
                 departmentId,
-                anchorMode
+                anchorMode,
+                shiftFromExcludedWeekdays,
+                excludedWeekdays,
+                recurrenceAnchor
         );
     }
 
@@ -51,7 +89,10 @@ public record MaintenanceScheduleCalculationRequest(
                 equipmentIds,
                 equipmentTypeIds,
                 null,
-                anchorMode
+                anchorMode,
+                shiftFromExcludedWeekdays,
+                excludedWeekdays,
+                recurrenceAnchor
         );
     }
 
@@ -66,7 +107,10 @@ public record MaintenanceScheduleCalculationRequest(
                 equipmentTypeIds,
                 scopedDepartmentId,
                 createdById,
-                anchorMode
+                anchorMode,
+                shiftFromExcludedWeekdays,
+                excludedWeekdays,
+                recurrenceAnchor
         );
     }
 }

@@ -85,13 +85,7 @@ public final class LifecycleApprovalRoutePolicy {
                 .map(step -> new RouteStep(
                         step.getStepOrder(), step.getApproverId(), step.getApproverRole()))
                 .toList();
-        ValidationResult structure = validateOrdered(route, true);
-        if (!structure.valid() || effectiveFlowType(template.getFlowType()) != ApprovalFlowType.PARALLEL_ALL) {
-            return structure;
-        }
-        return route.stream().allMatch(step -> step.approverId() != null && step.approverRole() == null)
-                ? structure
-                : ValidationResult.invalid(Reason.INVALID_ASSIGNMENT);
+        return validateOrdered(route, true);
     }
 
     public ValidationResult validateRuntime(ApprovalRequest request) {
@@ -103,7 +97,14 @@ public final class LifecycleApprovalRoutePolicy {
                         step.getStepNumber(), step.getApproverId(), step.getApproverRole()))
                 .toList();
         ValidationResult structure = validateOrdered(route, false);
-        return structure.valid() ? validateRuntimeState(request) : structure;
+        if (!structure.valid()) {
+            return structure;
+        }
+        if (effectiveFlowType(request.getFlowType()) == ApprovalFlowType.PARALLEL_ALL
+                && route.stream().anyMatch(step -> step.approverId() == null)) {
+            return ValidationResult.invalid(Reason.INVALID_ASSIGNMENT);
+        }
+        return validateRuntimeState(request);
     }
 
     public ValidationResult validateDecision(ApprovalRequest request,
@@ -154,6 +155,9 @@ public final class LifecycleApprovalRoutePolicy {
             return structure;
         }
         if (effectiveFlowType(request.getFlowType()) == ApprovalFlowType.PARALLEL_ALL) {
+            if (route.stream().anyMatch(step -> step.approverId() == null)) {
+                return ValidationResult.invalid(Reason.INVALID_ASSIGNMENT);
+            }
             if (steps.stream().anyMatch(step -> step.getDecision() != ApprovalDecision.APPROVED)) {
                 return ValidationResult.invalid(Reason.RUNTIME_INCOMPLETE);
             }

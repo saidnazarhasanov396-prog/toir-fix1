@@ -14,6 +14,7 @@ import com.toir.repository.PprPlanRepository;
 import com.toir.repository.MaintenanceScheduleCalculationRepository;
 import com.toir.service.PprPlanService;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -58,16 +59,25 @@ public class MaintenanceScheduleCalculationService {
         PprPlan plan = schedulePlan(id);
         return new MaintenanceScheduleCalculationDto(
                 pprPlanService.findById(plan.getId()),
-                latestApprovalStatus(plan.getId())
+                latestApprovalStatus(plan.getId()),
+                plan.isShiftFromExcludedWeekdays(),
+                Set.copyOf(plan.getExcludedWeekdays()),
+                plan.getRecurrenceAnchor()
         );
     }
 
     @Transactional
     public MaintenanceScheduleCalculationDto create(MaintenanceScheduleCalculationRequest request) {
         requireNonEmptyPreview(request);
+        var plan = pprPlanService.createScheduleCalculation(request.toPprPlanRequest());
         return new MaintenanceScheduleCalculationDto(
-                pprPlanService.createScheduleCalculation(request.toPprPlanRequest()),
-                null
+                plan,
+                null,
+                request.shiftFromExcludedWeekdays(),
+                request.excludedWeekdays() == null ? Set.of() : Set.copyOf(request.excludedWeekdays()),
+                request.recurrenceAnchor() == null
+                        ? com.toir.enums.MaintenanceScheduleRecurrenceAnchor.REGULATION_DATE
+                        : request.recurrenceAnchor()
         );
     }
 
@@ -78,9 +88,15 @@ public class MaintenanceScheduleCalculationService {
     ) {
         assertMutable(schedulePlan(id));
         requireNonEmptyPreview(request);
+        var plan = pprPlanService.updateScheduleCalculation(id, request.toPprPlanRequest());
         return new MaintenanceScheduleCalculationDto(
-                pprPlanService.updateScheduleCalculation(id, request.toPprPlanRequest()),
-                latestApprovalStatus(id)
+                plan,
+                latestApprovalStatus(id),
+                request.shiftFromExcludedWeekdays(),
+                request.excludedWeekdays() == null ? Set.of() : Set.copyOf(request.excludedWeekdays()),
+                request.recurrenceAnchor() == null
+                        ? com.toir.enums.MaintenanceScheduleRecurrenceAnchor.REGULATION_DATE
+                        : request.recurrenceAnchor()
         );
     }
 
@@ -93,12 +109,19 @@ public class MaintenanceScheduleCalculationService {
     private MaintenanceScheduleCalculationDto toDto(PprPlan plan) {
         return new MaintenanceScheduleCalculationDto(
                 pprPlanService.toSummaryDto(plan),
-                latestApprovalStatus(plan.getId())
+                latestApprovalStatus(plan.getId()),
+                plan.isShiftFromExcludedWeekdays(),
+                Set.copyOf(plan.getExcludedWeekdays()),
+                plan.getRecurrenceAnchor()
         );
     }
 
     private void requireNonEmptyPreview(MaintenanceScheduleCalculationRequest request) {
         MaintenanceSchedulePreviewResponse preview = scheduleService.preview(request.toPreviewRequest());
+        if (preview.diagnostics().stream()
+                .anyMatch(item -> "BLOCKING".equalsIgnoreCase(item.severity()))) {
+            throw RestException.badRequest("Maintenance schedule calculation has blocking diagnostics");
+        }
         if (preview.summary().totalOccurrences() <= 0) {
             throw RestException.badRequest("Maintenance schedule calculation has no occurrences");
         }

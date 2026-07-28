@@ -1,6 +1,7 @@
 package com.toir.service.maintanance;
 
 import com.toir.dto.maintenanceplanning.MaintenanceDueCalculationDto;
+import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewDiagnostic;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewItem;
 import com.toir.dto.maintenanceschedule.MaintenanceScheduleOption;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewRequest;
@@ -9,10 +10,12 @@ import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewSummary;
 import com.toir.entity.equipment.Equipment;
 import com.toir.enums.MaintenanceScheduleAnchorMode;
 import com.toir.enums.MaintenanceScheduleAnchorSource;
+import com.toir.enums.MaintenanceScheduleRecurrenceAnchor;
 import com.toir.enums.MaintenanceScheduleScopeType;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.exception.RestException;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -94,6 +97,7 @@ public class MaintenanceScheduleService {
         validate(request);
         List<Equipment> equipment = eligibilitySelector.selectForPreview(request);
         List<MaintenanceSchedulePreviewItem> items = new ArrayList<>();
+        List<MaintenanceSchedulePreviewDiagnostic> diagnostics = new ArrayList<>();
         Set<RuleSignature> missingMeters = new HashSet<>();
         Set<UUID> matchedEquipment = new HashSet<>();
 
@@ -104,16 +108,30 @@ public class MaintenanceScheduleService {
                     missingMeters.add(new RuleSignature(
                             item.getId(), rule.regulationId(), rule.equipmentMaintenanceRuleId()));
                 }
-                List<LocalDate> dates = occurrenceDates(request, rule, due);
-                if (!dates.isEmpty()) {
+                OccurrenceSchedule schedule = occurrenceDates(request, rule, due);
+                if (!schedule.dates().isEmpty() || !schedule.outsidePeriod().isEmpty()) {
                     matchedEquipment.add(item.getId());
                 }
-                for (LocalDate plannedDate : dates) {
+                for (OccurrenceDate outside : schedule.outsidePeriod()) {
+                    diagnostics.add(new MaintenanceSchedulePreviewDiagnostic(
+                            "SHIFTED_OUTSIDE_PERIOD",
+                            "BLOCKING",
+                            item.getId(),
+                            item.getCode(),
+                            rule.regulationId(),
+                            rule.equipmentMaintenanceRuleId(),
+                            rule.name(),
+                            outside.regulationDate(),
+                            outside.plannedDate(),
+                            null
+                    ));
+                }
+                for (OccurrenceDate date : schedule.dates()) {
                     if (items.size() >= MAX_OCCURRENCES) {
                         throw RestException.badRequest(
                                 "Maintenance schedule exceeds maximum occurrence count: " + MAX_OCCURRENCES);
                     }
-                    items.add(toItem(item, rule, plannedDate, request.anchorMode()));
+                    items.add(toItem(item, rule, date, request.anchorMode()));
                 }
             }
         }
@@ -134,11 +152,12 @@ public class MaintenanceScheduleService {
                         items.size(),
                         missingMeters.size(),
                         equipment.size() - matchedEquipment.size()
-                )
+                ),
+                List.copyOf(diagnostics)
         );
     }
 
-    private List<LocalDate> occurrenceDates(
+    private OccurrenceSchedule occurrenceDates(
             MaintenanceSchedulePreviewRequest request,
             EquipmentMaintenanceEffectiveRule rule,
             MaintenanceDueCalculationDto due
@@ -147,27 +166,63 @@ public class MaintenanceScheduleService {
                 || rule.periodicityUnit() == PeriodicityUnit.HOUR
                 || rule.periodicityUnit() == null
                 || rule.periodicityValue() <= 0) {
-            return List.of();
+            return OccurrenceSchedule.empty();
         }
         LocalDate cursor;
         if (request.anchorMode() == MaintenanceScheduleAnchorMode.RESET_TO_PLAN_START) {
             cursor = advance(request.fromDate(), rule.periodicityUnit(), rule.periodicityValue());
         } else {
             if (due == null || due.nextCalendarDueAt() == null) {
-                return List.of();
+                return OccurrenceSchedule.empty();
             }
             cursor = due.nextCalendarDueAt().atZone(zoneId).toLocalDate();
             while (cursor.isBefore(request.fromDate())) {
-                cursor = advance(cursor, rule.periodicityUnit(), rule.periodicityValue());
+                LocalDate plannedDate = shiftDate(request, cursor);
+                LocalDate recurrenceBase =
+                        recurrenceAnchor(request) == MaintenanceScheduleRecurrenceAnchor.SHIFTED_DATE
+                                ? plannedDate
+                                : cursor;
+                cursor = advance(recurrenceBase, rule.periodicityUnit(), rule.periodicityValue());
             }
         }
 
-        List<LocalDate> dates = new ArrayList<>();
+        List<OccurrenceDate> dates = new ArrayList<>();
+        List<OccurrenceDate> outsidePeriod = new ArrayList<>();
         while (!cursor.isAfter(request.toDate())) {
-            dates.add(cursor);
-            cursor = advance(cursor, rule.periodicityUnit(), rule.periodicityValue());
+            LocalDate regulationDate = cursor;
+            LocalDate plannedDate = shiftDate(request, regulationDate);
+            OccurrenceDate occurrence = new OccurrenceDate(
+                    regulationDate,
+                    plannedDate,
+                    Math.toIntExact(ChronoUnit.DAYS.between(regulationDate, plannedDate))
+            );
+            (plannedDate.isAfter(request.toDate()) ? outsidePeriod : dates).add(occurrence);
+            LocalDate recurrenceBase = recurrenceAnchor(request) == MaintenanceScheduleRecurrenceAnchor.SHIFTED_DATE
+                    ? plannedDate
+                    : regulationDate;
+            cursor = advance(recurrenceBase, rule.periodicityUnit(), rule.periodicityValue());
         }
-        return dates;
+        return new OccurrenceSchedule(List.copyOf(dates), List.copyOf(outsidePeriod));
+    }
+
+    private LocalDate shiftDate(MaintenanceSchedulePreviewRequest request, LocalDate regulationDate) {
+        if (!request.shiftFromExcludedWeekdays()) {
+            return regulationDate;
+        }
+        Set<DayOfWeek> excluded = request.excludedWeekdays();
+        LocalDate shifted = regulationDate;
+        while (excluded.contains(shifted.getDayOfWeek())) {
+            shifted = shifted.plusDays(1);
+        }
+        return shifted;
+    }
+
+    private MaintenanceScheduleRecurrenceAnchor recurrenceAnchor(
+            MaintenanceSchedulePreviewRequest request
+    ) {
+        return request.recurrenceAnchor() == null
+                ? MaintenanceScheduleRecurrenceAnchor.REGULATION_DATE
+                : request.recurrenceAnchor();
     }
 
     private LocalDate advance(LocalDate date, PeriodicityUnit unit, int value) {
@@ -184,7 +239,7 @@ public class MaintenanceScheduleService {
     private MaintenanceSchedulePreviewItem toItem(
             Equipment equipment,
             EquipmentMaintenanceEffectiveRule rule,
-            LocalDate plannedDate,
+            OccurrenceDate date,
             MaintenanceScheduleAnchorMode anchorMode
     ) {
         return new MaintenanceSchedulePreviewItem(
@@ -197,12 +252,15 @@ public class MaintenanceScheduleService {
                 rule.maintenanceKind(),
                 rule.periodicityUnit(),
                 rule.periodicityValue(),
-                plannedDate,
+                date.plannedDate(),
                 anchorMode == MaintenanceScheduleAnchorMode.CURRENT
                         ? MaintenanceScheduleAnchorSource.EXISTING_DUE_DATE
                         : MaintenanceScheduleAnchorSource.PLAN_START,
                 rule.normativeLaborHours(),
-                rule.requiresShutdown()
+                rule.requiresShutdown(),
+                date.regulationDate(),
+                date.shiftDays() > 0,
+                date.shiftDays()
         );
     }
 
@@ -238,6 +296,18 @@ public class MaintenanceScheduleService {
         if (request.anchorMode() == null) {
             throw RestException.badRequest("anchorMode is required");
         }
+        if (request.shiftFromExcludedWeekdays()) {
+            if (request.excludedWeekdays() == null || request.excludedWeekdays().isEmpty()) {
+                throw RestException.badRequest(
+                        "excludedWeekdays is required when weekday shifting is enabled");
+            }
+            if (request.excludedWeekdays().size() == DayOfWeek.values().length) {
+                throw RestException.badRequest("excludedWeekdays must not contain all weekdays");
+            }
+            if (request.excludedWeekdays().stream().anyMatch(Objects::isNull)) {
+                throw RestException.badRequest("excludedWeekdays must not contain null values");
+            }
+        }
         if (request.scopeType() == MaintenanceScheduleScopeType.EQUIPMENT) {
             requireIds("equipmentIds", request.equipmentIds());
             rejectIds("equipmentTypeIds", request.equipmentTypeIds());
@@ -265,6 +335,21 @@ public class MaintenanceScheduleService {
     private void rejectIds(String field, List<UUID> ids) {
         if (ids != null && !ids.isEmpty()) {
             throw RestException.badRequest(field + " is not allowed for selected scopeType");
+        }
+    }
+
+    private record OccurrenceDate(
+            LocalDate regulationDate,
+            LocalDate plannedDate,
+            int shiftDays
+    ) {}
+
+    private record OccurrenceSchedule(
+            List<OccurrenceDate> dates,
+            List<OccurrenceDate> outsidePeriod
+    ) {
+        private static OccurrenceSchedule empty() {
+            return new OccurrenceSchedule(List.of(), List.of());
         }
     }
 

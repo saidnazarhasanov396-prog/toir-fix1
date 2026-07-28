@@ -11,7 +11,9 @@ import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.UserStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalTemplateRepository;
+import com.toir.repository.users.RoleRepository;
 import com.toir.repository.users.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -22,11 +24,14 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -38,11 +43,18 @@ class ApprovalRuleServiceTest {
 
     private final ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
+    private final RoleRepository roleRepository = mock(RoleRepository.class);
     private final ApprovalRuleService service = new ApprovalRuleService(
             templateRepository,
             userRepository,
+            roleRepository,
             new LifecycleApprovalRoutePolicy()
     );
+
+    @BeforeEach
+    void allowExistingValidRoles() {
+        lenient().when(roleRepository.existsByCodeAndIsDeletedFalse(anyString())).thenReturn(true);
+    }
 
     @Test
     void parallelAllPersistsUniqueActiveExplicitUsers() {
@@ -71,9 +83,7 @@ class ApprovalRuleServiceTest {
     void parallelAllRejectsDuplicateUsers() {
         UUID userId = UUID.randomUUID();
 
-        assertThatThrownBy(() -> service.saveRule(parallelRule(userId, userId)))
-                .isInstanceOf(RestException.class)
-                .hasMessageContaining("PARALLEL_APPROVERS_MUST_BE_UNIQUE");
+        assertInvalid(parallelRule(userId, userId));
     }
 
     @Test
@@ -83,27 +93,119 @@ class ApprovalRuleServiceTest {
         when(userRepository.findAllByIdInAndIsDeletedFalse(java.util.Set.of(userId)))
                 .thenReturn(List.of(inactive));
 
-        assertThatThrownBy(() -> service.saveRule(parallelRule(userId)))
-                .isInstanceOf(RestException.class)
-                .hasMessageContaining("PARALLEL_APPROVER_NOT_ACTIVE");
+        assertExplicitUserNotActive(parallelRule(userId));
     }
 
     @Test
-    void parallelAllRejectsRoleAssignment() {
+    void parallelAllRejectsMissingUserWithExplicitUserCode() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findAllByIdInAndIsDeletedFalse(java.util.Set.of(userId)))
+                .thenReturn(List.of());
+
+        assertExplicitUserNotActive(parallelRule(userId));
+    }
+
+    @Test
+    void parallelAllRejectsRoleAssignmentWithUserId() {
         ApprovalRuleDto invalid = new ApprovalRuleDto(
                 null,
                 ApprovalTargetType.WORK_ORDER,
                 ApprovalActionType.APPROVE,
                 "Parallel",
                 1,
-                List.of(roleStep(1, "MANAGER")),
+                List.of(new ApprovalRuleDto.Step(
+                        1, UUID.randomUUID(), null, "MANAGER", ApprovalRuleDto.ApproverType.ROLE)),
                 true,
                 ApprovalFlowType.PARALLEL_ALL,
                 null);
 
-        assertThatThrownBy(() -> service.saveRule(invalid))
-                .isInstanceOf(RestException.class)
-                .hasMessageContaining("PARALLEL_APPROVERS_MUST_BE_USERS");
+        assertInvalid(invalid);
+    }
+
+    @Test
+    void parallelAllPersistsMixedRoleAndUserAssignments() {
+        UUID userId = UUID.randomUUID();
+        stubActiveUser(userId);
+        stubRole("FINANCE_MANAGER");
+        stubOrdinarySave();
+
+        ApprovalRuleDto saved = service.saveRule(parallelRule(List.of(
+                roleStep(1, "FINANCE_MANAGER"),
+                userStep(2, userId))));
+
+        assertThat(saved.steps()).extracting(ApprovalRuleDto.Step::approverType)
+                .containsExactly(ApprovalRuleDto.ApproverType.ROLE,
+                        ApprovalRuleDto.ApproverType.USER);
+    }
+
+    @Test
+    void parallelAllRejectsDuplicateConfiguredRoles() {
+        assertInvalid(parallelRule(List.of(
+                roleStep(1, "FINANCE_MANAGER"),
+                roleStep(2, "FINANCE_MANAGER"))));
+    }
+
+    @Test
+    void ordinarySequentialPersistsExplicitUserWithoutCoercingToRole() {
+        UUID userId = UUID.randomUUID();
+        stubActiveUser(userId);
+        stubOrdinarySave();
+
+        ApprovalRuleDto saved = service.saveRule(sequentialRule(List.of(userStep(1, userId))));
+
+        assertThat(saved.steps().getFirst().approverId()).isEqualTo(userId);
+        assertThat(saved.steps().getFirst().approverRole()).isNull();
+    }
+
+    @Test
+    void ordinarySequentialRejectsAssignmentXorViolationsAndBlankRoles() {
+        UUID userId = UUID.randomUUID();
+        stubOrdinarySave();
+
+        assertInvalid(sequentialRule(List.of(new ApprovalRuleDto.Step(
+                1, userId, null, "FINANCE_MANAGER", ApprovalRuleDto.ApproverType.USER))));
+        assertInvalid(sequentialRule(List.of(new ApprovalRuleDto.Step(
+                1, userId, null, "FINANCE_MANAGER", ApprovalRuleDto.ApproverType.ROLE))));
+        assertInvalid(sequentialRule(List.of(roleStep(1, "  "))));
+    }
+
+    @Test
+    void ordinarySequentialRejectsInactiveUser() {
+        UUID userId = UUID.randomUUID();
+        User inactive = User.builder().id(userId).fullName("Inactive").status(UserStatus.INACTIVE).build();
+        when(userRepository.findAllByIdInAndIsDeletedFalse(Set.of(userId))).thenReturn(List.of(inactive));
+        assertExplicitUserNotActive(sequentialRule(List.of(userStep(1, userId))));
+    }
+
+    @Test
+    void ordinarySequentialRejectsUnknownRole() {
+        stubOrdinarySave();
+        when(roleRepository.existsByCodeAndIsDeletedFalse("UNKNOWN_ROLE")).thenReturn(false);
+        assertInvalid(sequentialRule(List.of(roleStep(1, "UNKNOWN_ROLE"))));
+    }
+
+    @Test
+    void ordinarySequentialRejectsNonContiguousOrders() {
+        stubOrdinarySave();
+        assertInvalid(sequentialRule(List.of(
+                roleStep(1, "FINANCE_MANAGER"), roleStep(3, "SYSTEM_ADMIN"))));
+    }
+
+    @Test
+    void lifecycleSequentialPersistsMixedRoleAndUserAssignments() {
+        UUID userId = UUID.randomUUID();
+        stubActiveUser(userId);
+        stubRole("FINANCE_MANAGER");
+        stubActiveLifecycleSave();
+
+        ApprovalRuleDto saved = service.saveRule(lifecycleRule(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                List.of(roleStep(1, "FINANCE_MANAGER"), userStep(2, userId)),
+                true));
+
+        assertThat(saved.steps()).extracting(ApprovalRuleDto.Step::approverType)
+                .containsExactly(ApprovalRuleDto.ApproverType.ROLE,
+                        ApprovalRuleDto.ApproverType.USER);
     }
 
     @Test
@@ -310,6 +412,7 @@ class ApprovalRuleServiceTest {
     @Test
     void explicitUserStepRetainsApproverIdAndNullRole() {
         UUID approverId = UUID.randomUUID();
+        stubActiveUser(approverId);
         stubActiveLifecycleSave();
 
         ApprovalRuleDto saved = service.saveRule(lifecycleRule(
@@ -681,6 +784,49 @@ class ApprovalRuleServiceTest {
                 true,
                 ApprovalFlowType.PARALLEL_ALL,
                 null);
+    }
+
+    private ApprovalRuleDto parallelRule(List<ApprovalRuleDto.Step> steps) {
+        return new ApprovalRuleDto(
+                null, ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE,
+                "Parallel", steps.size(), steps, true, ApprovalFlowType.PARALLEL_ALL, null);
+    }
+
+    private ApprovalRuleDto sequentialRule(List<ApprovalRuleDto.Step> steps) {
+        return new ApprovalRuleDto(
+                null, ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE,
+                "Sequential", steps.size(), steps, true, ApprovalFlowType.SEQUENTIAL, null);
+    }
+
+    private void stubActiveUser(UUID id) {
+        User user = User.builder().id(id).fullName("Active").status(UserStatus.ACTIVE).build();
+        when(userRepository.findAllByIdInAndIsDeletedFalse(Set.of(id))).thenReturn(List.of(user));
+    }
+
+    private void stubRole(String code) {
+        when(roleRepository.existsByCodeAndIsDeletedFalse(code)).thenReturn(true);
+    }
+
+    private void stubOrdinarySave() {
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE)).thenReturn(Optional.empty());
+        when(templateRepository.findByCode("WORK_ORDER_APPROVE")).thenReturn(Optional.empty());
+        when(templateRepository.findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
+                ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE)).thenReturn(List.of());
+        when(templateRepository.saveAndFlush(any(ApprovalTemplate.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private void assertInvalid(ApprovalRuleDto rule) {
+        assertThatThrownBy(() -> service.saveRule(rule))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getMessage()).isEqualTo("APPROVAL_TEMPLATE_STEPS_INVALID"));
+    }
+
+    private void assertExplicitUserNotActive(ApprovalRuleDto rule) {
+        assertThatThrownBy(() -> service.saveRule(rule))
+                .isInstanceOfSatisfying(RestException.class,
+                        ex -> assertThat(ex.getMessage()).isEqualTo("PARALLEL_APPROVER_NOT_ACTIVE"));
     }
 
     private ApprovalRuleDto.Step roleStep(int order, String role) {

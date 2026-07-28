@@ -669,6 +669,11 @@ public class ApprovalService implements ApprovalOrchestrator {
         }
 
         List<CreateApprovalRequest.StepInput> frozenSteps = normalizeLifecyclePlanSteps(plan.frozenSteps());
+        if (plan.flowType() == ApprovalFlowType.PARALLEL_ALL
+                && frozenSteps.stream()
+                .anyMatch(step -> requesterId.equals(step.approverId()))) {
+            throw RestException.conflict("LIFECYCLE_APPROVAL_REQUESTER_ASSIGNEE_CONFLICT");
+        }
         ApprovalRequest request = new ApprovalRequest();
         request.setTargetType(plan.targetType());
         request.setTargetId(plan.targetId());

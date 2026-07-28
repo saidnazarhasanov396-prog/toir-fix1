@@ -122,7 +122,10 @@ public class PprGeneratorService {
                         equipmentIds,
                         equipmentTypeIds,
                         plan.getDepartmentId(),
-                        plan.getAnchorMode()
+                        plan.getAnchorMode(),
+                        plan.isShiftFromExcludedWeekdays(),
+                        plan.getExcludedWeekdays(),
+                        plan.getRecurrenceAnchor()
                 )
         );
         GenerationTracker tracker = new GenerationTracker(generationPlanFields(plan));

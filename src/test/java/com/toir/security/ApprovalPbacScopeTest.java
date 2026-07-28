@@ -33,6 +33,7 @@ import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.actualCost.ActualCostRepository;
 import com.toir.repository.maintenance.MaintenanceBudgetRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.users.RoleRepository;
 import com.toir.repository.users.UserRepository;
 import com.toir.service.ApprovalScopeService;
 import com.toir.service.ApprovalService;
@@ -43,6 +44,7 @@ import com.toir.service.ProcurementRequestService;
 import com.toir.service.WorkOrderService;
 import com.toir.service.approval.DefaultApprovalActionExecutor;
 import com.toir.service.approval.DefaultApprovalRouteResolver;
+import com.toir.service.approval.ParallelApprovalAssigneeResolver;
 import com.toir.service.approval.MaintenanceDueEventApprovalHandler;
 import com.toir.service.approval.MaintenanceBudgetApprovalHandler;
 import com.toir.service.approval.PprPlanApprovalHandler;
@@ -137,7 +139,10 @@ class ApprovalPbacScopeTest {
                 )),
                 governanceService,
                 slaPolicyService,
-                new DefaultApprovalRouteResolver(templateRepository, new LifecycleApprovalRoutePolicy()),
+                new DefaultApprovalRouteResolver(
+                        templateRepository,
+                        new LifecycleApprovalRoutePolicy(),
+                        new ParallelApprovalAssigneeResolver(userRepository, mock(RoleRepository.class))),
                 jdbcTemplate,
                 auditBuilderService,
                 approvalScopeService,

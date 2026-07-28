@@ -8,11 +8,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.toir.dto.maintenanceschedule.MaintenanceScheduleCalculationRequest;
+import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewDiagnostic;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewResponse;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewSummary;
 import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.enums.MaintenanceScheduleAnchorMode;
 import com.toir.enums.MaintenanceScheduleScopeType;
+import com.toir.enums.PlanStatus;
 import com.toir.enums.PprPlanOrigin;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalRequestRepository;
@@ -53,7 +55,20 @@ class MaintenanceScheduleCalculationServiceTest {
     @Test
     void createPersistsASeparatedBuilderPlanWithoutStartingApproval() {
         MaintenanceScheduleCalculationRequest request = request();
-        PprPlanDto saved = org.mockito.Mockito.mock(PprPlanDto.class);
+        PprPlanDto saved = new PprPlanDto(
+                UUID.randomUUID(),
+                "PPR-2027-0001",
+                "Вариант 2027",
+                PlanStatus.GENERATED,
+                request.departmentId(),
+                null,
+                request.createdById(),
+                null,
+                request.notes(),
+                4,
+                request.fromDate(),
+                request.toDate()
+        );
         when(scheduleService.preview(any())).thenReturn(new MaintenanceSchedulePreviewResponse(
                 List.of(),
                 new MaintenanceSchedulePreviewSummary(1, 4, 0, 0)
@@ -78,6 +93,34 @@ class MaintenanceScheduleCalculationServiceTest {
         assertThatThrownBy(() -> service.create(request()))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("no occurrences");
+
+        verify(pprPlanService, never()).createScheduleCalculation(any());
+    }
+
+    @Test
+    void createRejectsBlockingWeekdayShiftDiagnostics() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
+        when(scheduleService.preview(any())).thenReturn(new MaintenanceSchedulePreviewResponse(
+                List.of(),
+                new MaintenanceSchedulePreviewSummary(1, 1, 0, 0),
+                List.of(new MaintenanceSchedulePreviewDiagnostic(
+                        "SHIFTED_OUTSIDE_PERIOD",
+                        "BLOCKING",
+                        equipmentId,
+                        "EQ-1",
+                        regulationId,
+                        null,
+                        "Monthly maintenance",
+                        LocalDate.of(2027, 12, 31),
+                        LocalDate.of(2028, 1, 1),
+                        null
+                ))
+        ));
+
+        assertThatThrownBy(() -> service.create(request()))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("blocking diagnostics");
 
         verify(pprPlanService, never()).createScheduleCalculation(any());
     }

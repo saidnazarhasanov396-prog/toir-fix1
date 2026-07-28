@@ -29,6 +29,8 @@ import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -1373,6 +1375,82 @@ class ApprovalServiceTest {
                 .containsExactly(" MECHANICAL_REVIEW ", null);
         assertThat(saved.getValue().getSteps()).extracting(ApprovalStep::getApproverId)
                 .containsExactly(null, explicitApprover);
+    }
+
+    @Test
+    void parallelMaterializationPersistsOnlyExplicitPersonalSteps() {
+        UUID targetId = UUID.randomUUID();
+        UUID firstApprover = UUID.randomUUID();
+        UUID secondApprover = UUID.randomUUID();
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                targetId,
+                ApprovalActionType.APPROVE,
+                null,
+                List.of(
+                        new CreateApprovalRequest.StepInput(firstApprover, null),
+                        new CreateApprovalRequest.StepInput(secondApprover, null)),
+                LifecycleApprovalRoutePolicy.Reason.VALID,
+                ApprovalFlowType.PARALLEL_ALL,
+                UUID.randomUUID(),
+                4L);
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "Campaign approval", null, "{\"scopeVersion\":89}");
+
+        ArgumentCaptor<ApprovalRequest> saved = ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getSteps()).allSatisfy(step -> {
+            assertThat(step.getApproverId()).isNotNull();
+            assertThat(step.getApproverRole()).isNull();
+            assertThat(step.getFlowType()).isEqualTo(ApprovalFlowType.PARALLEL_ALL);
+        });
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = ApprovalTargetType.class,
+            names = {"REPAIR_CAMPAIGN", "PLANNED_SHUTDOWN"}
+    )
+    void parallelLifecycleMaterializationRejectsRequesterFromExpandedMixedRoute(
+            ApprovalTargetType targetType
+    ) {
+        UUID targetId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID explicitApprover = UUID.randomUUID();
+        when(requestRepository.findAllPendingByTargetAndAction(
+                targetType.name(), targetId, ApprovalActionType.APPROVE.name(),
+                ApprovalStatus.PENDING.name()))
+                .thenReturn(List.of());
+        when(routeResolver.resolveLifecycleRoute(targetType, ApprovalActionType.APPROVE))
+                .thenReturn(new LifecycleRouteResolution(
+                        List.of(
+                                new CreateApprovalRequest.StepInput(requesterId, null),
+                                new CreateApprovalRequest.StepInput(explicitApprover, null)),
+                        LifecycleApprovalRoutePolicy.Reason.VALID,
+                        ApprovalFlowType.PARALLEL_ALL,
+                        UUID.randomUUID(),
+                        4L));
+
+        LifecycleApprovalStartPlan plan = service.planLifecycleApproval(
+                targetType, targetId, ApprovalActionType.APPROVE, false, null);
+
+        assertThatThrownBy(() -> service.materializeLifecycleApproval(
+                plan, requesterId, "Lifecycle approval", null, "{}"))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus().value()).isEqualTo(409);
+                    assertThat(ex.getMessage())
+                            .isEqualTo("LIFECYCLE_APPROVAL_REQUESTER_ASSIGNEE_CONFLICT");
+                });
+        verify(requestRepository, never()).saveAndFlush(any());
     }
 
     @Test

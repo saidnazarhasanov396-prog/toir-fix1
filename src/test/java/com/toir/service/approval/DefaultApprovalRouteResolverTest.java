@@ -4,16 +4,22 @@ import com.toir.dto.approval.CreateApprovalRequest;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
+import com.toir.entity.users.Role;
+import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.UserStatus;
 import com.toir.repository.ApprovalTemplateRepository;
+import com.toir.repository.users.RoleRepository;
+import com.toir.repository.users.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.toir.service.approval.LifecycleApprovalRoutePolicy.Reason.MULTIPLE_ACTIVE_TEMPLATES;
@@ -22,12 +28,16 @@ import static com.toir.service.approval.LifecycleApprovalRoutePolicy.Reason.NONC
 import static com.toir.service.approval.LifecycleApprovalRoutePolicy.Reason.VALID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class DefaultApprovalRouteResolverTest {
+
+    private static final UUID FIRST_ROLE_MEMBER = UUID.fromString("00000000-0000-0000-0000-000000000011");
+    private static final UUID SECOND_ROLE_MEMBER = UUID.fromString("00000000-0000-0000-0000-000000000012");
 
     @Test
     void noExactTemplateReturnsNoActiveTemplate() {
@@ -215,10 +225,13 @@ class DefaultApprovalRouteResolverTest {
     @Test
     void genericParallelRouteFreezesFlowAndTemplateProvenance() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
-        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
-        UUID templateId = UUID.randomUUID();
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
+        UserRepository userRepository = mock(UserRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository, userRepository);
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(
+                user(first, "ANY"), user(second, "ANY")));
+        UUID templateId = UUID.randomUUID();
         ApprovalTemplate template = new ApprovalTemplate();
         ReflectionTestUtils.setField(template, "id", templateId);
         template.setVersion(7L);
@@ -241,6 +254,84 @@ class DefaultApprovalRouteResolverTest {
     }
 
     @Test
+    void genericParallelRoleIsExpandedBeforeSnapshotIsReturned() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository, userRepository);
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(
+                user(FIRST_ROLE_MEMBER, "WORK_ORDER_APPROVER"),
+                user(SECOND_ROLE_MEMBER, "WORK_ORDER_APPROVER")));
+        ApprovalTemplate template = parallelTemplate(roleStep(1, "WORK_ORDER_APPROVER"));
+        template.setTargetType(ApprovalTargetType.WORK_ORDER);
+        template.setActionType(ApprovalActionType.APPROVE);
+        ApprovalRequest request = request(ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE);
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE)).thenReturn(Optional.of(template));
+
+        ApprovalRouteSnapshot snapshot = resolver.resolveRouteSnapshot(request);
+
+        assertThat(snapshot.flowType()).isEqualTo(ApprovalFlowType.PARALLEL_ALL);
+        assertThat(snapshot.steps()).extracting(CreateApprovalRequest.StepInput::approverId)
+                .containsExactly(FIRST_ROLE_MEMBER, SECOND_ROLE_MEMBER);
+        assertThat(snapshot.steps()).extracting(CreateApprovalRequest.StepInput::approverRole)
+                .containsOnlyNulls();
+    }
+
+    @Test
+    void genericParallelSnapshotStaysFrozenWhenRoleMembershipChanges() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository, userRepository);
+        ApprovalTemplate template = parallelTemplate(roleStep(1, "WORK_ORDER_APPROVER"));
+        template.setTargetType(ApprovalTargetType.WORK_ORDER);
+        template.setActionType(ApprovalActionType.APPROVE);
+        ApprovalRequest request = request(ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE);
+        when(templateRepository.findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE)).thenReturn(Optional.of(template));
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(
+                List.of(user(FIRST_ROLE_MEMBER, "WORK_ORDER_APPROVER")),
+                List.of(user(SECOND_ROLE_MEMBER, "WORK_ORDER_APPROVER")));
+
+        ApprovalRouteSnapshot firstSnapshot = resolver.resolveRouteSnapshot(request);
+        ApprovalRouteSnapshot secondSnapshot = resolver.resolveRouteSnapshot(request);
+
+        assertThat(firstSnapshot.steps()).containsExactly(
+                new CreateApprovalRequest.StepInput(FIRST_ROLE_MEMBER, null));
+        assertThat(secondSnapshot.steps()).containsExactly(
+                new CreateApprovalRequest.StepInput(SECOND_ROLE_MEMBER, null));
+        assertThatThrownBy(() -> firstSnapshot.steps().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void lifecycleParallelRoleIsExpandedBeforeMaterialization() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository, userRepository);
+        when(userRepository.findAllWithRolesAndIsDeletedFalse()).thenReturn(List.of(
+                user(FIRST_ROLE_MEMBER, "CAMPAIGN_APPROVER"),
+                user(SECOND_ROLE_MEMBER, "CAMPAIGN_APPROVER")));
+        ApprovalTemplate template = lifecycleTemplate(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                roleStep(1, "CAMPAIGN_APPROVER"));
+        template.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        when(templateRepository.findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                ApprovalActionType.APPROVE
+        )).thenReturn(List.of(template));
+
+        LifecycleRouteResolution resolution = resolver.resolveLifecycleRoute(
+                ApprovalTargetType.REPAIR_CAMPAIGN, ApprovalActionType.APPROVE);
+
+        assertThat(resolution.steps()).extracting(CreateApprovalRequest.StepInput::approverId)
+                .containsExactly(FIRST_ROLE_MEMBER, SECOND_ROLE_MEMBER);
+        assertThat(resolution.steps()).allSatisfy(step -> {
+            assertThat(step.approverId()).isNotNull();
+            assertThat(step.approverRole()).isNull();
+        });
+    }
+
+    @Test
     void unrelatedTargetKeepsDomainPermissionFallback() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
         DefaultApprovalRouteResolver resolver = resolver(templateRepository);
@@ -258,9 +349,19 @@ class DefaultApprovalRouteResolverTest {
     }
 
     private static DefaultApprovalRouteResolver resolver(ApprovalTemplateRepository templateRepository) {
+        return resolver(templateRepository, mock(UserRepository.class));
+    }
+
+    private static DefaultApprovalRouteResolver resolver(ApprovalTemplateRepository templateRepository,
+                                                         UserRepository userRepository) {
+        RoleRepository roleRepository = mock(RoleRepository.class);
+        when(roleRepository.findByCodeAndIsDeletedFalse(anyString()))
+                .thenAnswer(invocation -> Optional.of(
+                        Role.builder().code(invocation.getArgument(0)).build()));
         return new DefaultApprovalRouteResolver(
                 templateRepository,
-                new LifecycleApprovalRoutePolicy());
+                new LifecycleApprovalRoutePolicy(),
+                new ParallelApprovalAssigneeResolver(userRepository, roleRepository));
     }
 
     private static ApprovalRequest request(ApprovalTargetType targetType,
@@ -281,6 +382,26 @@ class DefaultApprovalRouteResolverTest {
             template.getSteps().add(step);
         }
         return template;
+    }
+
+    private static ApprovalTemplate parallelTemplate(ApprovalTemplateStep... steps) {
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        for (ApprovalTemplateStep step : steps) {
+            step.setTemplate(template);
+            template.getSteps().add(step);
+        }
+        return template;
+    }
+
+    private static User user(UUID id, String roleCode) {
+        return User.builder()
+                .id(id)
+                .status(UserStatus.ACTIVE)
+                .isDeleted(false)
+                .primaryRole(Role.builder().code(roleCode).build())
+                .roles(Set.of())
+                .build();
     }
 
     private static ApprovalTemplateStep roleStep(int order, String role) {

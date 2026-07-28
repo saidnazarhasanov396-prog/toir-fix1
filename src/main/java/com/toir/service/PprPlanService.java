@@ -1128,6 +1128,18 @@ public class PprPlanService {
         plan.setIntervalHours(scheduleType == PprScheduleType.OPERATING_HOURS ? request.intervalHours() : null);
         plan.setScopeType(scopeType);
         plan.setAnchorMode(request.anchorMode());
+        plan.setShiftFromExcludedWeekdays(
+                scheduleBuilder && request.shiftFromExcludedWeekdays());
+        plan.getExcludedWeekdays().clear();
+        if (scheduleBuilder
+                && request.shiftFromExcludedWeekdays()
+                && request.excludedWeekdays() != null) {
+            plan.getExcludedWeekdays().addAll(request.excludedWeekdays());
+        }
+        plan.setRecurrenceAnchor(
+                scheduleBuilder && request.recurrenceAnchor() != null
+                        ? request.recurrenceAnchor()
+                        : com.toir.enums.MaintenanceScheduleRecurrenceAnchor.REGULATION_DATE);
     }
 
     private void validateSchedule(PprScheduleType scheduleType, PprFrequency frequency, Long intervalHours) {
