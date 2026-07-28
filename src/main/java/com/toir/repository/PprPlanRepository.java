@@ -20,7 +20,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
     @Query(value = "SELECT * FROM ppr_plans WHERE id = :id AND is_deleted = false FOR UPDATE", nativeQuery = true)
     Optional<PprPlan> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);
 
-    @Query(value = "SELECT * FROM ppr_plans WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM ppr_plans WHERE is_deleted = false AND (COALESCE(origin, 'MANUAL') = 'MANUAL' OR status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED')) ORDER BY updated_at DESC", nativeQuery = true)
     List<PprPlan> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
     @Query(value = "SELECT * FROM ppr_plans WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
@@ -50,19 +50,21 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             SELECT *
             FROM ppr_plans
             WHERE is_deleted = false
+              AND (COALESCE(origin, 'MANUAL') = 'MANUAL' OR status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
               AND start_date <= :date
               AND end_date >= :date
             ORDER BY updated_at DESC
             """, nativeQuery = true)
     List<PprPlan> findAllActiveOnDate(@Param("date") java.time.LocalDate date);
 
-    @Query(value = "SELECT * FROM ppr_plans WHERE department_id = :departmentId AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
+    @Query(value = "SELECT * FROM ppr_plans WHERE department_id = :departmentId AND is_deleted = false AND (COALESCE(origin, 'MANUAL') = 'MANUAL' OR status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED')) ORDER BY updated_at DESC", nativeQuery = true)
     List<PprPlan> findAllByDepartmentIdAndIsDeletedFalse(@Param("departmentId") UUID departmentId);
 
     @Query(value = """
             SELECT p.*
             FROM ppr_plans p
             WHERE p.is_deleted = false
+              AND (COALESCE(p.origin, 'MANUAL') = 'MANUAL' OR p.status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
               AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
               AND (
                     cast(:equipmentId as uuid) IS NULL
@@ -90,6 +92,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             SELECT count(*)
             FROM ppr_plans p
             WHERE p.is_deleted = false
+              AND (COALESCE(p.origin, 'MANUAL') = 'MANUAL' OR p.status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
               AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
               AND (
                     cast(:equipmentId as uuid) IS NULL
@@ -136,6 +139,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             SELECT p.*
             FROM ppr_plans p
             WHERE p.is_deleted = false
+              AND (COALESCE(p.origin, 'MANUAL') = 'MANUAL' OR p.status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
               AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
               AND (
                     cast(:equipmentId as uuid) IS NULL
@@ -181,6 +185,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             SELECT p.*
             FROM ppr_plans p
             WHERE p.is_deleted = false
+              AND (COALESCE(p.origin, 'MANUAL') = 'MANUAL' OR p.status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
               AND p.status IN (:visibleStatuses)
               AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
               AND (
@@ -207,6 +212,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             SELECT count(*)
             FROM ppr_plans p
             WHERE p.is_deleted = false
+              AND (COALESCE(p.origin, 'MANUAL') = 'MANUAL' OR p.status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
               AND p.status IN (:visibleStatuses)
               AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
               AND (
@@ -242,6 +248,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             SELECT p.*
             FROM ppr_plans p
             WHERE p.is_deleted = false
+              AND (COALESCE(p.origin, 'MANUAL') = 'MANUAL' OR p.status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
               AND p.status IN (:visibleStatuses)
               AND (cast(:departmentId as uuid) IS NULL OR p.department_id = cast(:departmentId as uuid))
               AND (
@@ -295,6 +302,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
                 on t.plan_id = p.id
                and t.is_deleted = false
             where p.is_deleted = false
+              and (COALESCE(p.origin, 'MANUAL') = 'MANUAL' or p.status in ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
               and (cast(:departmentId as uuid) is null or p.department_id = cast(:departmentId as uuid))
               and (
                     (cast(:year as integer) is null and cast(:month as integer) is null and cast(:day as integer) is null)

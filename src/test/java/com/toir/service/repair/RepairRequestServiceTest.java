@@ -5,6 +5,7 @@ import com.toir.dto.repairrequest.RepairRequestClarificationRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterReadingRequest;
 import com.toir.dto.repairrequest.RepairRequestStatsResponse;
+import com.toir.dto.repairrequest.RepairRequestFilterRequest;
 import com.toir.dto.repairrequest.CloseRequestRequest;
 import com.toir.dto.repairrequest.RepairRequestRequest;
 import com.toir.dto.repairrequest.WarrantyPreviewResponse;
@@ -59,6 +60,7 @@ import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairRequestStatsFilter;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.repair.RepairRequestTemplateActionRepository;
 import com.toir.repository.repair.RepairRequestTemplateRepository;
@@ -1831,9 +1833,7 @@ class RepairRequestServiceTest {
         RepairRequestStatsProjection projection = statsProjection(24L, 3L, 8L, 12L);
 
         when(repository.getRepairRequestStats(
-                null,
-                null,
-                null,
+                RepairRequestStatsFilter.empty(),
                 PriorityLevel.EMERGENCY.name(),
                 RequestStatus.OPEN.name()
         )).thenReturn(projection);
@@ -1846,9 +1846,7 @@ class RepairRequestServiceTest {
         assertThat(result.withWorkOrder()).isEqualTo(12);
 
         verify(repository).getRepairRequestStats(
-                null,
-                null,
-                null,
+                RepairRequestStatsFilter.empty(),
                 PriorityLevel.EMERGENCY.name(),
                 RequestStatus.OPEN.name()
         );
@@ -1862,9 +1860,9 @@ class RepairRequestServiceTest {
         RepairRequestStatsProjection projection = statsProjection(10L, 2L, 4L, 5L);
 
         when(repository.getRepairRequestStats(
-                departmentId,
-                equipmentId,
-                "%pump%",
+                argThat(filter -> departmentId.equals(filter.departmentId())
+                        && equipmentId.equals(filter.equipmentId())
+                        && "%pump%".equals(filter.searchPattern())),
                 PriorityLevel.EMERGENCY.name(),
                 RequestStatus.OPEN.name()
         )).thenReturn(projection);
@@ -1881,9 +1879,9 @@ class RepairRequestServiceTest {
         assertThat(result.withWorkOrder()).isEqualTo(5);
 
         verify(repository).getRepairRequestStats(
-                departmentId,
-                equipmentId,
-                "%pump%",
+                argThat(filter -> departmentId.equals(filter.departmentId())
+                        && equipmentId.equals(filter.equipmentId())
+                        && "%pump%".equals(filter.searchPattern())),
                 PriorityLevel.EMERGENCY.name(),
                 RequestStatus.OPEN.name()
         );
@@ -1894,9 +1892,7 @@ class RepairRequestServiceTest {
         RepairRequestStatsProjection projection = statsProjection(7L, 1L, 3L, 2L);
 
         when(repository.getRepairRequestStats(
-                null,
-                null,
-                null,
+                RepairRequestStatsFilter.empty(),
                 PriorityLevel.EMERGENCY.name(),
                 RequestStatus.OPEN.name()
         )).thenReturn(projection);
@@ -1909,9 +1905,7 @@ class RepairRequestServiceTest {
         assertThat(result.withWorkOrder()).isEqualTo(2);
 
         verify(repository).getRepairRequestStats(
-                null,
-                null,
-                null,
+                RepairRequestStatsFilter.empty(),
                 PriorityLevel.EMERGENCY.name(),
                 RequestStatus.OPEN.name()
         );
@@ -1922,9 +1916,7 @@ class RepairRequestServiceTest {
         RepairRequestStatsProjection projection = statsProjection(null, null, null, null);
 
         when(repository.getRepairRequestStats(
-                null,
-                null,
-                null,
+                RepairRequestStatsFilter.empty(),
                 PriorityLevel.EMERGENCY.name(),
                 RequestStatus.OPEN.name()
         )).thenReturn(projection);
@@ -1935,6 +1927,59 @@ class RepairRequestServiceTest {
         assertThat(result.emergency()).isZero();
         assertThat(result.open()).isZero();
         assertThat(result.withWorkOrder()).isZero();
+    }
+
+    @Test
+    void getStatsWithFullFilterUsesSingleAggregateAndDoesNotMaterializeEntities() {
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        Instant detectedFrom = Instant.parse("2026-07-01T00:00:00Z");
+        Instant targetTo = Instant.parse("2026-07-31T23:59:59Z");
+        RepairRequestFilterRequest filter = new RepairRequestFilterRequest(
+                RequestStatus.OPEN,
+                departmentId,
+                equipmentId,
+                PriorityLevel.EMERGENCY,
+                "  PuMp  ",
+                null, null, null, null, null, null, null,
+                CriticalityLevel.CRITICAL,
+                RequestSource.MOBILE,
+                detectedFrom,
+                null,
+                null,
+                targetTo,
+                null, null, null, null, null, null, null,
+                true,
+                true,
+                "COMPLETED_OR_CLOSED"
+        );
+        RepairRequestStatsProjection projection = statsProjection(1L, 1L, 1L, 1L);
+        when(repository.getRepairRequestStats(any(RepairRequestStatsFilter.class),
+                eq(PriorityLevel.EMERGENCY.name()), eq(RequestStatus.OPEN.name())))
+                .thenReturn(projection);
+
+        RepairRequestStatsResponse result = service.getStats(filter);
+
+        assertThat(result.totalRequests()).isEqualTo(1);
+        verify(repository).getRepairRequestStats(
+                argThat(statsFilter -> departmentId.equals(statsFilter.departmentId())
+                        && equipmentId.equals(statsFilter.equipmentId())
+                        && "%pump%".equals(statsFilter.searchPattern())
+                        && PriorityLevel.EMERGENCY.name().equals(statsFilter.priority())
+                        && RequestStatus.OPEN.name().equals(statsFilter.status())
+                        && statsFilter.statusScope() == null
+                        && CriticalityLevel.CRITICAL.name().equals(statsFilter.criticality())
+                        && RequestSource.MOBILE.name().equals(statsFilter.source())
+                        && detectedFrom.equals(statsFilter.detectedAtFrom())
+                        && targetTo.equals(statsFilter.targetCompletionAtTo())
+                        && Boolean.TRUE.equals(statsFilter.hasLinkedDefects())
+                        && Boolean.TRUE.equals(statsFilter.hasLinkedWorkOrders())),
+                eq(PriorityLevel.EMERGENCY.name()),
+                eq(RequestStatus.OPEN.name())
+        );
+        verify(repository, never()).findAll(any(org.springframework.data.jpa.domain.Specification.class));
+        verify(workOrderRepository, never())
+                .findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(any());
     }
 
     private RepairRequestStatsProjection statsProjection(

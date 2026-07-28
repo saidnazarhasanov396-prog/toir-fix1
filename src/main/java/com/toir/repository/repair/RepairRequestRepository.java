@@ -113,19 +113,44 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
                                         Pageable pageable);
 
 
+    default RepairRequestStatsProjection getRepairRequestStats(
+            RepairRequestStatsFilter filter,
+            String emergencyPriority,
+            String openStatus
+    ) {
+        return getRepairRequestStatsAggregate(
+                filter.departmentId(),
+                filter.equipmentId(),
+                filter.searchPattern(),
+                filter.priority(),
+                filter.status(),
+                filter.statusScope(),
+                filter.criticality(),
+                filter.source(),
+                filter.detectedAtFrom(),
+                filter.detectedAtTo(),
+                filter.targetCompletionAtFrom(),
+                filter.targetCompletionAtTo(),
+                filter.hasLinkedDefects(),
+                filter.hasLinkedWorkOrders(),
+                emergencyPriority,
+                openStatus
+        );
+    }
+
     @Query(nativeQuery = true, value = """
         select
-            count(r.id) as totalRequests,
+            count(distinct r.id) as totalRequests,
 
-            count(*) filter (
+            count(distinct r.id) filter (
                 where r.priority = cast(:emergencyPriority as text)
             ) as emergency,
 
-            count(*) filter (
+            count(distinct r.id) filter (
                 where r.status = cast(:openStatus as text)
             ) as open,
 
-            count(*) filter (
+            count(distinct r.id) filter (
                 where exists (
                     select 1
                     from work_orders w
@@ -138,19 +163,124 @@ public interface RepairRequestRepository extends JpaRepository<RepairRequest, UU
         where r.is_deleted = false
           and (cast(:departmentId as uuid) is null or r.department_id = cast(:departmentId as uuid))
           and (cast(:equipmentId as uuid) is null or r.equipment_id = cast(:equipmentId as uuid))
+          and (cast(:priority as text) is null or r.priority = cast(:priority as text))
+          and (
+              (cast(:status as text) is not null and r.status = cast(:status as text))
+              or (
+                  cast(:status as text) is null
+                  and (
+                      cast(:statusScope as text) is null
+                      or (
+                          cast(:statusScope as text) = 'COMPLETED_OR_CLOSED'
+                          and r.status in ('COMPLETED', 'CLOSED')
+                      )
+                  )
+              )
+          )
+          and (cast(:criticality as text) is null or r.criticality = cast(:criticality as text))
+          and (cast(:source as text) is null or r.source = cast(:source as text))
+          and (cast(:detectedAtFrom as timestamptz) is null or r.detected_at >= cast(:detectedAtFrom as timestamptz))
+          and (cast(:detectedAtTo as timestamptz) is null or r.detected_at <= cast(:detectedAtTo as timestamptz))
+          and (cast(:targetCompletionAtFrom as timestamptz) is null or r.target_completion_at >= cast(:targetCompletionAtFrom as timestamptz))
+          and (cast(:targetCompletionAtTo as timestamptz) is null or r.target_completion_at <= cast(:targetCompletionAtTo as timestamptz))
+          and (
+              cast(:hasLinkedDefects as boolean) is null
+              or cast(:hasLinkedDefects as boolean) = exists (
+                  select 1
+                  from defects d
+                  where d.is_deleted = false
+                    and d.repair_request_id = r.id
+              )
+          )
+          and (
+              cast(:hasLinkedWorkOrders as boolean) is null
+              or cast(:hasLinkedWorkOrders as boolean) = exists (
+                  select 1
+                  from work_orders fw
+                  where fw.is_deleted = false
+                    and fw.repair_request_id = r.id
+              )
+          )
           and (
               cast(:searchPattern as varchar) is null
               or lower(coalesce(r.number, '')) like cast(:searchPattern as varchar)
               or lower(coalesce(r.title, '')) like cast(:searchPattern as varchar)
               or lower(coalesce(r.description, '')) like cast(:searchPattern as varchar)
               or lower(coalesce(r.rejection_reason, '')) like cast(:searchPattern as varchar)
+              or lower(coalesce(r.clarification_reason, '')) like cast(:searchPattern as varchar)
               or lower(coalesce(r.close_result, '')) like cast(:searchPattern as varchar)
+              or exists (
+                  select 1 from equipment e
+                  where e.id = r.equipment_id and e.is_deleted = false
+                    and (
+                        lower(coalesce(e.code, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(e.name, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(e.inventory_number, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(e.technical_number, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(e.serial_number, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(e.model, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(e.manufacturer, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(e.description, '')) like cast(:searchPattern as varchar)
+                    )
+              )
+              or exists (
+                  select 1 from departments dep
+                  where dep.id = r.department_id and dep.is_deleted = false
+                    and (
+                        lower(coalesce(dep.code, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(dep.name, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(dep.name_en, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(dep.name_uz, '')) like cast(:searchPattern as varchar)
+                    )
+              )
+              or exists (
+                  select 1 from locations loc
+                  where loc.id = r.location_id and loc.is_deleted = false
+                    and (
+                        lower(coalesce(loc.code, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(loc.name, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(loc.name_en, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(loc.name_uz, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(loc.description, '')) like cast(:searchPattern as varchar)
+                    )
+              )
+              or exists (
+                  select 1 from users reporter
+                  where reporter.id = r.reporter_id and reporter.is_deleted = false
+                    and (
+                        lower(coalesce(reporter.username, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(reporter.email, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(reporter.full_name, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(reporter.phone, '')) like cast(:searchPattern as varchar)
+                    )
+              )
+              or exists (
+                  select 1 from users assigned
+                  where assigned.id = r.assigned_to_id and assigned.is_deleted = false
+                    and (
+                        lower(coalesce(assigned.username, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(assigned.email, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(assigned.full_name, '')) like cast(:searchPattern as varchar)
+                        or lower(coalesce(assigned.phone, '')) like cast(:searchPattern as varchar)
+                    )
+              )
           )
         """)
-    RepairRequestStatsProjection getRepairRequestStats(
+    RepairRequestStatsProjection getRepairRequestStatsAggregate(
             @Param("departmentId") UUID departmentId,
             @Param("equipmentId") UUID equipmentId,
             @Param("searchPattern") String searchPattern,
+            @Param("priority") String priority,
+            @Param("status") String status,
+            @Param("statusScope") String statusScope,
+            @Param("criticality") String criticality,
+            @Param("source") String source,
+            @Param("detectedAtFrom") java.time.Instant detectedAtFrom,
+            @Param("detectedAtTo") java.time.Instant detectedAtTo,
+            @Param("targetCompletionAtFrom") java.time.Instant targetCompletionAtFrom,
+            @Param("targetCompletionAtTo") java.time.Instant targetCompletionAtTo,
+            @Param("hasLinkedDefects") Boolean hasLinkedDefects,
+            @Param("hasLinkedWorkOrders") Boolean hasLinkedWorkOrders,
             @Param("emergencyPriority") String emergencyPriority,
             @Param("openStatus") String openStatus
     );

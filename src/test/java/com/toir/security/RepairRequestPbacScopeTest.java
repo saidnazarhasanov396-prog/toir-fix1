@@ -99,6 +99,38 @@ class RepairRequestPbacScopeTest {
     }
 
     @Test
+    void statsClampsRequestedForeignDepartmentToCurrentDepartment() throws Exception {
+        UUID requestedDepartmentId = UUID.randomUUID();
+        UUID currentDepartmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId))
+                .thenReturn(currentDepartmentId);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(currentDepartmentId);
+        when(service.getStats(any(RepairRequestFilterRequest.class)))
+                .thenReturn(new RepairRequestStatsResponse(0, 0, 0, 0));
+
+        mockMvc.perform(get("/api/v1/repair-requests/stats")
+                        .param("departmentId", requestedDepartmentId.toString()))
+                .andExpect(status().isOk());
+
+        verify(service).getStats(argThat(filter ->
+                currentDepartmentId.equals(filter.departmentId())));
+    }
+
+    @Test
+    void systemAdminCanRequestGlobalStats() throws Exception {
+        when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(service.getStats(any(RepairRequestFilterRequest.class)))
+                .thenReturn(new RepairRequestStatsResponse(0, 0, 0, 0));
+
+        mockMvc.perform(get("/api/v1/repair-requests/stats"))
+                .andExpect(status().isOk());
+
+        verify(service).getStats(argThat(filter -> filter.departmentId() == null));
+    }
+
+    @Test
     void systemAdminCanRequestGlobalList() throws Exception {
         when(scopeAccessService.enforceDepartmentScope(isNull())).thenReturn(null);
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);

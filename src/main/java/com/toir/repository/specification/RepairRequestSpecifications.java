@@ -94,15 +94,27 @@ public final class RepairRequestSpecifications {
             return;
         }
 
-        String statusScope = trimToNull(filter.statusScope());
+        String statusScope = normalizeStatusScope(filter.status(), filter.statusScope());
         if (statusScope == null) {
             return;
         }
 
-        String normalizedScope = statusScope.toUpperCase(Locale.ROOT);
-        if (COMPLETED_OR_CLOSED_STATUS_SCOPE.equals(normalizedScope)) {
+        if (COMPLETED_OR_CLOSED_STATUS_SCOPE.equals(statusScope)) {
             predicates.add(root.get("status").in(RequestStatus.COMPLETED, RequestStatus.CLOSED));
-            return;
+        }
+    }
+
+    public static String normalizeStatusScope(RequestStatus exactStatus, String statusScope) {
+        if (exactStatus != null) {
+            return null;
+        }
+        String normalizedScope = trimToNull(statusScope);
+        if (normalizedScope == null) {
+            return null;
+        }
+        normalizedScope = normalizedScope.toUpperCase(Locale.ROOT);
+        if (COMPLETED_OR_CLOSED_STATUS_SCOPE.equals(normalizedScope)) {
+            return normalizedScope;
         }
 
         throw RestException.badRequest("Unsupported repair request statusScope: " + statusScope);

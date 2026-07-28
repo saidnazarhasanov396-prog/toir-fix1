@@ -51,6 +51,7 @@ import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.repair.RepairRequestRepository;
+import com.toir.repository.repair.RepairRequestStatsFilter;
 import com.toir.repository.repair.RepairRequestStatsProjection;
 import com.toir.repository.repair.RepairRequestTemplateActionRepository;
 import com.toir.repository.repair.RepairRequestTemplateRepository;
@@ -95,9 +96,10 @@ import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.EnumSet;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -968,12 +970,43 @@ public class RepairRequestService {
             UUID equipmentId,
             String search
     ) {
-        String searchPattern = toSearchPattern(search);
-
-        RepairRequestStatsProjection stats = repository.getRepairRequestStats(
+        return aggregateStats(new RepairRequestStatsFilter(
                 departmentId,
                 equipmentId,
-                searchPattern,
+                toSearchPattern(search),
+                null, null, null, null, null,
+                null, null, null, null, null, null
+        ));
+    }
+
+    @Transactional(readOnly = true)
+    public RepairRequestStatsResponse getStats(RepairRequestFilterRequest filter) {
+        RepairRequestFilterRequest effectiveFilter = filterOrEmpty(filter);
+        String statusScope = RepairRequestSpecifications.normalizeStatusScope(
+                effectiveFilter.status(),
+                effectiveFilter.statusScope()
+        );
+        return aggregateStats(new RepairRequestStatsFilter(
+                effectiveFilter.departmentId(),
+                effectiveFilter.equipmentId(),
+                toSearchPattern(effectiveFilter.search()),
+                enumName(effectiveFilter.priority()),
+                enumName(effectiveFilter.status()),
+                statusScope,
+                enumName(effectiveFilter.criticality()),
+                enumName(effectiveFilter.source()),
+                effectiveFilter.detectedAtFrom(),
+                effectiveFilter.detectedAtTo(),
+                effectiveFilter.targetCompletionAtFrom(),
+                effectiveFilter.targetCompletionAtTo(),
+                effectiveFilter.hasLinkedDefects(),
+                effectiveFilter.hasLinkedWorkOrders()
+        ));
+    }
+
+    private RepairRequestStatsResponse aggregateStats(RepairRequestStatsFilter filter) {
+        RepairRequestStatsProjection stats = repository.getRepairRequestStats(
+                filter,
                 PriorityLevel.EMERGENCY.name(),
                 RequestStatus.OPEN.name()
         );
@@ -986,31 +1019,8 @@ public class RepairRequestService {
         );
     }
 
-    @Transactional(readOnly = true)
-    public RepairRequestStatsResponse getStats(RepairRequestFilterRequest filter) {
-        List<RepairRequest> requests = repository.findAll(
-                RepairRequestSpecifications.byFilter(filterOrEmpty(filter))
-        );
-        List<UUID> requestIds = requests.stream()
-                .map(RepairRequest::getId)
-                .filter(Objects::nonNull)
-                .toList();
-        Set<UUID> requestIdsWithWorkOrders = requestIds.isEmpty()
-                ? Set.of()
-                : workOrderRepository.findAllByRepairRequestIdInAndIsDeletedFalseOrderByUpdatedAtDesc(requestIds)
-                .stream()
-                .map(WorkOrder::getRepairRequestId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        long total = requests.size();
-        long emergency = requests.stream()
-                .filter(request -> request.getPriority() == PriorityLevel.EMERGENCY)
-                .count();
-        long open = requests.stream()
-                .filter(request -> request.getStatus() == RequestStatus.OPEN)
-                .count();
-        return new RepairRequestStatsResponse(total, emergency, open, requestIdsWithWorkOrders.size());
+    private String enumName(Enum<?> value) {
+        return value == null ? null : value.name();
     }
 
     private String toSearchPattern(String search) {
@@ -1018,7 +1028,7 @@ public class RepairRequestService {
             return null;
         }
 
-        return "%" + search.trim().toLowerCase() + "%";
+        return "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
     }
 
     private String normalizeSearch(String search) {
