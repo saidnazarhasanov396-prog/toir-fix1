@@ -2,6 +2,8 @@ package com.toir.controller;
 
 import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarFilter;
 import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarResponse;
+import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarSortDirection;
+import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarSortField;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.PprTaskStatus;
 import com.toir.exception.RestException;
@@ -40,31 +42,41 @@ public class PprEquipmentCalendarController {
     public ResponseEntity<PprEquipmentCalendarResponse> getEquipmentCalendar(
             @PathVariable UUID planId,
             @RequestParam Integer year,
+            @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID locationId,
             @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) Set<MaintenanceKind> maintenanceKinds,
             @RequestParam(name = "statuses", required = false) Set<PprTaskStatus> statuses,
             @RequestParam(required = false) Boolean onlyWithWork,
-            @RequestParam(required = false) Boolean includeCancelled) {
+            @RequestParam(required = false) Boolean includeCancelled,
+            @RequestParam(required = false)
+            PprEquipmentCalendarSortField sortBy,
+            @RequestParam(required = false)
+            PprEquipmentCalendarSortDirection sortDirection) {
         validateYear(year);
         final PprEquipmentCalendarFilter filter;
         try {
             filter = new PprEquipmentCalendarFilter(
                     year,
-                    page,
-                    size,
+                    month,
+                    page == null ? 0 : page,
+                    size == null ? 25 : size,
                     search,
                     departmentId,
                     locationId,
                     equipmentId,
+                    equipmentTypeId,
                     maintenanceKinds,
                     statuses,
                     onlyWithWork,
-                    includeCancelled);
+                    includeCancelled,
+                    sortBy,
+                    sortDirection);
         } catch (IllegalArgumentException | NullPointerException exception) {
             throw RestException.badRequest(exception.getMessage());
         }
