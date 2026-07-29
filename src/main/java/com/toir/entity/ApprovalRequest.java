@@ -2,6 +2,7 @@ package com.toir.entity;
 
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalFlowType;
+import com.toir.enums.ApprovalResolutionCode;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
 import jakarta.persistence.*;
@@ -62,6 +63,28 @@ public class ApprovalRequest extends BaseEntity {
 
     @Column(name = "failure_reason", columnDefinition = "text")
     private String failureReason;
+
+    @Column(name = "calculation_revision")
+    private Long calculationRevision;
+
+    @Column(name = "calculation_content_hash", length = 64)
+    private String calculationContentHash;
+
+    @Column(name = "calculation_content_hash_version")
+    private Integer calculationContentHashVersion;
+
+    @Column(name = "resolved_route_fingerprint", length = 64)
+    private String resolvedRouteFingerprint;
+
+    @Column(name = "requester_context_fingerprint", length = 64)
+    private String requesterContextFingerprint;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "resolution_code")
+    private ApprovalResolutionCode resolutionCode;
+
+    @Column(name = "superseded_by_request_id")
+    private UUID supersededByRequestId;
 
     @Version
     @Column(name = "version")

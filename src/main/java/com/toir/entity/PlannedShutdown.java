@@ -149,6 +149,8 @@ public class PlannedShutdown extends BaseEntity {
         this.status = switch (status) {
             case DRAFT -> PlannedShutdownStatus.DRAFT;
             case GENERATED -> PlannedShutdownStatus.SCOPE_FORMATION;
+            case CALCULATED -> throw new IllegalArgumentException(
+                    "CALCULATED is not a planned shutdown compatibility status");
             case APPROVED -> PlannedShutdownStatus.APPROVED;
             case IN_PROGRESS -> PlannedShutdownStatus.REPAIR_IN_PROGRESS;
             case CLOSED -> PlannedShutdownStatus.CLOSED;

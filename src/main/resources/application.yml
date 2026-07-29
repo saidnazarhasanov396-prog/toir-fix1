@@ -47,6 +47,11 @@ app:
     service-account-json: ${APP_FIREBASE_SERVICE_ACCOUNT_JSON:}
     service-account-base64: ${APP_FIREBASE_SERVICE_ACCOUNT_BASE64:}
 
+toir:
+  features:
+    annual-maintenance-approval-first:
+      enabled: ${TOIR_FEATURES_ANNUAL_MAINTENANCE_APPROVAL_FIRST_ENABLED:false}
+
 minio:
   endpoint: https://s3.tenzorsoft.uz
   access-key: s3_tenzorsoft_minio_user

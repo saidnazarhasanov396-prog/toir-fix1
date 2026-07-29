@@ -794,9 +794,11 @@ Audit metadata includes actor, old/new revision and hash fingerprints, request I
 
 ## 20. Migrations
 
-The existing untracked `V20260728_3__add_mixed_trigger_handling_to_ppr_plans.sql` is not renamed, edited, or merged.
+The current branch tracks `V20260728_3__maintenance_schedule_weekday_shifting.sql`.
+That migration is already reserved and is not renamed, edited, or merged.
+Approval-first migrations begin at the next available version; the foundation migration on the current branch is `V20260728_4`.
 
-The current working tree already reserves `V20260728_3`; use these exact next versions:
+Use these exact versions:
 
 - `V20260728_4`: plan/approval additive fields, enums/status constraints, expand/backfill/default/constrain;
 - `V20260728_5`: snapshot items and task traceability;

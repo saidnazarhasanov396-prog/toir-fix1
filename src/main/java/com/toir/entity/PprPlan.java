@@ -1,5 +1,7 @@
 package com.toir.entity;
+import com.toir.enums.MaterializationMode;
 import com.toir.enums.PlanStatus;
+import com.toir.enums.TaskMaterializationStatus;
 import com.toir.enums.MaintenanceScheduleAnchorMode;
 import com.toir.enums.MaintenanceScheduleRecurrenceAnchor;
 import com.toir.enums.PprFrequency;
@@ -100,6 +102,32 @@ public class PprPlan extends ActorStampedEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "origin", nullable = false)
     private PprPlanOrigin origin = PprPlanOrigin.MANUAL;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "materialization_mode", nullable = false)
+    private MaterializationMode materializationMode = MaterializationMode.LEGACY_MATERIALIZED;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "task_materialization_status", nullable = false)
+    private TaskMaterializationStatus taskMaterializationStatus =
+            TaskMaterializationStatus.NOT_APPLICABLE;
+
+    @Column(name = "calculation_revision")
+    private Long calculationRevision;
+
+    @Column(name = "calculation_content_hash", length = 64)
+    private String calculationContentHash;
+
+    @Column(name = "calculation_content_hash_version")
+    private Integer calculationContentHashVersion;
+
+    @Column(name = "materialized_revision")
+    private Long materializedRevision;
+
+    @Column(name = "materialized_task_count")
+    private Integer materializedTaskCount;
 
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
     @BatchSize(size = 50)
