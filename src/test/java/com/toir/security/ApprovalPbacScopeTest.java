@@ -130,7 +130,9 @@ class ApprovalPbacScopeTest {
                 delegateRepository,
                 new DefaultApprovalActionExecutor(List.of(
                         new WorkOrderApprovalHandler(workOrderService),
-                        new PprPlanApprovalHandler(pprPlanService),
+                        new PprPlanApprovalHandler(
+                                mock(com.toir.service.maintanance
+                                        .MaintenanceScheduleMaterializationService.class)),
                         new ProcurementRequestApprovalHandler(
                                 procurementRequestRepository,
                                 mock(com.toir.service.finance.BudgetCommitmentService.class)),
