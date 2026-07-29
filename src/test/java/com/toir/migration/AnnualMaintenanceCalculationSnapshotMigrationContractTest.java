@@ -19,13 +19,17 @@ class AnnualMaintenanceCalculationSnapshotMigrationContractTest {
             "V20260728_4__annual_maintenance_approval_first_foundation.sql";
     private static final String SNAPSHOT_V5 =
             "V20260728_5__annual_maintenance_calculation_snapshots.sql";
+    private static final String SNAPSHOT_INTEGRITY_V5_1 =
+            "V20260728_5_1__annual_maintenance_calculation_snapshot_integrity.sql";
 
     @Test
-    void committedV3AndV4RemainByteForByteUnchanged() throws Exception {
+    void committedV3V4AndV5RemainByteForByteUnchanged() throws Exception {
         assertThat(sha256(TRACKED_V3))
                 .isEqualTo("f86bc7db5dc33afb08ead2e7e53916cdf29544199b4d77de2f9900493a607d31");
         assertThat(sha256(FOUNDATION_V4))
                 .isEqualTo("37df0235e21abc2d737e134457b622d7ee8fca41a5f97888223147f2eb161f83");
+        assertThat(sha256(SNAPSHOT_V5))
+                .isEqualTo("a82612f764d17af70bff44760f43373abf81b0365d8597cbb20a937a92d3e1d7");
     }
 
     @Test
@@ -115,8 +119,43 @@ class AnnualMaintenanceCalculationSnapshotMigrationContractTest {
         );
     }
 
+    @Test
+    void v5_1MakesTaskTraceabilityPlanBoundAndIndependentOfSoftDelete()
+            throws Exception {
+        String sql = normalizedMigration(SNAPSHOT_INTEGRITY_V5_1);
+
+        assertThat(sql).contains(
+                "unique (id, plan_id)",
+                "foreign key (source_calculation_item_id, plan_id)",
+                "references maintenance_schedule_calculation_items(id, plan_id)",
+                "create unique index uq_ppr_tasks_source_calculation_item",
+                "where source_calculation_item_id is not null",
+                "drop index uq_ppr_tasks_active_source_calculation_item"
+        );
+        assertThat(sql).doesNotContain(
+                "where source_calculation_item_id is not null and is_deleted = false"
+        );
+    }
+
+    @Test
+    void v5_1AddsSnapshotForeignKeySupportIndexes() throws Exception {
+        String sql = normalizedMigration(SNAPSHOT_INTEGRITY_V5_1);
+
+        assertThat(sql).contains(
+                "on maintenance_schedule_calculation_items (equipment_id)",
+                "on maintenance_schedule_calculation_items (regulation_id)",
+                "on maintenance_schedule_calculation_items (maintenance_rule_id)",
+                "on maintenance_schedule_calculation_items (template_id)",
+                "on maintenance_schedule_calculation_items (department_id)"
+        );
+    }
+
     private static String normalizedMigration() throws Exception {
-        return Files.readString(MIGRATION_DIRECTORY.resolve(SNAPSHOT_V5))
+        return normalizedMigration(SNAPSHOT_V5);
+    }
+
+    private static String normalizedMigration(String migration) throws Exception {
+        return Files.readString(MIGRATION_DIRECTORY.resolve(migration))
                 .toLowerCase()
                 .replaceAll("\\s+", " ")
                 .trim();
