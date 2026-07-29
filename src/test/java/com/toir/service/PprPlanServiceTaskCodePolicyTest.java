@@ -6,6 +6,7 @@ import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprTaskRequest;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
+import com.toir.entity.equipment.Equipment;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
@@ -13,6 +14,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.department.DepartmentRepository;
+import com.toir.service.pprcalendar.PprPlanEquipmentAccessPolicy;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import jakarta.persistence.EntityManager;
@@ -67,6 +69,9 @@ class PprPlanServiceTaskCodePolicyTest {
     @Mock
     EntityManager entityManager;
 
+    @Mock
+    PprPlanEquipmentAccessPolicy equipmentAccessPolicy;
+
     @InjectMocks
     PprPlanService service;
 
@@ -74,6 +79,9 @@ class PprPlanServiceTaskCodePolicyTest {
     void setUp() {
         lenient().when(generatorService.generateForPlan(any(UUID.class)))
                 .thenAnswer(invocation -> new PprGeneratorService.GenerationResult(invocation.getArgument(0), 0, 0));
+        lenient().when(equipmentAccessPolicy.requireManualTaskEquipment(
+                        any(PprPlan.class), any(UUID.class)))
+                .thenReturn(new Equipment());
     }
 
     @Test
@@ -201,6 +209,25 @@ class PprPlanServiceTaskCodePolicyTest {
                 });
 
         verify(planRepository, never()).findByIdAndIsDeletedFalse(any(UUID.class));
+        verify(taskRepository, never()).maxSequenceByCodePrefix(anyString());
+        verify(taskRepository, never()).save(any(PprTask.class));
+    }
+
+    @Test
+    void addTaskDoesNotPersistWhenEquipmentPolicyRejectsCrossDepartmentEquipment() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId);
+        PprTaskRequest request = request(null);
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(equipmentAccessPolicy.requireManualTaskEquipment(plan, request.equipmentId()))
+                .thenThrow(RestException.badRequest("Equipment is outside the PPR plan department"));
+
+        assertThatThrownBy(() -> service.addTask(planId, request))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage())
+                                .isEqualTo("Equipment is outside the PPR plan department"));
+
+        verify(equipmentAccessPolicy).requireManualTaskEquipment(plan, request.equipmentId());
         verify(taskRepository, never()).maxSequenceByCodePrefix(anyString());
         verify(taskRepository, never()).save(any(PprTask.class));
     }

@@ -7,5 +7,21 @@ public enum ApprovalStatus {
     REJECTED,
     CANCELLED,
     EXPIRED,
-    FAILED
+    FAILED,
+    SUPERSEDED;
+
+    public boolean isPending() {
+        return this == PENDING;
+    }
+
+    public boolean isActionable() {
+        return this == PENDING;
+    }
+
+    public boolean isTerminal() {
+        return switch (this) {
+            case APPROVED, REJECTED, CANCELLED, EXPIRED, FAILED, SUPERSEDED -> true;
+            case DRAFT, PENDING -> false;
+        };
+    }
 }

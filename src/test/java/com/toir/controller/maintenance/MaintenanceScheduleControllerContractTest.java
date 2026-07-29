@@ -4,10 +4,12 @@ import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewRequest;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewResponse;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewSummary;
 import com.toir.dto.maintenanceschedule.MaintenanceScheduleOption;
+import com.toir.enums.MaintenanceScheduleRecurrenceAnchor;
 import com.toir.enums.MaintenanceScheduleScopeType;
 import com.toir.exception.GlobalExceptionHandler;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.maintanance.MaintenanceScheduleService;
+import java.time.DayOfWeek;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -75,6 +77,64 @@ class MaintenanceScheduleControllerContractTest {
         org.mockito.Mockito.verify(service).preview(captor.capture());
         assertThat(captor.getValue().departmentId()).isEqualTo(scopedDepartmentId);
         assertThat(captor.getValue().scopeType()).isEqualTo(MaintenanceScheduleScopeType.EQUIPMENT);
+    }
+
+    @Test
+    void previewPreservesWeekdayShiftPolicyWhenApplyingDepartmentScope() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID requestedDepartmentId = UUID.randomUUID();
+        UUID scopedDepartmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(requestedDepartmentId))
+                .thenReturn(scopedDepartmentId);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(scopedDepartmentId);
+        when(service.preview(any())).thenReturn(new MaintenanceSchedulePreviewResponse(
+                List.of(),
+                new MaintenanceSchedulePreviewSummary(0, 0, 0, 1)
+        ));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new MaintenanceScheduleController(service, scopeAccessService)
+        ).build();
+
+        mvc.perform(post("/api/v1/maintenance-schedule/preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fromDate": "2026-07-28",
+                                  "toDate": "2027-07-27",
+                                  "scopeType": "EQUIPMENT",
+                                  "equipmentIds": ["%s"],
+                                  "departmentId": "%s",
+                                  "anchorMode": "CURRENT",
+                                  "shiftFromExcludedWeekdays": true,
+                                  "excludedWeekdays": [
+                                    "TUESDAY",
+                                    "WEDNESDAY",
+                                    "THURSDAY",
+                                    "FRIDAY",
+                                    "SATURDAY",
+                                    "SUNDAY"
+                                  ],
+                                  "recurrenceAnchor": "REGULATION_DATE"
+                                }
+                                """.formatted(equipmentId, requestedDepartmentId)))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<MaintenanceSchedulePreviewRequest> captor =
+                ArgumentCaptor.forClass(MaintenanceSchedulePreviewRequest.class);
+        org.mockito.Mockito.verify(service).preview(captor.capture());
+        MaintenanceSchedulePreviewRequest scopedRequest = captor.getValue();
+        assertThat(scopedRequest.departmentId()).isEqualTo(scopedDepartmentId);
+        assertThat(scopedRequest.shiftFromExcludedWeekdays()).isTrue();
+        assertThat(scopedRequest.excludedWeekdays()).containsExactlyInAnyOrder(
+                DayOfWeek.TUESDAY,
+                DayOfWeek.WEDNESDAY,
+                DayOfWeek.THURSDAY,
+                DayOfWeek.FRIDAY,
+                DayOfWeek.SATURDAY,
+                DayOfWeek.SUNDAY
+        );
+        assertThat(scopedRequest.recurrenceAnchor())
+                .isEqualTo(MaintenanceScheduleRecurrenceAnchor.REGULATION_DATE);
     }
 
     @Test

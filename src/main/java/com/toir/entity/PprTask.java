@@ -39,6 +39,9 @@ public class PprTask extends BaseEntity {
     @Column(name = "cycle_key")
     private String cycleKey;
 
+    @Column(name = "source_calculation_item_id", updatable = false)
+    private UUID sourceCalculationItemId;
+
     @Column(nullable = false)
     private String title;
 
