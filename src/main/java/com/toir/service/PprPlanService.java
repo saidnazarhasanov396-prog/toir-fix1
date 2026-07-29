@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.dto.pprplanning.*;
+import com.toir.config.AnnualMaintenanceApprovalFirstFeature;
 import com.toir.entity.Department;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprPlanTarget;
@@ -20,6 +21,8 @@ import com.toir.enums.PprPlanOrigin;
 import com.toir.enums.PprTargetType;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PprType;
+import com.toir.enums.MaterializationMode;
+import com.toir.enums.TaskMaterializationStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprPlanStatsProjection;
@@ -82,6 +85,7 @@ public class PprPlanService {
     private final EntityManager entityManager;
     private final PprPlanVisibilityPolicy visibilityPolicy;
     private final PprPlanEquipmentAccessPolicy equipmentAccessPolicy;
+    private final AnnualMaintenanceApprovalFirstFeature approvalFirstFeature;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
     private static final int MAX_TASK_CODE_GENERATION_ATTEMPTS = 50;
     private static final String CLIENT_CODE_REJECT_MESSAGE =
@@ -469,6 +473,21 @@ public class PprPlanService {
 
     private PprPlanDto createWithOrigin(PprPlanRequest request, PprPlanOrigin origin) {
         PprPlan saved = saveWithGeneratedPlanCode(request, origin);
+        if (isApprovalFirstScheduleCreate(origin)) {
+            auditBuilderService.log(
+                    "ppr_plan",
+                    saved.getId().toString(),
+                    AuditAction.CREATE,
+                    AuditModule.PPR_PLAN,
+                    "ППР plan calculation created for approval-first review",
+                    null,
+                    saved
+            );
+            return toDto(reloadPlan(saved.getId()))
+                    .withGenerationMessage(
+                            "Maintenance schedule calculation created without tasks; "
+                                    + "task materialization requires final approval.");
+        }
         log.info("Calling PprGeneratorService.generateForPlan after PPR plan create: planId={} planCode={} status={} departmentId={}",
                 saved.getId(), saved.getCode(), saved.getStatus(), saved.getDepartmentId());
         PprGeneratorService.GenerationResult generationResult = generatorService.generateForPlan(saved.getId());
@@ -524,6 +543,21 @@ public class PprPlanService {
         PprPlan plan = planRepository.findByIdAndIsDeletedFalseForUpdate(id)
                 .orElseThrow(() -> RestException.notFound("Maintenance schedule calculation not found: " + id));
         requireScheduleCalculation(plan);
+        if (plan.getMaterializationMode() == MaterializationMode.APPROVAL_FIRST) {
+            if (plan.getStatus() != PlanStatus.CALCULATED) {
+                throw RestException.conflict(
+                        "Approval-first maintenance schedule calculation cannot be changed in its current status");
+            }
+            if (plan.getTasks().stream().anyMatch(task -> !task.isDeleted())) {
+                throw new RestException(
+                        "Approval-first calculation contains pre-approval tasks",
+                        org.springframework.http.HttpStatus.CONFLICT,
+                        "PPR_APPROVAL_FIRST_PREAPPROVAL_TASK_INTEGRITY");
+            }
+            applyPlanMutableFields(plan, request);
+            planRepository.saveAndFlush(plan);
+            return toDto(reloadPlan(id));
+        }
         if (plan.getStatus() != PlanStatus.DRAFT && plan.getStatus() != PlanStatus.GENERATED) {
             throw RestException.conflict("Approved maintenance schedule calculation cannot be changed");
         }
@@ -546,7 +580,10 @@ public class PprPlanService {
         PprPlan plan = planRepository.findByIdAndIsDeletedFalseForUpdate(id)
                 .orElseThrow(() -> RestException.notFound("Maintenance schedule calculation not found: " + id));
         requireScheduleCalculation(plan);
-        if (plan.getStatus() != PlanStatus.DRAFT && plan.getStatus() != PlanStatus.GENERATED) {
+        if (plan.getStatus() != PlanStatus.DRAFT
+                && plan.getStatus() != PlanStatus.GENERATED
+                && !(plan.getMaterializationMode() == MaterializationMode.APPROVAL_FIRST
+                    && plan.getStatus() == PlanStatus.CALCULATED)) {
             throw RestException.conflict("Approved maintenance schedule calculation cannot be deleted");
         }
         plan.setDeleted(true);
@@ -558,6 +595,12 @@ public class PprPlanService {
         if (plan.getOrigin() != PprPlanOrigin.MAINTENANCE_SCHEDULE) {
             throw RestException.notFound("Maintenance schedule calculation not found: " + plan.getId());
         }
+    }
+
+    private boolean isApprovalFirstScheduleCreate(PprPlanOrigin origin) {
+        return origin == PprPlanOrigin.MAINTENANCE_SCHEDULE
+                && approvalFirstFeature != null
+                && approvalFirstFeature.isEnabled();
     }
 
     @Transactional
@@ -582,6 +625,12 @@ public class PprPlanService {
 
     public PprPlanDto finalizeApprovalFromApprovalRequest(UUID planId, UUID approverId) {
         PprPlan plan = getPlan(planId);
+        if (plan.getMaterializationMode() == MaterializationMode.APPROVAL_FIRST) {
+            throw new RestException(
+                    "Approval-first PPR plan must be finalized from its exact snapshot",
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "PPR_APPROVAL_FIRST_LEGACY_FINALIZATION_FORBIDDEN");
+        }
         validateCanApprove(plan);
         plan.setStatus(PlanStatus.APPROVED);
         plan.setApprovedById(approverId);
@@ -606,6 +655,16 @@ public class PprPlanService {
     }
 
     private void validateCanApprove(PprPlan plan) {
+        if (plan.getMaterializationMode() == MaterializationMode.APPROVAL_FIRST) {
+            if (plan.getStatus() == PlanStatus.CALCULATED
+                    && plan.getTaskMaterializationStatus()
+                    == TaskMaterializationStatus.NOT_MATERIALIZED
+                    && plan.getTasks().stream().noneMatch(task -> !task.isDeleted())) {
+                return;
+            }
+            throw RestException.badRequest(
+                    "Approval-first calculation is not ready for approval");
+        }
         if (plan.getStatus() != PlanStatus.DRAFT && plan.getStatus() != PlanStatus.GENERATED) {
             throw RestException.badRequest("Only DRAFT/GENERATED plans can be approved");
         }
