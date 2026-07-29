@@ -116,6 +116,25 @@ class MaintenanceScheduleApprovalBindingServiceTest {
     }
 
     @Test
+    void exactTupleMatchUsesPlanRevisionHashAndVersionNotSubmittingActor() {
+        UUID planId = UUID.randomUUID();
+        ApprovalRequest request = approvalRequest(planId, 5L, HASH);
+        request.setRequesterContextFingerprint("old-requester");
+        MaintenanceScheduleApprovalBinding binding =
+                new MaintenanceScheduleApprovalBinding(
+                        planId,
+                        5L,
+                        HASH,
+                        1,
+                        "new-requester");
+
+        assertThat(service.matches(request, binding)).isTrue();
+
+        request.setCalculationContentHashVersion(2);
+        assertThat(service.matches(request, binding)).isFalse();
+    }
+
+    @Test
     void recalculationSupersedesOldPendingRequestAndCancelsPendingActions() {
         UUID planId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
@@ -127,7 +146,7 @@ class MaintenanceScheduleApprovalBindingServiceTest {
                 "PPR_PLAN", planId, "APPROVE", "PENDING"))
                 .thenReturn(List.of(old));
 
-        service.supersedeForNewRevision(planId, 2L, HASH, actorId);
+        service.supersedeForNewRevision(planId, 2L, HASH, 1, actorId);
 
         assertThat(old.getStatus()).isEqualTo(ApprovalStatus.SUPERSEDED);
         assertThat(old.getResolutionCode()).isEqualTo(ApprovalResolutionCode.NEW_REVISION);

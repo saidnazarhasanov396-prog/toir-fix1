@@ -52,6 +52,30 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                     resolution.templateVersion(),
                     resolution.steps());
         }
+        if (request.getTargetType() == ApprovalTargetType.PPR_PLAN
+                && actionType == ApprovalActionType.APPROVE) {
+            ApprovalTemplate template = templateRepository
+                    .findByCodeAndActiveTrueAndIsDeletedFalse(
+                            "PPR_PLAN_APPROVAL")
+                    .filter(candidate ->
+                            candidate.getTargetType()
+                                    == ApprovalTargetType.PPR_PLAN
+                                    && candidate.getActionType()
+                                    == ApprovalActionType.APPROVE)
+                    .orElse(null);
+            if (template == null || !hasConfiguredApproverStep(template)) {
+                return ApprovalRouteSnapshot.sequential(List.of());
+            }
+            List<CreateApprovalRequest.StepInput> steps = stepsFromTemplate(template);
+            if (steps.isEmpty()) {
+                return ApprovalRouteSnapshot.sequential(List.of());
+            }
+            return new ApprovalRouteSnapshot(
+                    effectiveFlowType(template),
+                    template.getId(),
+                    template.getVersion(),
+                    steps);
+        }
         return templateRepository
                 .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
                         request.getTargetType(),
@@ -131,6 +155,14 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
             return parallelAssigneeResolver.resolve(template);
         }
         return configuredSequentialSteps(template);
+    }
+
+    private boolean hasConfiguredApproverStep(ApprovalTemplate template) {
+        return template.getSteps().stream()
+                .filter(step -> !step.isDeleted())
+                .anyMatch(step -> step.getApproverId() != null
+                        || (step.getApproverRole() != null
+                            && !step.getApproverRole().isBlank()));
     }
 
     private List<CreateApprovalRequest.StepInput> configuredSequentialSteps(ApprovalTemplate template) {
