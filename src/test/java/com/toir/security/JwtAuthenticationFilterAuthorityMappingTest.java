@@ -109,6 +109,23 @@ class JwtAuthenticationFilterAuthorityMappingTest {
     }
 
     @Test
+    void knownRoleDefaultsAreExposedOnPrincipalForAuthMeConsumers() throws Exception {
+        Claims claims = claims(
+                List.of("PPR_ENGINEER", PermissionConstants.PPR_PLAN_READ),
+                List.of(PermissionConstants.PPR_PLAN_READ),
+                "PPR_ENGINEER"
+        );
+        when(jwtService.parse("token")).thenReturn(claims);
+
+        doFilter();
+
+        assertThat(authenticatedUser().permissions()).contains(
+                PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_TASK_READ
+        );
+    }
+
+    @Test
     void roleOnlyTokenIsExpandedWithAnalyticsPermissionForKnownAllowedRole() throws Exception {
         Claims claims = claims(List.of("WORKSHOP_HEAD"), null, "WORKSHOP_HEAD");
         when(jwtService.parse("token")).thenReturn(claims);
@@ -127,6 +144,7 @@ class JwtAuthenticationFilterAuthorityMappingTest {
 
         assertThat(authorityNames()).containsExactly("CUSTOM_ROLE");
         assertThat(authorityNames()).doesNotContain(PermissionConstants.ANALYTICS_READ);
+        assertThat(authenticatedUser().permissions()).isEmpty();
     }
 
     private Claims claims(List<String> authorities, List<String> permissions, String primaryRoleCode) {
@@ -152,5 +170,12 @@ class JwtAuthenticationFilterAuthorityMappingTest {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         assertThat(authentication).isNotNull();
         return authentication.getAuthorities().stream().map(Object::toString).toList();
+    }
+
+    private AuthenticatedUser authenticatedUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        assertThat(authentication).isNotNull();
+        assertThat(authentication.getPrincipal()).isInstanceOf(AuthenticatedUser.class);
+        return (AuthenticatedUser) authentication.getPrincipal();
     }
 }

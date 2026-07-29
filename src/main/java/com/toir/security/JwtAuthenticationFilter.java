@@ -42,21 +42,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 Claims claims = jwtService.parse(token);
+                String primaryRoleCode = claims.get("primaryRoleCode", String.class);
+                List<String> claimedPermissions = readList(claims, "permissions");
+                Set<String> authorityCodes = new LinkedHashSet<>(readList(claims, "authorities"));
+                if (StringUtils.hasText(primaryRoleCode)) {
+                    authorityCodes.add(primaryRoleCode);
+                }
+                Set<String> effectivePermissions = resolveEffectivePermissions(
+                        authorityCodes, claimedPermissions);
+                authorityCodes.addAll(effectivePermissions);
                 AuthenticatedUser principal = new AuthenticatedUser(
                         claims.getSubject(),
                         claims.get("username", String.class),
                         claims.get("email", String.class),
                         claims.get("fullName", String.class),
                         claims.get("departmentId", String.class),
-                        claims.get("primaryRoleCode", String.class),
-                        readList(claims, "permissions")
+                        primaryRoleCode,
+                        List.copyOf(effectivePermissions)
                 );
-                Set<String> authorityCodes = new LinkedHashSet<>(readList(claims, "authorities"));
-                if (StringUtils.hasText(principal.primaryRoleCode())) {
-                    authorityCodes.add(principal.primaryRoleCode());
-                }
-                expandKnownRolePermissions(authorityCodes);
-                authorityCodes.addAll(principal.permissions());
                 List<SimpleGrantedAuthority> authorities = authorityCodes.stream()
                         .map(SimpleGrantedAuthority::new)
                         .toList();
@@ -74,11 +77,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    private void expandKnownRolePermissions(Set<String> authorityCodes) {
-        List<String> roleCodes = authorityCodes.stream()
+    private Set<String> resolveEffectivePermissions(
+            Set<String> authorityCodes, List<String> claimedPermissions) {
+        Set<String> effective = new LinkedHashSet<>(claimedPermissions);
+        authorityCodes.stream()
                 .filter(RolePermissionDefaults::hasDefaults)
-                .toList();
-        roleCodes.forEach(roleCode -> authorityCodes.addAll(RolePermissionDefaults.forRole(roleCode)));
+                .map(RolePermissionDefaults::forRole)
+                .forEach(effective::addAll);
+        return effective;
     }
 
     private List<String> readList(Claims claims, String key) {

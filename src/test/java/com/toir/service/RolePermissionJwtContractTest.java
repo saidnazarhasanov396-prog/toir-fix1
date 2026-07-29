@@ -85,6 +85,22 @@ class RolePermissionJwtContractTest {
     }
 
     @Test
+    void pprEngineerLoginExpandsKnownRoleDefaultsForFrontendConsumers() {
+        LoginResponse response = loginWith(primaryRole("PPR_ENGINEER", List.of(
+                PermissionConstants.PPR_PLAN_READ
+        )));
+
+        assertThat(response.user().permissions()).contains(
+                PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_TASK_READ
+        );
+        assertJwtPermissionsContain(
+                PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_TASK_READ
+        );
+    }
+
+    @Test
     void storekeeperLoginIncludesWarehouseAndStockPermissionsWithoutStockAdjust() {
         LoginResponse response = loginWith(primaryRole("STOREKEEPER", List.of(
                 PermissionConstants.WAREHOUSE_READ,

@@ -9,6 +9,7 @@ import com.toir.util.RequestContext;
 import com.toir.exception.RestException;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.JwtService;
+import com.toir.security.RolePermissionDefaults;
 import com.toir.entity.users.Role;
 import com.toir.entity.users.User;
 import com.toir.repository.users.RoleRepository;
@@ -64,7 +65,12 @@ public class AuthService {
 
         Set<String> authorityCodes = new LinkedHashSet<>(roles.stream().map(Role::getCode).toList());
         for (Role role : roles) {
-            if (role.getPermissions() != null) permissions.addAll(role.getPermissions());
+            if (role.getPermissions() != null) {
+                permissions.addAll(role.getPermissions());
+            }
+            if (RolePermissionDefaults.hasDefaults(role.getCode())) {
+                permissions.addAll(RolePermissionDefaults.forRole(role.getCode()));
+            }
         }
         authorityCodes.addAll(permissions);
 

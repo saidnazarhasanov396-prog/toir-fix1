@@ -76,16 +76,24 @@ public class MaintenanceScheduleMaterializationService {
         List<PprTask> existing =
                 taskRepository.findAllByPlanIdAndSourceCalculationItemIdIn(
                         targetId, sourceIds);
-        if (!existing.isEmpty()
-                || plan.getTaskMaterializationStatus()
+        if (plan.getTaskMaterializationStatus()
                 == TaskMaterializationStatus.MATERIALIZED) {
             if (isExactIdempotentState(plan, revision, sourceIds, existing)) {
                 return MaintenanceScheduleMaterializationOutcome
                         .IDEMPOTENT_SUCCESS;
             }
-            throw conflict(
-                    "PPR_CALCULATION_MATERIALIZATION_INCONSISTENT",
-                    "Calculation materialization metadata is inconsistent");
+            throw inconsistentMaterialization();
+        }
+
+        Set<UUID> expectedSourceIds = new HashSet<>(sourceIds);
+        Set<UUID> existingSourceIds = existing.stream()
+                .map(PprTask::getSourceCalculationItemId)
+                .collect(java.util.stream.Collectors.toSet());
+        if (existing.stream().anyMatch(PprTask::isDeleted)
+                || existingSourceIds.contains(null)
+                || !expectedSourceIds.containsAll(existingSourceIds)
+                || existingSourceIds.size() != existing.size()) {
+            throw inconsistentMaterialization();
         }
         if (plan.getStatus() != PlanStatus.CALCULATED) {
             throw conflict(
@@ -94,18 +102,20 @@ public class MaintenanceScheduleMaterializationService {
         }
 
         List<PprTask> tasks = items.stream()
+                .filter(item -> !existingSourceIds.contains(item.getId()))
                 .map(item -> toApprovedTask(plan, item))
                 .toList();
-        taskRepository.saveAll(tasks);
-        entityManager.flush();
-
-        plan.getTasks().addAll(tasks);
+        if (!tasks.isEmpty()) {
+            taskRepository.saveAll(tasks);
+            entityManager.flush();
+            plan.getTasks().addAll(tasks);
+        }
         plan.setStatus(PlanStatus.APPROVED);
         plan.setApprovedById(approverId);
         plan.setTaskMaterializationStatus(
                 TaskMaterializationStatus.MATERIALIZED);
         plan.setMaterializedRevision(revision);
-        plan.setMaterializedTaskCount(tasks.size());
+        plan.setMaterializedTaskCount(sourceIds.size());
         planRepository.saveAndFlush(plan);
         return MaintenanceScheduleMaterializationOutcome.APPROVED;
     }
@@ -169,13 +179,20 @@ public class MaintenanceScheduleMaterializationService {
                 .collect(java.util.stream.Collectors.toSet());
         return existing.size() == expected.size()
                 && existing.stream().noneMatch(PprTask::isDeleted)
-                && plan.getStatus() == PlanStatus.APPROVED
+                && isMaterializedPlanStatus(plan.getStatus())
                 && plan.getTaskMaterializationStatus()
                 == TaskMaterializationStatus.MATERIALIZED
                 && Objects.equals(plan.getMaterializedRevision(), revision)
                 && Objects.equals(
                         plan.getMaterializedTaskCount(), sourceIds.size())
                 && expected.equals(actual);
+    }
+
+    private static boolean isMaterializedPlanStatus(PlanStatus status) {
+        return status == PlanStatus.APPROVED
+                || status == PlanStatus.IN_PROGRESS
+                || status == PlanStatus.CLOSED
+                || status == PlanStatus.CANCELLED;
     }
 
     private static PprTask toApprovedTask(
@@ -236,5 +253,11 @@ public class MaintenanceScheduleMaterializationService {
                 message,
                 org.springframework.http.HttpStatus.CONFLICT,
                 code);
+    }
+
+    private static RestException inconsistentMaterialization() {
+        return conflict(
+                "PPR_CALCULATION_MATERIALIZATION_INCONSISTENT",
+                "Calculation materialization metadata is inconsistent");
     }
 }

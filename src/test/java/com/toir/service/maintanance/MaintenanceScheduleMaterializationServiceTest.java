@@ -140,6 +140,31 @@ class MaintenanceScheduleMaterializationServiceTest {
     }
 
     @Test
+    void exactRetryRemainsIdempotentAfterPlanHasStarted() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, 2L, HASH);
+        plan.setStatus(PlanStatus.IN_PROGRESS);
+        plan.setTaskMaterializationStatus(TaskMaterializationStatus.MATERIALIZED);
+        plan.setMaterializedRevision(2L);
+        plan.setMaterializedTaskCount(1);
+        ApprovalRequest request = request(planId, 2L, HASH);
+        MaintenanceScheduleCalculationItem item = item(plan, 2L);
+        PprTask existing = new PprTask();
+        existing.setSourceCalculationItemId(item.getId());
+        existing.setPlan(plan);
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId))
+                .thenReturn(Optional.of(plan));
+        when(itemRepository.findAllByPlanIdAndCalculationRevisionOrderBySourceItemKey(
+                planId, 2L)).thenReturn(List.of(item));
+        when(taskRepository.findAllByPlanIdAndSourceCalculationItemIdIn(
+                planId, List.of(item.getId()))).thenReturn(List.of(existing));
+
+        assertThat(service.finalizeApproval(request, UUID.randomUUID()))
+                .isEqualTo(MaintenanceScheduleMaterializationOutcome.IDEMPOTENT_SUCCESS);
+        verify(taskRepository, never()).saveAll(any());
+    }
+
+    @Test
     void emptySnapshotDoesNotQueryExistingTasks() {
         UUID planId = UUID.randomUUID();
         PprPlan plan = plan(planId, 2L, HASH);
@@ -188,7 +213,7 @@ class MaintenanceScheduleMaterializationServiceTest {
     }
 
     @Test
-    void partialMaterializationFailsWithoutCreatingDuplicateOrMissingTasks() {
+    void partialMaterializationCreatesOnlyMissingTasksAndFinalizesPlan() {
         UUID planId = UUID.randomUUID();
         PprPlan plan = plan(planId, 2L, HASH);
         MaintenanceScheduleCalculationItem first = item(plan, 2L);
@@ -204,8 +229,23 @@ class MaintenanceScheduleMaterializationServiceTest {
                 planId, List.of(first.getId(), second.getId())))
                 .thenReturn(List.of(existing));
 
-        assertInconsistentMaterialization(planId);
-        verify(taskRepository, never()).saveAll(any());
+        when(taskRepository.saveAll(any())).thenAnswer(invocation ->
+                (List<PprTask>) invocation.getArgument(0));
+
+        assertThat(service.finalizeApproval(
+                request(planId, 2L, HASH), UUID.randomUUID()))
+                .isEqualTo(MaintenanceScheduleMaterializationOutcome.APPROVED);
+
+        verify(taskRepository).saveAll(org.mockito.ArgumentMatchers.argThat(tasks ->
+                ((List<PprTask>) tasks).stream()
+                        .map(PprTask::getSourceCalculationItemId)
+                        .toList()
+                        .equals(List.of(second.getId()))));
+        assertThat(plan.getStatus()).isEqualTo(PlanStatus.APPROVED);
+        assertThat(plan.getTaskMaterializationStatus())
+                .isEqualTo(TaskMaterializationStatus.MATERIALIZED);
+        assertThat(plan.getMaterializedRevision()).isEqualTo(2L);
+        assertThat(plan.getMaterializedTaskCount()).isEqualTo(2);
     }
 
     @Test
