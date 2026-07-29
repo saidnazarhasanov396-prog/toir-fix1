@@ -20,7 +20,7 @@ class MaintenanceScheduleCalculationItemRepositoryContractTest {
                 .collect(Collectors.toSet());
 
         assertThat(Repository.class).isAssignableFrom(repositoryType);
-        assertThat(CrudRepository.class).isNotAssignableFrom(repositoryType);
+        assertThat(CrudRepository.class.isAssignableFrom(repositoryType)).isFalse();
         assertThat(declaredMethods).containsExactlyInAnyOrder(
                 "saveAll",
                 "findAllByPlanIdAndCalculationRevisionOrderBySourceItemKey",
