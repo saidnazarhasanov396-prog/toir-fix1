@@ -132,16 +132,19 @@ public class PprEquipmentCalendarJdbcRepository
                 )
                 SELECT count(*) FILTER (
                            WHERE occurrence_base.equipment_id IS NULL
-                             AND (""" + matchingRow + """)
+                             AND (""" + matchingRow + """
+                             )
                        ) AS missing_equipment,
                        count(*) FILTER (
                            WHERE occurrence_base.equipment_id IS NOT NULL
                              AND e.id IS NULL
-                             AND (""" + matchingRow + """)
+                             AND (""" + matchingRow + """
+                             )
                        ) AS unresolved_equipment,
                        count(*) FILTER (
                            WHERE e.id IS NOT NULL
-                             AND (""" + matchingRow + """)
+                             AND (""" + matchingRow + """
+                             )
                              AND (
                                  occurrence_base.effective_date IS NULL
                                  OR occurrence_base.effective_date < :yearStart
@@ -150,7 +153,8 @@ public class PprEquipmentCalendarJdbcRepository
                        ) AS outside_plan_year,
                        count(*) FILTER (
                            WHERE e.id IS NOT NULL
-                             AND (""" + matchingRow + """)
+                             AND (""" + matchingRow + """
+                             )
                              AND (
                                  occurrence_base.effective_date IS NULL
                                  OR occurrence_base.effective_date < :planStart

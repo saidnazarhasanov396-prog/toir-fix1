@@ -45,7 +45,7 @@ public record PprEquipmentCalendarFilter(
             Boolean onlyWithWork,
             Boolean includeCancelled
     ) {
-        this(Objects.requireNonNull(year, "year is required"),
+        this(Objects.requireNonNull(year, "year is required").intValue(),
                 page == null ? 0 : page,
                 size == null ? 25 : size,
                 search,

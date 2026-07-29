@@ -20,6 +20,7 @@ import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.TaskMaterializationStatus;
 import com.toir.exception.MaintenanceScheduleApprovalStaleException;
+import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
 import com.toir.repository.maintenance.MaintenanceScheduleCalculationItemRepository;
@@ -139,6 +140,99 @@ class MaintenanceScheduleMaterializationServiceTest {
     }
 
     @Test
+    void emptySnapshotDoesNotQueryExistingTasks() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, 2L, HASH);
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId))
+                .thenReturn(Optional.of(plan));
+        when(itemRepository.findAllByPlanIdAndCalculationRevisionOrderBySourceItemKey(
+                planId, 2L)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.finalizeApproval(
+                request(planId, 2L, HASH), UUID.randomUUID()))
+                .isInstanceOfSatisfying(RestException.class, error ->
+                        assertThat(error.getErrorCode())
+                                .isEqualTo("PPR_CALCULATION_SNAPSHOT_MISSING"));
+
+        verify(taskRepository, never())
+                .findAllByPlanIdAndSourceCalculationItemIdIn(any(), any());
+        verify(taskRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void loadsMultipleSourceIdsInOnePlanBoundBatch() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, 2L, HASH);
+        MaintenanceScheduleCalculationItem first = item(plan, 2L);
+        MaintenanceScheduleCalculationItem second = item(plan, 2L);
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId))
+                .thenReturn(Optional.of(plan));
+        when(itemRepository.findAllByPlanIdAndCalculationRevisionOrderBySourceItemKey(
+                planId, 2L)).thenReturn(List.of(first, second));
+        when(taskRepository.findAllByPlanIdAndSourceCalculationItemIdIn(
+                planId, List.of(first.getId(), second.getId()))).thenReturn(List.of());
+        when(taskRepository.saveAll(any())).thenAnswer(invocation ->
+                (List<PprTask>) invocation.getArgument(0));
+
+        assertThat(service.finalizeApproval(
+                request(planId, 2L, HASH), UUID.randomUUID()))
+                .isEqualTo(MaintenanceScheduleMaterializationOutcome.APPROVED);
+
+        verify(taskRepository).findAllByPlanIdAndSourceCalculationItemIdIn(
+                planId, List.of(first.getId(), second.getId()));
+        verify(taskRepository).saveAll(org.mockito.ArgumentMatchers.argThat(tasks ->
+                ((List<PprTask>) tasks).stream()
+                        .map(PprTask::getSourceCalculationItemId)
+                        .toList()
+                        .equals(List.of(first.getId(), second.getId()))));
+    }
+
+    @Test
+    void partialMaterializationFailsWithoutCreatingDuplicateOrMissingTasks() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, 2L, HASH);
+        MaintenanceScheduleCalculationItem first = item(plan, 2L);
+        MaintenanceScheduleCalculationItem second = item(plan, 2L);
+        PprTask existing = new PprTask();
+        existing.setPlan(plan);
+        existing.setSourceCalculationItemId(first.getId());
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId))
+                .thenReturn(Optional.of(plan));
+        when(itemRepository.findAllByPlanIdAndCalculationRevisionOrderBySourceItemKey(
+                planId, 2L)).thenReturn(List.of(first, second));
+        when(taskRepository.findAllByPlanIdAndSourceCalculationItemIdIn(
+                planId, List.of(first.getId(), second.getId())))
+                .thenReturn(List.of(existing));
+
+        assertInconsistentMaterialization(planId);
+        verify(taskRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void softDeletedSourceTaskFailsInsteadOfCreatingDuplicate() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, 2L, HASH);
+        plan.setStatus(PlanStatus.APPROVED);
+        plan.setTaskMaterializationStatus(TaskMaterializationStatus.MATERIALIZED);
+        plan.setMaterializedRevision(2L);
+        plan.setMaterializedTaskCount(1);
+        MaintenanceScheduleCalculationItem item = item(plan, 2L);
+        PprTask deleted = new PprTask();
+        deleted.setPlan(plan);
+        deleted.setSourceCalculationItemId(item.getId());
+        deleted.setDeleted(true);
+        when(planRepository.findByIdAndIsDeletedFalseForUpdate(planId))
+                .thenReturn(Optional.of(plan));
+        when(itemRepository.findAllByPlanIdAndCalculationRevisionOrderBySourceItemKey(
+                planId, 2L)).thenReturn(List.of(item));
+        when(taskRepository.findAllByPlanIdAndSourceCalculationItemIdIn(
+                planId, List.of(item.getId()))).thenReturn(List.of(deleted));
+
+        assertInconsistentMaterialization(planId);
+        verify(taskRepository, never()).saveAll(any());
+    }
+
+    @Test
     void legacyPlanDelegatesWithoutRequiringRevisionTuple() {
         UUID planId = UUID.randomUUID();
         PprPlan legacy = new PprPlan();
@@ -183,12 +277,21 @@ class MaintenanceScheduleMaterializationServiceTest {
         return request;
     }
 
+    private void assertInconsistentMaterialization(UUID planId) {
+        assertThatThrownBy(() -> service.finalizeApproval(
+                request(planId, 2L, HASH), UUID.randomUUID()))
+                .isInstanceOfSatisfying(RestException.class, error ->
+                        assertThat(error.getErrorCode()).isEqualTo(
+                                "PPR_CALCULATION_MATERIALIZATION_INCONSISTENT"));
+    }
+
     private static MaintenanceScheduleCalculationItem item(
             PprPlan plan, long revision) {
-        return MaintenanceScheduleCalculationItem.builder()
+        String sourceItemKey = UUID.randomUUID().toString().replace("-", "").repeat(2);
+        MaintenanceScheduleCalculationItem item = MaintenanceScheduleCalculationItem.builder()
                 .plan(plan)
                 .calculationRevision(revision)
-                .sourceItemKey("e".repeat(64))
+                .sourceItemKey(sourceItemKey)
                 .sourceItemKeyVersion(1)
                 .plannedDate(LocalDate.of(2026, 2, 1))
                 .scheduledStart(LocalDateTime.of(2026, 2, 1, 9, 0))
@@ -199,5 +302,7 @@ class MaintenanceScheduleMaterializationServiceTest {
                 .cycleOrdinal(1L)
                 .taskTitleSnapshot("Maintenance")
                 .build();
+        item.setId(UUID.randomUUID());
+        return item;
     }
 }

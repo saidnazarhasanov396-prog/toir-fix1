@@ -167,7 +167,9 @@ public class MaintenanceScheduleMaterializationService {
         Set<UUID> actual = existing.stream()
                 .map(PprTask::getSourceCalculationItemId)
                 .collect(java.util.stream.Collectors.toSet());
-        return plan.getStatus() == PlanStatus.APPROVED
+        return existing.size() == expected.size()
+                && existing.stream().noneMatch(PprTask::isDeleted)
+                && plan.getStatus() == PlanStatus.APPROVED
                 && plan.getTaskMaterializationStatus()
                 == TaskMaterializationStatus.MATERIALIZED
                 && Objects.equals(plan.getMaterializedRevision(), revision)
