@@ -6,7 +6,9 @@ import com.toir.entity.maintenance.MaintenanceScheduleCalculationItem;
 import com.toir.enums.MaintenanceScheduleScopeType;
 import com.toir.enums.PprTargetType;
 import java.util.List;
+import org.springframework.stereotype.Component;
 
+@Component
 public class MaintenanceScheduleCalculationContentFactory {
 
     public MaintenanceScheduleCalculationContent fromSnapshot(
