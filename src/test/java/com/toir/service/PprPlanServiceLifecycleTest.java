@@ -31,6 +31,7 @@ import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.service.repair.RepairMaterialUsageService;
+import com.toir.service.pprcalendar.PprPlanEquipmentAccessPolicy;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import jakarta.persistence.EntityManager;
@@ -54,6 +55,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -102,6 +104,9 @@ class PprPlanServiceLifecycleTest {
     @Mock
     EntityManager entityManager;
 
+    @Mock
+    PprPlanEquipmentAccessPolicy equipmentAccessPolicy;
+
     @InjectMocks
     PprPlanService service;
 
@@ -109,6 +114,9 @@ class PprPlanServiceLifecycleTest {
     void setUp() {
         lenient().when(generatorService.generateForPlan(any(UUID.class)))
                 .thenAnswer(invocation -> new PprGeneratorService.GenerationResult(invocation.getArgument(0), 0, 0));
+        lenient().when(equipmentAccessPolicy.requireManualTaskEquipment(
+                        any(PprPlan.class), any(UUID.class)))
+                .thenReturn(new Equipment());
     }
 
     @Test
@@ -639,25 +647,18 @@ class PprPlanServiceLifecycleTest {
     }
 
     @Test
-    void addTaskAcceptsMissingEquipment() {
+    void addTaskRejectsMissingEquipmentBeforePersistence() {
         UUID planId = UUID.randomUUID();
         PprPlan plan = plan(planId, PlanStatus.DRAFT);
-        String codePrefix = "PPR-TASK-" + Year.now().getValue() + "-";
-        String expectedCode = "PPR-TASK-" + Year.now().getValue() + "-0001";
 
         when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
-        when(taskRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
-        when(taskRepository.existsByCode(expectedCode)).thenReturn(false);
-        when(taskRepository.save(any(PprTask.class))).thenAnswer(invocation -> {
-            PprTask task = invocation.getArgument(0);
-            task.setId(UUID.randomUUID());
-            return task;
-        });
+        when(equipmentAccessPolicy.requireManualTaskEquipment(eq(plan), isNull()))
+                .thenThrow(RestException.badRequest("equipmentId is required"));
 
-        PprTaskDto created = service.addTask(planId, taskRequest(null));
-
-        assertThat(created.equipmentId()).isNull();
-        assertThat(created.status()).isEqualTo(PprTaskStatus.PLANNED);
+        assertThatThrownBy(() -> service.addTask(planId, taskRequest(null)))
+                .isInstanceOfSatisfying(RestException.class, ex ->
+                        assertThat(ex.getMessage()).isEqualTo("equipmentId is required"));
+        verify(taskRepository, never()).save(any(PprTask.class));
     }
 
     @Test

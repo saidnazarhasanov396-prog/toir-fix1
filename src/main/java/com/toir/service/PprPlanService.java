@@ -34,6 +34,7 @@ import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import com.toir.service.repair.RepairMaterialUsageService;
+import com.toir.service.pprcalendar.PprPlanEquipmentAccessPolicy;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -80,6 +81,7 @@ public class PprPlanService {
     private final RepairMaterialUsageService repairMaterialUsageService;
     private final EntityManager entityManager;
     private final PprPlanVisibilityPolicy visibilityPolicy;
+    private final PprPlanEquipmentAccessPolicy equipmentAccessPolicy;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
     private static final int MAX_TASK_CODE_GENERATION_ATTEMPTS = 50;
     private static final String CLIENT_CODE_REJECT_MESSAGE =
@@ -613,6 +615,7 @@ public class PprPlanService {
         validateClientProvidedTaskCode(request.code());
         PprPlan plan = getPlan(planId);
         assertPlanAllowsTaskEdit(plan);
+        equipmentAccessPolicy.requireManualTaskEquipment(plan, request.equipmentId());
         return PprTaskDto.from(saveManualTaskWithGeneratedCode(plan, request));
     }
 
