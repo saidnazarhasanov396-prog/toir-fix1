@@ -1,10 +1,13 @@
 package com.toir.dto.counteragent;
 
 import com.toir.enums.CounteragentStatus;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+
+import java.util.List;
 
 public record CounteragentRequest(
         @NotBlank @Size(max = 255) String name,
@@ -15,9 +18,27 @@ public record CounteragentRequest(
         @Email String contactEmail,
         String address,
         String directorName,
-        String bankName,
-        String bankAccount,
-        String mfo,
+        @Valid @Size(max = 10) List<CounteragentBankDetailRequest> bankDetails,
+        @Deprecated String bankName,
+        @Deprecated String bankAccount,
+        @Deprecated String mfo,
         CounteragentStatus status
 ) {
+    public CounteragentRequest(
+            String name,
+            String inn,
+            String contactName,
+            String contactPosition,
+            String contactPhone,
+            String contactEmail,
+            String address,
+            String directorName,
+            String bankName,
+            String bankAccount,
+            String mfo,
+            CounteragentStatus status
+    ) {
+        this(name, inn, contactName, contactPosition, contactPhone, contactEmail, address, directorName,
+                null, bankName, bankAccount, mfo, status);
+    }
 }

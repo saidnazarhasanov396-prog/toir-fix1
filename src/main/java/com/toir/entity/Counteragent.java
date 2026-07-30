@@ -1,16 +1,22 @@
 package com.toir.entity;
 
 import com.toir.enums.CounteragentStatus;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "counteragents")
@@ -55,6 +61,11 @@ public class Counteragent extends BaseEntity {
     private String bankAccount;
 
     private String mfo;
+
+    @Builder.Default
+    @OneToMany(mappedBy = "counteragent", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("displayOrder ASC, id ASC")
+    private List<CounteragentBankDetail> bankDetails = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
