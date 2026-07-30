@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.maintenanceschedule.MaintenanceScheduleCalculationRequest;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewResponse;
+import com.toir.dto.pprplanning.PprPlanningSelectionRequest;
 import com.toir.entity.PprPlan;
 import com.toir.entity.maintenance.MaintenanceScheduleCalculationItem;
 import com.toir.entity.planning.PprPlanningSession;
@@ -115,6 +116,50 @@ public class PprPlanningVariantService {
         session.setStatus(PprPlanningSessionStatus.READY_FOR_SELECTION);
         sessionRepository.save(session);
         return variantRepository.saveAndFlush(variant);
+    }
+
+    @Transactional
+    public PprPlanningSession select(
+            UUID sessionId,
+            UUID variantId,
+            PprPlanningSelectionRequest request) {
+        if (request == null) {
+            throw RestException.badRequest("Selection payload is required");
+        }
+        if (!variantId.equals(request.variantId())) {
+            throw conflict(
+                    "PPR_PLANNING_SELECTION_STALE",
+                    "Selected variant id does not match the request");
+        }
+        PprPlanningSession session = sessionRepository
+                .findByIdAndIsDeletedFalseForUpdate(sessionId)
+                .orElseThrow(() -> RestException.notFound(
+                        "PPR planning session not found: " + sessionId));
+        requireMutable(session);
+        PprPlanningVariant selected = variantRepository
+                .findByIdAndSessionIdAndIsDeletedFalse(variantId, sessionId)
+                .orElseThrow(() -> RestException.notFound(
+                        "PPR planning variant not found: " + variantId));
+        if (selected.getStatus() != PprPlanningVariantStatus.CALCULATED
+                && selected.getStatus() != PprPlanningVariantStatus.SELECTED
+                || selected.getRevision() != request.revision()
+                || !Objects.equals(selected.getContentHash(), request.contentHash())) {
+            throw conflict(
+                    "PPR_PLANNING_SELECTION_STALE",
+                    "Selected variant revision or hash is stale");
+        }
+
+        List<PprPlanningVariant> variants =
+                variantRepository.findAllBySessionIdAndIsDeletedFalseOrderByCreatedAtAsc(sessionId);
+        variants.forEach(variant -> variant.setStatus(variant.getId().equals(variantId)
+                ? PprPlanningVariantStatus.SELECTED
+                : variant.getRevision() > 0
+                        ? PprPlanningVariantStatus.NOT_SELECTED
+                        : PprPlanningVariantStatus.DRAFT));
+        variantRepository.saveAll(variants);
+        session.setSelectedVariantId(variantId);
+        session.setStatus(PprPlanningSessionStatus.SELECTED);
+        return sessionRepository.save(session);
     }
 
     private static PprPlan draftPlan(

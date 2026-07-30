@@ -13,4 +13,9 @@ public interface PprPlanningVariantRepository extends JpaRepository<PprPlanningV
     Optional<PprPlanningVariant> findByIdAndSessionIdAndIsDeletedFalse(
             UUID id,
             UUID sessionId);
+    boolean existsBySessionIdAndNormalizedNameAndIsDeletedFalse(
+            UUID sessionId, String normalizedName);
+
+    boolean existsBySessionIdAndNormalizedNameAndIdNotAndIsDeletedFalse(
+            UUID sessionId, String normalizedName, UUID id);
 }

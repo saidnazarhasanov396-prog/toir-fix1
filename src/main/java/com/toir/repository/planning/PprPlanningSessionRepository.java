@@ -13,6 +13,8 @@ public interface PprPlanningSessionRepository extends JpaRepository<PprPlanningS
 
     Optional<PprPlanningSession> findByIdAndIsDeletedFalse(UUID id);
 
+    java.util.List<PprPlanningSession> findAllByIsDeletedFalseOrderByCreatedAtDesc();
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select session from PprPlanningSession session where session.id = :id and session.isDeleted = false")
     Optional<PprPlanningSession> findByIdAndIsDeletedFalseForUpdate(@Param("id") UUID id);

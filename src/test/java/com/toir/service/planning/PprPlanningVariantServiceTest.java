@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.dto.pprplanning.PprPlanningSelectionRequest;
 import com.toir.dto.maintenanceschedule.MaintenanceScheduleCalculationRequest;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewItem;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewResponse;
@@ -106,6 +107,42 @@ class PprPlanningVariantServiceTest {
                     && persisted.getFirst().getRevision() == 1
                     && persisted.getFirst().getWorkOrderLeadDays() == 7;
         }));
+    }
+
+    @Test
+    void selectBindsExactCalculatedRevisionAndHash() {
+        UUID sessionId = UUID.randomUUID();
+        UUID variantId = UUID.randomUUID();
+        PprPlanningSession session = session(sessionId);
+        session.setStatus(PprPlanningSessionStatus.READY_FOR_SELECTION);
+        PprPlanningVariant selected = variant(variantId, session);
+        selected.setRevision(2);
+        selected.setContentHash("a".repeat(64));
+        selected.setStatus(PprPlanningVariantStatus.CALCULATED);
+        PprPlanningVariant alternative = variant(UUID.randomUUID(), session);
+        alternative.setRevision(1);
+        alternative.setContentHash("b".repeat(64));
+        alternative.setStatus(PprPlanningVariantStatus.CALCULATED);
+
+        when(sessionRepository.findByIdAndIsDeletedFalseForUpdate(sessionId))
+                .thenReturn(Optional.of(session));
+        when(variantRepository.findByIdAndSessionIdAndIsDeletedFalse(variantId, sessionId))
+                .thenReturn(Optional.of(selected));
+        when(variantRepository.findAllBySessionIdAndIsDeletedFalseOrderByCreatedAtAsc(sessionId))
+                .thenReturn(List.of(selected, alternative));
+        when(sessionRepository.save(any(PprPlanningSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        PprPlanningSession result = service.select(
+                sessionId,
+                variantId,
+                new PprPlanningSelectionRequest(variantId, 2, "a".repeat(64)));
+
+        assertThat(result.getSelectedVariantId()).isEqualTo(variantId);
+        assertThat(result.getStatus()).isEqualTo(PprPlanningSessionStatus.SELECTED);
+        assertThat(selected.getStatus()).isEqualTo(PprPlanningVariantStatus.SELECTED);
+        assertThat(alternative.getStatus()).isEqualTo(PprPlanningVariantStatus.NOT_SELECTED);
+        verify(variantRepository).saveAll(List.of(selected, alternative));
     }
 
     private static PprPlanningSession session(UUID id) {
