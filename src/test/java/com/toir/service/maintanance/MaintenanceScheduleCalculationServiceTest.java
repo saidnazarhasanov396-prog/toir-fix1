@@ -32,6 +32,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.MaintenanceScheduleCalculationRepository;
+import com.toir.repository.maintenance.MaintenanceScheduleCalculationItemRepository;
 import com.toir.service.PprPlanService;
 import com.toir.security.ScopeAccessService;
 import java.time.LocalDate;
@@ -50,6 +51,7 @@ class MaintenanceScheduleCalculationServiceTest {
     @Mock PprPlanService pprPlanService;
     @Mock PprPlanRepository planRepository;
     @Mock MaintenanceScheduleCalculationRepository calculationRepository;
+    @Mock MaintenanceScheduleCalculationItemRepository calculationItemRepository;
     @Mock ApprovalRequestRepository approvalRequestRepository;
     @Mock AnnualMaintenanceApprovalFirstFeature approvalFirstFeature;
     @Mock MaintenanceScheduleSnapshotDraftFactory snapshotDraftFactory;
@@ -70,6 +72,7 @@ class MaintenanceScheduleCalculationServiceTest {
                 pprPlanService,
                 planRepository,
                 calculationRepository,
+                calculationItemRepository,
                 approvalRequestRepository,
                 approvalFirstFeature,
                 snapshotDraftFactory,
@@ -80,6 +83,37 @@ class MaintenanceScheduleCalculationServiceTest {
                 approvalBindingService,
                 scopeAccessService
         );
+    }
+
+    @Test
+    void findByIdReturnsSavedItemsFromTheCurrentCalculationRevision() {
+        MaintenanceScheduleCalculationRequest request = request();
+        UUID planId = UUID.randomUUID();
+        PprPlan entity = approvalFirstPlan(planId, request, "a".repeat(64));
+        MaintenanceScheduleCalculationItem item = snapshotItem(entity, 1L);
+        item.setId(UUID.randomUUID());
+        item.setSourceItemKey("source-item-1");
+        item.setEquipmentId(UUID.randomUUID());
+        item.setEquipmentCodeSnapshot("EQ-101");
+        item.setEquipmentNameSnapshot("Pump 101");
+        item.setRegulationId(UUID.randomUUID());
+        item.setRegulationNameSnapshot("Monthly service");
+        item.setNormativeLaborHours(java.math.BigDecimal.valueOf(8));
+        when(planRepository.findByIdAndIsDeletedFalse(planId))
+                .thenReturn(java.util.Optional.of(entity));
+        when(pprPlanService.findById(planId))
+                .thenReturn(planDto(planId, PlanStatus.CALCULATED));
+        when(calculationItemRepository
+                .findAllByPlanIdAndCalculationRevisionOrderBySourceItemKey(planId, 1L))
+                .thenReturn(List.of(item));
+
+        var result = service.findById(planId);
+
+        assertThat(result.calculationItems()).hasSize(1);
+        assertThat(result.calculationItems().getFirst().taskTitle())
+                .isEqualTo("Monthly service");
+        assertThat(result.calculationItems().getFirst().equipmentName())
+                .isEqualTo("Pump 101");
     }
 
     @Test
