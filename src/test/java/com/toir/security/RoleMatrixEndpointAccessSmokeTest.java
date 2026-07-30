@@ -308,6 +308,7 @@ class RoleMatrixEndpointAccessSmokeTest {
             PermissionConstants.DEFECT_READ,
             PermissionConstants.DEFECT_LIST_READ,
             PermissionConstants.PPR_PLAN_READ,
+            PermissionConstants.PPR_CALENDAR_READ,
             PermissionConstants.PPR_TASK_READ,
             PermissionConstants.KNOWLEDGE_READ,
             PermissionConstants.ANALYTICS_READ,

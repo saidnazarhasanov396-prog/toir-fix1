@@ -73,8 +73,8 @@ public class PprEquipmentCalendarController {
                     equipmentTypeId,
                     maintenanceKinds,
                     statuses,
-                    onlyWithWork,
-                    includeCancelled,
+                    onlyWithWork == null || onlyWithWork,
+                    includeCancelled != null && includeCancelled,
                     sortBy,
                     sortDirection);
         } catch (IllegalArgumentException | NullPointerException exception) {
@@ -86,6 +86,9 @@ public class PprEquipmentCalendarController {
     private void validateYear(Integer year) {
         if (year == null) {
             throw RestException.badRequest("year is required");
+        }
+        if (year < 1 || year > 9999) {
+            throw RestException.badRequest("year must be between 1 and 9999");
         }
         try {
             LocalDate.of(year, 1, 1);

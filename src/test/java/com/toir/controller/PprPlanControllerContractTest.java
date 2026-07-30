@@ -49,6 +49,7 @@ import java.time.Year;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -144,6 +145,78 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.last").value(true));
 
         verify(service).findAll(2026, 5, 12, departmentId, 0, 20);
+    }
+
+    @Test
+    void operationalCalendarListUsesScopedServiceBranch() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(departmentId))
+                .thenReturn(departmentId);
+        when(service.findOperationalCalendarPlans(
+                        2026,
+                        5,
+                        null,
+                        departmentId,
+                        null,
+                        Set.of(),
+                        0,
+                        20,
+                        null,
+                        "asc"))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/ppr-plans")
+                        .param("operationalCalendar", "true")
+                        .param("year", "2026")
+                        .param("month", "5")
+                        .param("departmentId", departmentId.toString())
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+
+        verify(service).findOperationalCalendarPlans(
+                2026,
+                5,
+                null,
+                departmentId,
+                null,
+                Set.of(),
+                0,
+                20,
+                null,
+                "asc");
+        verify(service, never()).findAll(
+                2026, 5, null, departmentId, 0, 20);
+    }
+
+    @Test
+    void operationalCalendarStatsAndTasksUseScopedAggregations() throws Exception {
+        UUID departmentId = UUID.randomUUID();
+        when(scopeAccessService.enforceDepartmentScope(departmentId))
+                .thenReturn(departmentId);
+        when(service.getOperationalCalendarStats(2026, null, null, departmentId))
+                .thenReturn(new PprPlanStatsResponse(1, 0, 0, 1, 0, 0, 0, 0));
+        when(service.findOperationalCalendarTasks(
+                        departmentId, null, Set.of(), false, 0, 20))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/stats")
+                        .param("operationalCalendar", "true")
+                        .param("year", "2026")
+                        .param("departmentId", departmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalPlans").value(1));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/tasks")
+                        .param("operationalCalendar", "true")
+                        .param("departmentId", departmentId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+
+        verify(service).getOperationalCalendarStats(2026, null, null, departmentId);
+        verify(service).findOperationalCalendarTasks(
+                departmentId, null, Set.of(), false, 0, 20);
     }
 
     @Test
@@ -268,8 +341,8 @@ class PprPlanControllerContractTest {
 
         mockMvc.perform(get("/api/v1/ppr-plans/tasks/{taskId}", taskId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("1id").value(taskId.toString()))
-                .andExpect(jsonPath("1planId").value(planId.toString()));
+                .andExpect(jsonPath("$.id").value(taskId.toString()))
+                .andExpect(jsonPath("$.planId").value(planId.toString()));
     }
 
     @Test
