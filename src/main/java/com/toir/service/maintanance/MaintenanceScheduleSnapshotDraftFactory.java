@@ -131,6 +131,7 @@ public class MaintenanceScheduleSnapshotDraftFactory {
                     .sourceCodeSnapshot(sourceCode)
                     .sourceNameSnapshot(sourceName)
                     .taskTitleSnapshot(sourceName + " — " + preview.equipmentCode())
+                    .workOrderLeadDays(resolveWorkOrderLeadDays(rule, regulation))
                     .build();
             item.setSourceItemKey(sourceItemKeyGenerator.generate(
                     new MaintenanceScheduleSourceItemCoordinates(
@@ -148,5 +149,17 @@ public class MaintenanceScheduleSnapshotDraftFactory {
             result.add(item);
         }
         return List.copyOf(result);
+    }
+
+    private static int resolveWorkOrderLeadDays(
+            EquipmentMaintenanceRule rule,
+            MaintenanceRegulation regulation) {
+        if (rule != null && rule.getLeadTimeDays() != null) {
+            return rule.getLeadTimeDays();
+        }
+        if (regulation != null && regulation.getLeadTimeDays() != null) {
+            return regulation.getLeadTimeDays();
+        }
+        return 7;
     }
 }

@@ -40,6 +40,7 @@ class MaintenanceScheduleSnapshotDraftFactoryTest {
         rule.setId(ruleId);
         rule.setCode("MR-001");
         rule.setName("Bearing service");
+        rule.setLeadTimeDays(3);
         when(ruleRepository.findAllById(List.of(ruleId))).thenReturn(List.of(rule));
 
         PprPlan plan = new PprPlan();
@@ -72,6 +73,7 @@ class MaintenanceScheduleSnapshotDraftFactoryTest {
         assertThat(rows.getFirst().getSourceNameSnapshot()).isEqualTo("Bearing service");
         assertThat(rows.getFirst().getSourceItemKey()).matches("^[0-9a-f]{64}$");
         assertThat(rows.getFirst().getSourceItemKeyVersion()).isEqualTo(1);
+        assertThat(rows.getFirst().getWorkOrderLeadDays()).isEqualTo(3);
         assertThat(rows.getFirst().getEquipmentCodeSnapshot()).isEqualTo("EQ-001");
         assertThat(rows.getFirst().getScheduledStart())
                 .isBefore(rows.getFirst().getScheduledEnd());

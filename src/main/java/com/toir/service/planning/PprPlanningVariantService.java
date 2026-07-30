@@ -163,7 +163,9 @@ public class PprPlanningVariantService {
         item.setMaintenanceRuleNameSnapshot(source.getMaintenanceRuleNameSnapshot());
         item.setTemplateNameSnapshot(source.getTemplateNameSnapshot());
         item.setTaskTitleSnapshot(source.getTaskTitleSnapshot());
-        item.setWorkOrderLeadDays(7);
+        item.setWorkOrderLeadDays(source.getWorkOrderLeadDays() == null
+                ? 7
+                : source.getWorkOrderLeadDays());
         return item;
     }
 

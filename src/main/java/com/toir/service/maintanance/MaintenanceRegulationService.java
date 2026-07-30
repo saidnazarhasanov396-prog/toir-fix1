@@ -749,7 +749,7 @@ public class MaintenanceRegulationService {
         entity.setDuplicatePolicy(request.duplicatePolicy() == null
                 ? DuplicatePolicy.ONE_ITEM_PER_CYCLE
                 : request.duplicatePolicy());
-        entity.setLeadTimeDays(request.leadTimeDays());
+        entity.setLeadTimeDays(request.leadTimeDays() == null ? 7 : request.leadTimeDays());
         entity.setLeadMeterPercent(request.leadMeterPercent());
         entity.setDefaultDepartmentId(request.defaultDepartmentId());
         entity.setDefaultResponsibleId(request.defaultResponsibleId());

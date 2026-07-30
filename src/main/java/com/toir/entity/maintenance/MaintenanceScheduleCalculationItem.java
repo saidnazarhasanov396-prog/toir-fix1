@@ -15,6 +15,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -139,4 +140,7 @@ public class MaintenanceScheduleCalculationItem extends BaseEntity {
 
     @Column(name = "task_title_snapshot", nullable = false, length = 255, updatable = false)
     private String taskTitleSnapshot;
+
+    @Transient
+    private Integer workOrderLeadDays;
 }

@@ -13,6 +13,7 @@ import com.toir.enums.PriorityLevel;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -43,7 +44,7 @@ public record EquipmentMaintenanceRuleRequest(
         @Schema(description = "Action created after approving a REQUIRE_APPROVAL maintenance due event.")
         ApprovalResultAction approvalResultAction,
         DuplicatePolicy duplicatePolicy,
-        Integer leadTimeDays,
+        @PositiveOrZero @Max(365) Integer leadTimeDays,
         Double leadMeterPercent,
         UUID defaultDepartmentId,
         UUID defaultResponsibleId,

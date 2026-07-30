@@ -95,8 +95,9 @@ public class MaintenanceRegulation extends BaseEntity {
     @Column(name = "duplicate_policy", nullable = false)
     private DuplicatePolicy duplicatePolicy = DuplicatePolicy.ONE_ITEM_PER_CYCLE;
 
-    @Column(name = "lead_time_days")
-    private Integer leadTimeDays;
+    @Builder.Default
+    @Column(name = "lead_time_days", nullable = false)
+    private Integer leadTimeDays = 7;
 
     @Column(name = "lead_meter_percent")
     private Double leadMeterPercent;
