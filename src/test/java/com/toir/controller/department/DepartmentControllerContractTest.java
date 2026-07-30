@@ -1,6 +1,7 @@
 package com.toir.controller.department;
 
 import com.toir.dto.department.DepartmentDto;
+import com.toir.dto.department.DepartmentListItemDto;
 import com.toir.dto.department.DepartmentTreeDto;
 import com.toir.dto.hr.EmployeeDto;
 import com.toir.enums.DepartmentType;
@@ -136,6 +137,30 @@ class DepartmentControllerContractTest {
                 .andExpect(jsonPath("$.content[0].code").value("UI-E2E-20260516052136"));
     }
 
+    @Test
+    void registryReturnsDepartmentsWithoutCode() throws Exception {
+        DepartmentListItemDto department = new DepartmentListItemDto(
+                UUID.randomUUID(),
+                "Workshop",
+                null,
+                null,
+                DepartmentType.WORKSHOP,
+                null,
+                "UI created"
+        );
+        when(service.findRegistry(null, "")).thenReturn(List.of(department));
+
+        mockMvc.perform(get("/api/v1/departments/registry")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(department.id().toString()))
+                .andExpect(jsonPath("$.content[0].name").value("Workshop"))
+                .andExpect(jsonPath("$.content[0].code").doesNotExist());
+
+        verify(service).findRegistry(null, "");
+    }
+
 
     @Test
     void treeReturnsNestedDepartmentsAndForwardsFilters() throws Exception {
@@ -143,7 +168,6 @@ class DepartmentControllerContractTest {
         UUID childId = UUID.randomUUID();
         DepartmentTreeDto child = new DepartmentTreeDto(
                 childId,
-                "ENT-003",
                 "Navoiyazot",
                 null,
                 null,
@@ -154,7 +178,6 @@ class DepartmentControllerContractTest {
         );
         DepartmentTreeDto root = new DepartmentTreeDto(
                 rootId,
-                "ENT-002",
                 "Tenzorsoft",
                 null,
                 null,
@@ -170,9 +193,9 @@ class DepartmentControllerContractTest {
                         .param("search", "navoi"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(rootId.toString()))
-                .andExpect(jsonPath("$[0].code").value("ENT-002"))
+                .andExpect(jsonPath("$[0].code").doesNotExist())
                 .andExpect(jsonPath("$[0].children[0].id").value(childId.toString()))
-                .andExpect(jsonPath("$[0].children[0].code").value("ENT-003"));
+                .andExpect(jsonPath("$[0].children[0].code").doesNotExist());
 
         verify(service).findTree(DepartmentType.ENTERPRISE, "navoi");
     }

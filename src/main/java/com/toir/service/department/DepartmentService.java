@@ -1,6 +1,7 @@
 package com.toir.service.department;
 
 import com.toir.dto.department.DepartmentDto;
+import com.toir.dto.department.DepartmentListItemDto;
 import com.toir.dto.department.DepartmentRequest;
 import com.toir.dto.department.DepartmentTreeDto;
 import com.toir.dto.hr.EmployeeDto;
@@ -36,11 +37,22 @@ public class DepartmentService {
 
     @Transactional(readOnly = true)
     public List<DepartmentDto> findAll(DepartmentType type, String search) {
-        String normalizedSearch = normalizeSearch(search);
-        String searchPattern = buildSearchPattern(normalizedSearch);
-        return repository.findAllByIsDeletedFalseAndByType(type, searchPattern).stream()
+        return findDepartments(type, search).stream()
                 .map(DepartmentDto::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<DepartmentListItemDto> findRegistry(DepartmentType type, String search) {
+        return findDepartments(type, search).stream()
+                .map(DepartmentListItemDto::from)
+                .toList();
+    }
+
+    private List<Department> findDepartments(DepartmentType type, String search) {
+        String normalizedSearch = normalizeSearch(search);
+        String searchPattern = buildSearchPattern(normalizedSearch);
+        return repository.findAllByIsDeletedFalseAndByType(type, searchPattern);
     }
 
 

@@ -1,6 +1,7 @@
 package com.toir.service.department;
 
 import com.toir.dto.department.DepartmentDto;
+import com.toir.dto.department.DepartmentListItemDto;
 import com.toir.dto.department.DepartmentRequest;
 import com.toir.dto.department.DepartmentTreeDto;
 import com.toir.dto.hr.EmployeeDto;
@@ -160,6 +161,22 @@ class DepartmentServiceTest {
     }
 
     @Test
+    void registryMapsDepartmentWithoutExposingCode() {
+        Department department = department("WS-001", "Workshop");
+        when(repository.findAllByIsDeletedFalseAndByType(null, null))
+                .thenReturn(List.of(department));
+
+        List<DepartmentListItemDto> results = service.findRegistry(null, "");
+
+        assertThat(results).hasSize(1);
+        assertThat(results.getFirst().id()).isEqualTo(department.getId());
+        assertThat(results.getFirst().name()).isEqualTo("Workshop");
+        assertThat(DepartmentListItemDto.class.getRecordComponents())
+                .extracting(component -> component.getName())
+                .doesNotContain("code");
+    }
+
+    @Test
     void blankSearchFallbackWorks() {
         Department department = department("UI-E2E-20260516052136", "Workshop");
         when(repository.findAllByIsDeletedFalseAndByType(null, null))
@@ -258,10 +275,10 @@ class DepartmentServiceTest {
         List<DepartmentTreeDto> tree = service.findTree(null, "");
 
         assertThat(tree).hasSize(1);
-        assertThat(tree.getFirst().code()).isEqualTo("ENT-001");
+        assertThat(tree.getFirst().name()).isEqualTo("Tenzorsoft");
         assertThat(tree.getFirst().children()).hasSize(1);
-        assertThat(tree.getFirst().children().getFirst().code()).isEqualTo("WS-001");
-        assertThat(tree.getFirst().children().getFirst().children().getFirst().code()).isEqualTo("SEC-001");
+        assertThat(tree.getFirst().children().getFirst().name()).isEqualTo("Ammonia Workshop");
+        assertThat(tree.getFirst().children().getFirst().children().getFirst().name()).isEqualTo("Shift A");
     }
 
     @Test
@@ -292,8 +309,8 @@ class DepartmentServiceTest {
         List<DepartmentTreeDto> tree = service.findTree(null, "navoi");
 
         assertThat(tree).hasSize(1);
-        assertThat(tree.getFirst().code()).isEqualTo("ENT-001");
-        assertThat(tree.getFirst().children()).extracting(DepartmentTreeDto::code).containsExactly("ENT-003");
+        assertThat(tree.getFirst().name()).isEqualTo("Tenzorsoft");
+        assertThat(tree.getFirst().children()).extracting(DepartmentTreeDto::name).containsExactly("Navoiyazot");
     }
 
     @Test
@@ -308,8 +325,8 @@ class DepartmentServiceTest {
         List<DepartmentTreeDto> tree = service.findTree(null, "tenzor");
 
         assertThat(tree).hasSize(1);
-        assertThat(tree.getFirst().code()).isEqualTo("ENT-001");
-        assertThat(tree.getFirst().children()).extracting(DepartmentTreeDto::code).containsExactly("ENT-003");
+        assertThat(tree.getFirst().name()).isEqualTo("Tenzorsoft");
+        assertThat(tree.getFirst().children()).extracting(DepartmentTreeDto::name).containsExactly("Navoiyazot");
     }
 
     @Test
@@ -325,7 +342,7 @@ class DepartmentServiceTest {
         List<DepartmentTreeDto> tree = service.findTree(null, null);
 
         assertThat(tree).hasSize(2);
-        assertThat(tree).extracting(DepartmentTreeDto::code).containsExactly("ENT-001", "WS-001");
+        assertThat(tree).extracting(DepartmentTreeDto::name).containsExactly("First", "Second");
     }
 
     private static Employee getEmployee(UUID employeeId, UUID departmentId, UUID brigadeId) {

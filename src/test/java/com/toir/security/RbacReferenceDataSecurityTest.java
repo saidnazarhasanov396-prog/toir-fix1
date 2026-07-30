@@ -9,6 +9,7 @@ import com.toir.dto.brigade.BrigadeDto;
 import com.toir.dto.brigade.BrigadeRequest;
 import com.toir.dto.criticalityclass.CriticalityClassDto;
 import com.toir.dto.department.DepartmentDto;
+import com.toir.dto.department.DepartmentListItemDto;
 import com.toir.dto.department.DepartmentRequest;
 import com.toir.dto.equipmenttype.EquipmentTypeDto;
 import com.toir.dto.equipmenttype.EquipmentTypeRequest;
@@ -113,6 +114,8 @@ class RbacReferenceDataSecurityTest {
     void unauthenticatedCannotReadReferenceData() throws Exception {
         mockMvc.perform(get("/api/v1/departments?page=0&size=1"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/departments/registry?page=0&size=1"))
+                .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/brigades?page=0&size=1"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/locations?page=0&size=1"))
@@ -129,6 +132,8 @@ class RbacReferenceDataSecurityTest {
         stubReadEndpoints();
 
         mockMvc.perform(get("/api/v1/departments?page=0&size=1"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/departments/registry?page=0&size=1"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/brigades?page=0&size=1"))
                 .andExpect(status().isForbidden());
@@ -158,6 +163,8 @@ class RbacReferenceDataSecurityTest {
         when(criticalityClassService.findById(id)).thenReturn(criticalityClassDto(id));
 
         mockMvc.perform(get("/api/v1/departments?page=0&size=1"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/departments/registry?page=0&size=1"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/departments/{id}", id))
                 .andExpect(status().isOk());
@@ -190,6 +197,8 @@ class RbacReferenceDataSecurityTest {
 
         mockMvc.perform(get("/api/v1/departments?page=0&size=1"))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/departments/registry?page=0&size=1"))
+                .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/brigades?page=0&size=1"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/locations?page=0&size=1"))
@@ -206,6 +215,8 @@ class RbacReferenceDataSecurityTest {
         stubReadEndpoints();
 
         mockMvc.perform(get("/api/v1/departments?page=0&size=1"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/departments/registry?page=0&size=1"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/brigades?page=0&size=1"))
                 .andExpect(status().isOk());
@@ -457,6 +468,8 @@ class RbacReferenceDataSecurityTest {
     private void stubReadEndpoints() {
         UUID id = UUID.randomUUID();
         when(departmentService.findAll(isNull(), eq(""))).thenReturn(List.of(departmentDto(id)));
+        when(departmentService.findRegistry(isNull(), eq("")))
+                .thenReturn(List.of(departmentListItemDto(id)));
         when(departmentService.findEmployeesByDepartment(any())).thenReturn(List.of());
         when(brigadeService.findAll(isNull(), isNull(), isNull())).thenReturn(List.of(brigadeDto(id)));
         when(brigadeService.listMembers(any())).thenReturn(List.of());
@@ -468,6 +481,10 @@ class RbacReferenceDataSecurityTest {
 
     private DepartmentDto departmentDto(UUID id) {
         return new DepartmentDto(id, "DEP-001", "Mechanical", null, null, DepartmentType.WORKSHOP, null, null);
+    }
+
+    private DepartmentListItemDto departmentListItemDto(UUID id) {
+        return new DepartmentListItemDto(id, "Mechanical", null, null, DepartmentType.WORKSHOP, null, null);
     }
 
     private BrigadeDto brigadeDto(UUID id) {
