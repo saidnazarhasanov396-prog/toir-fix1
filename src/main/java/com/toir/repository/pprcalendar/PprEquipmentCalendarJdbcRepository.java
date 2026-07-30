@@ -48,13 +48,11 @@ public class PprEquipmentCalendarJdbcRepository
                 candidates + "\nSELECT count(*) " + from,
                 params,
                 Long.class);
+        String pageSql = candidates + "\nSELECT e.id\n" + from
+                + "\nORDER BY " + orderBy
+                + "\nLIMIT :limit OFFSET :offset\n";
         List<UUID> ids = jdbc.query(
-                candidates + """
-                        SELECT e.id
-                        """ + from + """
-                        ORDER BY """ + orderBy + """
-                        LIMIT :limit OFFSET :offset
-                        """,
+                pageSql,
                 params,
                 (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class));
         return new EquipmentIdPage(ids, total == null ? 0 : total);
