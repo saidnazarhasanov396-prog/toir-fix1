@@ -1113,6 +1113,9 @@ public class WorkOrderService {
     public WorkOrderDto complete(UUID id, CompleteWorkOrderRequest request) {
         WorkOrder entity = getOrThrow(id);
         assertCanComplete(entity, request);
+        sparePartLifecycleOperationGuard.assertAllowed(
+                entity.getEquipmentId(),
+                com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation.WORK_ORDER_COMPLETE);
         validateAndBindCompletionActFiles(entity, request);
         assertDefectListGate(entity);
         MaintenanceDueEvent dueEvent = loadMaintenanceDueEvent(entity);
@@ -1125,9 +1128,6 @@ public class WorkOrderService {
                 resolveCompletionMeterSnapshots(entity, request);
         issueCompletionMaterials(entity, request);
         executeSparePartLifecycleOperations(entity, request);
-        sparePartLifecycleOperationGuard.assertAllowed(
-                entity.getEquipmentId(),
-                com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation.WORK_ORDER_COMPLETE);
         workOrderCompletionService.createActualCostsOnCompletion(entity);
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());

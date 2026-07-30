@@ -30,6 +30,21 @@ class SparePartLifecycleGuardWiringContractTest {
                 .doesNotContain("SparePartLifecycleOperationGuard");
     }
 
+    @Test
+    void workOrderCompletionGuardRunsBeforeMaterialAndLifecycleSideEffects() throws IOException {
+        String workOrders = source("src/main/java/com/toir/service/WorkOrderService.java");
+        int completeMethod = workOrders.indexOf("public WorkOrderDto complete(UUID id");
+        int guard = workOrders.indexOf("SparePartLifecycleOperation.WORK_ORDER_COMPLETE", completeMethod);
+        int materialIssue = workOrders.indexOf("issueCompletionMaterials(entity, request)", completeMethod);
+        int lifecycleOperations = workOrders.indexOf(
+                "executeSparePartLifecycleOperations(entity, request)", completeMethod);
+
+        assertThat(completeMethod).isGreaterThanOrEqualTo(0);
+        assertThat(guard).isGreaterThan(completeMethod);
+        assertThat(guard).isLessThan(materialIssue);
+        assertThat(guard).isLessThan(lifecycleOperations);
+    }
+
     private String source(String path) throws IOException {
         return Files.readString(Path.of(path));
     }

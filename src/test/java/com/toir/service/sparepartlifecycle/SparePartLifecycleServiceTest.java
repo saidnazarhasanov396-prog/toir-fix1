@@ -292,6 +292,46 @@ class SparePartLifecycleServiceTest {
     }
 
     @Test
+    void replaceRejectsReturnToStockWithStableErrorCode() {
+        ReplaceSparePartCommand request = new ReplaceSparePartCommand(
+                UUID.randomUUID(),
+                new ReplacementPartCommand(
+                        UUID.randomUUID(), BigDecimal.ONE, null, null, null, "External certified stock"),
+                Instant.parse("2026-07-10T10:00:00Z"),
+                null,
+                SparePartRemovalDisposition.RETURN_TO_STOCK,
+                "Reusable",
+                null
+        );
+
+        assertThatThrownBy(() -> service.replace("replace-stock", UUID.randomUUID(), request))
+                .isInstanceOfSatisfying(com.toir.exception.RestException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(
+                                com.toir.exception.SparePartLifecycleErrorCodes.RETURN_TO_STOCK_UNSUPPORTED));
+        verifyNoInteractions(commandCoordinator);
+    }
+
+    @Test
+    void replaceRejectsUnknownDispositionWithStableErrorCode() {
+        ReplaceSparePartCommand request = new ReplaceSparePartCommand(
+                UUID.randomUUID(),
+                new ReplacementPartCommand(
+                        UUID.randomUUID(), BigDecimal.ONE, null, null, null, "External certified stock"),
+                Instant.parse("2026-07-10T10:00:00Z"),
+                null,
+                SparePartRemovalDisposition.UNKNOWN,
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> service.replace("replace-unknown", UUID.randomUUID(), request))
+                .isInstanceOfSatisfying(com.toir.exception.RestException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(
+                                com.toir.exception.SparePartLifecycleErrorCodes.UNKNOWN_DISPOSITION_FORBIDDEN));
+        verifyNoInteractions(commandCoordinator);
+    }
+
+    @Test
     void replaceAtomicallyClosesOldInstallationAndLinksNewInstallationAtSamePosition() {
         UUID actorId = UUID.randomUUID();
         UUID equipmentId = UUID.randomUUID();

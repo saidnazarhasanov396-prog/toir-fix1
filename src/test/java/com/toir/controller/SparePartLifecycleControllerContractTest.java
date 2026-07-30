@@ -64,5 +64,7 @@ class SparePartLifecycleControllerContractTest {
         assertThat(aggregate).contains("SparePartLifecycleAggregateResponse");
         assertThat(aggregate).contains("SparePartLifecycleView");
         assertThat(aggregate).contains("SPARE_PART_INSTALLATION_READ");
+        assertThat(aggregate).contains("SPARE_PART_DUE_READ");
+        assertThat(aggregate).doesNotContain("SYSTEM_ADMIN");
     }
 }

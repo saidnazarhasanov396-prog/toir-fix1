@@ -23,7 +23,10 @@ public class SparePartLifecycleAggregateController {
     private final SparePartLifecycleAggregateService service;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('*') or hasAuthority('SPARE_PART_INSTALLATION_READ')")
+    @PreAuthorize("""
+            hasAuthority('*') or
+            (hasAuthority('SPARE_PART_INSTALLATION_READ') and hasAuthority('SPARE_PART_DUE_READ'))
+            """)
     public ResponseEntity<SparePartLifecycleAggregateResponse> get(
             @PathVariable UUID equipmentId,
             @RequestParam(defaultValue = "installed") String view,
