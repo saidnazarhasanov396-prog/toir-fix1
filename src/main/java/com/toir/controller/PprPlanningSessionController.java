@@ -4,16 +4,23 @@ import com.toir.dto.maintenanceschedule.MaintenanceScheduleCalculationRequest;
 import com.toir.dto.pprplanning.PprPlanningSelectionRequest;
 import com.toir.dto.pprplanning.PprPlanningSessionCreateRequest;
 import com.toir.dto.pprplanning.PprPlanningSessionDto;
+import com.toir.dto.pprplanning.PprPlanningSubmitRequest;
+import com.toir.dto.approval.ApprovalRequestDto;
+import com.toir.dto.approval.ApprovalStartRequest;
 import com.toir.dto.pprplanning.PprPlanningVariantRequest;
 import com.toir.entity.planning.PprPlanningSession;
 import com.toir.entity.planning.PprPlanningVariantItem;
 import com.toir.exception.RestException;
+import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalTargetType;
+import com.toir.service.ApprovalService;
 import com.toir.service.planning.PprPlanningSessionService;
 import com.toir.service.planning.PprPlanningVariantService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -40,6 +47,8 @@ public class PprPlanningSessionController {
 
     private final PprPlanningSessionService sessionService;
     private final PprPlanningVariantService variantService;
+    @Autowired
+    private ApprovalService approvalService;
 
     @PostMapping
     @PreAuthorize(CREATE)
@@ -122,6 +131,20 @@ public class PprPlanningSessionController {
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         requireIdempotencyKey(idempotencyKey);
         return dto(variantService.select(sessionId, request.variantId(), request));
+    }
+
+    @PostMapping("/{sessionId}/submit")
+    @PreAuthorize("hasAnyAuthority('PPR_PLAN_UPDATE','APPROVAL_CREATE','SYSTEM_ADMIN','*')")
+    public ApprovalRequestDto submit(
+            @PathVariable UUID sessionId,
+            @Valid @RequestBody(required = false) PprPlanningSubmitRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        requireIdempotencyKey(idempotencyKey);
+        return approvalService.requestApproval(new ApprovalStartRequest(
+                ApprovalTargetType.PPR_PLANNING_SESSION,
+                sessionId,
+                ApprovalActionType.APPROVE,
+                request == null ? null : request.comment()));
     }
 
     private PprPlanningSessionDto dto(PprPlanningSession session) {

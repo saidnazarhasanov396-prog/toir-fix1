@@ -22,6 +22,7 @@ public class ApprovalHandlerRegistryVerifier implements ApplicationRunner {
         List<HandlerContract> contracts = new ArrayList<>();
         addApproveReject(contracts, ApprovalTargetType.WORK_ORDER);
         addApproveReject(contracts, ApprovalTargetType.PPR_PLAN);
+        addApproveReject(contracts, ApprovalTargetType.PPR_PLANNING_SESSION);
         contracts.add(new HandlerContract(ApprovalTargetType.MAINTENANCE_DUE_EVENT, ApprovalActionType.CREATE_TASK));
         contracts.add(new HandlerContract(ApprovalTargetType.MAINTENANCE_DUE_EVENT, ApprovalActionType.CREATE_WORK_ORDER));
         addApproveReject(contracts, ApprovalTargetType.PROCUREMENT_REQUEST);

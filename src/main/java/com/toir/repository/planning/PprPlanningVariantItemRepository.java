@@ -24,4 +24,6 @@ public interface PprPlanningVariantItemRepository
     List<PprPlanningVariantItem> findAllByVariantIdAndRevisionOrderBySourceItemKey(
             @Param("variantId") UUID variantId,
             @Param("revision") long revision);
+
+    long countByVariantIdAndRevision(UUID variantId, long revision);
 }

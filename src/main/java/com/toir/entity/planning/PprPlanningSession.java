@@ -44,6 +44,18 @@ public class PprPlanningSession extends BaseEntity {
     @Column(name = "selected_variant_id")
     private UUID selectedVariantId;
 
+    @Column(name = "selected_variant_revision")
+    private Long selectedVariantRevision;
+
+    @Column(name = "selected_variant_hash", length = 64)
+    private String selectedVariantHash;
+
+    @Column(name = "selected_variant_hash_version")
+    private Integer selectedVariantHashVersion;
+
+    @Column(name = "approval_request_id")
+    private UUID approvalRequestId;
+
     @Column(name = "approved_plan_id")
     private UUID approvedPlanId;
 

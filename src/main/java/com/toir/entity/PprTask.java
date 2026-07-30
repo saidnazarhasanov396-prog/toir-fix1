@@ -1,11 +1,14 @@
 package com.toir.entity;
 import com.toir.enums.PprTaskStatus;
+import com.toir.enums.CompletionEvidenceType;
 
 import com.toir.enums.PriorityLevel;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -42,6 +45,9 @@ public class PprTask extends BaseEntity {
     @Column(name = "source_calculation_item_id", updatable = false)
     private UUID sourceCalculationItemId;
 
+    @Column(name = "source_variant_item_id", updatable = false)
+    private UUID sourceVariantItemId;
+
     @Column(nullable = false)
     private String title;
 
@@ -70,4 +76,13 @@ public class PprTask extends BaseEntity {
 
     @Column(name = "postpone_reason")
     private String postponeReason;
+
+    @Column(name = "work_order_lead_days", nullable = false)
+    private int workOrderLeadDays = 7;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "ppr_task_required_evidence", joinColumns = @JoinColumn(name = "ppr_task_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "evidence_type", nullable = false, length = 32)
+    private Set<CompletionEvidenceType> requiredEvidenceTypes = new HashSet<>();
 }

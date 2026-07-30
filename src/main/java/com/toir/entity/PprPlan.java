@@ -148,6 +148,15 @@ public class PprPlan extends ActorStampedEntity {
     @Column(name = "materialized_task_count")
     private Integer materializedTaskCount;
 
+    @Column(name = "planning_session_id", updatable = false)
+    private UUID planningSessionId;
+
+    @Column(name = "source_variant_id", updatable = false)
+    private UUID sourceVariantId;
+
+    @Column(name = "source_variant_revision", updatable = false)
+    private Long sourceVariantRevision;
+
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
     @BatchSize(size = 50)
     private List<PprTask> tasks = new ArrayList<>();

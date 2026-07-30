@@ -73,6 +73,9 @@ public class ApprovalRequest extends BaseEntity {
     @Column(name = "calculation_content_hash_version")
     private Integer calculationContentHashVersion;
 
+    @Column(name = "ppr_planning_variant_id")
+    private UUID pprPlanningVariantId;
+
     @Column(name = "resolved_route_fingerprint", length = 64)
     private String resolvedRouteFingerprint;
 
