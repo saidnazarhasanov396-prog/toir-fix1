@@ -23,6 +23,7 @@ import com.toir.repository.sparepartlifecycle.SparePartDueEventRepository;
 import com.toir.repository.sparepartlifecycle.SparePartDueEventWorkOrderLinkRepository;
 import com.toir.repository.sparepartlifecycle.SparePartInstallationRepository;
 import com.toir.security.ScopeAccessService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -44,7 +45,8 @@ class SparePartLifecycleAggregateServiceTest {
                 mock(SparePartDueEventWorkOrderLinkRepository.class);
         SparePartLifecycleAggregateService service = new SparePartLifecycleAggregateService(
                 equipmentRepository, installationRepository, dueEventRepository, sparePartRepository,
-                warehouseStockRepository, scopeAccessService, new SparePartLifecyclePolicy(), linkRepository);
+                warehouseStockRepository, scopeAccessService, new SparePartLifecyclePolicy(), linkRepository,
+                new ObjectMapper().findAndRegisterModules());
         UUID equipmentId = UUID.randomUUID();
         Equipment equipment = new Equipment();
         equipment.setId(equipmentId);
@@ -86,5 +88,52 @@ class SparePartLifecycleAggregateServiceTest {
                 .isEqualTo(SparePartLifecycleEvaluationState.OVERDUE);
         verify(warehouseStockRepository, never())
                 .findAllBySparePartIdInAndIsDeletedFalseOrderByUpdatedAtDesc(java.util.Set.of(part.getId()));
+    }
+
+    @Test
+    void exposesManualDueAndLifecycleCommandsOnlyFromAuthoritativePermissions() throws Exception {
+        EquipmentRepository equipmentRepository = mock(EquipmentRepository.class);
+        SparePartInstallationRepository installationRepository = mock(SparePartInstallationRepository.class);
+        SparePartDueEventRepository dueEventRepository = mock(SparePartDueEventRepository.class);
+        SparePartRepository sparePartRepository = mock(SparePartRepository.class);
+        WarehouseStockRepository warehouseStockRepository = mock(WarehouseStockRepository.class);
+        ScopeAccessService scopeAccessService = mock(ScopeAccessService.class);
+        SparePartDueEventWorkOrderLinkRepository linkRepository =
+                mock(SparePartDueEventWorkOrderLinkRepository.class);
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        SparePartLifecycleAggregateService service = new SparePartLifecycleAggregateService(
+                equipmentRepository, installationRepository, dueEventRepository, sparePartRepository,
+                warehouseStockRepository, scopeAccessService, new SparePartLifecyclePolicy(), linkRepository,
+                objectMapper);
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        SparePartInstallation installation = new SparePartInstallation();
+        installation.setId(UUID.randomUUID());
+        installation.setEquipmentId(equipmentId);
+        installation.setSparePartId(UUID.randomUUID());
+        installation.setStatus(SparePartInstallationStatus.ACTIVE);
+        installation.setLifecycleEvaluationState(SparePartLifecycleEvaluationState.OK);
+        installation.setInstalledAt(Instant.parse("2026-01-01T00:00:00Z"));
+        installation.setAppliedRuleSnapshot(objectMapper.writeValueAsString(
+                new com.toir.dto.sparepartlifecycle.AppliedLifeRuleSnapshot(
+                        UUID.randomUUID(), 1,
+                        com.toir.enums.sparepartlifecycle.SparePartLifeCombinationMode.MANUAL,
+                        SparePartDueAction.MAINTENANCE_REQUIRED, List.of())));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(installationRepository.findAllByEquipmentIdAndIsDeletedFalseOrderByInstalledAtDesc(equipmentId))
+                .thenReturn(List.of(installation));
+        when(dueEventRepository.findAllByInstallationIdInAndIsDeletedFalse(List.of(installation.getId())))
+                .thenReturn(List.of());
+        when(sparePartRepository.findAllByIdInAndIsDeletedFalse(java.util.Set.of(installation.getSparePartId())))
+                .thenReturn(List.of());
+        when(scopeAccessService.hasAuthority("SPARE_PART_MANUAL_DUE")).thenReturn(true);
+        when(scopeAccessService.hasAuthority("SPARE_PART_REPLACE")).thenReturn(true);
+        when(scopeAccessService.hasAuthority("SPARE_PART_REMOVE")).thenReturn(true);
+
+        var actions = service.get(equipmentId, SparePartLifecycleView.INSTALLED, null, null, 0, 20)
+                .items().getContent().getFirst().availableActions();
+
+        assertThat(actions).containsExactly("MANUAL_DUE", "REPLACE", "REMOVE");
     }
 }

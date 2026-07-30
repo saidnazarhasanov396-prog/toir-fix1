@@ -1,5 +1,8 @@
 package com.toir.service.sparepartlifecycle;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.toir.dto.sparepartlifecycle.AppliedLifeRuleSnapshot;
 import com.toir.dto.sparepartlifecycle.SparePartLifecycleAggregateResponse;
 import com.toir.dto.sparepartlifecycle.SparePartLifecycleItem;
 import com.toir.dto.sparepartlifecycle.SparePartLifecycleItem.LinkedWorkOrderSummary;
@@ -57,6 +60,7 @@ public class SparePartLifecycleAggregateService {
     private final ScopeAccessService scopeAccessService;
     private final SparePartLifecyclePolicy lifecyclePolicy;
     private final SparePartDueEventWorkOrderLinkRepository linkRepository;
+    private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public SparePartLifecycleAggregateResponse get(UUID equipmentId, SparePartLifecycleView view,
@@ -161,6 +165,20 @@ public class SparePartLifecycleAggregateService {
         if (event != null && hasPermission(PermissionConstants.SPARE_PART_DUE_WORK_ORDER_CREATE)) {
             actions.add("CREATE_WORK_ORDER");
         }
+        if (installation.getStatus() == SparePartInstallationStatus.ACTIVE
+                && isManualRule(installation)
+                && installation.getManualDueAt() == null
+                && hasPermission(PermissionConstants.SPARE_PART_MANUAL_DUE)) {
+            actions.add("MANUAL_DUE");
+        }
+        if (installation.getStatus() == SparePartInstallationStatus.ACTIVE
+                && hasPermission(PermissionConstants.SPARE_PART_REPLACE)) {
+            actions.add("REPLACE");
+        }
+        if (installation.getStatus() == SparePartInstallationStatus.ACTIVE
+                && hasPermission(PermissionConstants.SPARE_PART_REMOVE)) {
+            actions.add("REMOVE");
+        }
         List<LinkedWorkOrderSummary> linked = event == null ? List.of()
                 : linksByEvent.getOrDefault(event.getId(), List.of()).stream()
                 .map(link -> new LinkedWorkOrderSummary(
@@ -253,5 +271,19 @@ public class SparePartLifecycleAggregateService {
     private boolean hasPermission(String permission) {
         return scopeAccessService.hasAuthority(PermissionConstants.WILDCARD)
                 || scopeAccessService.hasAuthority(permission);
+    }
+
+    private boolean isManualRule(SparePartInstallation installation) {
+        if (installation.getAppliedRuleSnapshot() == null
+                || installation.getAppliedRuleSnapshot().isBlank()) {
+            return false;
+        }
+        try {
+            return objectMapper.readValue(
+                    installation.getAppliedRuleSnapshot(), AppliedLifeRuleSnapshot.class
+            ).combinationMode() == com.toir.enums.sparepartlifecycle.SparePartLifeCombinationMode.MANUAL;
+        } catch (JsonProcessingException exception) {
+            return false;
+        }
     }
 }

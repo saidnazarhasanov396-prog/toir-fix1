@@ -4,8 +4,8 @@ import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.security.PermissionConstants;
-import com.toir.service.NotificationEntityTypes;
 import com.toir.service.NotificationService;
+import com.toir.service.NotificationNavigationBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -19,6 +19,7 @@ public class SparePartLifecycleNotificationListener {
 
     private final EquipmentRepository equipmentRepository;
     private final NotificationService notificationService;
+    private final NotificationNavigationBuilder navigationBuilder;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onDueTransition(SparePartDueTransitionEvent event) {
@@ -32,9 +33,11 @@ public class SparePartLifecycleNotificationListener {
                         "Installed spare-part service life: " + event.state(),
                         "Installation " + event.installationId() + " requires action " + event.action(),
                         severity(event),
-                        NotificationEventType.SPARE_PART_DUE,
-                        NotificationEntityTypes.SPARE_PART_DUE_EVENT,
-                        event.dueEventId().toString()
+                        navigationBuilder.forSparePartDue(
+                                NotificationEventType.SPARE_PART_DUE,
+                                event.equipmentId(),
+                                event.dueEventId(),
+                                event.installationId())
                 );
             } catch (RuntimeException exception) {
                 log.error("spare_part_due_notification_failed dueEventId={}", event.dueEventId(), exception);
