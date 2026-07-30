@@ -133,6 +133,15 @@ public class PprPlan extends ActorStampedEntity {
     @Column(name = "calculation_content_hash_version")
     private Integer calculationContentHashVersion;
 
+    @Column(name = "approved_revision")
+    private Long approvedRevision;
+
+    @Column(name = "approved_content_hash", length = 64)
+    private String approvedContentHash;
+
+    @Column(name = "approved_content_hash_version")
+    private Integer approvedContentHashVersion;
+
     @Column(name = "materialized_revision")
     private Long materializedRevision;
 

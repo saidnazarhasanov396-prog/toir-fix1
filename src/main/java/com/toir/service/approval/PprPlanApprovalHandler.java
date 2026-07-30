@@ -4,7 +4,8 @@ import com.toir.entity.ApprovalRequest;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalTargetType;
-import com.toir.service.PprPlanService;
+import com.toir.service.maintanance.MaintenanceScheduleMaterializationOutcome;
+import com.toir.service.maintanance.MaintenanceScheduleMaterializationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +15,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PprPlanApprovalHandler implements ApprovalActionHandler {
 
-    private final PprPlanService pprPlanService;
+    private final MaintenanceScheduleMaterializationService materializationService;
 
     @Override
     public boolean supports(ApprovalTargetType targetType, ApprovalActionType actionType) {
@@ -27,13 +28,14 @@ public class PprPlanApprovalHandler implements ApprovalActionHandler {
         if (request.getActionType() == ApprovalActionType.REJECT) {
             return "{\"status\":\"REJECTED\"}";
         }
-        UUID targetId = request.getTargetId() == null ? request.getDocumentId() : request.getTargetId();
         UUID approverId = request.getSteps().stream()
                 .filter(step -> step.getDecision() == ApprovalDecision.APPROVED)
                 .map(step -> step.getDecidedById() == null ? step.getApproverId() : step.getDecidedById())
                 .reduce((first, second) -> second)
                 .orElse(null);
-        pprPlanService.finalizeApprovalFromApprovalRequest(targetId, approverId);
-        return "{\"status\":\"APPROVED\"}";
+        MaintenanceScheduleMaterializationOutcome outcome =
+                materializationService.finalizeApproval(request, approverId);
+        return "{\"status\":\"APPROVED\",\"materialization\":\""
+                + outcome.name() + "\"}";
     }
 }

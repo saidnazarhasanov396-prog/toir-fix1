@@ -93,6 +93,8 @@ class MaintenanceScheduleMaterializationServiceTest {
         assertThat(plan.getTaskMaterializationStatus())
                 .isEqualTo(TaskMaterializationStatus.MATERIALIZED);
         assertThat(plan.getMaterializedRevision()).isEqualTo(2L);
+        assertThat(plan.getApprovedRevision()).isEqualTo(2L);
+        assertThat(plan.getApprovedContentHash()).isEqualTo(HASH);
         assertThat(plan.getMaterializedTaskCount()).isEqualTo(1);
         verify(taskRepository).saveAll(org.mockito.ArgumentMatchers.argThat(tasks ->
                 ((List<PprTask>) tasks).stream().allMatch(task ->
@@ -120,6 +122,9 @@ class MaintenanceScheduleMaterializationServiceTest {
         PprPlan plan = plan(planId, 2L, HASH);
         plan.setStatus(PlanStatus.APPROVED);
         plan.setTaskMaterializationStatus(TaskMaterializationStatus.MATERIALIZED);
+        plan.setApprovedRevision(2L);
+        plan.setApprovedContentHash(HASH);
+        plan.setApprovedContentHashVersion(1);
         plan.setMaterializedRevision(2L);
         plan.setMaterializedTaskCount(1);
         ApprovalRequest request = request(planId, 2L, HASH);
@@ -145,6 +150,9 @@ class MaintenanceScheduleMaterializationServiceTest {
         PprPlan plan = plan(planId, 2L, HASH);
         plan.setStatus(PlanStatus.IN_PROGRESS);
         plan.setTaskMaterializationStatus(TaskMaterializationStatus.MATERIALIZED);
+        plan.setApprovedRevision(2L);
+        plan.setApprovedContentHash(HASH);
+        plan.setApprovedContentHashVersion(1);
         plan.setMaterializedRevision(2L);
         plan.setMaterializedTaskCount(1);
         ApprovalRequest request = request(planId, 2L, HASH);
@@ -254,6 +262,9 @@ class MaintenanceScheduleMaterializationServiceTest {
         PprPlan plan = plan(planId, 2L, HASH);
         plan.setStatus(PlanStatus.APPROVED);
         plan.setTaskMaterializationStatus(TaskMaterializationStatus.MATERIALIZED);
+        plan.setApprovedRevision(2L);
+        plan.setApprovedContentHash(HASH);
+        plan.setApprovedContentHashVersion(1);
         plan.setMaterializedRevision(2L);
         plan.setMaterializedTaskCount(1);
         MaintenanceScheduleCalculationItem item = item(plan, 2L);
@@ -311,6 +322,7 @@ class MaintenanceScheduleMaterializationServiceTest {
         request.setTargetType(ApprovalTargetType.PPR_PLAN);
         request.setTargetId(planId);
         request.setActionType(ApprovalActionType.APPROVE);
+        request.setStatus(com.toir.enums.ApprovalStatus.APPROVED);
         request.setCalculationRevision(revision);
         request.setCalculationContentHash(hash);
         request.setCalculationContentHashVersion(revision == null ? null : 1);

@@ -25,6 +25,7 @@ import com.toir.service.approval.LifecycleApprovalRoutePolicy;
 import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.approval.LifecycleRouteResolution;
 import com.toir.service.maintanance.MaintenanceRegulationService;
+import com.toir.service.maintanance.MaintenanceScheduleApprovalBindingService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -125,12 +126,19 @@ class ApprovalServiceTest {
     @Mock
     MaintenanceRegulationService maintenanceRegulationService;
 
+    @Mock
+    MaintenanceScheduleApprovalBindingService maintenanceScheduleApprovalBindingService;
+
     @InjectMocks
     ApprovalService service;
 
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "lifecycleApprovalRoutePolicy", lifecycleApprovalRoutePolicy);
+        ReflectionTestUtils.setField(
+                service,
+                "maintenanceScheduleApprovalBindingService",
+                maintenanceScheduleApprovalBindingService);
     }
 
     @Test
@@ -2529,6 +2537,80 @@ class ApprovalServiceTest {
         verify(requestRepository, never()).save(approval);
         assertThat(approval.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
         assertThat(approval.getFailureReason()).isNull();
+    }
+
+    @Test
+    void approvalFirstMaterializationBusinessFailureRollsBackTerminalDecision() {
+        UUID approvalId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(
+                approvalId,
+                UUID.randomUUID(),
+                1,
+                approverId);
+        approval.setTargetType(ApprovalTargetType.PPR_PLAN);
+        approval.setTargetId(UUID.randomUUID());
+        approval.setDocumentType(null);
+        approval.setDocumentId(null);
+        approval.setCalculationRevision(3L);
+        approval.setCalculationContentHash("a".repeat(64));
+        approval.setCalculationContentHashVersion(1);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId))
+                .thenReturn(Optional.of(approval));
+        when(maintenanceScheduleApprovalBindingService
+                .isBoundApprovalFirstRequest(approval))
+                .thenReturn(true);
+        when(maintenanceScheduleApprovalBindingService
+                .routeMatches(eq(approval), isNull()))
+                .thenReturn(true);
+        when(approvalActionExecutor.execute(approval))
+                .thenThrow(new RestException(
+                        "stale calculation",
+                        org.springframework.http.HttpStatus.CONFLICT,
+                        "PPR_CALCULATION_APPROVAL_STALE"));
+
+        assertThatThrownBy(() -> service.approve(
+                approvalId,
+                new DecisionRequest(approverId, "approve")))
+                .isInstanceOfSatisfying(RestException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo("PPR_CALCULATION_APPROVAL_STALE"));
+
+        verify(requestRepository, never()).save(approval);
+    }
+
+    @Test
+    void completedApprovalFirstRetryIsIdempotentForOriginalApprover() {
+        UUID approvalId = UUID.randomUUID();
+        UUID approverId = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(
+                approvalId,
+                UUID.randomUUID(),
+                1,
+                approverId);
+        approval.setTargetType(ApprovalTargetType.PPR_PLAN);
+        approval.setTargetId(UUID.randomUUID());
+        approval.setStatus(ApprovalStatus.APPROVED);
+        approval.setExecuted(true);
+        approval.setCalculationRevision(3L);
+        approval.setCalculationContentHash("a".repeat(64));
+        approval.setCalculationContentHashVersion(1);
+        ApprovalStep step = approval.getSteps().getFirst();
+        step.setDecision(ApprovalDecision.APPROVED);
+        step.setDecidedById(approverId);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId))
+                .thenReturn(Optional.of(approval));
+        when(maintenanceScheduleApprovalBindingService
+                .isBoundApprovalFirstRequest(approval))
+                .thenReturn(true);
+
+        ApprovalRequestDto result = service.approve(
+                approvalId,
+                new DecisionRequest(approverId, "retry"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.APPROVED);
+        verifyNoInteractions(approvalActionExecutor);
+        verify(requestRepository, never()).save(approval);
     }
 
     @Test

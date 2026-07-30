@@ -223,6 +223,70 @@ class DefaultApprovalRouteResolverTest {
     }
 
     @Test
+    void pprApprovalRequiresOneExactActiveConfiguredTemplate() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        ApprovalRequest request = request(
+                ApprovalTargetType.PPR_PLAN,
+                ApprovalActionType.APPROVE);
+        when(templateRepository
+                .findByCodeAndActiveTrueAndIsDeletedFalse(
+                        "PPR_PLAN_APPROVAL"))
+                .thenReturn(Optional.empty());
+
+        assertThat(resolver.resolveRouteSnapshot(request).steps()).isEmpty();
+        verify(templateRepository, never())
+                .findFirstByTargetTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                        ApprovalTargetType.PPR_PLAN);
+    }
+
+    @Test
+    void pprApprovalRejectsLegacyTopLevelApproverWithoutConfiguredStep() {
+        ApprovalTemplateRepository templateRepository =
+                mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setCode("PPR_PLAN_APPROVAL");
+        template.setTargetType(ApprovalTargetType.PPR_PLAN);
+        template.setActionType(ApprovalActionType.APPROVE);
+        template.setActive(true);
+        template.setApproverId(UUID.randomUUID());
+        when(templateRepository.findByCodeAndActiveTrueAndIsDeletedFalse(
+                "PPR_PLAN_APPROVAL")).thenReturn(Optional.of(template));
+
+        assertThat(resolver.resolveRouteSnapshot(request(
+                ApprovalTargetType.PPR_PLAN,
+                ApprovalActionType.APPROVE)).steps()).isEmpty();
+    }
+
+    @Test
+    void pprApprovalFreezesTemplateConfiguredChiefEngineerActorWithoutPermissionFallback() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        UUID chiefEngineer = UUID.randomUUID();
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setId(UUID.randomUUID());
+        template.setCode("PPR_PLAN_APPROVAL");
+        template.setTargetType(ApprovalTargetType.PPR_PLAN);
+        template.setActionType(ApprovalActionType.APPROVE);
+        template.setActive(true);
+        template.setVersion(3L);
+        template.getSteps().add(explicitStep(1, chiefEngineer));
+        when(templateRepository
+                .findByCodeAndActiveTrueAndIsDeletedFalse(
+                        "PPR_PLAN_APPROVAL"))
+                .thenReturn(Optional.of(template));
+
+        ApprovalRouteSnapshot route = resolver.resolveRouteSnapshot(request(
+                ApprovalTargetType.PPR_PLAN,
+                ApprovalActionType.APPROVE));
+
+        assertThat(route.templateId()).isEqualTo(template.getId());
+        assertThat(route.steps()).containsExactly(
+                new CreateApprovalRequest.StepInput(chiefEngineer, null));
+    }
+
+    @Test
     void genericParallelRouteFreezesFlowAndTemplateProvenance() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
         UUID first = UUID.randomUUID();

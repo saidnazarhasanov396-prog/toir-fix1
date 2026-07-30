@@ -8,6 +8,8 @@ import static org.mockito.Mockito.when;
 
 import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarAuthoritativeSource;
 import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarFilter;
+import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarSortDirection;
+import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarSortField;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.PprTaskStatus;
 import com.toir.repository.pprcalendar.PprEquipmentCalendarQueryRepository.CalendarDiagnostics;
@@ -94,7 +96,7 @@ class PprEquipmentCalendarJdbcRepositoryContractTest {
                 .contains("lower(coalesce(e.name, '')) LIKE :search");
         assertThat(pageSql.getValue())
                 .contains(countSql.getValue().substring(0, countSql.getValue().indexOf("SELECT count(*)")))
-                .contains("ORDER BY lower(coalesce(e.name, '')), lower(coalesce(e.inventory_number, '')), e.id")
+                .contains("ORDER BY lower(coalesce(e.name, '')) ASC, e.id ASC")
                 .contains("LIMIT :limit OFFSET :offset")
                 .doesNotContain("e.is_deleted = false");
         MapSqlParameterSource parameters = (MapSqlParameterSource) countParameters.getValue();
@@ -126,7 +128,62 @@ class PprEquipmentCalendarJdbcRepositoryContractTest {
                 .contains("UNION")
                 .contains("FROM ppr_plan_targets target")
                 .contains("target.target_type = 'EQUIPMENT'")
-                .doesNotContain("target.target_type = 'EQUIPMENT_TYPE'");
+                .contains("target.target_type = 'EQUIPMENT_TYPE'")
+                .contains("scoped_equipment.equipment_type_id =");
+    }
+
+    @Test
+    void monthEquipmentTypeAndControlledSortAreBoundWithoutRawSqlInput() {
+        when(jdbc.queryForObject(anyString(), any(SqlParameterSource.class), eq(Long.class)))
+                .thenReturn(0L);
+        when(jdbc.query(
+                anyString(),
+                any(SqlParameterSource.class),
+                org.mockito.ArgumentMatchers.<RowMapper<UUID>>any()))
+                .thenReturn(List.of());
+        UUID equipmentTypeId =
+                UUID.fromString("50000000-0000-0000-0000-000000000001");
+        PprEquipmentCalendarFilter filter = new PprEquipmentCalendarFilter(
+                2026,
+                7,
+                0,
+                25,
+                null,
+                null,
+                null,
+                null,
+                equipmentTypeId,
+                Set.of(),
+                Set.of(),
+                true,
+                false,
+                PprEquipmentCalendarSortField.INVENTORY_NUMBER,
+                PprEquipmentCalendarSortDirection.DESC);
+
+        repository.findEquipmentPage(taskQuery(filter));
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<SqlParameterSource> params =
+                ArgumentCaptor.forClass(SqlParameterSource.class);
+        org.mockito.Mockito.verify(jdbc).queryForObject(
+                sql.capture(), params.capture(), eq(Long.class));
+        assertThat(sql.getValue())
+                .contains("BETWEEN :windowStart AND :windowEnd")
+                .contains("e.equipment_type_id = :equipmentTypeId");
+        org.mockito.Mockito.verify(jdbc).query(
+                org.mockito.ArgumentMatchers.<String>argThat(value ->
+                        value.contains(
+                                "ORDER BY lower(coalesce(e.inventory_number, '')) DESC, e.id ASC")),
+                any(SqlParameterSource.class),
+                org.mockito.ArgumentMatchers.<RowMapper<UUID>>any());
+        MapSqlParameterSource parameters =
+                (MapSqlParameterSource) params.getValue();
+        assertThat(parameters.getValue("windowStart"))
+                .isEqualTo(LocalDate.of(2026, 7, 1));
+        assertThat(parameters.getValue("windowEnd"))
+                .isEqualTo(LocalDate.of(2026, 7, 31));
+        assertThat(parameters.getValue("equipmentTypeId"))
+                .isEqualTo(equipmentTypeId);
     }
 
     @Test
@@ -166,10 +223,41 @@ class PprEquipmentCalendarJdbcRepositoryContractTest {
         assertThat(snapshotSql.getValue())
                 .contains("FROM maintenance_schedule_calculation_items item")
                 .contains("item.calculation_revision = :sourceRevision")
+                .contains("item.source_code_snapshot AS source_code")
+                .contains("item.source_name_snapshot AS source_name")
                 .contains("item.maintenance_type IN (:maintenanceKinds)")
                 .contains("AND 1 = 0")
                 .doesNotContain("FROM ppr_tasks task")
+                .doesNotContain("JOIN maintenance_regulations")
+                .doesNotContain("JOIN equipment_maintenance_rules")
                 .doesNotContain("task.status");
+    }
+
+    @Test
+    void exactMaterializedRevisionUsesSnapshotMetadataInsteadOfMutableReferences() {
+        when(jdbc.query(
+                anyString(),
+                any(SqlParameterSource.class),
+                org.mockito.ArgumentMatchers.<RowMapper<CalendarOccurrence>>any()))
+                .thenReturn(List.of());
+
+        repository.findOccurrences(
+                taskQuery(PprEquipmentCalendarFilter.forYear(2026), 7L),
+                List.of(EQUIPMENT_ID));
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(jdbc).query(
+                sql.capture(),
+                any(SqlParameterSource.class),
+                org.mockito.ArgumentMatchers.<RowMapper<CalendarOccurrence>>any());
+        assertThat(sql.getValue())
+                .contains("linked.plan_id = :planId")
+                .contains("linked.calculation_revision = :sourceRevision")
+                .contains("linked.source_code_snapshot AS source_code")
+                .contains("linked.source_name_snapshot AS source_name")
+                .contains("linked.maintenance_type AS maintenance_kind")
+                .doesNotContain(
+                        "coalesce(maintenance_rule.code, regulation.code) AS source_code");
     }
 
     @Test
@@ -200,6 +288,11 @@ class PprEquipmentCalendarJdbcRepositoryContractTest {
     }
 
     private CalendarQuery taskQuery(PprEquipmentCalendarFilter filter) {
+        return taskQuery(filter, null);
+    }
+
+    private CalendarQuery taskQuery(
+            PprEquipmentCalendarFilter filter, Long sourceRevision) {
         return new CalendarQuery(
                 PLAN_ID,
                 DEPARTMENT_ID,
@@ -207,7 +300,7 @@ class PprEquipmentCalendarJdbcRepositoryContractTest {
                 LocalDate.of(2026, 1, 1),
                 LocalDate.of(2026, 12, 31),
                 PprEquipmentCalendarAuthoritativeSource.PPR_TASK,
-                null,
+                sourceRevision,
                 filter);
     }
 

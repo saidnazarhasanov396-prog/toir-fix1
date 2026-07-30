@@ -5,6 +5,7 @@ import com.toir.dto.pprplanning.CompletePprTaskRequest;
 import com.toir.dto.pprplanning.PprTaskDto;
 import com.toir.dto.pprplanning.PprPlanRequest;
 import com.toir.dto.pprplanning.PprTaskRequest;
+import com.toir.config.AnnualMaintenanceApprovalFirstFeature;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprPlanTarget;
 import com.toir.entity.PprTask;
@@ -14,6 +15,7 @@ import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.MaintenanceScheduleAnchorMode;
+import com.toir.enums.MaterializationMode;
 import com.toir.enums.PprFrequency;
 import com.toir.enums.PprScheduleType;
 import com.toir.enums.PprScopeType;
@@ -21,6 +23,7 @@ import com.toir.enums.PprTargetType;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PprType;
 import com.toir.enums.PriorityLevel;
+import com.toir.enums.TaskMaterializationStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
@@ -106,6 +109,9 @@ class PprPlanServiceLifecycleTest {
 
     @Mock
     PprPlanEquipmentAccessPolicy equipmentAccessPolicy;
+
+    @Mock
+    AnnualMaintenanceApprovalFirstFeature approvalFirstFeature;
 
     @InjectMocks
     PprPlanService service;
@@ -306,6 +312,72 @@ class PprPlanServiceLifecycleTest {
         assertThat(result.tasks()).hasSize(1);
         assertThat(result.generationMessage()).contains("1 PPR task");
         verify(generatorService).generateForPlan(planId);
+    }
+
+    @Test
+    void approvalFirstScheduleCalculationCreateDoesNotGenerateTasks() {
+        UUID planId = UUID.randomUUID();
+        String codePrefix = "PPR-" + Year.now().getValue() + "-";
+        String expectedCode = codePrefix + "0001";
+        when(approvalFirstFeature.isEnabled()).thenReturn(true);
+        when(planRepository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(planRepository.existsByCodeAndIsDeletedFalse(expectedCode)).thenReturn(false);
+        when(planRepository.saveAndFlush(any(PprPlan.class))).thenAnswer(invocation -> {
+            PprPlan plan = invocation.getArgument(0);
+            plan.setId(planId);
+            return plan;
+        });
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenAnswer(invocation -> {
+            PprPlan plan = plan(planId, PlanStatus.DRAFT);
+            plan.setOrigin(com.toir.enums.PprPlanOrigin.MAINTENANCE_SCHEDULE);
+            plan.setCode(expectedCode);
+            return Optional.of(plan);
+        });
+
+        var result = service.createScheduleCalculation(new PprPlanRequest(
+                "Approval-first schedule",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31),
+                null,
+                PprScheduleType.CALENDAR,
+                null,
+                null,
+                PprScopeType.DEPARTMENT,
+                List.of(UUID.randomUUID()),
+                List.of(),
+                List.of(),
+                MaintenanceScheduleAnchorMode.CURRENT
+        ));
+
+        assertThat(result.taskCount()).isZero();
+        verify(generatorService, never()).generateForPlan(planId);
+    }
+
+    @Test
+    void approvalFirstCalculatedPlanCanBeSubmittedButCannotUseLegacyFinalizer() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.CALCULATED);
+        plan.setCode("PPR-2026-0001");
+        plan.setName("Approval-first calculation");
+        plan.setStartDate(LocalDate.of(2026, 1, 1));
+        plan.setEndDate(LocalDate.of(2026, 12, 31));
+        plan.setMaterializationMode(MaterializationMode.APPROVAL_FIRST);
+        plan.setTaskMaterializationStatus(
+                TaskMaterializationStatus.NOT_MATERIALIZED);
+        when(planRepository.findByIdAndIsDeletedFalse(planId))
+                .thenReturn(Optional.of(plan));
+
+        assertThat(service.validateCanApprove(planId).status())
+                .isEqualTo(PlanStatus.CALCULATED);
+        assertThatThrownBy(() ->
+                service.finalizeApprovalFromApprovalRequest(
+                        planId, UUID.randomUUID()))
+                .isInstanceOfSatisfying(RestException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(
+                                "PPR_APPROVAL_FIRST_LEGACY_FINALIZATION_FORBIDDEN"));
     }
 
     @Test

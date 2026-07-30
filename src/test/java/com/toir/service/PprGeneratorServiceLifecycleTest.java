@@ -33,12 +33,14 @@ import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRe
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.service.maintanance.MaintenanceDueCalculationService;
 import com.toir.service.maintanance.MaintenanceScheduleService;
+import com.toir.service.maintanance.PprTaskScheduleWindowCalculator;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
@@ -105,6 +107,10 @@ class PprGeneratorServiceLifecycleTest {
 
     @Mock
     MaintenanceScheduleService maintenanceScheduleService;
+
+    @Spy
+    PprTaskScheduleWindowCalculator scheduleWindowCalculator =
+            new PprTaskScheduleWindowCalculator();
 
     @InjectMocks
     PprGeneratorService service;

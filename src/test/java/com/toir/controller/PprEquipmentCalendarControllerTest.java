@@ -16,6 +16,8 @@ import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarPlacementBasis;
 import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarPlanSummary;
 import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarResponse;
 import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarSpanMode;
+import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarSortDirection;
+import com.toir.dto.pprplanning.calendar.PprEquipmentCalendarSortField;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.PlanStatus;
 import com.toir.enums.PprTaskStatus;
@@ -57,7 +59,11 @@ class PprEquipmentCalendarControllerTest {
 
         mockMvc.perform(get("/api/v1/ppr-plans/{planId}/equipment-calendar", PLAN_ID)
                         .param("year", "2026")
+                        .param("month", "7")
                         .param("search", "pump")
+                        .param("equipmentTypeId", "50000000-0000-0000-0000-000000000001")
+                        .param("sortBy", "INVENTORY_NUMBER")
+                        .param("sortDirection", "DESC")
                         .param("maintenanceKinds", "INSPECTION", "OVERHAUL")
                         .param("statuses", "PLANNED", "IN_PROGRESS"))
                 .andExpect(status().isOk());
@@ -66,9 +72,16 @@ class PprEquipmentCalendarControllerTest {
                 ArgumentCaptor.forClass(PprEquipmentCalendarFilter.class);
         verify(service).getCalendar(eq(PLAN_ID), filterCaptor.capture());
         assertThat(filterCaptor.getValue().page()).isZero();
+        assertThat(filterCaptor.getValue().month()).isEqualTo(7);
         assertThat(filterCaptor.getValue().size()).isEqualTo(25);
         assertThat(filterCaptor.getValue().onlyWithWork()).isTrue();
         assertThat(filterCaptor.getValue().includeCancelled()).isFalse();
+        assertThat(filterCaptor.getValue().equipmentTypeId()).isEqualTo(
+                UUID.fromString("50000000-0000-0000-0000-000000000001"));
+        assertThat(filterCaptor.getValue().sortBy())
+                .isEqualTo(PprEquipmentCalendarSortField.INVENTORY_NUMBER);
+        assertThat(filterCaptor.getValue().sortDirection())
+                .isEqualTo(PprEquipmentCalendarSortDirection.DESC);
         assertThat(filterCaptor.getValue().maintenanceKinds())
                 .containsExactlyInAnyOrder(MaintenanceKind.INSPECTION, MaintenanceKind.OVERHAUL);
         assertThat(filterCaptor.getValue().taskStatuses())
@@ -94,14 +107,18 @@ class PprEquipmentCalendarControllerTest {
                 Integer.class,
                 Integer.class,
                 Integer.class,
+                Integer.class,
                 String.class,
+                UUID.class,
                 UUID.class,
                 UUID.class,
                 UUID.class,
                 Set.class,
                 Set.class,
                 Boolean.class,
-                Boolean.class);
+                Boolean.class,
+                PprEquipmentCalendarSortField.class,
+                PprEquipmentCalendarSortDirection.class);
 
         assertThat(endpoint.getAnnotation(PreAuthorize.class).value())
                 .isEqualTo("hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')");
