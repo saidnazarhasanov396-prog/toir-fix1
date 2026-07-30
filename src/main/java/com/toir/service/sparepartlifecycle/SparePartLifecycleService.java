@@ -38,6 +38,7 @@ import com.toir.repository.sparepartlifecycle.SparePartInstallationMaterialAlloc
 import com.toir.repository.sparepartlifecycle.SparePartInstallationMeterBaselineRepository;
 import com.toir.repository.sparepartlifecycle.SparePartInstallationRepository;
 import com.toir.repository.sparepartlifecycle.SparePartLifeLimitRepository;
+import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import java.math.BigDecimal;
@@ -76,6 +77,7 @@ public class SparePartLifecycleService {
     private final SparePartSlotNormalizer slotNormalizer;
     private final AuditBuilderService auditBuilderService;
     private final ObjectMapper objectMapper;
+    private final SparePartLifecycleOperationGuard operationGuard;
 
     @Transactional(readOnly = true)
     public SparePartInstallation get(UUID id) {
@@ -122,6 +124,10 @@ public class SparePartLifecycleService {
         scopeAccessService.assertCanAccessEquipmentScope(
                 equipment.getResponsibleDepartmentId(),
                 equipment.getDepartmentId()
+        );
+        operationGuard.assertAllowed(
+                equipmentId,
+                com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation.SPARE_PART_INSTALL
         );
         validateNode(equipmentId, request.equipmentNodeId());
         String normalizedSlot = slotNormalizer.normalizeRequired(request.slotCode());
@@ -230,13 +236,15 @@ public class SparePartLifecycleService {
         }
         if (request.disposition() == SparePartRemovalDisposition.RETURN_TO_STOCK) {
             throw RestException.conflict(
-                    "RETURN_TO_STOCK_UNSUPPORTED: no safe transactional WMS return path is configured");
+                    "No safe transactional WMS return path is configured",
+                    com.toir.exception.SparePartLifecycleErrorCodes.RETURN_TO_STOCK_UNSUPPORTED);
         }
         if (request.disposition() == SparePartRemovalDisposition.UNKNOWN
                 && (request.reason() == null || request.reason().isBlank()
-                || !scopeAccessService.hasAuthority("SPARE_PART_EXPIRY_OVERRIDE"))) {
+                || !scopeAccessService.hasAuthority(PermissionConstants.SPARE_PART_EXPIRY_OVERRIDE))) {
             throw RestException.conflict(
-                    "REMOVAL_DISPOSITION_UNKNOWN_REQUIRES_OVERRIDE: UNKNOWN requires override permission and reason");
+                    "UNKNOWN requires override permission and reason",
+                    com.toir.exception.SparePartLifecycleErrorCodes.UNKNOWN_DISPOSITION_FORBIDDEN);
         }
         var handle = commandCoordinator.acquire(
                 idempotencyKey,
@@ -467,13 +475,15 @@ public class SparePartLifecycleService {
         }
         if (request.oldPartDisposition() == SparePartRemovalDisposition.RETURN_TO_STOCK) {
             throw RestException.conflict(
-                    "RETURN_TO_STOCK_UNSUPPORTED: no safe transactional WMS return path is configured");
+                    "No safe transactional WMS return path is configured",
+                    com.toir.exception.SparePartLifecycleErrorCodes.RETURN_TO_STOCK_UNSUPPORTED);
         }
         if (request.oldPartDisposition() == SparePartRemovalDisposition.UNKNOWN
                 && (request.reason() == null || request.reason().isBlank()
-                || !scopeAccessService.hasAuthority("SPARE_PART_EXPIRY_OVERRIDE"))) {
+                || !scopeAccessService.hasAuthority(PermissionConstants.SPARE_PART_EXPIRY_OVERRIDE))) {
             throw RestException.conflict(
-                    "REMOVAL_DISPOSITION_UNKNOWN_REQUIRES_OVERRIDE: UNKNOWN requires override permission and reason");
+                    "UNKNOWN requires override permission and reason",
+                    com.toir.exception.SparePartLifecycleErrorCodes.UNKNOWN_DISPOSITION_FORBIDDEN);
         }
     }
 
@@ -512,7 +522,7 @@ public class SparePartLifecycleService {
         List<EquipmentSparePart> bom = equipmentSparePartRepository
                 .findAllByEquipmentIdAndIsDeletedFalse(equipmentId);
         if (!bom.isEmpty() && bom.stream().noneMatch(item -> Objects.equals(item.getSparePartId(), sparePartId))) {
-            if (!scopeAccessService.hasAuthority("SPARE_PART_EXPIRY_OVERRIDE")
+            if (!scopeAccessService.hasAuthority(PermissionConstants.SPARE_PART_EXPIRY_OVERRIDE)
                     || externalSourceReason == null || externalSourceReason.isBlank()) {
                 throw RestException.conflict(
                         "BOM_INCOMPATIBLE: ad hoc installation requires override permission and a reason");

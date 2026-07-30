@@ -37,6 +37,8 @@ import com.toir.service.LowStockRecommendationService;
 import com.toir.service.equipment.EquipmentStatusLifecycleService;
 import com.toir.service.warehouse.ToirStockService;
 import com.toir.service.warehouse.LegacyStockProjectionService;
+import com.toir.service.sparepartlifecycle.SparePartLifecycleOperationGuard;
+import com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -80,6 +82,7 @@ public class RepairMaterialUsageService {
     private final WorkOrderSparePartRequirementRepository requirementRepository;
     private final ToirStockService toirStockService;
     private final LegacyStockProjectionService legacyStockProjectionService;
+    private final SparePartLifecycleOperationGuard sparePartLifecycleOperationGuard;
 
 
     @Transactional(readOnly = true)
@@ -125,6 +128,8 @@ public class RepairMaterialUsageService {
         WorkOrder workOrder = workOrderOrThrow(workOrderId);
         assertCanAccessWorkOrder(workOrder);
         assertWorkOrderAllowsMaterialIssue(workOrder);
+        sparePartLifecycleOperationGuard.assertAllowed(
+                workOrder.getEquipmentId(), SparePartLifecycleOperation.MATERIAL_ISSUE);
         equipmentStatusLifecycleService.assertOperationallyAllowed(workOrder.getEquipmentId(), "add material usage");
         assertCanAccessWarehouseId(r.warehouseId());
         if (r.quantity()==null||r.quantity().signum() <= 0

@@ -123,6 +123,9 @@ public final class PermissionConstants {
     public static final String SPARE_PART_REPLACE = "SPARE_PART_REPLACE";
     public static final String SPARE_PART_DUE_READ = "SPARE_PART_DUE_READ";
     public static final String SPARE_PART_DUE_ACKNOWLEDGE = "SPARE_PART_DUE_ACKNOWLEDGE";
+    public static final String SPARE_PART_MANUAL_DUE = "SPARE_PART_MANUAL_DUE";
+    public static final String SPARE_PART_DUE_WORK_ORDER_CREATE = "SPARE_PART_DUE_WORK_ORDER_CREATE";
+    public static final String SPARE_PART_LIFECYCLE_OVERRIDE = "SPARE_PART_LIFECYCLE_OVERRIDE";
     public static final String SPARE_PART_EXPIRY_OVERRIDE = "SPARE_PART_EXPIRY_OVERRIDE";
     public static final String STOCK_READ = "STOCK_READ";
     public static final String STOCK_MOVE = "STOCK_MOVE";

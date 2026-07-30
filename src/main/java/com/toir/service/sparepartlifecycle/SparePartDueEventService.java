@@ -10,6 +10,10 @@ import com.toir.enums.sparepartlifecycle.SparePartDueEventState;
 import com.toir.enums.sparepartlifecycle.SparePartLifecycleEvaluationState;
 import com.toir.repository.sparepartlifecycle.SparePartDueEventRepository;
 import com.toir.repository.sparepartlifecycle.SparePartInstallationRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.PermissionConstants;
+import com.toir.security.ScopeAccessService;
+import com.toir.exception.RestException;
 import com.toir.enums.sparepartlifecycle.SparePartInstallationStatus;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -32,6 +36,8 @@ public class SparePartDueEventService {
     private final SparePartInstallationRepository installationRepository;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final EquipmentRepository equipmentRepository;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional
     public SparePartDueEvent applyEvaluation(SparePartInstallation installation,
@@ -131,11 +137,26 @@ public class SparePartDueEventService {
     @Transactional
     public SparePartDueEvent acknowledge(UUID id, UUID actorId, Instant acknowledgedAt) {
         if (actorId == null) {
-            throw com.toir.exception.RestException.badRequest("ACTOR_REQUIRED: actor is required");
+            throw RestException.badRequest("ACTOR_REQUIRED: actor is required");
+        }
+        if (!scopeAccessService.hasAuthority(PermissionConstants.WILDCARD)
+                && !scopeAccessService.hasAuthority(PermissionConstants.SPARE_PART_DUE_ACKNOWLEDGE)) {
+            throw RestException.forbidden("SPARE_PART_DUE_ACKNOWLEDGE permission is required");
         }
         SparePartDueEvent event = get(id);
         if (event.getState() == SparePartDueEventState.RESOLVED) {
-            throw com.toir.exception.RestException.conflict("DUE_EVENT_RESOLVED: resolved event cannot be acknowledged");
+            throw RestException.conflict("DUE_EVENT_RESOLVED: resolved event cannot be acknowledged");
+        }
+        SparePartInstallation installation = installationRepository
+                .findByIdAndIsDeletedFalse(event.getInstallationId())
+                .orElseThrow(() -> RestException.notFound(
+                        "Spare-part installation not found: " + event.getInstallationId()));
+        var equipment = equipmentRepository.findByIdAndIsDeletedFalse(installation.getEquipmentId())
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + installation.getEquipmentId()));
+        scopeAccessService.assertCanAccessEquipmentScope(
+                equipment.getResponsibleDepartmentId(), equipment.getDepartmentId());
+        if (event.getAcknowledgedAt() != null) {
+            return event;
         }
         event.setAcknowledgedAt(acknowledgedAt == null ? Instant.now() : acknowledgedAt);
         event.setAcknowledgedBy(actorId);

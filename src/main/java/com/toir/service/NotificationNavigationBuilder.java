@@ -99,6 +99,28 @@ public class NotificationNavigationBuilder {
         );
     }
 
+    public NotificationNavigation forSparePartDue(
+            NotificationEventType eventType,
+            UUID equipmentId,
+            UUID dueEventId,
+            UUID installationId
+    ) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("equipmentId", equipmentId.toString());
+        metadata.put("eventId", dueEventId.toString());
+        metadata.put("installationId", installationId.toString());
+        String actionUrl = "/equipment/" + equipmentId
+                + "?tab=spareParts&view=attention&eventId=" + dueEventId
+                + "&installationId=" + installationId;
+        return new NotificationNavigation(
+                eventType == null ? null : eventType.name(),
+                NotificationEntityTypes.SPARE_PART_DUE_EVENT,
+                dueEventId.toString(),
+                actionUrl,
+                Map.copyOf(metadata)
+        );
+    }
+
     private Map<String, String> secondaryAction(
             String labelKey,
             String entityType,

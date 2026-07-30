@@ -16,10 +16,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SparePartOperationalReadinessServiceTest {
 
-    private final SparePartOperationalReadinessService service = new SparePartOperationalReadinessService(null, null, null);
+    private final SparePartOperationalReadinessService service = new SparePartOperationalReadinessService(
+            null, null, null, new SparePartLifecyclePolicy());
 
     @Test
-    void evaluationErrorPrecedesBlockMaintenanceAndWarningWithoutChangingBaseStatus() {
+    void blockedRemainsCanonicalWhenEvaluationErrorIsAlsoPresent() {
         Equipment equipment = equipment();
         SparePartInstallation error = installation(SparePartLifecycleEvaluationState.ERROR);
         SparePartDueEvent blocker = event(error, SparePartDueAction.BLOCK_OPERATION, SparePartDueEventState.OVERDUE);
@@ -27,7 +28,9 @@ class SparePartOperationalReadinessServiceTest {
         var result = service.evaluate(equipment, List.of(error), List.of(blocker));
 
         assertThat(result.baseEquipmentStatus()).isEqualTo(EquipmentStatus.ACTIVE);
-        assertThat(result.operationalReadiness()).isEqualTo(SparePartOperationalReadiness.EVALUATION_ERROR);
+        assertThat(result.operationalReadiness()).isEqualTo(SparePartOperationalReadiness.BLOCKED);
+        assertThat(result.hasEvaluationError()).isTrue();
+        assertThat(result.evaluationErrorCount()).isEqualTo(1);
         assertThat(equipment.getStatus()).isEqualTo(EquipmentStatus.ACTIVE);
     }
 
@@ -68,6 +71,7 @@ class SparePartOperationalReadinessServiceTest {
         installation.setId(UUID.randomUUID());
         installation.setSparePartId(UUID.randomUUID());
         installation.setPositionKey("N:ROOT:S:DEFAULT");
+        installation.setStatus(com.toir.enums.sparepartlifecycle.SparePartInstallationStatus.ACTIVE);
         installation.setLifecycleEvaluationState(state);
         return installation;
     }

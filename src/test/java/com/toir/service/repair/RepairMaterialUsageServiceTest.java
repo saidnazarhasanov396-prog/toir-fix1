@@ -107,6 +107,9 @@ class RepairMaterialUsageServiceTest {
     @Mock
     LegacyStockProjectionService legacyStockProjectionService;
 
+    @Mock
+    com.toir.service.sparepartlifecycle.SparePartLifecycleOperationGuard sparePartLifecycleOperationGuard;
+
     @InjectMocks
     RepairMaterialUsageService service;
 
