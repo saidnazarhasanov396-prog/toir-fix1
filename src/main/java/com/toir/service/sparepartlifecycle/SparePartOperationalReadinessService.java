@@ -5,11 +5,9 @@ import com.toir.dto.sparepartlifecycle.SparePartReadinessReason;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.sparepartlifecycle.SparePartDueEvent;
 import com.toir.entity.sparepartlifecycle.SparePartInstallation;
-import com.toir.enums.sparepartlifecycle.SparePartDueAction;
 import com.toir.enums.sparepartlifecycle.SparePartDueEventState;
 import com.toir.enums.sparepartlifecycle.SparePartInstallationStatus;
 import com.toir.enums.sparepartlifecycle.SparePartLifecycleEvaluationState;
-import com.toir.enums.sparepartlifecycle.SparePartOperationalReadiness;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.sparepartlifecycle.SparePartDueEventRepository;
@@ -32,6 +30,7 @@ public class SparePartOperationalReadinessService {
     private final EquipmentRepository equipmentRepository;
     private final SparePartInstallationRepository installationRepository;
     private final SparePartDueEventRepository dueEventRepository;
+    private final SparePartLifecyclePolicy lifecyclePolicy;
 
     @Transactional(readOnly = true)
     public SparePartOperationalReadinessDto get(UUID equipmentId) {
@@ -55,13 +54,8 @@ public class SparePartOperationalReadinessService {
         Map<UUID, SparePartInstallation> byId = installations.stream()
                 .collect(Collectors.toMap(SparePartInstallation::getId, Function.identity(), (left, right) -> left));
         List<SparePartReadinessReason> reasons = new ArrayList<>();
-        boolean evaluationError = false;
-        boolean blocked = false;
-        boolean maintenanceRequired = false;
-        boolean warning = false;
         for (SparePartInstallation installation : installations) {
             if (installation.getLifecycleEvaluationState() == SparePartLifecycleEvaluationState.ERROR) {
-                evaluationError = true;
                 reasons.add(new SparePartReadinessReason(
                         "SPARE_PART_INSTALLATION",
                         installation.getId(),
@@ -76,22 +70,10 @@ public class SparePartOperationalReadinessService {
             }
         }
         for (SparePartDueEvent event : events) {
-            if (event.getState() == SparePartDueEventState.RESOLVED
-                    || event.getState() == SparePartDueEventState.UPCOMING) {
+            if (event.getState() == SparePartDueEventState.RESOLVED) {
                 continue;
             }
             SparePartInstallation installation = byId.get(event.getInstallationId());
-            if (event.getDueAction() == SparePartDueAction.BLOCK_OPERATION
-                    && (event.getState() == SparePartDueEventState.DUE
-                    || event.getState() == SparePartDueEventState.OVERDUE)) {
-                blocked = true;
-            } else if (event.getDueAction() == SparePartDueAction.MAINTENANCE_REQUIRED
-                    && (event.getState() == SparePartDueEventState.DUE
-                    || event.getState() == SparePartDueEventState.OVERDUE)) {
-                maintenanceRequired = true;
-            } else {
-                warning = true;
-            }
             reasons.add(new SparePartReadinessReason(
                     "SPARE_PART_INSTALLATION",
                     event.getInstallationId(),
@@ -108,19 +90,13 @@ public class SparePartOperationalReadinessService {
                     null
             ));
         }
-        SparePartOperationalReadiness readiness = evaluationError
-                ? SparePartOperationalReadiness.EVALUATION_ERROR
-                : blocked
-                ? SparePartOperationalReadiness.BLOCKED
-                : maintenanceRequired
-                ? SparePartOperationalReadiness.MAINTENANCE_REQUIRED
-                : warning
-                ? SparePartOperationalReadiness.WARNING
-                : SparePartOperationalReadiness.READY;
+        SparePartLifecyclePolicy.Assessment assessment = lifecyclePolicy.assess(installations, events);
         return new SparePartOperationalReadinessDto(
                 equipment.getId(),
                 equipment.getStatus(),
-                readiness,
+                assessment.readinessStatus(),
+                assessment.hasEvaluationError(),
+                assessment.evaluationErrorCount(),
                 List.copyOf(reasons),
                 Instant.now()
         );

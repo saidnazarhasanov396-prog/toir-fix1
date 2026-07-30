@@ -36,12 +36,20 @@ public class RestException extends RuntimeException {
         return new RestException(message, HttpStatus.FORBIDDEN);
     }
 
+    public static RestException forbidden(String message, String errorCode) {
+        return new RestException(message, HttpStatus.FORBIDDEN, errorCode);
+    }
+
     public static RestException notFound(String message) {
         return new RestException(message, HttpStatus.NOT_FOUND);
     }
 
     public static RestException conflict(String message) {
         return new RestException(message, HttpStatus.CONFLICT);
+    }
+
+    public static RestException conflict(String message, String errorCode) {
+        return new RestException(message, HttpStatus.CONFLICT, errorCode);
     }
 
     public static RestException restThrow(ErrorType errorType) {

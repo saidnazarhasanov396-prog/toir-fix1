@@ -96,4 +96,23 @@ class NotificationNavigationBuilderTest {
         assertThat(target.metadata()).containsEntry("approvalRequestId", approvalId.toString());
         assertThat((List<?>) target.metadata().get("secondaryActions")).hasSize(1);
     }
+
+    @Test
+    void sparePartDueUsesCanonicalEquipmentAttentionRouteAndStructuredMetadata() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID installationId = UUID.randomUUID();
+
+        NotificationNavigation target = builder.forSparePartDue(
+                NotificationEventType.SPARE_PART_DUE, equipmentId, eventId, installationId);
+
+        assertThat(target.actionUrl()).isEqualTo(
+                "/equipment/" + equipmentId
+                        + "?tab=spareParts&view=attention&eventId=" + eventId
+                        + "&installationId=" + installationId);
+        assertThat(target.metadata())
+                .containsEntry("equipmentId", equipmentId.toString())
+                .containsEntry("eventId", eventId.toString())
+                .containsEntry("installationId", installationId.toString());
+    }
 }

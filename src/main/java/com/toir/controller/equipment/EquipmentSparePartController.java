@@ -13,38 +13,46 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import com.toir.security.RequiresSensitiveAccess;
 
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "equipment-spare-parts")
 @RequiredArgsConstructor
+@RequiresSensitiveAccess
 public class EquipmentSparePartController {
 
     private final EquipmentSparePartService service;
 
     @GetMapping("/equipment/{equipmentId}/spare-parts")
+    @PreAuthorize("hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<Page<EquipmentSparePartDto>> listForEquipment(@PathVariable UUID equipmentId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(service.listForEquipment(equipmentId), page, size));
     }
 
     @PostMapping("/equipment/{equipmentId}/spare-parts")
+    @PreAuthorize("hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<EquipmentSparePartDto> add(@PathVariable UUID equipmentId,
                                                      @Valid @RequestBody EquipmentSparePartRequest r) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.add(equipmentId, r));
     }
 
     @PutMapping("/equipment-spare-parts/{id}")
+    @PreAuthorize("hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<EquipmentSparePartDto> update(@PathVariable UUID id, @Valid @RequestBody EquipmentSparePartRequest r) {
         return ResponseEntity.ok(service.update(id, r));
     }
 
     @DeleteMapping("/equipment-spare-parts/{id}")
+    @PreAuthorize("hasAuthority('*') or hasAuthority('EQUIPMENT_UPDATE')")
     public ResponseEntity<Void> remove(@PathVariable UUID id) {
         service.remove(id);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/spare-parts/{sparePartId}/equipment")
+    @PreAuthorize("hasAuthority('*') or hasAuthority('EQUIPMENT_READ')")
     public ResponseEntity<Page<EquipmentSparePartDto>> listForSparePart(@PathVariable UUID sparePartId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(service.listForSparePart(sparePartId), page, size));
     }

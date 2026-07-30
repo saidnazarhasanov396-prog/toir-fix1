@@ -7,11 +7,19 @@ import com.toir.dto.sparepartlifecycle.CurrentMeterValue;
 import com.toir.dto.sparepartlifecycle.SparePartLifecycleEvaluation;
 import com.toir.dto.sparepartlifecycle.SparePartLifecycleEvaluationInput;
 import com.toir.entity.equipment.EquipmentMeter;
+import com.toir.entity.equipment.Equipment;
 import com.toir.entity.sparepartlifecycle.SparePartInstallation;
 import com.toir.entity.sparepartlifecycle.SparePartInstallationMeterBaseline;
 import com.toir.enums.sparepartlifecycle.SparePartInstallationStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.equipment.EquipmentMeterRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.PermissionConstants;
+import com.toir.security.ScopeAccessService;
+import com.toir.exception.SparePartLifecycleErrorCodes;
+import com.toir.enums.AuditAction;
+import com.toir.enums.AuditModule;
+import com.toir.util.AuditBuilderService;
 import com.toir.repository.sparepartlifecycle.SparePartInstallationMeterBaselineRepository;
 import com.toir.repository.sparepartlifecycle.SparePartInstallationRepository;
 import java.math.BigDecimal;
@@ -36,6 +44,9 @@ public class SparePartLifecycleEvaluationService {
     private final SparePartLifecycleEvaluator evaluator;
     private final SparePartDueEventService dueEventService;
     private final ObjectMapper objectMapper;
+    private final EquipmentRepository equipmentRepository;
+    private final ScopeAccessService scopeAccessService;
+    private final AuditBuilderService auditBuilderService;
 
     @Transactional
     public SparePartLifecycleEvaluation reevaluate(UUID installationId, Instant evaluatedAt) {
@@ -71,7 +82,7 @@ public class SparePartLifecycleEvaluationService {
                 baselineValues,
                 currentMeters,
                 at,
-                false
+                installation.getManualDueAt() != null
         ));
         installation.setLifecycleEvaluationState(evaluation.aggregateState());
         installation.setNextCalendarDueAt(evaluation.nextCalendarDueAt());
@@ -80,6 +91,48 @@ public class SparePartLifecycleEvaluationService {
         installationRepository.save(installation);
         dueEventService.applyEvaluation(installation, evaluation);
         return evaluation;
+    }
+
+    @Transactional
+    public SparePartLifecycleEvaluation markManualDue(UUID installationId, UUID actorId, String reason) {
+        if (actorId == null) {
+            throw RestException.badRequest("ACTOR_REQUIRED: actor is required");
+        }
+        if (!scopeAccessService.hasAuthority(PermissionConstants.WILDCARD)
+                && !scopeAccessService.hasAuthority(PermissionConstants.SPARE_PART_MANUAL_DUE)) {
+            throw RestException.forbidden("SPARE_PART_MANUAL_DUE permission is required");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw RestException.badRequest(
+                    "Manual due reason is required", SparePartLifecycleErrorCodes.MANUAL_DUE_REASON_MISSING);
+        }
+        SparePartInstallation installation = installationRepository
+                .findByIdAndIsDeletedFalseForUpdate(installationId)
+                .orElseThrow(() -> RestException.notFound("Spare-part installation not found: " + installationId));
+        if (installation.getStatus() != SparePartInstallationStatus.ACTIVE) {
+            throw RestException.conflict("INSTALLATION_NOT_ACTIVE: only an active installation can be marked due");
+        }
+        AppliedLifeRuleSnapshot snapshot = readSnapshot(installation);
+        if (snapshot.combinationMode()
+                != com.toir.enums.sparepartlifecycle.SparePartLifeCombinationMode.MANUAL) {
+            throw RestException.conflict(
+                    "Only a MANUAL lifecycle rule can be marked due",
+                    SparePartLifecycleErrorCodes.MANUAL_DUE_NOT_ALLOWED);
+        }
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(installation.getEquipmentId())
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + installation.getEquipmentId()));
+        scopeAccessService.assertCanAccessEquipmentScope(
+                equipment.getResponsibleDepartmentId(), equipment.getDepartmentId());
+        if (installation.getManualDueAt() == null) {
+            installation.setManualDueAt(Instant.now());
+            installation.setManualDueBy(actorId);
+            installation.setManualDueReason(reason.trim());
+            installationRepository.save(installation);
+            auditBuilderService.log(
+                    "spare_part_installation", installation.getId().toString(), AuditAction.UPDATE,
+                    AuditModule.SPARE_PART, "Manual spare-part due action", null, installation);
+        }
+        return reevaluate(installationId, installation.getManualDueAt());
     }
 
     @Transactional

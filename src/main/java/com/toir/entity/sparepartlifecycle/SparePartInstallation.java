@@ -116,6 +116,15 @@ public class SparePartInstallation extends BaseEntity {
     @Column(name = "evaluation_details", columnDefinition = "jsonb")
     private String evaluationDetails;
 
+    @Column(name = "manual_due_at")
+    private Instant manualDueAt;
+
+    @Column(name = "manual_due_by")
+    private UUID manualDueBy;
+
+    @Column(name = "manual_due_reason", columnDefinition = "text")
+    private String manualDueReason;
+
     @Version
     @Column(nullable = false)
     private long version;
