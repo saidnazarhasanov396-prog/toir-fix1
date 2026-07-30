@@ -235,6 +235,7 @@ public class WorkOrderService {
     private final OperationalIssueLifecycleSyncService operationalIssueLifecycleSyncService;
     private final ObjectProvider<MaintenanceAutomationService> maintenanceAutomationServiceProvider;
     private final com.toir.service.sparepartlifecycle.SparePartLifecycleService sparePartLifecycleService;
+    private final com.toir.service.sparepartlifecycle.SparePartLifecycleOperationGuard sparePartLifecycleOperationGuard;
     private final ObjectMapper objectMapper;
     private final ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
     private static final Set<WorkOrderStatus> COMPLETE_ALLOWED_WORK_ORDER_STATUSES =
@@ -797,10 +798,15 @@ public class WorkOrderService {
 
     @Transactional
     public WorkOrderDto createGenerated(WorkOrderRequest request) {
+        return createGenerated(request, null);
+    }
+
+    @Transactional
+    public WorkOrderDto createGenerated(WorkOrderRequest request, UUID createdById) {
         if (request.generationKey() == null || request.generationKey().isBlank()) {
             throw RestException.badRequest("Generated work order requires a server generation key");
         }
-        WorkOrderDto created = createInternal(request, null);
+        WorkOrderDto created = createInternal(request, createdById);
         repository.flush();
         return created;
     }
@@ -1038,6 +1044,9 @@ public class WorkOrderService {
         validatePerformerSkillsForWorkOrder(entity);
         plannedShutdownStartPolicy.assertCanStart(entity);
         safetyChecklistService.assertCanStart(entity);
+        sparePartLifecycleOperationGuard.assertAllowed(
+                entity.getEquipmentId(),
+                com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation.WORK_ORDER_START);
         entity.setStatus(WorkOrderStatus.IN_PROGRESS);
         entity.setStartedAt(Instant.now());
         ensureReplacementEquipmentReservedOnStart(entity);
@@ -1116,6 +1125,9 @@ public class WorkOrderService {
                 resolveCompletionMeterSnapshots(entity, request);
         issueCompletionMaterials(entity, request);
         executeSparePartLifecycleOperations(entity, request);
+        sparePartLifecycleOperationGuard.assertAllowed(
+                entity.getEquipmentId(),
+                com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation.WORK_ORDER_COMPLETE);
         workOrderCompletionService.createActualCostsOnCompletion(entity);
         entity.setStatus(WorkOrderStatus.COMPLETED);
         entity.setCompletedAt(Instant.now());
@@ -1216,6 +1228,9 @@ public class WorkOrderService {
         WorkOrder entity = getOrThrow(id);
         assertCanClose(entity, request);
         assertClosureEvidenceReady(entity);
+        sparePartLifecycleOperationGuard.assertAllowed(
+                entity.getEquipmentId(),
+                com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation.WORK_ORDER_CLOSE);
         entity.setResult(request.result());
         entity.setClosureNotes(request.closureNotes());
         entity.setStatus(WorkOrderStatus.CLOSED);

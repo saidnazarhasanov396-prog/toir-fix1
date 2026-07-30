@@ -61,6 +61,7 @@ class MaterialUsagePbacScopeTest {
     RepairCampaignBudgetLineResolver repairCampaignBudgetLineResolver;
     ToirStockService toirStockService;
     LegacyStockProjectionService legacyStockProjectionService;
+    com.toir.service.sparepartlifecycle.SparePartLifecycleOperationGuard sparePartLifecycleOperationGuard;
     RepairMaterialUsageService service;
 
     @BeforeEach
@@ -83,6 +84,8 @@ class MaterialUsagePbacScopeTest {
         repairCampaignBudgetLineResolver = mock(RepairCampaignBudgetLineResolver.class);
         toirStockService = mock(ToirStockService.class);
         legacyStockProjectionService = mock(LegacyStockProjectionService.class);
+        sparePartLifecycleOperationGuard = mock(
+                com.toir.service.sparepartlifecycle.SparePartLifecycleOperationGuard.class);
         service = new RepairMaterialUsageService(
                 repository,
                 stockRepository,
@@ -101,7 +104,8 @@ class MaterialUsagePbacScopeTest {
                 costCategoryRepository,
                 requirementRepository,
                 toirStockService,
-                legacyStockProjectionService
+                legacyStockProjectionService,
+                sparePartLifecycleOperationGuard
         );
     }
 

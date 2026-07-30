@@ -28,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,6 +40,9 @@ class SparePartLifecycleEvaluationServiceTest {
     @Mock SparePartInstallationMeterBaselineRepository baselineRepository;
     @Mock EquipmentMeterRepository meterRepository;
     @Mock SparePartDueEventService dueEventService;
+    @Mock com.toir.repository.equipment.EquipmentRepository equipmentRepository;
+    @Mock com.toir.security.ScopeAccessService scopeAccessService;
+    @Mock com.toir.util.AuditBuilderService auditBuilderService;
 
     private SparePartLifecycleEvaluationService service;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -51,7 +55,10 @@ class SparePartLifecycleEvaluationServiceTest {
                 meterRepository,
                 new SparePartLifecycleEvaluator(),
                 dueEventService,
-                objectMapper
+                objectMapper,
+                equipmentRepository,
+                scopeAccessService,
+                auditBuilderService
         );
         when(installationRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -81,6 +88,42 @@ class SparePartLifecycleEvaluationServiceTest {
         assertThat(installation.getLastEvaluatedAt()).isEqualTo(Instant.parse("2026-07-10T12:00:00Z"));
         assertThat(installation.getEvaluationDetails()).contains("\"aggregateState\":\"DUE\"");
         verify(dueEventService).applyEvaluation(installation, result);
+    }
+
+    @Test
+    void manualDueRequiresReasonAndDedicatedPermission() {
+        UUID installationId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.markManualDue(installationId, actorId, "reason"))
+                .isInstanceOf(com.toir.exception.RestException.class);
+
+        when(scopeAccessService.hasAuthority(com.toir.security.PermissionConstants.WILDCARD)).thenReturn(true);
+        assertThatThrownBy(() -> service.markManualDue(installationId, actorId, " "))
+                .isInstanceOfSatisfying(com.toir.exception.RestException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(
+                                com.toir.exception.SparePartLifecycleErrorCodes.MANUAL_DUE_REASON_MISSING));
+    }
+
+    @Test
+    void manualDueRejectsNonManualRule() throws Exception {
+        UUID installationId = UUID.randomUUID();
+        SparePartInstallation installation = new SparePartInstallation();
+        installation.setId(installationId);
+        installation.setStatus(com.toir.enums.sparepartlifecycle.SparePartInstallationStatus.ACTIVE);
+        installation.setAppliedRuleSnapshot(objectMapper.writeValueAsString(
+                new AppliedLifeRuleSnapshot(UUID.randomUUID(), 1,
+                        com.toir.enums.sparepartlifecycle.SparePartLifeCombinationMode.ANY,
+                        com.toir.enums.sparepartlifecycle.SparePartDueAction.WARNING_ONLY,
+                        List.of())));
+        when(scopeAccessService.hasAuthority(com.toir.security.PermissionConstants.WILDCARD)).thenReturn(true);
+        when(installationRepository.findByIdAndIsDeletedFalseForUpdate(installationId))
+                .thenReturn(Optional.of(installation));
+
+        assertThatThrownBy(() -> service.markManualDue(installationId, UUID.randomUUID(), "inspection"))
+                .isInstanceOfSatisfying(com.toir.exception.RestException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(
+                                com.toir.exception.SparePartLifecycleErrorCodes.MANUAL_DUE_NOT_ALLOWED));
     }
 
     @Test

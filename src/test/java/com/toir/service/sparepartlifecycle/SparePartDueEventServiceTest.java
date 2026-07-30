@@ -13,6 +13,9 @@ import com.toir.enums.MeterType;
 import java.math.BigDecimal;
 import com.toir.repository.sparepartlifecycle.SparePartDueEventRepository;
 import com.toir.repository.sparepartlifecycle.SparePartInstallationRepository;
+import com.toir.repository.equipment.EquipmentRepository;
+import com.toir.security.ScopeAccessService;
+import com.toir.entity.equipment.Equipment;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -39,6 +42,12 @@ class SparePartDueEventServiceTest {
 
     @Mock
     SparePartInstallationRepository installationRepository;
+
+    @Mock
+    EquipmentRepository equipmentRepository;
+
+    @Mock
+    ScopeAccessService scopeAccessService;
 
     @Mock
     ApplicationEventPublisher eventPublisher;
@@ -148,6 +157,34 @@ class SparePartDueEventServiceTest {
         assertThat(event.getCurrentMeterValue()).isEqualByComparingTo("145");
         assertThat(event.getDueMeterValue()).isEqualByComparingTo("150");
         assertThat(event.getWarningThreshold()).isEqualByComparingTo("140");
+    }
+
+    @Test
+    void acknowledgeIsIdempotentAndDoesNotResolveHazard() {
+        UUID actorId = UUID.randomUUID();
+        SparePartInstallation installation = installation();
+        installation.setEquipmentId(UUID.randomUUID());
+        SparePartDueEvent event = new SparePartDueEvent();
+        event.setId(UUID.randomUUID());
+        event.setInstallationId(installation.getId());
+        event.setState(SparePartDueEventState.DUE);
+        Instant firstAcknowledgedAt = Instant.parse("2026-07-30T08:00:00Z");
+        event.setAcknowledgedAt(firstAcknowledgedAt);
+        event.setAcknowledgedBy(actorId);
+        Equipment equipment = new Equipment();
+        equipment.setId(installation.getEquipmentId());
+        when(scopeAccessService.hasAuthority(com.toir.security.PermissionConstants.WILDCARD)).thenReturn(true);
+        when(repository.findByIdAndIsDeletedFalse(event.getId())).thenReturn(Optional.of(event));
+        when(installationRepository.findByIdAndIsDeletedFalse(installation.getId()))
+                .thenReturn(Optional.of(installation));
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipment.getId())).thenReturn(Optional.of(equipment));
+
+        SparePartDueEvent repeated = service.acknowledge(
+                event.getId(), actorId, Instant.parse("2026-07-30T09:00:00Z"));
+
+        assertThat(repeated.getAcknowledgedAt()).isEqualTo(firstAcknowledgedAt);
+        assertThat(repeated.getState()).isEqualTo(SparePartDueEventState.DUE);
+        verify(repository, never()).save(event);
     }
 
     private static SparePartInstallation installation() {

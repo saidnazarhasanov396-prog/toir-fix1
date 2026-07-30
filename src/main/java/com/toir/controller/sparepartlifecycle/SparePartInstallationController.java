@@ -5,6 +5,7 @@ import com.toir.dto.sparepartlifecycle.RemoveSparePartCommand;
 import com.toir.dto.sparepartlifecycle.ReplaceSparePartCommand;
 import com.toir.dto.sparepartlifecycle.SparePartLifecycleResult;
 import com.toir.dto.sparepartlifecycle.SparePartLifecycleEvaluation;
+import com.toir.dto.sparepartlifecycle.MarkSparePartManualDueRequest;
 import com.toir.entity.sparepartlifecycle.SparePartInstallation;
 import com.toir.security.RequiresSensitiveAccess;
 import com.toir.security.ScopeAccessService;
@@ -94,5 +95,15 @@ public class SparePartInstallationController {
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('SPARE_PART_EXPIRY_OVERRIDE')")
     public ResponseEntity<SparePartLifecycleEvaluation> reevaluate(@PathVariable UUID id) {
         return ResponseEntity.ok(evaluationService.reevaluate(id, Instant.now()));
+    }
+
+    @PostMapping("/{id}/manual-due")
+    @PreAuthorize("hasAuthority('*') or hasAuthority('SPARE_PART_MANUAL_DUE')")
+    public ResponseEntity<SparePartLifecycleEvaluation> manualDue(
+            @PathVariable UUID id,
+            @Valid @RequestBody MarkSparePartManualDueRequest request
+    ) {
+        return ResponseEntity.ok(evaluationService.markManualDue(
+                id, scopeAccessService.currentUserIdOrNull(), request.reason()));
     }
 }

@@ -57,6 +57,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -80,6 +81,7 @@ class SparePartLifecycleServiceTest {
     @Mock ScopeAccessService scopeAccessService;
     @Mock SparePartSlotNormalizer slotNormalizer;
     @Mock AuditBuilderService auditBuilderService;
+    @Mock SparePartLifecycleOperationGuard operationGuard;
     @Spy ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @InjectMocks SparePartLifecycleService service;
@@ -270,7 +272,23 @@ class SparePartLifecycleServiceTest {
         );
 
         assertThatThrownBy(() -> service.remove("remove-stock", actorId, request))
-                .hasMessageStartingWith("RETURN_TO_STOCK_UNSUPPORTED:");
+                .isInstanceOfSatisfying(com.toir.exception.RestException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(
+                                com.toir.exception.SparePartLifecycleErrorCodes.RETURN_TO_STOCK_UNSUPPORTED));
+        verifyNoInteractions(commandCoordinator);
+    }
+
+    @Test
+    void removeRejectsUnknownDispositionWithoutPermissionAndReason() {
+        RemoveSparePartCommand request = new RemoveSparePartCommand(
+                UUID.randomUUID(), Instant.parse("2026-07-10T10:00:00Z"), null,
+                SparePartRemovalDisposition.UNKNOWN, null, null);
+
+        assertThatThrownBy(() -> service.remove("remove-unknown", UUID.randomUUID(), request))
+                .isInstanceOfSatisfying(com.toir.exception.RestException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(
+                                com.toir.exception.SparePartLifecycleErrorCodes.UNKNOWN_DISPOSITION_FORBIDDEN));
+        verifyNoInteractions(commandCoordinator);
     }
 
     @Test

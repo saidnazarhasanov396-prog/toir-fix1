@@ -21,6 +21,8 @@ class SparePartLifecycleControllerContractTest {
         assertThat(source).contains("/equipment/{equipmentId}/current");
         assertThat(source).contains("/equipment/{equipmentId}/history");
         assertThat(source).contains("/{id}/reevaluate");
+        assertThat(source).contains("/{id}/manual-due");
+        assertThat(source).contains("SPARE_PART_MANUAL_DUE");
         assertThat(source).contains("SPARE_PART_EXPIRY_OVERRIDE");
     }
 
@@ -43,11 +45,24 @@ class SparePartLifecycleControllerContractTest {
         assertThat(rules).contains("SPARE_PART_LIFE_RULE_DELETE");
         assertThat(due).contains("SPARE_PART_DUE_READ");
         assertThat(due).contains("SPARE_PART_DUE_ACKNOWLEDGE");
+        assertThat(due).contains("/{id}/work-orders");
+        assertThat(due).contains("SPARE_PART_DUE_WORK_ORDER_CREATE");
         assertThat(readiness).contains("/api/v1/equipment/{equipmentId}/operational-readiness");
         assertThat(readiness).contains("SPARE_PART_DUE_READ");
         assertThat(nextActions).contains("/api/v1/equipment/{equipmentId}/next-required-actions");
         assertThat(nextActions).contains("SPARE_PART_DUE_READ");
         assertThat(effectiveRule).contains("/api/v1/equipment/{equipmentId}/spare-part-life-rules/effective");
         assertThat(effectiveRule).contains("SPARE_PART_LIFE_RULE_READ");
+    }
+
+    @Test
+    void aggregateControllerExposesSummaryAndPagedItemsContract() throws Exception {
+        String aggregate = Files.readString(Path.of(
+                "src/main/java/com/toir/controller/sparepartlifecycle/SparePartLifecycleAggregateController.java"));
+
+        assertThat(aggregate).contains("/api/v1/equipment/{equipmentId}/spare-parts/lifecycle");
+        assertThat(aggregate).contains("SparePartLifecycleAggregateResponse");
+        assertThat(aggregate).contains("SparePartLifecycleView");
+        assertThat(aggregate).contains("SPARE_PART_INSTALLATION_READ");
     }
 }

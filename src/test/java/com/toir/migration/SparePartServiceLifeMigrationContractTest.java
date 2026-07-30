@@ -94,4 +94,18 @@ class SparePartServiceLifeMigrationContractTest {
                 "SPARE_PART_EXPIRY_OVERRIDE"
         );
     }
+
+    @Test
+    void w1MigrationAddsManualAuditAndAppendOnlyWorkOrderHistory() throws Exception {
+        Path migration = Path.of(
+                "src/main/resources/db/migration/V20260730_3__spare_part_lifecycle_w1_actions.sql");
+        String sql = Files.readString(migration).toLowerCase();
+
+        assertThat(sql).contains("manual_due_at", "manual_due_by", "manual_due_reason");
+        assertThat(sql).contains("create table if not exists spare_part_due_event_work_orders");
+        assertThat(sql).contains("foreign key", "references spare_part_due_events(id)");
+        assertThat(sql).contains("references work_orders(id)");
+        assertThat(sql).contains("unique (due_event_id, idempotency_key)");
+        assertThat(sql).doesNotContain("on delete cascade");
+    }
 }

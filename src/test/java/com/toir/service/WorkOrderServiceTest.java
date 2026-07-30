@@ -349,6 +349,9 @@ class WorkOrderServiceTest {
     SparePartLifecycleService sparePartLifecycleService;
 
     @Mock
+    com.toir.service.sparepartlifecycle.SparePartLifecycleOperationGuard sparePartLifecycleOperationGuard;
+
+    @Mock
     ObjectMapper objectMapper;
 
     @Mock

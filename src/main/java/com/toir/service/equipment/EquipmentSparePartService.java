@@ -11,12 +11,16 @@ import com.toir.repository.SparePartRepository;
 import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentSparePartRepository;
 import com.toir.util.AuditBuilderService;
+import com.toir.security.ScopeAccessService;
+import com.toir.entity.equipment.Equipment;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,12 +30,11 @@ public class EquipmentSparePartService {
     private final EquipmentRepository equipmentRepository;
     private final SparePartRepository sparePartRepository;
     private final AuditBuilderService auditBuilderService;
+    private final ScopeAccessService scopeAccessService;
 
     @Transactional(readOnly = true)
     public List<EquipmentSparePartDto> listForEquipment(UUID equipmentId) {
-        if (!equipmentRepository.existsByIdAndIsDeletedFalse(equipmentId)) {
-            throw RestException.notFound("Equipment not found: " + equipmentId);
-        }
+        equipmentAndAssertScope(equipmentId);
         return repo.findAllByEquipmentIdAndIsDeletedFalse(equipmentId).stream().map(this::enrich).toList();
     }
 
@@ -40,14 +43,26 @@ public class EquipmentSparePartService {
         if (!sparePartRepository.existsByIdAndIsDeletedFalse(sparePartId)) {
             throw RestException.notFound("Spare part not found: " + sparePartId);
         }
-        return repo.findAllBySparePartIdAndIsDeletedFalse(sparePartId).stream().map(this::enrich).toList();
+        List<EquipmentSparePart> links = repo.findAllBySparePartIdAndIsDeletedFalse(sparePartId);
+        if (links.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> accessibleEquipmentIds = equipmentRepository.findAllByIdInAndIsDeletedFalse(
+                        links.stream().map(EquipmentSparePart::getEquipmentId).collect(Collectors.toSet()))
+                .stream()
+                .filter(equipment -> scopeAccessService.canAccessEquipmentScope(
+                        equipment.getResponsibleDepartmentId(), equipment.getDepartmentId()))
+                .map(Equipment::getId)
+                .collect(Collectors.toSet());
+        return links.stream()
+                .filter(link -> accessibleEquipmentIds.contains(link.getEquipmentId()))
+                .map(this::enrich)
+                .toList();
     }
 
     @Transactional
     public EquipmentSparePartDto add(UUID equipmentId, EquipmentSparePartRequest r) {
-        if (!equipmentRepository.existsByIdAndIsDeletedFalse(equipmentId)) {
-            throw RestException.notFound("Equipment not found: " + equipmentId);
-        }
+        equipmentAndAssertScope(equipmentId);
         SparePart sp = sparePartRepository.findByIdAndIsDeletedFalse(r.sparePartId())
                 .orElseThrow(() -> RestException.notFound("Spare part not found: " + r.sparePartId()));
         EquipmentSparePart esp = new EquipmentSparePart();
@@ -76,6 +91,7 @@ public class EquipmentSparePartService {
     public EquipmentSparePartDto update(UUID id, EquipmentSparePartRequest r) {
         EquipmentSparePart esp = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment spare part link not found: " + id));
+        equipmentAndAssertScope(esp.getEquipmentId());
         if (!esp.getSparePartId().equals(r.sparePartId())) {
             sparePartRepository.findByIdAndIsDeletedFalse(r.sparePartId())
                     .orElseThrow(() -> RestException.notFound("Spare part not found: " + r.sparePartId()));
@@ -107,6 +123,7 @@ public class EquipmentSparePartService {
     public void remove(UUID id) {
         EquipmentSparePart esp = repo.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Equipment spare part link not found: " + id));
+        equipmentAndAssertScope(esp.getEquipmentId());
         esp.setDeleted(true);
         EquipmentSparePart saved = repo.save(esp);
 
@@ -127,5 +144,14 @@ public class EquipmentSparePartService {
                 .map(sp -> EquipmentSparePartDto.from(esp, sp.getCode(), sp.getName(), sp.getUnit()))
                 .orElseGet(() -> EquipmentSparePartDto.from(esp));
     }
+
+    private Equipment equipmentAndAssertScope(UUID equipmentId) {
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
+        scopeAccessService.assertCanAccessEquipmentScope(
+                equipment.getResponsibleDepartmentId(), equipment.getDepartmentId());
+        return equipment;
+    }
+
 
 }

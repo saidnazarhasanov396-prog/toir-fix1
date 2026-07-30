@@ -76,6 +76,7 @@ public class SparePartLifecycleService {
     private final SparePartSlotNormalizer slotNormalizer;
     private final AuditBuilderService auditBuilderService;
     private final ObjectMapper objectMapper;
+    private final SparePartLifecycleOperationGuard operationGuard;
 
     @Transactional(readOnly = true)
     public SparePartInstallation get(UUID id) {
@@ -122,6 +123,10 @@ public class SparePartLifecycleService {
         scopeAccessService.assertCanAccessEquipmentScope(
                 equipment.getResponsibleDepartmentId(),
                 equipment.getDepartmentId()
+        );
+        operationGuard.assertAllowed(
+                equipmentId,
+                com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation.SPARE_PART_INSTALL
         );
         validateNode(equipmentId, request.equipmentNodeId());
         String normalizedSlot = slotNormalizer.normalizeRequired(request.slotCode());
@@ -230,13 +235,15 @@ public class SparePartLifecycleService {
         }
         if (request.disposition() == SparePartRemovalDisposition.RETURN_TO_STOCK) {
             throw RestException.conflict(
-                    "RETURN_TO_STOCK_UNSUPPORTED: no safe transactional WMS return path is configured");
+                    "No safe transactional WMS return path is configured",
+                    com.toir.exception.SparePartLifecycleErrorCodes.RETURN_TO_STOCK_UNSUPPORTED);
         }
         if (request.disposition() == SparePartRemovalDisposition.UNKNOWN
                 && (request.reason() == null || request.reason().isBlank()
                 || !scopeAccessService.hasAuthority("SPARE_PART_EXPIRY_OVERRIDE"))) {
             throw RestException.conflict(
-                    "REMOVAL_DISPOSITION_UNKNOWN_REQUIRES_OVERRIDE: UNKNOWN requires override permission and reason");
+                    "UNKNOWN requires override permission and reason",
+                    com.toir.exception.SparePartLifecycleErrorCodes.UNKNOWN_DISPOSITION_FORBIDDEN);
         }
         var handle = commandCoordinator.acquire(
                 idempotencyKey,
