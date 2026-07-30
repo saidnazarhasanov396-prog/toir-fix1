@@ -1,5 +1,6 @@
 package com.toir.entity.users;
 import com.toir.entity.Department;
+import com.toir.entity.UploadedFile;
 import com.toir.enums.UserStatus;
 
 import jakarta.persistence.*;
@@ -47,6 +48,13 @@ public class User {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "department_id", insertable = false, updatable = false)
     private Department department;
+
+    @Column(name = "avatar_file_id")
+    private UUID avatarFileId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "avatar_file_id", insertable = false, updatable = false)
+    private UploadedFile avatarFile;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "primary_role_id")
