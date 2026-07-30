@@ -223,15 +223,44 @@ class DefaultApprovalRouteResolverTest {
     }
 
     @Test
-    void pprApprovalRequiresOneExactActiveConfiguredTemplate() {
+    void pprApprovalUsesActiveRuleCreatedForTargetAndActionRegardlessOfGeneratedCode() {
+        ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
+        DefaultApprovalRouteResolver resolver = resolver(templateRepository);
+        ApprovalTemplate template = new ApprovalTemplate();
+        template.setId(UUID.randomUUID());
+        template.setCode("PPR_PLAN_APPROVE");
+        template.setTargetType(ApprovalTargetType.PPR_PLAN);
+        template.setActionType(ApprovalActionType.APPROVE);
+        template.setActive(true);
+        template.setVersion(4L);
+        template.getSteps().add(roleStep(1, "SYSTEM_ADMIN"));
+        when(templateRepository
+                .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                        ApprovalTargetType.PPR_PLAN,
+                        ApprovalActionType.APPROVE))
+                .thenReturn(Optional.of(template));
+
+        ApprovalRouteSnapshot route = resolver.resolveRouteSnapshot(request(
+                ApprovalTargetType.PPR_PLAN,
+                ApprovalActionType.APPROVE));
+
+        assertThat(route.templateId()).isEqualTo(template.getId());
+        assertThat(route.templateVersion()).isEqualTo(4L);
+        assertThat(route.steps()).containsExactly(
+                new CreateApprovalRequest.StepInput(null, "SYSTEM_ADMIN"));
+    }
+
+    @Test
+    void pprApprovalRequiresOneActiveConfiguredTemplateForTargetAndAction() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
         DefaultApprovalRouteResolver resolver = resolver(templateRepository);
         ApprovalRequest request = request(
                 ApprovalTargetType.PPR_PLAN,
                 ApprovalActionType.APPROVE);
         when(templateRepository
-                .findByCodeAndActiveTrueAndIsDeletedFalse(
-                        "PPR_PLAN_APPROVAL"))
+                .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                        ApprovalTargetType.PPR_PLAN,
+                        ApprovalActionType.APPROVE))
                 .thenReturn(Optional.empty());
 
         assertThat(resolver.resolveRouteSnapshot(request).steps()).isEmpty();
@@ -241,18 +270,21 @@ class DefaultApprovalRouteResolverTest {
     }
 
     @Test
-    void pprApprovalRejectsLegacyTopLevelApproverWithoutConfiguredStep() {
+    void pprApprovalRejectsTopLevelApproverWithoutConfiguredStep() {
         ApprovalTemplateRepository templateRepository =
                 mock(ApprovalTemplateRepository.class);
         DefaultApprovalRouteResolver resolver = resolver(templateRepository);
         ApprovalTemplate template = new ApprovalTemplate();
-        template.setCode("PPR_PLAN_APPROVAL");
+        template.setCode("PPR_PLAN_APPROVE");
         template.setTargetType(ApprovalTargetType.PPR_PLAN);
         template.setActionType(ApprovalActionType.APPROVE);
         template.setActive(true);
         template.setApproverId(UUID.randomUUID());
-        when(templateRepository.findByCodeAndActiveTrueAndIsDeletedFalse(
-                "PPR_PLAN_APPROVAL")).thenReturn(Optional.of(template));
+        when(templateRepository
+                .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                        ApprovalTargetType.PPR_PLAN,
+                        ApprovalActionType.APPROVE))
+                .thenReturn(Optional.of(template));
 
         assertThat(resolver.resolveRouteSnapshot(request(
                 ApprovalTargetType.PPR_PLAN,
@@ -260,21 +292,22 @@ class DefaultApprovalRouteResolverTest {
     }
 
     @Test
-    void pprApprovalFreezesTemplateConfiguredChiefEngineerActorWithoutPermissionFallback() {
+    void pprApprovalFreezesTemplateConfiguredExplicitActorWithoutPermissionFallback() {
         ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
         DefaultApprovalRouteResolver resolver = resolver(templateRepository);
-        UUID chiefEngineer = UUID.randomUUID();
+        UUID configuredApprover = UUID.randomUUID();
         ApprovalTemplate template = new ApprovalTemplate();
         template.setId(UUID.randomUUID());
-        template.setCode("PPR_PLAN_APPROVAL");
+        template.setCode("PPR_PLAN_APPROVE");
         template.setTargetType(ApprovalTargetType.PPR_PLAN);
         template.setActionType(ApprovalActionType.APPROVE);
         template.setActive(true);
         template.setVersion(3L);
-        template.getSteps().add(explicitStep(1, chiefEngineer));
+        template.getSteps().add(explicitStep(1, configuredApprover));
         when(templateRepository
-                .findByCodeAndActiveTrueAndIsDeletedFalse(
-                        "PPR_PLAN_APPROVAL"))
+                .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                        ApprovalTargetType.PPR_PLAN,
+                        ApprovalActionType.APPROVE))
                 .thenReturn(Optional.of(template));
 
         ApprovalRouteSnapshot route = resolver.resolveRouteSnapshot(request(
@@ -283,7 +316,7 @@ class DefaultApprovalRouteResolverTest {
 
         assertThat(route.templateId()).isEqualTo(template.getId());
         assertThat(route.steps()).containsExactly(
-                new CreateApprovalRequest.StepInput(chiefEngineer, null));
+                new CreateApprovalRequest.StepInput(configuredApprover, null));
     }
 
     @Test
