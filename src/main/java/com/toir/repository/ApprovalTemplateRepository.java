@@ -58,5 +58,8 @@ public interface ApprovalTemplateRepository extends JpaRepository<ApprovalTempla
 
     Optional<ApprovalTemplate> findByCodeAndIsDeletedFalse(String code);
 
+    @EntityGraph(attributePaths = "steps")
+    Optional<ApprovalTemplate> findByCodeAndActiveTrueAndIsDeletedFalse(String code);
+
     Optional<ApprovalTemplate> findByCode(String code);
 }

@@ -70,3 +70,8 @@ logging:
     root: INFO
     com.toir: INFO
     com.google.firebase: WARN
+
+toir:
+  features:
+    annual-maintenance-approval-first:
+      enabled: ${TOIR_FEATURES_ANNUAL_MAINTENANCE_APPROVAL_FIRST_ENABLED:true}

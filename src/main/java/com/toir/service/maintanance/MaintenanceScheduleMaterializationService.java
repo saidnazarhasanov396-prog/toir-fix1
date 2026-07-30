@@ -5,6 +5,7 @@ import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
 import com.toir.entity.maintenance.MaintenanceScheduleCalculationItem;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.MaterializationMode;
 import com.toir.enums.PlanStatus;
@@ -73,6 +74,16 @@ public class MaintenanceScheduleMaterializationService {
         List<UUID> sourceIds = items.stream()
                 .map(MaintenanceScheduleCalculationItem::getId)
                 .toList();
+        validateSnapshotWindows(items);
+        List<PprTask> allPlanTasks =
+                taskRepository.findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+                        targetId);
+        if (allPlanTasks.stream().anyMatch(task ->
+                task.getSourceCalculationItemId() == null
+                        || !sourceIds.contains(
+                                task.getSourceCalculationItemId()))) {
+            throw inconsistentMaterialization();
+        }
         List<PprTask> existing =
                 taskRepository.findAllByPlanIdAndSourceCalculationItemIdIn(
                         targetId, sourceIds);
@@ -114,6 +125,10 @@ public class MaintenanceScheduleMaterializationService {
         plan.setApprovedById(approverId);
         plan.setTaskMaterializationStatus(
                 TaskMaterializationStatus.MATERIALIZED);
+        plan.setApprovedRevision(revision);
+        plan.setApprovedContentHash(request.getCalculationContentHash());
+        plan.setApprovedContentHashVersion(
+                request.getCalculationContentHashVersion());
         plan.setMaterializedRevision(revision);
         plan.setMaterializedTaskCount(sourceIds.size());
         planRepository.saveAndFlush(plan);
@@ -124,6 +139,7 @@ public class MaintenanceScheduleMaterializationService {
         if (request == null
                 || effectiveTargetType(request) != ApprovalTargetType.PPR_PLAN
                 || request.getActionType() != ApprovalActionType.APPROVE
+                || request.getStatus() != ApprovalStatus.APPROVED
                 || !Objects.equals(effectiveTargetId(request), plan.getId())) {
             throw new MaintenanceScheduleApprovalStaleException(
                     Reason.TARGET_MISMATCH);
@@ -183,6 +199,13 @@ public class MaintenanceScheduleMaterializationService {
                 && plan.getTaskMaterializationStatus()
                 == TaskMaterializationStatus.MATERIALIZED
                 && Objects.equals(plan.getMaterializedRevision(), revision)
+                && Objects.equals(plan.getApprovedRevision(), revision)
+                && Objects.equals(
+                        plan.getApprovedContentHash(),
+                        plan.getCalculationContentHash())
+                && Objects.equals(
+                        plan.getApprovedContentHashVersion(),
+                        plan.getCalculationContentHashVersion())
                 && Objects.equals(
                         plan.getMaterializedTaskCount(), sourceIds.size())
                 && expected.equals(actual);
@@ -218,6 +241,23 @@ public class MaintenanceScheduleMaterializationService {
                 : item.getPriority());
         task.setStatus(PprTaskStatus.APPROVED);
         return task;
+    }
+
+    private static void validateSnapshotWindows(
+            List<MaintenanceScheduleCalculationItem> items) {
+        boolean invalid = items.stream().anyMatch(item ->
+                item.getScheduledStart() == null
+                        || item.getScheduledEnd() == null
+                        || item.getDueDate() == null
+                        || !item.getScheduledStart().isBefore(
+                                item.getScheduledEnd())
+                        || item.getDueDate().isBefore(
+                                item.getScheduledEnd()));
+        if (invalid) {
+            throw conflict(
+                    "PPR_CALCULATION_SCHEDULE_WINDOW_INVALID",
+                    "Approved calculation contains an invalid task schedule window");
+        }
     }
 
     private static boolean isApprovalFirst(PprPlan plan) {

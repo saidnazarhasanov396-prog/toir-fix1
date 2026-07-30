@@ -5,10 +5,10 @@ import com.toir.entity.ApprovalStep;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalTargetType;
-import com.toir.service.PprPlanService;
 import com.toir.service.WorkOrderService;
 import com.toir.service.PlannedShutdownService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
+import com.toir.service.maintanance.MaintenanceScheduleMaterializationService;
 import com.toir.service.repair.RepairRequestService;
 import org.junit.jupiter.api.Test;
 
@@ -38,18 +38,19 @@ class ApprovalActionHandlerTest {
 
     @Test
     void pprPlanApproveCallsFinalizerWithLastApprover() {
-        PprPlanService pprPlanService = mock(PprPlanService.class);
+        MaintenanceScheduleMaterializationService materializationService =
+                mock(MaintenanceScheduleMaterializationService.class);
         UUID targetId = UUID.randomUUID();
         UUID approverId = UUID.randomUUID();
-
-        new PprPlanApprovalHandler(pprPlanService).execute(request(
+        ApprovalRequest request = request(
                 ApprovalTargetType.PPR_PLAN,
                 ApprovalActionType.APPROVE,
                 targetId,
-                approvedStep(1, approverId)
-        ));
+                approvedStep(1, approverId));
 
-        verify(pprPlanService).finalizeApprovalFromApprovalRequest(targetId, approverId);
+        new PprPlanApprovalHandler(materializationService).execute(request);
+
+        verify(materializationService).finalizeApproval(request, approverId);
     }
 
     @Test

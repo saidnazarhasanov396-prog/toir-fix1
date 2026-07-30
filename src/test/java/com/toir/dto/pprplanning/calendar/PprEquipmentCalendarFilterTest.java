@@ -80,4 +80,54 @@ class PprEquipmentCalendarFilterTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("size must be between 1 and 100");
     }
+
+    @Test
+    void acceptsMonthEquipmentTypeAndControlledSortContract() {
+        UUID equipmentTypeId = UUID.randomUUID();
+        PprEquipmentCalendarFilter filter = new PprEquipmentCalendarFilter(
+                2026,
+                7,
+                0,
+                25,
+                null,
+                null,
+                null,
+                null,
+                equipmentTypeId,
+                Set.of(),
+                Set.of(),
+                true,
+                false,
+                PprEquipmentCalendarSortField.INVENTORY_NUMBER,
+                PprEquipmentCalendarSortDirection.DESC);
+
+        assertThat(filter.month()).isEqualTo(7);
+        assertThat(filter.equipmentTypeId()).isEqualTo(equipmentTypeId);
+        assertThat(filter.sortBy())
+                .isEqualTo(PprEquipmentCalendarSortField.INVENTORY_NUMBER);
+        assertThat(filter.sortDirection())
+                .isEqualTo(PprEquipmentCalendarSortDirection.DESC);
+    }
+
+    @Test
+    void rejectsMonthOutsideCalendarRange() {
+        assertThatThrownBy(() -> new PprEquipmentCalendarFilter(
+                2026,
+                13,
+                0,
+                25,
+                null,
+                null,
+                null,
+                null,
+                null,
+                Set.of(),
+                Set.of(),
+                true,
+                false,
+                PprEquipmentCalendarSortField.EQUIPMENT_NAME,
+                PprEquipmentCalendarSortDirection.ASC))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("month must be between 1 and 12");
+    }
 }

@@ -113,6 +113,9 @@ public class MaintenanceScheduleApprovalBindingService {
         return binding != null
                 && request != null
                 && Objects.equals(
+                        effectiveTargetId(request),
+                        binding.planId())
+                && Objects.equals(
                         request.getCalculationRevision(),
                         binding.calculationRevision())
                 && Objects.equals(
@@ -120,10 +123,7 @@ public class MaintenanceScheduleApprovalBindingService {
                         binding.calculationContentHash())
                 && Objects.equals(
                         request.getCalculationContentHashVersion(),
-                        binding.calculationContentHashVersion())
-                && Objects.equals(
-                        request.getRequesterContextFingerprint(),
-                        binding.requesterContextFingerprint());
+                        binding.calculationContentHashVersion());
     }
 
     public boolean isBoundApprovalFirstRequest(ApprovalRequest request) {
@@ -177,6 +177,7 @@ public class MaintenanceScheduleApprovalBindingService {
             UUID planId,
             long currentRevision,
             String currentHash,
+            int currentHashVersion,
             UUID actorId) {
         lockTargetAction(planId);
         List<ApprovalRequest> pending =
@@ -185,9 +186,12 @@ public class MaintenanceScheduleApprovalBindingService {
                         ApprovalStatus.PENDING.name());
         List<ApprovalRequest> stale = pending.stream()
                 .filter(request -> !Objects.equals(
-                                request.getCalculationRevision(), currentRevision)
+                        request.getCalculationRevision(), currentRevision)
                         || !Objects.equals(
-                                request.getCalculationContentHash(), currentHash))
+                                request.getCalculationContentHash(), currentHash)
+                        || !Objects.equals(
+                                request.getCalculationContentHashVersion(),
+                                currentHashVersion))
                 .toList();
         if (stale.isEmpty()) {
             return;
@@ -272,6 +276,12 @@ public class MaintenanceScheduleApprovalBindingService {
         return request.getTargetType() != null
                 ? request.getTargetType()
                 : ApprovalTargetType.fromDocumentType(request.getDocumentType());
+    }
+
+    private static UUID effectiveTargetId(ApprovalRequest request) {
+        return request.getTargetId() != null
+                ? request.getTargetId()
+                : request.getDocumentId();
     }
 
     private static String requesterFingerprint(

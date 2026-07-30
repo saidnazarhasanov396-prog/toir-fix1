@@ -95,6 +95,33 @@ class PprPlanEndpointSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = "PPR_TASK_READ")
+    void pprTaskReadAuthorityCanReadDetailButCannotMutatePlan() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        when(pprPlanRepository.findByIdAndIsDeletedFalse(id))
+                .thenReturn(Optional.of(planEntity(id, departmentId)));
+        when(pprPlanService.findById(id)).thenReturn(planDto(id));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/{id}", id))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/ppr-plans")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "name": "Forbidden mutation",
+                                  "departmentId": "%s",
+                                  "createdById": "%s",
+                                  "fromDate": "2026-06-01",
+                                  "toDate": "2026-06-30"
+                                }
+                                """.formatted(
+                                UUID.randomUUID(),
+                                UUID.randomUUID())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @WithMockUser(authorities = "read")
     void legacyReadAuthorityCannotMutate() throws Exception {
         mockMvc.perform(post("/api/v1/ppr-plans")

@@ -259,6 +259,7 @@ class PprEquipmentCalendarServiceTest {
         PprPlan snapshotPlan = plan();
         snapshotPlan.setMaterializationMode(MaterializationMode.APPROVAL_FIRST);
         snapshotPlan.setTaskMaterializationStatus(TaskMaterializationStatus.NOT_MATERIALIZED);
+        snapshotPlan.setStatus(PlanStatus.CALCULATED);
         snapshotPlan.setCalculationRevision(7L);
         when(planRepository.findByIdAndIsDeletedFalse(PLAN_ID)).thenReturn(Optional.of(snapshotPlan));
         when(queryRepository.findOccurrences(any(), any())).thenReturn(List.of());

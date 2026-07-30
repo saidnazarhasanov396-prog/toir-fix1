@@ -54,6 +54,8 @@ public class PprPlanController {
             + " and hasAnyAuthority('WORK_ORDER_CREATE','SYSTEM_ADMIN','*')"
             + " and (hasAuthority('SYSTEM_ADMIN') or (!hasAuthority('VIEWER') and !hasAuthority('CONTRACTOR')))";
     private static final String PPR_TASK_READ_AUTH = "hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')";
+    private static final String PPR_PLAN_DETAIL_READ_AUTH =
+            "hasAnyAuthority('read','PPR_PLAN_READ','PPR_TASK_READ','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_CREATE_AUTH = "hasAnyAuthority('PPR_TASK_CREATE','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_POSTPONE_AUTH = "hasAnyAuthority('PPR_TASK_POSTPONE','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_APPROVE_AUTH = "hasAnyAuthority('PPR_TASK_APPROVE','SYSTEM_ADMIN','*')";
@@ -200,7 +202,7 @@ public class PprPlanController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize(PPR_PLAN_READ_AUTH)
+    @PreAuthorize(PPR_PLAN_DETAIL_READ_AUTH)
     public ResponseEntity<PprPlanDto> get(@PathVariable UUID id) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(service.findById(id));

@@ -26,6 +26,7 @@ import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.service.maintanance.MaintenanceDueCalculationService;
 import com.toir.service.maintanance.MaintenanceScheduleService;
+import com.toir.service.maintanance.PprTaskScheduleWindowCalculator;
 import com.toir.service.equipment.OperationalEquipmentPolicy;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +35,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.Year;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -71,6 +71,7 @@ public class PprGeneratorService {
     private final MaintenanceDueCalculationService maintenanceDueCalculationService;
     private final OperationalEquipmentPolicy operationalEquipmentPolicy;
     private final MaintenanceScheduleService maintenanceScheduleService;
+    private final PprTaskScheduleWindowCalculator scheduleWindowCalculator;
     private static final Set<PlanStatus> PLAN_TASK_GENERATION_STATUSES =
             EnumSet.of(PlanStatus.DRAFT, PlanStatus.GENERATED);
     private static final Set<PlanStatus> PLAN_WORK_ORDER_GENERATION_STATUSES =
@@ -178,7 +179,7 @@ public class PprGeneratorService {
                     item.equipmentCode(),
                     sequence++
             );
-            PprTask saved = saveGeneratedScheduleTask(plan, code, item, planEnd);
+            PprTask saved = saveGeneratedScheduleTask(plan, code, item);
             created++;
             existingCodes.add(saved.getCode());
             existingSignatures.add(signature);
@@ -204,12 +205,15 @@ public class PprGeneratorService {
     private PprTask saveGeneratedScheduleTask(
             PprPlan plan,
             String code,
-            MaintenanceSchedulePreviewItem item,
-            LocalDate planEnd
+            MaintenanceSchedulePreviewItem item
     ) {
-        LocalDate calculatedEnd = item.plannedDate().plusDays(
-                Math.max(1, (int) Math.ceil(item.normativeLaborHours() / 8)));
-        LocalDate scheduledEndDate = calculatedEnd.isAfter(planEnd) ? planEnd : calculatedEnd;
+        PprTaskScheduleWindowCalculator.ScheduleWindow window =
+                scheduleWindowCalculator.calculate(
+                        item.plannedDate(),
+                        item.normativeLaborHours(),
+                        plan.getStartDate(),
+                        plan.getEndDate(),
+                        plan.getExcludedWeekdays());
         PprTask task = new PprTask();
         task.setCode(code);
         task.setPlan(plan);
@@ -217,9 +221,9 @@ public class PprGeneratorService {
         task.setEquipmentMaintenanceRuleId(item.equipmentMaintenanceRuleId());
         task.setEquipmentId(item.equipmentId());
         task.setTitle(item.regulationName() + " — " + item.equipmentCode());
-        task.setScheduledStart(item.plannedDate().atTime(LocalTime.of(9, 0)));
-        task.setScheduledEnd(scheduledEndDate.atTime(scheduledEndTime()));
-        task.setDueDate(item.plannedDate().atTime(LocalTime.of(18, 0)));
+        task.setScheduledStart(window.scheduledStart());
+        task.setScheduledEnd(window.scheduledEnd());
+        task.setDueDate(window.dueDate());
         task.setPlannedLaborHours(item.normativeLaborHours());
         task.setPriority(PriorityLevel.MEDIUM);
         task.setStatus(PprTaskStatus.PLANNED);
@@ -320,8 +324,6 @@ public class PprGeneratorService {
                         eq.getId(),
                         reg.getName() + " вЂ” " + eq.getCode(),
                         planStart,
-                        resolveScheduledEnd(plan, reg, planStart, planEnd),
-                        planEnd,
                         reg.getNormativeLaborHours()
                 );
                 created++;
@@ -370,8 +372,6 @@ public class PprGeneratorService {
                     eq.getId(),
                     rule.getName() + " вЂ” " + eq.getCode(),
                     planStart,
-                    resolveScheduledEnd(plan, rule, planStart, planEnd),
-                    planEnd,
                     rule.getNormativeLaborHours()
             );
             created++;
@@ -488,10 +488,15 @@ public class PprGeneratorService {
                                       UUID equipmentMaintenanceRuleId,
                                       UUID equipmentId,
                                       String title,
-                                      LocalDate planStart,
-                                      java.time.LocalDateTime scheduledEnd,
-                                      LocalDate planEnd,
+                                      LocalDate occurrenceDate,
                                       double plannedLaborHours) {
+        PprTaskScheduleWindowCalculator.ScheduleWindow window =
+                scheduleWindowCalculator.calculate(
+                        occurrenceDate,
+                        plannedLaborHours,
+                        plan.getStartDate(),
+                        plan.getEndDate(),
+                        plan.getExcludedWeekdays());
         PprTask task = new PprTask();
         task.setCode(code);
         task.setPlan(plan);
@@ -499,9 +504,9 @@ public class PprGeneratorService {
         task.setEquipmentMaintenanceRuleId(equipmentMaintenanceRuleId);
         task.setEquipmentId(equipmentId);
         task.setTitle(title);
-        task.setScheduledStart(planStart.atTime(LocalTime.of(9, 0)));
-        task.setScheduledEnd(scheduledEnd);
-        task.setDueDate(planEnd.atTime(LocalTime.of(18, 0)));
+        task.setScheduledStart(window.scheduledStart());
+        task.setScheduledEnd(window.scheduledEnd());
+        task.setDueDate(window.dueDate());
         task.setPlannedLaborHours(plannedLaborHours);
         task.setPriority(PriorityLevel.MEDIUM);
         task.setStatus(PprTaskStatus.PLANNED);
@@ -803,35 +808,6 @@ public class PprGeneratorService {
             case QUARTERLY -> PeriodicityUnit.QUARTER;
             case YEARLY -> PeriodicityUnit.YEAR;
         };
-    }
-
-    private LocalTime scheduledEndTime() {
-        return LocalTime.of(18, 0);
-    }
-
-    private java.time.LocalDateTime resolveScheduledEnd(PprPlan plan,
-                                                        MaintenanceRegulation regulation,
-                                                        LocalDate planStart,
-                                                        LocalDate planEnd) {
-        return resolveScheduledEnd(plan, regulation.getNormativeLaborHours(), planStart, planEnd);
-    }
-
-    private java.time.LocalDateTime resolveScheduledEnd(PprPlan plan,
-                                                        EquipmentMaintenanceRule rule,
-                                                        LocalDate planStart,
-                                                        LocalDate planEnd) {
-        return resolveScheduledEnd(plan, rule.getNormativeLaborHours(), planStart, planEnd);
-    }
-
-    private java.time.LocalDateTime resolveScheduledEnd(PprPlan plan,
-                                                        double normativeLaborHours,
-                                                        LocalDate planStart,
-                                                        LocalDate planEnd) {
-        if (plan.getScheduleType() == PprScheduleType.ONE_TIME) {
-            return planEnd.atTime(scheduledEndTime());
-        }
-        return planStart.plusDays(Math.max(1, (int) Math.ceil(normativeLaborHours / 8)))
-                .atTime(scheduledEndTime());
     }
 
     private String uniqueTaskCode(Set<String> existingCodes,

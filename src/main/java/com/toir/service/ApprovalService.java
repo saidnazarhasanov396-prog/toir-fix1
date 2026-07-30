@@ -20,6 +20,7 @@ import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.ApprovalResolutionCode;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.NotificationEventType;
@@ -32,6 +33,8 @@ import com.toir.repository.users.UserRepository;
 import com.toir.security.ScopeAccessService;
 import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
+import com.toir.service.maintanance.MaintenanceScheduleApprovalBinding;
+import com.toir.service.maintanance.MaintenanceScheduleApprovalBindingService;
 import com.toir.service.approval.ApprovalActionExecutor;
 import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalOrchestrator;
@@ -111,6 +114,8 @@ public class ApprovalService implements ApprovalOrchestrator {
     private final UserRepository userRepository;
     @Autowired
     private LifecycleApprovalRoutePolicy lifecycleApprovalRoutePolicy = new LifecycleApprovalRoutePolicy();
+    @Autowired
+    private MaintenanceScheduleApprovalBindingService maintenanceScheduleApprovalBindingService;
     private final ObjectProvider<WorkOrderService> workOrderServiceProvider;
     private final ObjectProvider<PprPlanService> pprPlanServiceProvider;
     private final ObjectProvider<ProcurementRequestService> procurementRequestServiceProvider;
@@ -249,6 +254,10 @@ public class ApprovalService implements ApprovalOrchestrator {
     public ApprovalRequestDto update(UUID id, UpdateApprovalRequest update) {
         ApprovalRequest request = getOrThrow(id);
         approvalScopeService.assertCanUpdateApproval(request);
+        if (isBoundApprovalFirstRequest(request)) {
+            throw RestException.conflict(
+                    "PPR approval route and exact calculation binding are immutable");
+        }
 
         if (request.getStatus() != ApprovalStatus.PENDING
                 && request.getStatus() != ApprovalStatus.DRAFT) {
@@ -967,12 +976,50 @@ public class ApprovalService implements ApprovalOrchestrator {
 
         ApprovalActionType effectiveActionType = actionType == null ? ApprovalActionType.APPROVE : actionType;
         lockApprovalTargetAction(normalizedType, documentId, effectiveActionType);
+        MaintenanceScheduleApprovalBinding calculationBinding =
+                resolveCalculationBinding(
+                        targetType,
+                        documentId,
+                        effectiveActionType,
+                        effectiveRequesterId);
         List<ApprovalRequest> pendingApprovals = findPendingApprovals(
                 targetType, normalizedType, documentId, effectiveActionType);
         ApprovalRequest reusable = null;
         if (!pendingApprovals.isEmpty()) {
             String currentPayload = currentScopePayload(targetType, documentId);
             for (ApprovalRequest candidate : pendingApprovals) {
+                if (calculationBinding != null) {
+                    ApprovalRouteSnapshot currentRoute =
+                            routeResolver.resolveRouteSnapshot(candidate);
+                    boolean tupleMatches =
+                            maintenanceScheduleApprovalBindingService.matches(
+                                    candidate, calculationBinding);
+                    if (tupleMatches
+                            && maintenanceScheduleApprovalBindingService
+                            .routeMatches(candidate, currentRoute)
+                            && reusable == null) {
+                        reusable = candidate;
+                        continue;
+                    }
+                    ApprovalResolutionCode resolution = tupleMatches
+                            ? ApprovalResolutionCode.ROUTE_CHANGED
+                            : ApprovalResolutionCode.NEW_REVISION;
+                    maintenanceScheduleApprovalBindingService.supersede(
+                            candidate,
+                            resolution,
+                            resolution == ApprovalResolutionCode.ROUTE_CHANGED
+                                    ? "PPR_APPROVAL_SUPERSEDED_ROUTE_CHANGED"
+                                    : "PPR_APPROVAL_SUPERSEDED_NEW_REVISION",
+                            effectiveRequesterId);
+                    requestRepository.saveAndFlush(candidate);
+                    governanceService.record(
+                            candidate,
+                            ApprovalStatus.PENDING,
+                            ApprovalStatus.SUPERSEDED,
+                            effectiveRequesterId,
+                            candidate.getFailureReason());
+                    continue;
+                }
                 boolean payloadStale = currentPayload != null
                         && !Objects.equals(candidate.getPayloadJson(), currentPayload);
                 boolean routeStale = routeStale(targetType, candidate);
@@ -1046,11 +1093,19 @@ public class ApprovalService implements ApprovalOrchestrator {
     }
 
     private boolean hasActionableRoute(ApprovalRequest request) {
-        return !routeStale(effectiveTargetType(request), request);
+        return !routeStale(effectiveTargetType(request), request)
+                && (!isBoundApprovalFirstRequest(request)
+                    || maintenanceScheduleApprovalBindingService.routeMatches(
+                            request, routeResolver.resolveRouteSnapshot(request)));
     }
 
     private void assertActionableRoute(ApprovalRequest request) {
         ApprovalTargetType targetType = effectiveTargetType(request);
+        if (isBoundApprovalFirstRequest(request)
+                && !maintenanceScheduleApprovalBindingService.routeMatches(
+                        request, routeResolver.resolveRouteSnapshot(request))) {
+            throw RestException.conflict("PPR_APPROVAL_ROUTE_STALE");
+        }
         if (routeStale(targetType, request)) {
             if (targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
                 throw RestException.conflict("PLANNED_SHUTDOWN_APPROVAL_ROUTE_STALE");
@@ -1237,6 +1292,9 @@ public class ApprovalService implements ApprovalOrchestrator {
         ApprovalRequest request = lockLifecycleMutationRequest(requestId);
         UUID actorId = effectiveDecisionActor(decision);
         String decisionComment = decision == null ? null : decision.comment();
+        if (isIdempotentApprovalFirstRetry(request, outcome, actorId)) {
+            return toDto(request);
+        }
         if (request.getStatus() == ApprovalStatus.FAILED) {
             if (expectedStepId != null && !expectedStepId.equals(currentStepOrThrow(request).getId())) {
                 throw RestException.conflict("Only current pending step can be acted on");
@@ -1311,6 +1369,30 @@ public class ApprovalService implements ApprovalOrchestrator {
 
 
         return toDto(request);
+    }
+
+    private boolean isIdempotentApprovalFirstRetry(
+            ApprovalRequest request,
+            ApprovalDecision outcome,
+            UUID actorId) {
+        if (!isBoundApprovalFirstRequest(request)
+                || request.getStatus() != ApprovalStatus.APPROVED
+                || outcome != ApprovalDecision.APPROVED
+                || !request.isExecuted()) {
+            return false;
+        }
+        boolean participated = request.getSteps().stream()
+                .filter(step -> !step.isDeleted())
+                .filter(step ->
+                        step.getDecision() == ApprovalDecision.APPROVED)
+                .anyMatch(step ->
+                        Objects.equals(step.getDecidedById(), actorId));
+        if (!participated) {
+            throw RestException.forbidden(
+                    "Only an approver from the completed PPR route "
+                            + "can retry this approval");
+        }
+        return true;
     }
 
     private ApprovalRequestDto applyParallelDecision(
@@ -1538,6 +1620,21 @@ public class ApprovalService implements ApprovalOrchestrator {
                                            ApprovalStep current,
                                            UUID actorId,
                                            ApprovalDecision outcome) {
+        if (isBoundApprovalFirstRequest(request)) {
+            if (Objects.equals(request.getRequesterId(), actorId)) {
+                throw RestException.forbidden(
+                        "Requester cannot approve or reject this PPR calculation");
+            }
+            boolean repeatedActor = request.getSteps().stream()
+                    .filter(step -> step != current)
+                    .filter(step -> step.getDecision() == ApprovalDecision.APPROVED)
+                    .anyMatch(step -> Objects.equals(step.getDecidedById(), actorId));
+            if (repeatedActor) {
+                throw RestException.forbidden(
+                        "An actor cannot approve more than one PPR approval step");
+            }
+            return assertCanActOnCurrentStep(request, current, actorId);
+        }
         if (!isLifecycleApproval(request)) {
             return assertCanActOnCurrentStep(request, current, actorId);
         }
@@ -1622,7 +1719,9 @@ public class ApprovalService implements ApprovalOrchestrator {
             request.setResultJson(executeOnce(request));
             request.setFailureReason(null);
         } catch (RuntimeException ex) {
-            if (lifecycleFinalization || shouldPropagateFinalizerFailure(ex)) {
+            if (lifecycleFinalization
+                    || isBoundApprovalFirstRequest(request)
+                    || shouldPropagateFinalizerFailure(ex)) {
                 throw ex;
             }
             request.setStatus(ApprovalStatus.FAILED);
@@ -1700,6 +1799,32 @@ public class ApprovalService implements ApprovalOrchestrator {
     private boolean isLifecycleApproval(ApprovalRequest request) {
         return request != null && lifecycleApprovalRoutePolicy.supports(
                 effectiveTargetType(request), effectiveActionType(request.getActionType()));
+    }
+
+    private MaintenanceScheduleApprovalBinding resolveCalculationBinding(
+            ApprovalTargetType targetType,
+            UUID targetId,
+            ApprovalActionType actionType,
+            UUID requesterId) {
+        if (maintenanceScheduleApprovalBindingService == null) {
+            return null;
+        }
+        return maintenanceScheduleApprovalBindingService.resolveForSubmission(
+                targetType, targetId, actionType, requesterId);
+    }
+
+    private void bindCalculation(
+            ApprovalRequest request,
+            MaintenanceScheduleApprovalBinding binding) {
+        if (maintenanceScheduleApprovalBindingService != null) {
+            maintenanceScheduleApprovalBindingService.bind(request, binding);
+        }
+    }
+
+    private boolean isBoundApprovalFirstRequest(ApprovalRequest request) {
+        return maintenanceScheduleApprovalBindingService != null
+                && maintenanceScheduleApprovalBindingService
+                .isBoundApprovalFirstRequest(request);
     }
 
     private boolean lifecycleAssignmentSatisfied(ApprovalStep step, UUID actorId) {
@@ -1908,6 +2033,13 @@ public class ApprovalService implements ApprovalOrchestrator {
         request.setDescription(description);
         request.setStatus(ApprovalStatus.PENDING);
         request.setActionType(actionType);
+        MaintenanceScheduleApprovalBinding calculationBinding =
+                resolveCalculationBinding(
+                        targetType,
+                        targetId,
+                        effectiveActionType(actionType),
+                        requesterId);
+        bindCalculation(request, calculationBinding);
         if (targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
             PlannedShutdownApprovalSnapshot snapshot = loadPlannedShutdownApprovalSnapshot(targetId);
             request.setPayloadJson(plannedShutdownApprovalPayload(snapshot));
@@ -1924,7 +2056,8 @@ public class ApprovalService implements ApprovalOrchestrator {
         boolean plannedShutdownApproval = targetType == ApprovalTargetType.PLANNED_SHUTDOWN
                 && (actionType == null || actionType == ApprovalActionType.APPROVE);
         boolean domainValidatedApproval = repairCampaignApproval || plannedShutdownApproval;
-        List<CreateApprovalRequest.StepInput> suppliedSteps = domainValidatedApproval
+        List<CreateApprovalRequest.StepInput> suppliedSteps =
+                domainValidatedApproval || calculationBinding != null
                 ? List.of()
                 : normalizeStepInputs(steps);
         ApprovalRouteSnapshot routeSnapshot = suppliedSteps.isEmpty()
@@ -1935,6 +2068,13 @@ public class ApprovalService implements ApprovalOrchestrator {
         }
         List<CreateApprovalRequest.StepInput> effectiveSteps = normalizeStepInputs(routeSnapshot.steps());
         if (effectiveSteps.isEmpty()) {
+            if (calculationBinding != null) {
+                throw new RestException(
+                        "Active PPR_PLAN_APPROVAL template with a configured "
+                                + "Chief Engineer approver step is required",
+                        org.springframework.http.HttpStatus.CONFLICT,
+                        "PPR_APPROVAL_TEMPLATE_ROUTE_NOT_CONFIGURED");
+            }
             if (repairCampaignApproval) {
                 throw RestException.conflict("REPAIR_CAMPAIGN_APPROVAL_ROUTE_NOT_CONFIGURED");
             }
@@ -1946,6 +2086,10 @@ public class ApprovalService implements ApprovalOrchestrator {
         request.setFlowType(routeSnapshot.flowType());
         request.setTemplateId(routeSnapshot.templateId());
         request.setTemplateVersion(routeSnapshot.templateVersion());
+        if (calculationBinding != null) {
+            maintenanceScheduleApprovalBindingService.bindResolvedRoute(
+                    request, routeSnapshot, effectiveSteps);
+        }
         ApprovalActionType roundAction = effectiveActionType(actionType);
         lockApprovalTargetAction(targetType.name(), targetId, roundAction);
         request.setApprovalRound(nextApprovalRound(targetType, targetId, roundAction));

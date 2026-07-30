@@ -131,6 +131,12 @@ public class MaintenanceScheduleCalculationItem extends BaseEntity {
     @Column(name = "template_name_snapshot", length = 255, updatable = false)
     private String templateNameSnapshot;
 
+    @Column(name = "source_code_snapshot", length = 255, updatable = false)
+    private String sourceCodeSnapshot;
+
+    @Column(name = "source_name_snapshot", length = 255, updatable = false)
+    private String sourceNameSnapshot;
+
     @Column(name = "task_title_snapshot", nullable = false, length = 255, updatable = false)
     private String taskTitleSnapshot;
 }

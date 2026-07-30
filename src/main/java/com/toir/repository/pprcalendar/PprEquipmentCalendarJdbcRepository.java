@@ -38,6 +38,7 @@ public class PprEquipmentCalendarJdbcRepository
         params.addValue("offset", Math.multiplyExact((long) query.filter().page(), query.filter().size()));
         String candidates = candidateCte(query);
         String equipmentPredicate = equipmentPredicate(query, "e");
+        String orderBy = equipmentOrderBy(query.filter());
         String from = """
                 FROM candidate_ids candidate
                 JOIN equipment e ON e.id = candidate.equipment_id
@@ -51,7 +52,7 @@ public class PprEquipmentCalendarJdbcRepository
                 candidates + """
                         SELECT e.id
                         """ + from + """
-                        ORDER BY lower(coalesce(e.name, '')), lower(coalesce(e.inventory_number, '')), e.id
+                        ORDER BY """ + orderBy + """
                         LIMIT :limit OFFSET :offset
                         """,
                 params,
@@ -197,6 +198,17 @@ public class PprEquipmentCalendarJdbcRepository
                           AND target.is_deleted = false
                           AND target.target_type = 'EQUIPMENT'
                           AND target.equipment_id IS NOT NULL
+                        UNION
+                        SELECT scoped_equipment.id
+                        FROM ppr_plan_targets target
+                        JOIN equipment scoped_equipment
+                          ON scoped_equipment.equipment_type_id =
+                             target.equipment_type_id
+                        WHERE target.plan_id = :planId
+                          AND target.is_deleted = false
+                          AND target.target_type = 'EQUIPMENT_TYPE'
+                          AND target.equipment_type_id IS NOT NULL
+                          AND scoped_equipment.is_deleted = false
                         """;
         return """
                 WITH work_equipment AS (
@@ -225,11 +237,17 @@ public class PprEquipmentCalendarJdbcRepository
         String placement = restrictPlacement
                 ? """
                           AND coalesce(linked.planned_date, cast(task.scheduled_start AS date))
-                              BETWEEN :yearStart AND :yearEnd
+                              BETWEEN :windowStart AND :windowEnd
                           AND coalesce(linked.planned_date, cast(task.scheduled_start AS date))
                               BETWEEN :planStart AND :planEnd
                         """
                 : "";
+        String exactRevision = query.sourceRevision() == null
+                ? ""
+                : """
+                  AND linked.plan_id = :planId
+                  AND linked.calculation_revision = :sourceRevision
+                """;
         return """
                 SELECT task.equipment_id,
                        coalesce(linked.planned_date, cast(task.scheduled_start AS date)) AS effective_date
@@ -244,13 +262,13 @@ public class PprEquipmentCalendarJdbcRepository
                        ON regulation.id = coalesce(task.regulation_id, linked.regulation_id)
                 WHERE task.plan_id = :planId
                   AND task.is_deleted = false
-                """ + taskOccurrencePredicate(query.filter()) + placement;
+                """ + exactRevision + taskOccurrencePredicate(query) + placement;
     }
 
     private String snapshotBase(CalendarQuery query, boolean restrictPlacement) {
         String placement = restrictPlacement
                 ? """
-                          AND item.planned_date BETWEEN :yearStart AND :yearEnd
+                          AND item.planned_date BETWEEN :windowStart AND :windowEnd
                           AND item.planned_date BETWEEN :planStart AND :planEnd
                         """
                 : "";
@@ -265,27 +283,51 @@ public class PprEquipmentCalendarJdbcRepository
     }
 
     private String taskOccurrenceSql(CalendarQuery query) {
+        boolean exactSnapshotLineage = query.sourceRevision() != null;
+        String sourceType = exactSnapshotLineage
+                ? "CASE WHEN linked.maintenance_rule_id IS NOT NULL "
+                    + "THEN 'MAINTENANCE_RULE' ELSE 'REGULATION' END"
+                : "CASE WHEN maintenance_rule.id IS NOT NULL "
+                    + "THEN 'MAINTENANCE_RULE' ELSE 'REGULATION' END";
+        String sourceCode = exactSnapshotLineage
+                ? "linked.source_code_snapshot"
+                : "coalesce(maintenance_rule.code, regulation.code)";
+        String sourceName = exactSnapshotLineage
+                ? "linked.source_name_snapshot"
+                : """
+                  coalesce(
+                      maintenance_rule.name,
+                      regulation.name,
+                      linked.maintenance_rule_name_snapshot,
+                      linked.regulation_name_snapshot
+                  )
+                  """;
+        String maintenanceKind = exactSnapshotLineage
+                ? "linked.maintenance_type"
+                : """
+                  coalesce(
+                      maintenance_rule.maintenance_kind,
+                      regulation.maintenance_kind,
+                      linked.maintenance_type
+                  )
+                  """;
+        String exactRevision = exactSnapshotLineage
+                ? """
+                  AND linked.plan_id = :planId
+                  AND linked.calculation_revision = :sourceRevision
+                """
+                : "";
         return """
                 SELECT task.equipment_id,
-                       CASE WHEN maintenance_rule.id IS NOT NULL
-                            THEN 'MAINTENANCE_RULE' ELSE 'REGULATION' END AS source_type,
+                       %1$s AS source_type,
                        task.id AS task_id,
                        linked.id AS calculation_item_id,
                        coalesce(task.regulation_id, linked.regulation_id) AS regulation_id,
                        coalesce(task.equipment_maintenance_rule_id, linked.maintenance_rule_id)
                            AS maintenance_rule_id,
-                       coalesce(maintenance_rule.code, regulation.code) AS source_code,
-                       coalesce(
-                           maintenance_rule.name,
-                           regulation.name,
-                           linked.maintenance_rule_name_snapshot,
-                           linked.regulation_name_snapshot
-                       ) AS source_name,
-                       coalesce(
-                           maintenance_rule.maintenance_kind,
-                           regulation.maintenance_kind,
-                           linked.maintenance_type
-                       ) AS maintenance_kind,
+                       %2$s AS source_code,
+                       %3$s AS source_name,
+                       %4$s AS maintenance_kind,
                        linked.planned_date AS planned_date,
                        task.scheduled_start,
                        task.scheduled_end,
@@ -307,28 +349,29 @@ public class PprEquipmentCalendarJdbcRepository
                   AND task.is_deleted = false
                   AND task.equipment_id IN (:equipmentIds)
                   AND coalesce(linked.planned_date, cast(task.scheduled_start AS date))
-                      BETWEEN :yearStart AND :yearEnd
+                      BETWEEN :windowStart AND :windowEnd
                   AND coalesce(linked.planned_date, cast(task.scheduled_start AS date))
                       BETWEEN :planStart AND :planEnd
-                """ + taskOccurrencePredicate(query.filter());
+                %5$s
+                """.formatted(
+                sourceType,
+                sourceCode,
+                sourceName,
+                maintenanceKind,
+                exactRevision) + taskOccurrencePredicate(query);
     }
 
     private String snapshotOccurrenceSql(CalendarQuery query) {
         return """
                 SELECT item.equipment_id,
-                       CASE WHEN maintenance_rule.id IS NOT NULL
+                       CASE WHEN item.maintenance_rule_id IS NOT NULL
                             THEN 'MAINTENANCE_RULE' ELSE 'REGULATION' END AS source_type,
                        NULL::uuid AS task_id,
                        item.id AS calculation_item_id,
                        item.regulation_id,
                        item.maintenance_rule_id,
-                       coalesce(maintenance_rule.code, regulation.code) AS source_code,
-                       coalesce(
-                           maintenance_rule.name,
-                           regulation.name,
-                           item.maintenance_rule_name_snapshot,
-                           item.regulation_name_snapshot
-                       ) AS source_name,
+                       item.source_code_snapshot AS source_code,
+                       item.source_name_snapshot AS source_name,
                        item.maintenance_type AS maintenance_kind,
                        item.planned_date,
                        item.scheduled_start,
@@ -339,20 +382,17 @@ public class PprEquipmentCalendarJdbcRepository
                        item.normative_labor_hours AS planned_labor_hours,
                        item.task_title_snapshot AS title
                 FROM maintenance_schedule_calculation_items item
-                LEFT JOIN equipment_maintenance_rules maintenance_rule
-                       ON maintenance_rule.id = item.maintenance_rule_id
-                LEFT JOIN maintenance_regulations regulation
-                       ON regulation.id = item.regulation_id
                 WHERE item.plan_id = :planId
                   AND item.calculation_revision = :sourceRevision
                   AND item.is_deleted = false
                   AND item.equipment_id IN (:equipmentIds)
-                  AND item.planned_date BETWEEN :yearStart AND :yearEnd
+                  AND item.planned_date BETWEEN :windowStart AND :windowEnd
                   AND item.planned_date BETWEEN :planStart AND :planEnd
                 """ + snapshotOccurrencePredicate(query.filter());
     }
 
-    private String taskOccurrencePredicate(PprEquipmentCalendarFilter filter) {
+    private String taskOccurrencePredicate(CalendarQuery query) {
+        PprEquipmentCalendarFilter filter = query.filter();
         StringBuilder predicate = new StringBuilder();
         if (!filter.includeCancelled()) {
             predicate.append("\n  AND task.status <> 'CANCELLED'");
@@ -361,14 +401,16 @@ public class PprEquipmentCalendarJdbcRepository
             predicate.append("\n  AND task.status IN (:taskStatuses)");
         }
         if (!filter.maintenanceKinds().isEmpty()) {
-            predicate.append("""
+            predicate.append(query.sourceRevision() == null
+                    ? """
 
-                      AND coalesce(
-                          maintenance_rule.maintenance_kind,
-                          regulation.maintenance_kind,
-                          linked.maintenance_type
-                      ) IN (:maintenanceKinds)
-                    """);
+                          AND coalesce(
+                              maintenance_rule.maintenance_kind,
+                              regulation.maintenance_kind,
+                              linked.maintenance_type
+                          ) IN (:maintenanceKinds)
+                        """
+                    : "\n  AND linked.maintenance_type IN (:maintenanceKinds)");
         }
         return predicate.toString();
     }
@@ -404,6 +446,10 @@ public class PprEquipmentCalendarJdbcRepository
         if (filter.equipmentId() != null) {
             predicate.append("\n  AND ").append(alias).append(".id = :equipmentId");
         }
+        if (filter.equipmentTypeId() != null) {
+            predicate.append("\n  AND ").append(alias)
+                    .append(".equipment_type_id = :equipmentTypeId");
+        }
         if (filter.search() != null) {
             predicate.append("""
 
@@ -422,6 +468,12 @@ public class PprEquipmentCalendarJdbcRepository
         PprEquipmentCalendarFilter filter = query.filter();
         LocalDate yearStart = LocalDate.of(filter.year(), 1, 1);
         LocalDate yearEnd = LocalDate.of(filter.year(), 12, 31);
+        LocalDate windowStart = filter.month() == null
+                ? yearStart
+                : LocalDate.of(filter.year(), filter.month(), 1);
+        LocalDate windowEnd = filter.month() == null
+                ? yearEnd
+                : windowStart.withDayOfMonth(windowStart.lengthOfMonth());
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("planId", query.planId())
                 .addValue("planDepartmentId", query.planDepartmentId())
@@ -430,10 +482,13 @@ public class PprEquipmentCalendarJdbcRepository
                 .addValue("planEnd", query.planEndDate())
                 .addValue("yearStart", yearStart)
                 .addValue("yearEnd", yearEnd)
+                .addValue("windowStart", windowStart)
+                .addValue("windowEnd", windowEnd)
                 .addValue("sourceRevision", query.sourceRevision())
                 .addValue("departmentId", filter.departmentId())
                 .addValue("locationId", filter.locationId())
                 .addValue("equipmentId", filter.equipmentId())
+                .addValue("equipmentTypeId", filter.equipmentTypeId())
                 .addValue("search", filter.search() == null
                         ? null
                         : "%" + filter.search().toLowerCase(Locale.ROOT) + "%");
@@ -453,7 +508,23 @@ public class PprEquipmentCalendarJdbcRepository
         return filter.departmentId() != null
                 || filter.locationId() != null
                 || filter.equipmentId() != null
+                || filter.equipmentTypeId() != null
                 || filter.search() != null;
+    }
+
+    private String equipmentOrderBy(PprEquipmentCalendarFilter filter) {
+        String expression = switch (filter.sortBy()) {
+            case EQUIPMENT_NAME -> "lower(coalesce(e.name, ''))";
+            case INVENTORY_NUMBER ->
+                    "lower(coalesce(e.inventory_number, ''))";
+            case EQUIPMENT_CODE -> "lower(coalesce(e.code, ''))";
+        };
+        String direction = filter.sortDirection()
+                == com.toir.dto.pprplanning.calendar
+                        .PprEquipmentCalendarSortDirection.DESC
+                ? "DESC"
+                : "ASC";
+        return expression + " " + direction + ", e.id ASC";
     }
 
     private CalendarEquipment mapEquipment(ResultSet resultSet, int rowNumber)
