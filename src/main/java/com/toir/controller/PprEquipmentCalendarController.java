@@ -27,8 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "ppr-plans")
 public class PprEquipmentCalendarController {
 
-    private static final String PPR_TASK_READ_AUTH =
-            "hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')";
+    private static final String PPR_CALENDAR_READ_AUTH =
+            "hasAnyAuthority('PPR_CALENDAR_READ','SYSTEM_ADMIN','*')";
 
     private final PprEquipmentCalendarService service;
 
@@ -37,7 +37,7 @@ public class PprEquipmentCalendarController {
     }
 
     @GetMapping("/{planId}/equipment-calendar")
-    @PreAuthorize(PPR_TASK_READ_AUTH)
+    @PreAuthorize(PPR_CALENDAR_READ_AUTH)
     @Operation(summary = "Get a yearly PPR calendar paged by equipment")
     public ResponseEntity<PprEquipmentCalendarResponse> getEquipmentCalendar(
             @PathVariable UUID planId,
@@ -73,8 +73,8 @@ public class PprEquipmentCalendarController {
                     equipmentTypeId,
                     maintenanceKinds,
                     statuses,
-                    onlyWithWork,
-                    includeCancelled,
+                    onlyWithWork == null || onlyWithWork,
+                    includeCancelled != null && includeCancelled,
                     sortBy,
                     sortDirection);
         } catch (IllegalArgumentException | NullPointerException exception) {
@@ -86,6 +86,9 @@ public class PprEquipmentCalendarController {
     private void validateYear(Integer year) {
         if (year == null) {
             throw RestException.badRequest("year is required");
+        }
+        if (year < 1 || year > 9999) {
+            throw RestException.badRequest("year must be between 1 and 9999");
         }
         try {
             LocalDate.of(year, 1, 1);

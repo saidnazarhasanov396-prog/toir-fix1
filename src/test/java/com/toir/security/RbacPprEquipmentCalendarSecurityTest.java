@@ -74,7 +74,15 @@ class RbacPprEquipmentCalendarSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.PPR_TASK_READ)
-    void pprTaskReadCanReadEquipmentCalendar() throws Exception {
+    void taskReadAloneCannotReadEquipmentCalendar() throws Exception {
+        mockMvc.perform(get("/api/v1/ppr-plans/{planId}/equipment-calendar", PLAN_ID)
+                        .param("year", "2026"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PPR_CALENDAR_READ)
+    void pprCalendarReadCanReadEquipmentCalendar() throws Exception {
         when(service.getCalendar(eq(PLAN_ID), any())).thenReturn(emptyResponse());
 
         mockMvc.perform(get("/api/v1/ppr-plans/{planId}/equipment-calendar", PLAN_ID)

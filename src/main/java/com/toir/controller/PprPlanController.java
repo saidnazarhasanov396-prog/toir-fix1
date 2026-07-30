@@ -45,7 +45,8 @@ import java.util.UUID;
 @Tag(name = "ppr-plans")
 public class PprPlanController {
 
-    private static final String PPR_PLAN_READ_AUTH = "hasAnyAuthority('read','PPR_PLAN_READ','SYSTEM_ADMIN','*')";
+    private static final String PPR_CALENDAR_READ_AUTH =
+            "hasAnyAuthority('PPR_CALENDAR_READ','SYSTEM_ADMIN','*')";
     private static final String PPR_PLAN_CREATE_AUTH = "hasAnyAuthority('PPR_PLAN_CREATE','SYSTEM_ADMIN','*')";
     private static final String PPR_PLAN_UPDATE_AUTH = "hasAnyAuthority('PPR_PLAN_UPDATE','SYSTEM_ADMIN','*')";
     private static final String PPR_PLAN_DELETE_AUTH = "hasAnyAuthority('PPR_PLAN_DELETE','SYSTEM_ADMIN','*')";
@@ -55,7 +56,7 @@ public class PprPlanController {
             + " and (hasAuthority('SYSTEM_ADMIN') or (!hasAuthority('VIEWER') and !hasAuthority('CONTRACTOR')))";
     private static final String PPR_TASK_READ_AUTH = "hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')";
     private static final String PPR_PLAN_DETAIL_READ_AUTH =
-            "hasAnyAuthority('read','PPR_PLAN_READ','PPR_TASK_READ','SYSTEM_ADMIN','*')";
+            "hasAnyAuthority('PPR_PLAN_READ','PPR_CALENDAR_READ','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_CREATE_AUTH = "hasAnyAuthority('PPR_TASK_CREATE','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_POSTPONE_AUTH = "hasAnyAuthority('PPR_TASK_POSTPONE','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_APPROVE_AUTH = "hasAnyAuthority('PPR_TASK_APPROVE','SYSTEM_ADMIN','*')";
@@ -83,7 +84,7 @@ public class PprPlanController {
     }
 
     @GetMapping
-    @PreAuthorize(PPR_PLAN_READ_AUTH)
+    @PreAuthorize(PPR_CALENDAR_READ_AUTH)
     @Operation(summary = "List PPR plans", description = "Always returns a paginated response wrapper with data in content. "
             + "When both page and size are provided, returns the existing paginated response. "
             + "When both are omitted, returns all matching PPR plans in the same wrapper. "
@@ -99,7 +100,8 @@ public class PprPlanController {
             @Parameter(description = "Optional page index. Must be provided together with size. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer page,
             @Parameter(description = "Optional page size. Must be provided together with page. Omit both page and size to return all matching plans in the same response wrapper.") @RequestParam(required = false) Integer size,
             @RequestParam(required = false) String sortBy,
-            @RequestParam(required = false, defaultValue = "asc") String sortDir) {
+            @RequestParam(required = false, defaultValue = "asc") String sortDir,
+            @RequestParam(defaultValue = "false") boolean operationalCalendar) {
         UUID scopedDepartmentId = scopedDepartment(departmentId);
         boolean sortingRequested = sortBy != null && !sortBy.isBlank();
         Set<PlanStatus> requestedStatuses = new LinkedHashSet<>();
@@ -108,6 +110,19 @@ public class PprPlanController {
         }
         if (statuses != null) {
             requestedStatuses.addAll(statuses);
+        }
+        if (operationalCalendar) {
+            return ResponseEntity.ok(service.findOperationalCalendarPlans(
+                    year,
+                    month,
+                    day,
+                    scopedDepartmentId,
+                    equipmentId,
+                    requestedStatuses,
+                    page,
+                    size,
+                    sortBy,
+                    sortDir));
         }
         if (!requestedStatuses.isEmpty()) {
             if (page == null && size == null) {
@@ -151,13 +166,18 @@ public class PprPlanController {
     }
 
     @GetMapping("/stats")
-    @PreAuthorize(PPR_PLAN_READ_AUTH)
+    @PreAuthorize(PPR_CALENDAR_READ_AUTH)
     public ResponseEntity<PprPlanStatsResponse> stats(
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer day,
-            @RequestParam(required = false) UUID departmentId) {
-        return ResponseEntity.ok(service.getStats(year, month, day, scopedDepartment(departmentId)));
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(defaultValue = "false") boolean operationalCalendar) {
+        UUID scopedDepartmentId = scopedDepartment(departmentId);
+        return ResponseEntity.ok(operationalCalendar
+                ? service.getOperationalCalendarStats(
+                        year, month, day, scopedDepartmentId)
+                : service.getStats(year, month, day, scopedDepartmentId));
     }
 
     @GetMapping("/tasks")
@@ -169,27 +189,44 @@ public class PprPlanController {
             @RequestParam(required = false) List<PprTaskStatus> statuses,
             @RequestParam(defaultValue = "false") boolean overdue,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        if (statuses != null && !statuses.isEmpty()) {
-            Set<PprTaskStatus> requestedStatuses = new LinkedHashSet<>();
-            if (status != null) {
-                requestedStatuses.add(status);
-            }
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean operationalCalendar) {
+        UUID scopedDepartmentId = scopedDepartment(departmentId);
+        Set<PprTaskStatus> requestedStatuses = new LinkedHashSet<>();
+        if (status != null) {
+            requestedStatuses.add(status);
+        }
+        if (statuses != null) {
             requestedStatuses.addAll(statuses);
+        }
+        if (operationalCalendar) {
+            return ResponseEntity.ok(service.findOperationalCalendarTasks(
+                    scopedDepartmentId,
+                    equipmentId,
+                    requestedStatuses,
+                    overdue,
+                    page,
+                    size));
+        }
+        if (statuses != null && !statuses.isEmpty()) {
             return ResponseEntity.ok(service.findTasksByStatuses(
-                    scopedDepartment(departmentId), equipmentId,
+                    scopedDepartmentId, equipmentId,
                     requestedStatuses, overdue, page, size));
         }
         return ResponseEntity.ok(service.findTasks(
-                scopedDepartment(departmentId), equipmentId, status, overdue, page, size));
+                scopedDepartmentId, equipmentId, status, overdue, page, size));
     }
 
     @GetMapping("/tasks/{taskId}")
     @PreAuthorize(PPR_TASK_READ_AUTH)
-    public ResponseEntity<PprTaskDto> getTask(@PathVariable UUID taskId) {
+    public ResponseEntity<PprTaskDto> getTask(
+            @PathVariable UUID taskId,
+            @RequestParam(defaultValue = "false") boolean operationalCalendar) {
         PprTask task = taskOrThrow(taskId);
         assertCanAccessTask(task);
-        return ResponseEntity.ok(PprTaskDto.from(task));
+        return ResponseEntity.ok(operationalCalendar
+                ? service.findOperationalCalendarTaskById(taskId)
+                : PprTaskDto.from(task));
     }
 
     @GetMapping("/tasks/stats")
@@ -197,15 +234,24 @@ public class PprPlanController {
     public ResponseEntity<PprTaskStatsResponse> taskStats(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID equipmentId,
-            @RequestParam(required = false) PprTaskStatus status) {
-        return ResponseEntity.ok(service.getTaskStats(scopedDepartment(departmentId), equipmentId, status));
+            @RequestParam(required = false) PprTaskStatus status,
+            @RequestParam(defaultValue = "false") boolean operationalCalendar) {
+        UUID scopedDepartmentId = scopedDepartment(departmentId);
+        return ResponseEntity.ok(operationalCalendar
+                ? service.getOperationalCalendarTaskStats(
+                        scopedDepartmentId, equipmentId, status)
+                : service.getTaskStats(scopedDepartmentId, equipmentId, status));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize(PPR_PLAN_DETAIL_READ_AUTH)
-    public ResponseEntity<PprPlanDto> get(@PathVariable UUID id) {
+    public ResponseEntity<PprPlanDto> get(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "false") boolean operationalCalendar) {
         assertCanAccessPlan(planOrThrow(id));
-        return ResponseEntity.ok(service.findById(id));
+        return ResponseEntity.ok(operationalCalendar
+                ? service.findOperationalCalendarPlanById(id)
+                : service.findById(id));
     }
 
     @PostMapping

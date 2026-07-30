@@ -259,6 +259,33 @@ public record PprPlanDto(
         );
     }
 
+    public PprPlanDto withTasks(List<PprTaskDto> visibleTasks) {
+        List<PprTaskDto> safeTasks = visibleTasks == null ? List.of() : visibleTasks;
+        return new PprPlanDto(
+                id,
+                code,
+                name,
+                status,
+                departmentId,
+                departmentName,
+                createdById,
+                approvedById,
+                notes,
+                safeTasks,
+                safeTasks.size(),
+                fromDate,
+                toDate,
+                pprType,
+                scheduleType,
+                frequency,
+                intervalHours,
+                scopeType,
+                targets,
+                generationMessage,
+                generationDiagnostics,
+                anchorMode);
+    }
+
     public PprPlanDto withGenerationDiagnostics(PprGeneratorService.GenerationDiagnostics diagnostics) {
         return new PprPlanDto(
                 id,
