@@ -19,6 +19,12 @@ public record MaintenanceRegulationSummaryDto(
 ) {
     public static MaintenanceRegulationSummaryDto from(MaintenanceRegulation regulation,
                                                        OperationSummary operationSummary) {
+        return from(regulation, operationSummary, regulation != null && regulation.isActive());
+    }
+
+    public static MaintenanceRegulationSummaryDto from(MaintenanceRegulation regulation,
+                                                       OperationSummary operationSummary,
+                                                       boolean effectiveActive) {
         if (regulation == null) {
             return null;
         }
@@ -33,12 +39,18 @@ public record MaintenanceRegulationSummaryDto(
                 operationSummary == null ? null : operationSummary.toolsRequired(),
                 operationSummary == null ? null : operationSummary.sparePartsRequired(),
                 operationSummary == null ? null : operationSummary.consumablesRequired(),
-                regulation.isActive()
+                effectiveActive
         );
     }
 
     public static MaintenanceRegulationSummaryDto from(EquipmentMaintenanceRule rule,
                                                        OperationSummary operationSummary) {
+        return from(rule, operationSummary, rule != null && rule.isActive());
+    }
+
+    public static MaintenanceRegulationSummaryDto from(EquipmentMaintenanceRule rule,
+                                                       OperationSummary operationSummary,
+                                                       boolean effectiveActive) {
         if (rule == null) {
             return null;
         }
@@ -53,7 +65,7 @@ public record MaintenanceRegulationSummaryDto(
                 operationSummary == null ? null : operationSummary.toolsRequired(),
                 operationSummary == null ? null : operationSummary.sparePartsRequired(),
                 operationSummary == null ? null : operationSummary.consumablesRequired(),
-                rule.isActive()
+                effectiveActive
         );
     }
 

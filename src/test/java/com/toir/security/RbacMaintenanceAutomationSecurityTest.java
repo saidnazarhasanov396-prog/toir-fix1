@@ -115,7 +115,7 @@ class RbacMaintenanceAutomationSecurityTest {
     @WithMockUser(authorities = PermissionConstants.MAINTENANCE_REGULATION_READ)
     void regulationReadCanListPreviewAndImpact() throws Exception {
         UUID regulationId = UUID.randomUUID();
-        when(maintenanceRegulationService.search(anyInt(), anyInt(), isNull(), isNull(), isNull(), isNull()))
+        when(maintenanceRegulationService.search(anyInt(), anyInt(), any()))
                 .thenReturn(Page.empty());
         when(maintenanceImpactService.preview(any())).thenReturn(preview());
         when(maintenanceImpactService.impact(regulationId)).thenReturn(impact(regulationId));
