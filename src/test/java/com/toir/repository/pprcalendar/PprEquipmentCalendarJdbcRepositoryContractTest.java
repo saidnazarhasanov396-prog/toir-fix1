@@ -95,10 +95,10 @@ class PprEquipmentCalendarJdbcRepositoryContractTest {
                 .contains("e.id = :equipmentId")
                 .contains("lower(coalesce(e.name, '')) LIKE :search");
         assertThat(pageSql.getValue())
-                .contains(countSql.getValue().substring(0, countSql.getValue().indexOf("SELECT count(*)")))
+                .contains("WITH work_equipment AS (")
                 .contains("ORDER BY lower(coalesce(e.name, '')) ASC, e.id ASC")
-                .contains("LIMIT :limit OFFSET :offset")
-                .doesNotContain("e.is_deleted = false");
+                .contains("e.id ASC\nLIMIT :limit OFFSET :offset")
+                .doesNotContain("ORDER BYlower", "ASCLIMIT", "e.is_deleted = false");
         MapSqlParameterSource parameters = (MapSqlParameterSource) countParameters.getValue();
         assertThat(parameters.getValue("search")).isEqualTo("%pump%");
         assertThat(parameters.getValue("taskStatuses")).isEqualTo(List.of("PLANNED"));
