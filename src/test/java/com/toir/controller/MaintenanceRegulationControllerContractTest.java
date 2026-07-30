@@ -5,6 +5,8 @@ import com.toir.dto.maintenanceregulation.EquipmentTypeWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationFilter;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationStatsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationSummaryDto;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MeterType;
@@ -31,8 +33,8 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -61,18 +63,97 @@ class MaintenanceRegulationControllerContractTest {
     }
 
     @Test
-    void listPassesEquipmentTypeAndActiveFiltersToService() throws Exception {
+    void listPassesCanonicalFiltersToService() throws Exception {
         UUID equipmentTypeId = UUID.randomUUID();
-        when(service.search(0, 20, "pump", equipmentTypeId, true, "PREVENTIVE"))
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(
+                "pump", MaintenanceKind.PREVENTIVE, equipmentTypeId, true);
+        when(service.search(0, 20, filter))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/maintenance-regulations")
                         .param("equipmentTypeId", equipmentTypeId.toString())
                         .param("active", "true")
-                        .param("category", "PREVENTIVE")
+                        .param("maintenanceType", "PREVENTIVE")
                         .param("search", "pump"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray());
+
+        verify(service).search(0, 20, filter);
+    }
+
+    @Test
+    void listAcceptsLegacyCategoryAsCanonicalMaintenanceType() throws Exception {
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(
+                null, MaintenanceKind.OVERHAUL, null, null);
+        when(service.search(0, 20, filter))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations")
+                        .param("category", "OVERHAUL"))
+                .andExpect(status().isOk());
+
+        verify(service).search(0, 20, filter);
+    }
+
+    @Test
+    void listAcceptsEqualCanonicalAndLegacyMaintenanceTypes() throws Exception {
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(
+                null, MaintenanceKind.PREVENTIVE, null, null);
+        when(service.search(0, 20, filter))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations")
+                        .param("maintenanceType", "PREVENTIVE")
+                        .param("category", "PREVENTIVE"))
+                .andExpect(status().isOk());
+
+        verify(service).search(0, 20, filter);
+    }
+
+    @Test
+    void listRejectsConflictingCanonicalAndLegacyMaintenanceTypes() throws Exception {
+        mockMvc.perform(get("/api/v1/maintenance-regulations")
+                        .param("maintenanceType", "PREVENTIVE")
+                        .param("category", "OVERHAUL"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("maintenanceType and category must represent the same maintenance kind"));
+    }
+
+    @Test
+    void listRejectsInvalidLegacyCategory() throws Exception {
+        mockMvc.perform(get("/api/v1/maintenance-regulations")
+                        .param("category", "NOT_A_KIND"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid maintenance category: NOT_A_KIND"));
+    }
+
+    @Test
+    void listRejectsInvalidCanonicalParameterTypes() throws Exception {
+        mockMvc.perform(get("/api/v1/maintenance-regulations")
+                        .param("maintenanceType", "NOT_A_KIND"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations")
+                        .param("equipmentTypeId", "not-a-uuid"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations")
+                        .param("active", "not-a-boolean"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void listPreservesNoFilterBehavior() throws Exception {
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(null, null, null, null);
+        when(service.search(0, 20, filter))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+
+        verify(service).search(0, 20, filter);
     }
 
     @Test
@@ -100,10 +181,14 @@ class MaintenanceRegulationControllerContractTest {
                         true
                 ))
         );
-        when(service.equipmentWithRegulations(equipmentTypeId, true, 0, 20))
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(
+                "pump", MaintenanceKind.PREVENTIVE, equipmentTypeId, true);
+        when(service.equipmentWithRegulations(0, 20, filter))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/maintenance-regulations/equipment")
+                        .param("search", "pump")
+                        .param("maintenanceType", "PREVENTIVE")
                         .param("equipmentTypeId", equipmentTypeId.toString())
                         .param("active", "true")
                         .param("page", "0")
@@ -113,16 +198,21 @@ class MaintenanceRegulationControllerContractTest {
                 .andExpect(jsonPath("$.content[0].equipmentTypeName").value("Pump"))
                 .andExpect(jsonPath("$.content[0].regulations[0].id").value(regulationId.toString()))
                 .andExpect(jsonPath("$.content[0].regulations[0].requiredSkill").value("Mechanic"));
+
+        verify(service).equipmentWithRegulations(0, 20, filter);
     }
 
     @Test
-    void equipmentWithRegulationsSupportsUnpagedWrapper() throws Exception {
-        when(service.equipmentWithRegulations(isNull(), isNull(), isNull(), isNull()))
+    void equipmentWithRegulationsUsesDefaultPaginationWithoutFilters() throws Exception {
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(null, null, null, null);
+        when(service.equipmentWithRegulations(0, 20, filter))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/v1/maintenance-regulations/equipment"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray());
+
+        verify(service).equipmentWithRegulations(0, 20, filter);
     }
 
     @Test
@@ -136,7 +226,8 @@ class MaintenanceRegulationControllerContractTest {
                 null,
                 List.of()
         );
-        when(service.equipmentWithRegulations(isNull(), isNull(), isNull(), isNull()))
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(null, null, null, null);
+        when(service.equipmentWithRegulations(0, 20, filter))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/maintenance-regulations/equipment"))
@@ -171,10 +262,14 @@ class MaintenanceRegulationControllerContractTest {
                         true
                 ))
         );
-        when(service.equipmentTypeWithRegulations(equipmentTypeId, true, 0, 20))
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(
+                "pump", MaintenanceKind.PREVENTIVE, equipmentTypeId, true);
+        when(service.equipmentTypeWithRegulations(0, 20, filter))
                 .thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/v1/maintenance-regulations/equipment-types")
+                        .param("search", "pump")
+                        .param("maintenanceType", "PREVENTIVE")
                         .param("equipmentTypeId", equipmentTypeId.toString())
                         .param("active", "true")
                         .param("page", "0")
@@ -187,6 +282,30 @@ class MaintenanceRegulationControllerContractTest {
                 .andExpect(jsonPath("$.content[0].equipmentCount").value(4))
                 .andExpect(jsonPath("$.content[0].regulations[0].id").value(regulationId.toString()))
                 .andExpect(jsonPath("$.content[0].regulations[0].toolsRequired").value("Wrench"));
+
+        verify(service).equipmentTypeWithRegulations(0, 20, filter);
+    }
+
+    @Test
+    void statsPassesAllCanonicalFiltersAndReturnsDatabaseCounts() throws Exception {
+        UUID equipmentTypeId = UUID.randomUUID();
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(
+                "pump", MaintenanceKind.PREVENTIVE, equipmentTypeId, false);
+        when(service.stats(filter))
+                .thenReturn(new MaintenanceRegulationStatsDto(12, 0, 12, 0));
+
+        mockMvc.perform(get("/api/v1/maintenance-regulations/stats")
+                        .param("search", "pump")
+                        .param("maintenanceType", "PREVENTIVE")
+                        .param("equipmentTypeId", equipmentTypeId.toString())
+                        .param("active", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(12))
+                .andExpect(jsonPath("$.active").value(0))
+                .andExpect(jsonPath("$.preventive").value(12))
+                .andExpect(jsonPath("$.overhaul").value(0));
+
+        verify(service).stats(filter);
     }
 
     @Test
