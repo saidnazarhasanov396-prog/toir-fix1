@@ -31,7 +31,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class MaintenanceScheduleCalculationController {
 
     private static final String READ_AUTH =
-            "hasAnyAuthority('PPR_PLAN_READ','SYSTEM_ADMIN','*')";
+            "hasAnyAuthority('PPR_PLAN_READ','PPR_PLAN_CREATE','PPR_PLAN_UPDATE','PPR_PLAN_DELETE',"
+                    + "'PPR_PLAN_APPROVE','PPR_PLAN_GENERATE','SYSTEM_ADMIN','*')";
     private static final String CREATE_AUTH =
             "hasAnyAuthority('PPR_PLAN_CREATE','PPR_PLAN_GENERATE','SYSTEM_ADMIN','*')";
     private static final String UPDATE_AUTH =

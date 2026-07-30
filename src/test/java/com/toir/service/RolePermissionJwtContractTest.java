@@ -106,6 +106,25 @@ class RolePermissionJwtContractTest {
     }
 
     @Test
+    void pprPlanActionsDoNotDeriveIndependentCalendarActionsFromRoleDefaults() {
+        LoginResponse response = loginWith(primaryRole("PPR_ENGINEER", List.of(
+                PermissionConstants.PPR_PLAN_CREATE,
+                PermissionConstants.PPR_PLAN_UPDATE,
+                PermissionConstants.PPR_PLAN_DELETE,
+                PermissionConstants.PPR_PLAN_APPROVE,
+                PermissionConstants.PPR_PLAN_GENERATE
+        )));
+
+        assertThat(response.user().permissions()).doesNotContain(
+                "PPR_CALENDAR_CREATE",
+                "PPR_CALENDAR_UPDATE",
+                "PPR_CALENDAR_DELETE",
+                "PPR_CALENDAR_APPROVE",
+                "PPR_CALENDAR_GENERATE"
+        );
+    }
+
+    @Test
     void storekeeperLoginIncludesWarehouseAndStockPermissionsWithoutStockAdjust() {
         LoginResponse response = loginWith(primaryRole("STOREKEEPER", List.of(
                 PermissionConstants.WAREHOUSE_READ,

@@ -57,6 +57,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class RbacPprSecurityTest {
 
+    @Test
+    void unifiedApprovalEndpointsRecognizeCalendarApprovalPermissions() {
+        org.assertj.core.api.Assertions.assertThat(ApprovalSecurityExpressions.CAN_CREATE)
+                .contains("PPR_CALENDAR_CREATE", "PPR_CALENDAR_UPDATE",
+                        "PPR_CALENDAR_GENERATE", "PPR_CALENDAR_APPROVE");
+        org.assertj.core.api.Assertions.assertThat(ApprovalSecurityExpressions.CAN_APPROVE)
+                .contains("PPR_CALENDAR_APPROVE");
+        org.assertj.core.api.Assertions.assertThat(ApprovalSecurityExpressions.CAN_REJECT)
+                .contains("PPR_CALENDAR_APPROVE");
+    }
+
     @Autowired
     MockMvc mockMvc;
 
@@ -136,12 +147,9 @@ class RbacPprSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.PPR_PLAN_READ)
-    void pprPlanReadCanReadSharedDetailButNotCalendarListOrStats() throws Exception {
-        UUID planId = UUID.randomUUID();
-        when(pprPlanService.findById(planId)).thenReturn(planDto(planId));
-
-        mockMvc.perform(get("/api/v1/ppr-plans/{id}", planId))
-                .andExpect(status().isOk());
+    void pprRegistryReadCannotReadCalendarEndpoints() throws Exception {
+        mockMvc.perform(get("/api/v1/ppr-plans/{id}", UUID.randomUUID()))
+                .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/ppr-plans?page=0&size=1"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/ppr-plans/stats"))
@@ -174,14 +182,65 @@ class RbacPprSecurityTest {
     }
 
     @Test
-    @WithMockUser(authorities = PermissionConstants.PPR_PLAN_CREATE)
-    void pprPlanCreateCanCreatePlan() throws Exception {
+    @WithMockUser(authorities = "PPR_CALENDAR_CREATE")
+    void pprCalendarCreateCanCreateCalendarPlan() throws Exception {
         when(pprPlanService.create(any())).thenReturn(planDto(UUID.randomUUID()));
 
         mockMvc.perform(post("/api/v1/ppr-plans")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(planPayload()))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(authorities = "PPR_CALENDAR_UPDATE")
+    void pprCalendarUpdateCanUpdateCalendarPlan() throws Exception {
+        UUID planId = UUID.randomUUID();
+        when(pprPlanService.update(eq(planId), any())).thenReturn(planDto(planId));
+
+        mockMvc.perform(patch("/api/v1/ppr-plans/{id}", planId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(planPayload()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = "PPR_CALENDAR_DELETE")
+    void pprCalendarDeleteCanDeleteCalendarPlan() throws Exception {
+        mockMvc.perform(delete("/api/v1/ppr-plans/{id}", UUID.randomUUID()))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @WithMockUser(authorities = "PPR_CALENDAR_GENERATE")
+    void pprCalendarGenerateCanGenerateCalendarTasks() throws Exception {
+        UUID planId = UUID.randomUUID();
+        when(pprGeneratorService.generateForPlan(planId))
+                .thenReturn(new PprGeneratorService.GenerationResult(planId, 1, 0));
+
+        mockMvc.perform(post("/api/v1/ppr-plans/{id}/generate", planId))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = "PPR_CALENDAR_GENERATE")
+    void pprCalendarActionCanReadCalendarPlanDetailButNotCalendarRegistry() throws Exception {
+        UUID planId = UUID.randomUUID();
+        when(pprPlanService.findById(planId)).thenReturn(planDto(planId));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/{id}", planId))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/ppr-plans?page=0&size=1"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PPR_PLAN_CREATE)
+    void pprRegistryCreateCannotCreateCalendarPlan() throws Exception {
+        mockMvc.perform(post("/api/v1/ppr-plans")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(planPayload()))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -204,21 +263,18 @@ class RbacPprSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.PPR_PLAN_UPDATE)
-    void pprPlanUpdateCanUpdatePlan() throws Exception {
-        UUID planId = UUID.randomUUID();
-        when(pprPlanService.update(eq(planId), any())).thenReturn(planDto(planId));
-
-        mockMvc.perform(patch("/api/v1/ppr-plans/{id}", planId)
+    void pprRegistryUpdateCannotUpdateCalendarPlan() throws Exception {
+        mockMvc.perform(patch("/api/v1/ppr-plans/{id}", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(planPayload()))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(authorities = PermissionConstants.PPR_PLAN_DELETE)
-    void pprPlanDeleteCanDeletePlan() throws Exception {
+    void pprRegistryDeleteCannotDeleteCalendarPlan() throws Exception {
         mockMvc.perform(delete("/api/v1/ppr-plans/{id}", UUID.randomUUID()))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -234,21 +290,17 @@ class RbacPprSecurityTest {
 
     @Test
     @WithMockUser(authorities = PermissionConstants.PPR_PLAN_GENERATE)
-    void pprPlanGenerateCanGenerateTasks() throws Exception {
-        UUID planId = UUID.randomUUID();
-        when(pprGeneratorService.generateForPlan(planId))
-                .thenReturn(new PprGeneratorService.GenerationResult(planId, 1, 0));
-
-        mockMvc.perform(post("/api/v1/ppr-plans/{id}/generate", planId))
-                .andExpect(status().isOk());
+    void pprRegistryGenerateCannotGenerateCalendarTasks() throws Exception {
+        mockMvc.perform(post("/api/v1/ppr-plans/{id}/generate", UUID.randomUUID()))
+                .andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(authorities = {
-            PermissionConstants.PPR_PLAN_GENERATE,
+            "PPR_CALENDAR_GENERATE",
             PermissionConstants.WORK_ORDER_CREATE
     })
-    void pprPlanGenerateCanGenerateWorkOrders() throws Exception {
+    void pprCalendarGenerateCanGenerateWorkOrders() throws Exception {
         UUID planId = UUID.randomUUID();
         UUID createdById = UUID.randomUUID();
         when(pprGeneratorService.generateWorkOrdersForPlan(planId, createdById))
@@ -263,6 +315,16 @@ class RbacPprSecurityTest {
         mockMvc.perform(post("/api/v1/ppr-plans/{id}/work-orders/generate", planId)
                         .param("createdById", createdById.toString()))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = {
+            PermissionConstants.PPR_PLAN_GENERATE,
+            PermissionConstants.WORK_ORDER_CREATE
+    })
+    void pprRegistryGenerateCannotGenerateCalendarWorkOrders() throws Exception {
+        mockMvc.perform(post("/api/v1/ppr-plans/{id}/work-orders/generate", UUID.randomUUID()))
+                .andExpect(status().isForbidden());
     }
 
     @Test
