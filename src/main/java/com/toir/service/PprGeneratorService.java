@@ -35,6 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Year;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -539,6 +540,7 @@ public class PprGeneratorService {
         List<PprTask> tasks = taskRepository.findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(planId);
         List<WorkOrderGenerationSkippedItem> skippedItems = new ArrayList<>();
         List<PprTask> candidates = new ArrayList<>();
+        LocalDateTime generationNow = LocalDateTime.now();
         for (PprTask task : tasks) {
             if (task.getStatus() != PprTaskStatus.APPROVED) {
                 skippedItems.add(new WorkOrderGenerationSkippedItem(task.getId(), "TASK_STATUS_NOT_APPROVED"));
@@ -550,6 +552,14 @@ public class PprGeneratorService {
             }
             if (workOrderRepository.existsByPprTaskIdAndIsDeletedFalse(task.getId())) {
                 skippedItems.add(new WorkOrderGenerationSkippedItem(task.getId(), "WORK_ORDER_ALREADY_EXISTS"));
+                continue;
+            }
+            if (task.getScheduledStart() == null) {
+                skippedItems.add(new WorkOrderGenerationSkippedItem(task.getId(), "TASK_SCHEDULE_MISSING"));
+                continue;
+            }
+            if (generationNow.isBefore(task.getScheduledStart().minusDays(task.getWorkOrderLeadDays()))) {
+                skippedItems.add(new WorkOrderGenerationSkippedItem(task.getId(), "GENERATION_TIME_NOT_REACHED"));
                 continue;
             }
             candidates.add(task);
