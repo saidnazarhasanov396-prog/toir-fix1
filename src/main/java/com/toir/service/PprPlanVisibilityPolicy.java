@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.enums.PlanStatus;
+import com.toir.security.PermissionConstants;
 import com.toir.security.ScopeAccessService;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -25,8 +26,11 @@ public class PprPlanVisibilityPolicy {
 
     public boolean canViewUnapprovedPlans() {
         return scopeAccessService.isScopeAdmin()
-                || scopeAccessService.hasAuthority("PPR_PLAN_GENERATE")
-                || scopeAccessService.hasAuthority("PPR_PLAN_APPROVE");
+                || scopeAccessService.hasAuthority(PermissionConstants.PPR_CALENDAR_CREATE)
+                || scopeAccessService.hasAuthority(PermissionConstants.PPR_CALENDAR_UPDATE)
+                || scopeAccessService.hasAuthority(PermissionConstants.PPR_CALENDAR_DELETE)
+                || scopeAccessService.hasAuthority(PermissionConstants.PPR_CALENDAR_GENERATE)
+                || scopeAccessService.hasAuthority(PermissionConstants.PPR_CALENDAR_APPROVE);
     }
 
     public Set<PlanStatus> visibleStatuses(Collection<PlanStatus> requestedStatuses) {

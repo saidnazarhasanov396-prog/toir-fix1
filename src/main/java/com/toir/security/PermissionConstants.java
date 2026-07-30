@@ -20,6 +20,11 @@ public final class PermissionConstants {
 
     public static final String PPR_PLAN_READ = "PPR_PLAN_READ";
     public static final String PPR_CALENDAR_READ = "PPR_CALENDAR_READ";
+    public static final String PPR_CALENDAR_CREATE = "PPR_CALENDAR_CREATE";
+    public static final String PPR_CALENDAR_UPDATE = "PPR_CALENDAR_UPDATE";
+    public static final String PPR_CALENDAR_DELETE = "PPR_CALENDAR_DELETE";
+    public static final String PPR_CALENDAR_APPROVE = "PPR_CALENDAR_APPROVE";
+    public static final String PPR_CALENDAR_GENERATE = "PPR_CALENDAR_GENERATE";
     public static final String PPR_PLAN_CREATE = "PPR_PLAN_CREATE";
     public static final String PPR_PLAN_UPDATE = "PPR_PLAN_UPDATE";
     public static final String PPR_PLAN_DELETE = "PPR_PLAN_DELETE";
