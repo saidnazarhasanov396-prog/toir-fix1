@@ -60,6 +60,7 @@ class RolePermissionJwtContractTest {
     void pprEngineerLoginIncludesSeededPprPermissions() {
         LoginResponse response = loginWith(primaryRole("PPR_ENGINEER", List.of(
                 PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_CALENDAR_READ,
                 PermissionConstants.PPR_TASK_READ,
                 PermissionConstants.PPR_TASK_START,
                 PermissionConstants.EQUIPMENT_READ,
@@ -68,6 +69,7 @@ class RolePermissionJwtContractTest {
 
         assertThat(response.user().permissions()).contains(
                 PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_CALENDAR_READ,
                 PermissionConstants.PPR_TASK_READ,
                 PermissionConstants.PPR_TASK_START,
                 PermissionConstants.EQUIPMENT_READ,
@@ -78,6 +80,7 @@ class RolePermissionJwtContractTest {
         );
         assertJwtPermissionsContain(
                 PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_CALENDAR_READ,
                 PermissionConstants.PPR_TASK_READ,
                 PermissionConstants.PPR_TASK_START,
                 PermissionConstants.EQUIPMENT_READ
@@ -85,7 +88,7 @@ class RolePermissionJwtContractTest {
     }
 
     @Test
-    void pprEngineerLoginExpandsKnownRoleDefaultsForFrontendConsumers() {
+    void pprPlanReadDoesNotDeriveIndependentCalendarPermissionFromRoleDefaults() {
         LoginResponse response = loginWith(primaryRole("PPR_ENGINEER", List.of(
                 PermissionConstants.PPR_PLAN_READ
         )));
@@ -94,6 +97,8 @@ class RolePermissionJwtContractTest {
                 PermissionConstants.PPR_PLAN_READ,
                 PermissionConstants.PPR_TASK_READ
         );
+        assertThat(response.user().permissions())
+                .doesNotContain(PermissionConstants.PPR_CALENDAR_READ);
         assertJwtPermissionsContain(
                 PermissionConstants.PPR_PLAN_READ,
                 PermissionConstants.PPR_TASK_READ
@@ -172,6 +177,7 @@ class RolePermissionJwtContractTest {
     void primaryRoleAndAdditionalRolePermissionsAreUnionedAndDeduplicated() {
         Role primaryRole = primaryRole("PPR_ENGINEER", List.of(
                 PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_CALENDAR_READ,
                 PermissionConstants.PPR_TASK_READ
         ));
         Role additionalRole = role("STOREKEEPER", List.of(
@@ -184,6 +190,7 @@ class RolePermissionJwtContractTest {
 
         assertThat(response.user().permissions()).contains(
                 PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_CALENDAR_READ,
                 PermissionConstants.PPR_TASK_READ,
                 PermissionConstants.WAREHOUSE_READ,
                 PermissionConstants.STOCK_READ
@@ -193,6 +200,7 @@ class RolePermissionJwtContractTest {
                 .hasSize(1);
         assertJwtPermissionsContain(
                 PermissionConstants.PPR_PLAN_READ,
+                PermissionConstants.PPR_CALENDAR_READ,
                 PermissionConstants.PPR_TASK_READ,
                 PermissionConstants.WAREHOUSE_READ,
                 PermissionConstants.STOCK_READ

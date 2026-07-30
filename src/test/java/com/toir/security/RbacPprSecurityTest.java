@@ -117,8 +117,8 @@ class RbacPprSecurityTest {
     }
 
     @Test
-    @WithMockUser(authorities = PermissionConstants.PPR_PLAN_READ)
-    void pprPlanReadCanReadPlanListDetailAndStats() throws Exception {
+    @WithMockUser(authorities = PermissionConstants.PPR_CALENDAR_READ)
+    void pprCalendarReadCanReadPlanListDetailAndStats() throws Exception {
         UUID planId = UUID.randomUUID();
         when(pprPlanService.findAll(null, null, null, null, 0, 1))
                 .thenReturn(new PageImpl<>(List.of(planDto(planId)), PageRequest.of(0, 1), 1));
@@ -132,6 +132,27 @@ class RbacPprSecurityTest {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/ppr-plans/stats"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PPR_PLAN_READ)
+    void pprPlanReadCanReadSharedDetailButNotCalendarListOrStats() throws Exception {
+        UUID planId = UUID.randomUUID();
+        when(pprPlanService.findById(planId)).thenReturn(planDto(planId));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/{id}", planId))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/ppr-plans?page=0&size=1"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/ppr-plans/stats"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = PermissionConstants.PPR_TASK_READ)
+    void pprTaskReadCannotReadSharedPlanDetail() throws Exception {
+        mockMvc.perform(get("/api/v1/ppr-plans/{id}", UUID.randomUUID()))
+                .andExpect(status().isForbidden());
     }
 
     @Test

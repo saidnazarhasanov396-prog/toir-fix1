@@ -45,7 +45,8 @@ import java.util.UUID;
 @Tag(name = "ppr-plans")
 public class PprPlanController {
 
-    private static final String PPR_PLAN_READ_AUTH = "hasAnyAuthority('read','PPR_PLAN_READ','SYSTEM_ADMIN','*')";
+    private static final String PPR_CALENDAR_READ_AUTH =
+            "hasAnyAuthority('PPR_CALENDAR_READ','SYSTEM_ADMIN','*')";
     private static final String PPR_PLAN_CREATE_AUTH = "hasAnyAuthority('PPR_PLAN_CREATE','SYSTEM_ADMIN','*')";
     private static final String PPR_PLAN_UPDATE_AUTH = "hasAnyAuthority('PPR_PLAN_UPDATE','SYSTEM_ADMIN','*')";
     private static final String PPR_PLAN_DELETE_AUTH = "hasAnyAuthority('PPR_PLAN_DELETE','SYSTEM_ADMIN','*')";
@@ -55,7 +56,7 @@ public class PprPlanController {
             + " and (hasAuthority('SYSTEM_ADMIN') or (!hasAuthority('VIEWER') and !hasAuthority('CONTRACTOR')))";
     private static final String PPR_TASK_READ_AUTH = "hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')";
     private static final String PPR_PLAN_DETAIL_READ_AUTH =
-            "hasAnyAuthority('read','PPR_PLAN_READ','PPR_TASK_READ','SYSTEM_ADMIN','*')";
+            "hasAnyAuthority('PPR_PLAN_READ','PPR_CALENDAR_READ','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_CREATE_AUTH = "hasAnyAuthority('PPR_TASK_CREATE','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_POSTPONE_AUTH = "hasAnyAuthority('PPR_TASK_POSTPONE','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_APPROVE_AUTH = "hasAnyAuthority('PPR_TASK_APPROVE','SYSTEM_ADMIN','*')";
@@ -83,7 +84,7 @@ public class PprPlanController {
     }
 
     @GetMapping
-    @PreAuthorize(PPR_PLAN_READ_AUTH)
+    @PreAuthorize(PPR_CALENDAR_READ_AUTH)
     @Operation(summary = "List PPR plans", description = "Always returns a paginated response wrapper with data in content. "
             + "When both page and size are provided, returns the existing paginated response. "
             + "When both are omitted, returns all matching PPR plans in the same wrapper. "
@@ -151,7 +152,7 @@ public class PprPlanController {
     }
 
     @GetMapping("/stats")
-    @PreAuthorize(PPR_PLAN_READ_AUTH)
+    @PreAuthorize(PPR_CALENDAR_READ_AUTH)
     public ResponseEntity<PprPlanStatsResponse> stats(
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month,

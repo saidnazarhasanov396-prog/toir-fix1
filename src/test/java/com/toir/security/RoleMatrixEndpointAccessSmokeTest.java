@@ -158,6 +158,7 @@ class RoleMatrixEndpointAccessSmokeTest {
     @WithMockUser(authorities = {
             "PPR_ENGINEER",
             PermissionConstants.PPR_PLAN_READ,
+            PermissionConstants.PPR_CALENDAR_READ,
             PermissionConstants.PPR_PLAN_CREATE,
             PermissionConstants.PPR_PLAN_UPDATE,
             PermissionConstants.PPR_PLAN_GENERATE,

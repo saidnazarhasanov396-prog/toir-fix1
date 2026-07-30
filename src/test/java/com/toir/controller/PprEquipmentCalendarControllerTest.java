@@ -100,7 +100,7 @@ class PprEquipmentCalendarControllerTest {
     }
 
     @Test
-    void endpointRequiresPprTaskReadSystemAdminOrWildcard() throws Exception {
+    void endpointRequiresPprCalendarReadSystemAdminOrWildcard() throws Exception {
         Method endpoint = PprEquipmentCalendarController.class.getMethod(
                 "getEquipmentCalendar",
                 UUID.class,
@@ -121,7 +121,7 @@ class PprEquipmentCalendarControllerTest {
                 PprEquipmentCalendarSortDirection.class);
 
         assertThat(endpoint.getAnnotation(PreAuthorize.class).value())
-                .isEqualTo("hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')");
+                .isEqualTo("hasAnyAuthority('PPR_CALENDAR_READ','SYSTEM_ADMIN','*')");
     }
 
     private PprEquipmentCalendarResponse emptyResponse() {
