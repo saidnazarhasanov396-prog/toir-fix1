@@ -57,6 +57,7 @@ public class CounteragentService {
     public CounteragentDto update(UUID id, CounteragentRequest request) {
         Counteragent counteragent = load(id);
         validateUniqueInnForUpdate(request.inn(), id);
+        demoteExistingPrimaryBeforeReconciliation(counteragent);
         apply(counteragent, request);
         return CounteragentDto.from(counteragentRepository.save(counteragent));
     }
@@ -112,6 +113,15 @@ public class CounteragentService {
         return counteragentRepository.findAllByIdInAndIsDeletedFalse(ids);
     }
 
+    private void demoteExistingPrimaryBeforeReconciliation(Counteragent counteragent) {
+        if (counteragent.getBankDetails() == null
+                || counteragent.getBankDetails().stream().noneMatch(detail -> detail.isPrimary())) {
+            return;
+        }
+        counteragent.getBankDetails().forEach(detail -> detail.setPrimary(false));
+        counteragentRepository.flush();
+    }
+
     private void apply(Counteragent counteragent, CounteragentRequest request) {
         counteragent.setName(request.name());
         counteragent.setInn(trimToNull(request.inn()));
@@ -121,10 +131,12 @@ public class CounteragentService {
         counteragent.setContactEmail(trimToNull(request.contactEmail()));
         counteragent.setAddress(trimToNull(request.address()));
         counteragent.setDirectorName(trimToNull(request.directorName()));
-        counteragent.setBankName(trimToNull(request.bankName()));
-        counteragent.setBankAccount(trimToNull(request.bankAccount()));
-        counteragent.setMfo(trimToNull(request.mfo()));
+        applyBankDetails(counteragent, request);
         counteragent.setStatus(request.status() != null ? request.status() : CounteragentStatus.ACTIVE);
+    }
+
+    private void applyBankDetails(Counteragent counteragent, CounteragentRequest request) {
+        CounteragentBankDetails.apply(counteragent, request);
     }
 
     private String generateCode() {
