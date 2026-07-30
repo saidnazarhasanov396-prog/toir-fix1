@@ -38,6 +38,7 @@ import com.toir.util.AuditSerializationService;
 import com.toir.util.PaginationUtils;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.service.pprcalendar.PprPlanEquipmentAccessPolicy;
+import com.toir.service.pprcalendar.PprOperationalCalendarPolicy;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -85,6 +86,7 @@ public class PprPlanService {
     private final EntityManager entityManager;
     private final PprPlanVisibilityPolicy visibilityPolicy;
     private final PprPlanEquipmentAccessPolicy equipmentAccessPolicy;
+    private final PprOperationalCalendarPolicy operationalCalendarPolicy;
     private final AnnualMaintenanceApprovalFirstFeature approvalFirstFeature;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
     private static final int MAX_TASK_CODE_GENERATION_ATTEMPTS = 50;
@@ -94,6 +96,12 @@ public class PprPlanService {
             EnumSet.of(PlanStatus.DRAFT, PlanStatus.GENERATED);
     private static final Set<PlanStatus> PLAN_EXECUTION_STATUSES =
             EnumSet.of(PlanStatus.APPROVED, PlanStatus.IN_PROGRESS);
+    private static final Set<PlanStatus> OPERATIONAL_CALENDAR_STATUSES =
+            EnumSet.of(
+                    PlanStatus.APPROVED,
+                    PlanStatus.IN_PROGRESS,
+                    PlanStatus.CLOSED,
+                    PlanStatus.CANCELLED);
     private static final Set<String> LIST_SORT_FIELDS = Set.of("taskCount", "intervalHours", "status", "fromDate", "pprType");
 
 
@@ -378,6 +386,97 @@ public class PprPlanService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public Page<PprPlanDto> findOperationalCalendarPlans(
+            Integer year,
+            Integer month,
+            Integer day,
+            UUID departmentId,
+            UUID equipmentId,
+            Set<PlanStatus> requestedStatuses,
+            Integer page,
+            Integer size,
+            String sortBy,
+            String sortDir) {
+        List<PprPlan> entities = findOperationalCalendarPlanEntities(
+                year, month, day, departmentId, equipmentId, requestedStatuses);
+        List<PprPlanDto> plans = sortIfRequested(
+                toOperationalCalendarDtos(entities, equipmentId), sortBy, sortDir);
+        if (page == null && size == null) {
+            int pageSize = PaginationUtils.pageSizeFromList(0, plans.size());
+            return PaginationUtils.page(plans, 0, pageSize, plans.size());
+        }
+        if (page == null || size == null) {
+            throw RestException.badRequest(
+                    "Both page and size must be provided for paginated PPR plan list");
+        }
+        return PaginationUtils.page(plans, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public PprPlanStatsResponse getOperationalCalendarStats(
+            Integer year,
+            Integer month,
+            Integer day,
+            UUID departmentId) {
+        List<PprPlan> plans = findOperationalCalendarPlanEntities(
+                year, month, day, departmentId, null, Set.of());
+        List<PprTask> tasks = collectTasks(plans).stream()
+                .filter(operationalCalendarPolicy::includes)
+                .toList();
+        LocalDateTime now = LocalDateTime.now();
+        return new PprPlanStatsResponse(
+                plans.size(),
+                0,
+                0,
+                plans.stream()
+                        .filter(plan -> plan.getStatus() == PlanStatus.APPROVED)
+                        .count(),
+                tasks.stream()
+                        .filter(task -> task.getStatus() == PprTaskStatus.PLANNED)
+                        .count(),
+                tasks.stream()
+                        .filter(task -> task.getStatus() == PprTaskStatus.IN_PROGRESS)
+                        .count(),
+                tasks.stream()
+                        .filter(task -> task.getStatus() == PprTaskStatus.COMPLETED)
+                        .count(),
+                tasks.stream().filter(task -> isOverdue(task, now)).count());
+    }
+
+    private List<PprPlan> findOperationalCalendarPlanEntities(
+            Integer year,
+            Integer month,
+            Integer day,
+            UUID departmentId,
+            UUID equipmentId,
+            Set<PlanStatus> requestedStatuses) {
+        validateDateFilterParts(year, month, day);
+        Set<PlanStatus> effectiveStatuses =
+                requestedStatuses == null || requestedStatuses.isEmpty()
+                        ? EnumSet.copyOf(OPERATIONAL_CALENDAR_STATUSES)
+                        : EnumSet.copyOf(requestedStatuses);
+        effectiveStatuses.retainAll(OPERATIONAL_CALENDAR_STATUSES);
+        if (effectiveStatuses.isEmpty()) {
+            return List.of();
+        }
+        List<String> visibleStatuses =
+                visibleStatusNames(effectiveStatuses, true);
+        if (visibleStatuses.isEmpty()) {
+            return List.of();
+        }
+        return planRepository.searchPlansByStatuses(
+                        year,
+                        month,
+                        day,
+                        departmentId,
+                        equipmentId,
+                        visibleStatuses)
+                .stream()
+                .filter(operationalCalendarPolicy::includes)
+                .toList();
+    }
+
     private boolean isOverdue(PprTask task, LocalDateTime now) {
         return task.getStatus() == PprTaskStatus.OVERDUE
                 || (task.getDueDate() != null
@@ -441,6 +540,69 @@ public class PprPlanService {
     }
 
     @Transactional(readOnly = true)
+    public Page<PprTaskDto> findOperationalCalendarTasks(
+            UUID departmentId,
+            UUID equipmentId,
+            Set<PprTaskStatus> requestedStatuses,
+            boolean overdue,
+            int page,
+            int size) {
+        Set<PprTaskStatus> effectiveStatuses =
+                requestedStatuses == null || requestedStatuses.isEmpty()
+                        ? EnumSet.allOf(PprTaskStatus.class)
+                        : EnumSet.copyOf(requestedStatuses);
+        List<PprTask> tasks = pprTaskQueryService.findTasksByStatuses(
+                        departmentId,
+                        equipmentId,
+                        effectiveStatuses,
+                        overdue)
+                .stream()
+                .filter(operationalCalendarPolicy::includes)
+                .toList();
+        Map<UUID, EquipmentMaintenanceRule> ruleById =
+                loadMaintenanceRuleById(tasks);
+        Map<UUID, String> equipmentNames =
+                resolveEquipmentNames(List.of(), tasks);
+        Map<UUID, String> regulationNames =
+                resolveRegulationNames(List.of(), tasks);
+        List<PprTaskDto> dtos = tasks.stream()
+                .map(task -> PprTaskDto.from(
+                        task, ruleById, equipmentNames, regulationNames))
+                .toList();
+        return PaginationUtils.page(dtos, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public PprTaskStatsResponse getOperationalCalendarTaskStats(
+            UUID departmentId,
+            UUID equipmentId,
+            PprTaskStatus status) {
+        Set<PprTaskStatus> statuses = status == null
+                ? EnumSet.allOf(PprTaskStatus.class)
+                : EnumSet.of(status);
+        List<PprTask> tasks = pprTaskQueryService.findTasksByStatuses(
+                        departmentId, equipmentId, statuses, false)
+                .stream()
+                .filter(operationalCalendarPolicy::includes)
+                .toList();
+        Map<PprTaskStatus, Long> statusBreakdown =
+                new EnumMap<>(PprTaskStatus.class);
+        for (PprTaskStatus taskStatus : PprTaskStatus.values()) {
+            statusBreakdown.put(taskStatus, 0L);
+        }
+        for (PprTask task : tasks) {
+            statusBreakdown.computeIfPresent(
+                    task.getStatus(), (ignored, count) -> count + 1);
+        }
+        long completedTasks = statusBreakdown.get(PprTaskStatus.COMPLETED);
+        double completionRate = tasks.isEmpty()
+                ? 0
+                : (double) completedTasks / tasks.size() * 100;
+        return new PprTaskStatsResponse(
+                tasks.size(), completedTasks, completionRate, statusBreakdown);
+    }
+
+    @Transactional(readOnly = true)
     public PprTaskStatsResponse getTaskStats(UUID departmentId, UUID equipmentId, PprTaskStatus status) {
         List<PprTask> tasks = pprTaskQueryService.findTasks(departmentId, equipmentId, status, false);
         Map<PprTaskStatus, Long> statusBreakdown = new EnumMap<>(PprTaskStatus.class);
@@ -459,6 +621,29 @@ public class PprPlanService {
     @Transactional(readOnly = true)
     public PprPlanDto findById(UUID id) {
         return toDto(getPlan(id));
+    }
+
+    @Transactional(readOnly = true)
+    public PprPlanDto findOperationalCalendarPlanById(UUID id) {
+        PprPlan plan = getPlan(id);
+        if (!operationalCalendarPolicy.includes(plan)) {
+            throw RestException.notFound("PPR plan not found: " + id);
+        }
+        return toOperationalCalendarDtos(List.of(plan), null).getFirst();
+    }
+
+    @Transactional(readOnly = true)
+    public PprTaskDto findOperationalCalendarTaskById(UUID id) {
+        PprTask task = getTask(id);
+        if (!operationalCalendarPolicy.includes(task)) {
+            throw RestException.notFound("PPR task not found: " + id);
+        }
+        List<PprTask> tasks = List.of(task);
+        return PprTaskDto.from(
+                task,
+                loadMaintenanceRuleById(tasks),
+                resolveEquipmentNames(List.of(), tasks),
+                resolveRegulationNames(List.of(), tasks));
     }
 
     @Transactional
@@ -886,6 +1071,23 @@ public class PprPlanService {
                         regulationNames,
                         equipmentId
                 ))
+                .toList();
+    }
+
+    private List<PprPlanDto> toOperationalCalendarDtos(
+            List<PprPlan> plans,
+            UUID equipmentId) {
+        Set<UUID> visibleTaskIds = plans.stream()
+                .flatMap(plan -> plan.getTasks().stream())
+                .filter(operationalCalendarPolicy::includes)
+                .filter(task -> equipmentId == null
+                        || equipmentId.equals(task.getEquipmentId()))
+                .map(PprTask::getId)
+                .collect(Collectors.toSet());
+        return toDtos(plans, equipmentId).stream()
+                .map(plan -> plan.withTasks(plan.tasks().stream()
+                        .filter(task -> visibleTaskIds.contains(task.id()))
+                        .toList()))
                 .toList();
     }
 

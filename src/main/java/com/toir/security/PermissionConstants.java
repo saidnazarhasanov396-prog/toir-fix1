@@ -19,6 +19,7 @@ public final class PermissionConstants {
     public static final String AUDIT_LOG_READ = "AUDIT_LOG_READ";
 
     public static final String PPR_PLAN_READ = "PPR_PLAN_READ";
+    public static final String PPR_CALENDAR_READ = "PPR_CALENDAR_READ";
     public static final String PPR_PLAN_CREATE = "PPR_PLAN_CREATE";
     public static final String PPR_PLAN_UPDATE = "PPR_PLAN_UPDATE";
     public static final String PPR_PLAN_DELETE = "PPR_PLAN_DELETE";
