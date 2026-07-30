@@ -20,6 +20,18 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     @Query(value = "SELECT * FROM users WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<User> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
+    @Query("""
+            SELECT DISTINCT u
+            FROM User u
+            LEFT JOIN FETCH u.roles
+            LEFT JOIN FETCH u.primaryRole
+            LEFT JOIN FETCH u.department
+            LEFT JOIN FETCH u.avatarFile
+            WHERE u.id = :id
+              AND u.isDeleted = false
+            """)
+    Optional<User> findProfileById(@Param("id") UUID id);
+
     @Query(value = "SELECT * FROM users WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<User> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
