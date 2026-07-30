@@ -3,6 +3,7 @@ import com.toir.entity.BaseEntity;
 import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
+import com.toir.enums.CompletionEvidenceType;
 import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceRecalculationPolicy;
@@ -14,6 +15,8 @@ import com.toir.enums.PriorityLevel;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -98,6 +101,15 @@ public class MaintenanceRegulation extends BaseEntity {
     @Builder.Default
     @Column(name = "lead_time_days", nullable = false)
     private Integer leadTimeDays = 7;
+
+    @Builder.Default
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "maintenance_regulation_required_evidence",
+            joinColumns = @JoinColumn(name = "regulation_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "evidence_type", nullable = false, length = 32)
+    private Set<CompletionEvidenceType> requiredEvidenceTypes = new HashSet<>();
 
     @Column(name = "lead_meter_percent")
     private Double leadMeterPercent;

@@ -283,6 +283,9 @@ class WorkOrderServiceTest {
     CompletionActRepository completionActRepository;
 
     @Mock
+    com.toir.service.ppr.PprCompletionEvidenceService pprCompletionEvidenceService;
+
+    @Mock
     FileAssetRepository fileAssetRepository;
 
     @Mock
@@ -2824,7 +2827,7 @@ class WorkOrderServiceTest {
     }
 
     @Test
-    void completeWithLinkedPprTaskShouldCompleteTaskAndMovePlanToInProgress() {
+    void completeWithLinkedPprTaskShouldKeepTaskInProgressUntilAcceptanceAndClose() {
         UUID workOrderId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
         UUID linkedTaskId = UUID.randomUUID();
@@ -2848,15 +2851,16 @@ class WorkOrderServiceTest {
         WorkOrderDto result = service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
 
         assertThat(result.status()).isEqualTo(WorkOrderStatus.COMPLETED);
-        assertThat(linkedTask.getStatus()).isEqualTo(com.toir.enums.PprTaskStatus.COMPLETED);
+        assertThat(linkedTask.getStatus()).isEqualTo(com.toir.enums.PprTaskStatus.IN_PROGRESS);
         assertThat(plan.getStatus()).isEqualTo(PlanStatus.IN_PROGRESS);
         assertThat(plan.getStatus()).isNotEqualTo(PlanStatus.DRAFT);
         verify(pprTaskRepository).save(any(PprTask.class));
         verify(pprPlanRepository).save(any(PprPlan.class));
+        verify(pprCompletionEvidenceService).validateAndStore(eq(workOrder), any(CompleteWorkOrderRequest.class), any());
     }
 
     @Test
-    void completeWithLinkedPprTaskShouldClosePlanWhenAllTasksCompleted() {
+    void completeWithLinkedPprTaskShouldNotClosePlanBeforeAcceptanceAndClose() {
         UUID workOrderId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
         UUID linkedTaskId = UUID.randomUUID();
@@ -2879,12 +2883,12 @@ class WorkOrderServiceTest {
 
         service.complete(workOrderId, new CompleteWorkOrderRequest("done", "summary", null));
 
-        assertThat(linkedTask.getStatus()).isEqualTo(com.toir.enums.PprTaskStatus.COMPLETED);
-        assertThat(plan.getStatus()).isEqualTo(PlanStatus.CLOSED);
+        assertThat(linkedTask.getStatus()).isEqualTo(com.toir.enums.PprTaskStatus.IN_PROGRESS);
+        assertThat(plan.getStatus()).isEqualTo(PlanStatus.IN_PROGRESS);
     }
 
     @Test
-    void closeWithLinkedAlreadyCompletedTaskShouldRollupPlanStatus() {
+    void closeWithLinkedInProgressTaskShouldCompleteTaskAndRollupPlanStatus() {
         UUID workOrderId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
         UUID linkedTaskId = UUID.randomUUID();
@@ -2893,7 +2897,7 @@ class WorkOrderServiceTest {
         workOrder.setPprTaskId(linkedTaskId);
 
         PprPlan plan = pprPlan(planId, PlanStatus.DRAFT);
-        PprTask linkedTask = pprTask(linkedTaskId, plan, com.toir.enums.PprTaskStatus.COMPLETED);
+        PprTask linkedTask = pprTask(linkedTaskId, plan, com.toir.enums.PprTaskStatus.IN_PROGRESS);
         PprTask plannedTask = pprTask(UUID.randomUUID(), plan, com.toir.enums.PprTaskStatus.PLANNED);
 
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
@@ -2902,13 +2906,17 @@ class WorkOrderServiceTest {
                 .thenReturn(java.util.List.of(linkedTask, plannedTask));
         when(pprPlanRepository.save(any(PprPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(completionAct(workOrderId, true)));
+        when(pprCompletionEvidenceService.missingEvidence(workOrder)).thenReturn(java.util.Set.of());
         stubLifecycleDtoLookups(workOrder);
 
         WorkOrderDto result = service.close(workOrderId, new CloseWorkOrderRequest("closed", "notes"));
 
         assertThat(result.status()).isEqualTo(WorkOrderStatus.CLOSED);
+        assertThat(linkedTask.getStatus()).isEqualTo(com.toir.enums.PprTaskStatus.COMPLETED);
         assertThat(plan.getStatus()).isEqualTo(PlanStatus.IN_PROGRESS);
-        verify(pprTaskRepository, never()).save(any(PprTask.class));
+        verify(pprTaskRepository).save(any(PprTask.class));
         verify(pprPlanRepository).save(any(PprPlan.class));
     }
 
@@ -3832,6 +3840,60 @@ class WorkOrderServiceTest {
         assertThat(readiness.groups()).containsEntry("acts", com.toir.enums.CloseReadinessGroupStatus.BLOCKED);
         assertThat(readiness.groups()).containsEntry("labor", com.toir.enums.CloseReadinessGroupStatus.BLOCKED);
         assertThat(readiness.groups()).containsEntry("materials", com.toir.enums.CloseReadinessGroupStatus.BLOCKED);
+    }
+
+    @Test
+    void closeReadinessRequiresCompletionActForPprWorkOrder() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(
+                workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        workOrder.setPprTaskId(UUID.randomUUID());
+        workOrder.setResult("completed");
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(repairAcceptanceRepository.existsAcceptedFinalByWorkOrderId(workOrderId)).thenReturn(true);
+        when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId))
+                .thenReturn(List.of(laborEntry(workOrderId)));
+        when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+        when(actualCostRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+        when(pprCompletionEvidenceService.missingEvidence(workOrder)).thenReturn(java.util.Set.of());
+
+        WorkOrderCloseReadinessDto readiness = service.getCloseReadiness(workOrderId);
+
+        assertThat(readiness.blockers()).extracting("code").contains("COMPLETION_ACT_MISSING");
+    }
+
+    @Test
+    void closeReadinessReportsMissingRequiredPprEvidence() {
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrder workOrder = lifecycleWorkOrder(
+                workOrderId, WorkType.REPAIR, WorkOrderStatus.COMPLETED, null, null);
+        workOrder.setPprTaskId(UUID.randomUUID());
+        workOrder.setResult("completed");
+
+        when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(safetyPermitRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.empty());
+        when(completionActRepository.findByWorkOrderIdAndIsDeletedFalse(workOrderId))
+                .thenReturn(Optional.of(completionAct(workOrderId, true)));
+        when(repairAcceptanceRepository.existsAcceptedFinalByWorkOrderId(workOrderId)).thenReturn(true);
+        when(laborEntryRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByWorkDateAsc(workOrderId))
+                .thenReturn(List.of(laborEntry(workOrderId)));
+        when(reservationRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+        when(actualCostRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
+                .thenReturn(List.of());
+        when(pprCompletionEvidenceService.missingEvidence(workOrder))
+                .thenReturn(java.util.Set.of(com.toir.enums.CompletionEvidenceType.AFTER_PHOTO));
+
+        WorkOrderCloseReadinessDto readiness = service.getCloseReadiness(workOrderId);
+
+        assertThat(readiness.blockers()).extracting("code").contains("MISSING_PPR_EVIDENCE");
+        assertThat(readiness.blockers()).extracting("message").anyMatch(message ->
+                ((String) message).contains("AFTER_PHOTO"));
     }
 
     @Test

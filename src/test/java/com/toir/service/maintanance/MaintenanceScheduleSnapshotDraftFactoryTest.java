@@ -41,6 +41,9 @@ class MaintenanceScheduleSnapshotDraftFactoryTest {
         rule.setCode("MR-001");
         rule.setName("Bearing service");
         rule.setLeadTimeDays(3);
+        rule.setRequiredEvidenceTypes(java.util.Set.of(
+                com.toir.enums.CompletionEvidenceType.BEFORE_PHOTO,
+                com.toir.enums.CompletionEvidenceType.AFTER_PHOTO));
         when(ruleRepository.findAllById(List.of(ruleId))).thenReturn(List.of(rule));
 
         PprPlan plan = new PprPlan();
@@ -74,6 +77,9 @@ class MaintenanceScheduleSnapshotDraftFactoryTest {
         assertThat(rows.getFirst().getSourceItemKey()).matches("^[0-9a-f]{64}$");
         assertThat(rows.getFirst().getSourceItemKeyVersion()).isEqualTo(1);
         assertThat(rows.getFirst().getWorkOrderLeadDays()).isEqualTo(3);
+        assertThat(rows.getFirst().getRequiredEvidenceTypes()).containsExactlyInAnyOrder(
+                com.toir.enums.CompletionEvidenceType.BEFORE_PHOTO,
+                com.toir.enums.CompletionEvidenceType.AFTER_PHOTO);
         assertThat(rows.getFirst().getEquipmentCodeSnapshot()).isEqualTo("EQ-001");
         assertThat(rows.getFirst().getScheduledStart())
                 .isBefore(rows.getFirst().getScheduledEnd());

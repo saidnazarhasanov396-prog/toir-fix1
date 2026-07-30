@@ -3,6 +3,7 @@ package com.toir.dto.maintenanceregulation;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.DuplicatePolicy;
+import com.toir.enums.CompletionEvidenceType;
 import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceRecalculationPolicy;
@@ -22,6 +23,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public record MaintenanceRegulationRequest(
@@ -59,8 +61,49 @@ public record MaintenanceRegulationRequest(
         String approvalRole,
         String approvalPermission,
         List<MaintenanceRegulationAttributeConditionRequest> attributeConditions,
-        List<MaintenanceRegulationSparePartRequirementRequest> sparePartRequirements
+        List<MaintenanceRegulationSparePartRequirementRequest> sparePartRequirements,
+        Set<CompletionEvidenceType> requiredEvidenceTypes
 ) {
+        public MaintenanceRegulationRequest(
+                String code,
+                String name,
+                String description,
+                UUID equipmentTypeId,
+                UUID templateId,
+                MaintenanceKind maintenanceKind,
+                double normativeLaborHours,
+                Boolean active,
+                PeriodicityUnit periodicityUnit,
+                int periodicityValue,
+                Integer toleranceDays,
+                boolean requiresShutdown,
+                MeterType triggerMeterType,
+                Double triggerMeterInterval,
+                MaintenanceTriggerPolicy triggerPolicy,
+                MaintenanceRecalculationPolicy recalculationPolicy,
+                MaintenanceInitialSchedulePolicy initialSchedulePolicy,
+                AutomationAction automationAction,
+                ApprovalResultAction approvalResultAction,
+                DuplicatePolicy duplicatePolicy,
+                Integer leadTimeDays,
+                Double leadMeterPercent,
+                UUID defaultDepartmentId,
+                UUID defaultResponsibleId,
+                PriorityLevel defaultPriority,
+                Boolean requiresApproval,
+                String approvalRole,
+                String approvalPermission,
+                List<MaintenanceRegulationAttributeConditionRequest> attributeConditions,
+                List<MaintenanceRegulationSparePartRequirementRequest> sparePartRequirements
+        ) {
+                this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours,
+                        active, periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
+                        triggerMeterInterval, triggerPolicy, recalculationPolicy, initialSchedulePolicy,
+                        automationAction, approvalResultAction, duplicatePolicy, leadTimeDays, leadMeterPercent,
+                        defaultDepartmentId, defaultResponsibleId, defaultPriority, requiresApproval, approvalRole,
+                        approvalPermission, attributeConditions, sparePartRequirements, null);
+        }
+
         public MaintenanceRegulationRequest(
                 String code,
                 @NotBlank String name,
@@ -95,7 +138,7 @@ public record MaintenanceRegulationRequest(
                         triggerMeterInterval, triggerPolicy, recalculationPolicy, null, automationAction,
                         null, duplicatePolicy,
                         leadTimeDays, leadMeterPercent, defaultDepartmentId, defaultResponsibleId, defaultPriority,
-                        requiresApproval, approvalRole, approvalPermission, attributeConditions, null);
+                        requiresApproval, approvalRole, approvalPermission, attributeConditions, null, null);
         }
 
         public MaintenanceRegulationRequest(
@@ -134,7 +177,7 @@ public record MaintenanceRegulationRequest(
                         triggerMeterInterval, triggerPolicy, recalculationPolicy, initialSchedulePolicy, automationAction,
                         approvalResultAction, duplicatePolicy, leadTimeDays, leadMeterPercent, defaultDepartmentId,
                         defaultResponsibleId, defaultPriority, requiresApproval, approvalRole, approvalPermission,
-                        attributeConditions, null);
+                        attributeConditions, null, null);
         }
 
         public MaintenanceRegulationRequest(
@@ -156,7 +199,7 @@ public record MaintenanceRegulationRequest(
                 this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
                         triggerMeterInterval, null, null, null, null, null, null, null, null, null, null, null, null,
-                        null, null, null, null);
+                        null, null, null, null, null);
         }
 
         public MaintenanceRegulationRequest(
@@ -179,7 +222,7 @@ public record MaintenanceRegulationRequest(
                 this(code, name, description, equipmentTypeId, templateId, maintenanceKind, normativeLaborHours, active,
                         periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
                         triggerMeterInterval, null, null, null, null, null, null, null, null, null, null, null, null,
-                        null, null, attributeConditions, null);
+                        null, null, attributeConditions, null, null);
         }
 
         @AssertTrue(message = "triggerMeterType and triggerMeterInterval must be provided together")

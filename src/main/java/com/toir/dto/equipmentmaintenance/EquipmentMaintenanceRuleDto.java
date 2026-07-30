@@ -4,6 +4,7 @@ import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
+import com.toir.enums.CompletionEvidenceType;
 import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceRecalculationPolicy;
@@ -13,6 +14,7 @@ import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.Set;
 import java.util.UUID;
 
 public record EquipmentMaintenanceRuleDto(
@@ -50,7 +52,8 @@ public record EquipmentMaintenanceRuleDto(
         @Schema(hidden = true, deprecated = true)
         Boolean requiresApproval,
         String approvalRole,
-        String approvalPermission
+        String approvalPermission,
+        Set<CompletionEvidenceType> requiredEvidenceTypes
 ) {
     public static EquipmentMaintenanceRuleDto from(EquipmentMaintenanceRule rule) {
         return new EquipmentMaintenanceRuleDto(
@@ -87,7 +90,8 @@ public record EquipmentMaintenanceRuleDto(
                 rule.getDefaultPriority(),
                 rule.getRequiresApproval(),
                 rule.getApprovalRole(),
-                rule.getApprovalPermission()
+                rule.getApprovalPermission(),
+                rule.getRequiredEvidenceTypes() == null ? Set.of() : Set.copyOf(rule.getRequiredEvidenceTypes())
         );
     }
 }

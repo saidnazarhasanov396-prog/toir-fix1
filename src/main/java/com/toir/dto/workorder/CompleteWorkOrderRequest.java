@@ -23,7 +23,8 @@ public record CompleteWorkOrderRequest(
         List<@Valid RepairMaterialUsageDto> materialUsages,
         UUID repairActFileId,
         UUID stoppageActFileId,
-        List<@Valid WorkOrderSparePartLifecycleOperation> sparePartLifecycleOperations
+        List<@Valid WorkOrderSparePartLifecycleOperation> sparePartLifecycleOperations,
+        List<@Valid WorkOrderCompletionEvidenceRequest> completionEvidence
 ) {
         public CompleteWorkOrderRequest(
                 String result,
@@ -46,7 +47,7 @@ public record CompleteWorkOrderRequest(
                 List<CompletionMeterSnapshotRequest> meterSnapshots
         ) {
                 this(result, summary, oldEquipmentReturnWarehouseId, regulationId, equipmentMaintenanceRuleId,
-                        performedAt, plannedDueAt, recalculationPolicy, meterSnapshots, null, null, null, null);
+                        performedAt, plannedDueAt, recalculationPolicy, meterSnapshots, null, null, null, null, null);
         }
 
         public CompleteWorkOrderRequest(
@@ -81,6 +82,25 @@ public record CompleteWorkOrderRequest(
         ) {
                 this(result, summary, oldEquipmentReturnWarehouseId, regulationId, equipmentMaintenanceRuleId,
                         performedAt, plannedDueAt, recalculationPolicy, meterSnapshots, materialUsages,
-                        repairActFileId, stoppageActFileId, null);
+                        repairActFileId, stoppageActFileId, null, null);
+        }
+        public CompleteWorkOrderRequest(
+                String result,
+                String summary,
+                UUID oldEquipmentReturnWarehouseId,
+                UUID regulationId,
+                UUID equipmentMaintenanceRuleId,
+                Instant performedAt,
+                Instant plannedDueAt,
+                MaintenanceRecalculationPolicy recalculationPolicy,
+                List<CompletionMeterSnapshotRequest> meterSnapshots,
+                List<@Valid RepairMaterialUsageDto> materialUsages,
+                UUID repairActFileId,
+                UUID stoppageActFileId,
+                List<@Valid WorkOrderSparePartLifecycleOperation> sparePartLifecycleOperations
+        ) {
+                this(result, summary, oldEquipmentReturnWarehouseId, regulationId, equipmentMaintenanceRuleId,
+                        performedAt, plannedDueAt, recalculationPolicy, meterSnapshots, materialUsages,
+                        repairActFileId, stoppageActFileId, sparePartLifecycleOperations, null);
         }
 }

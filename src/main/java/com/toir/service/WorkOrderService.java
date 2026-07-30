@@ -1,5 +1,7 @@
 package com.toir.service;
 
+import com.toir.service.ppr.PprCompletionEvidenceService;
+
 import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.attachment.AttachmentPhotoSummary;
 import com.toir.dto.equipment.EquipmentPlacementRequest;
@@ -212,6 +214,7 @@ public class WorkOrderService {
     private final EquipmentService equipmentService;
     private final SafetyPermitRepository safetyPermitRepository;
     private final CompletionActRepository completionActRepository;
+    private final PprCompletionEvidenceService pprCompletionEvidenceService;
     private final FileAssetRepository fileAssetRepository;
     private final FileService fileService;
     private final UploadedFileRepository uploadedFileRepository;
@@ -1117,6 +1120,8 @@ public class WorkOrderService {
                 entity.getEquipmentId(),
                 com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation.WORK_ORDER_COMPLETE);
         validateAndBindCompletionActFiles(entity, request);
+        pprCompletionEvidenceService.validateAndStore(
+                entity, request, scopeAccessService.currentUserIdOrNull());
         assertDefectListGate(entity);
         MaintenanceDueEvent dueEvent = loadMaintenanceDueEvent(entity);
         entity.setResult(request.result());
@@ -1134,7 +1139,7 @@ public class WorkOrderService {
         if (isReplacementWorkOrder(entity)) {
             completeReplacementPlacement(entity, request);
         }
-        completeLinkedPprTask(entity);
+        markLinkedPprTaskInProgress(entity);
 
         WorkOrder saved = repository.save(entity);
         erpWorkOrderDeltas.queueDelta(saved.getId());
@@ -1610,14 +1615,33 @@ public class WorkOrderService {
                                 + (permit.getStatus() == null ? "" : " (current: " + permit.getStatus() + ")"),
                         "safety", "close-safety-permit", "safety"));
 
-        completionActRepository.findByWorkOrderIdAndIsDeletedFalse(entity.getId())
-                .filter(act -> act.getSignedAt() == null || act.getSignedById() == null)
-                .ifPresent(act -> addBlocker(blockers, groups, "COMPLETION_ACT_NOT_SIGNED",
-                        "Completion act must be signed.", "acts", "sign-completion-act", "closure"));
+        Optional<com.toir.entity.CompletionAct> completionAct = completionActRepository
+                .findByWorkOrderIdAndIsDeletedFalse(entity.getId());
+        if (entity.getPprTaskId() != null && completionAct.isEmpty()) {
+            addBlocker(blockers, groups, "COMPLETION_ACT_MISSING",
+                    "Completion act is required for a PPR work order.",
+                    "acts", "create-completion-act", "closure");
+        } else {
+            completionAct
+                    .filter(act -> act.getSignedAt() == null || act.getSignedById() == null)
+                    .ifPresent(act -> addBlocker(blockers, groups, "COMPLETION_ACT_NOT_SIGNED",
+                            "Completion act must be signed.",
+                            "acts", "sign-completion-act", "closure"));
+        }
 
         if (!repairAcceptanceRepository.existsAcceptedFinalByWorkOrderId(entity.getId())) {
             addBlocker(blockers, groups, "FINAL_ACCEPTANCE_NOT_ACCEPTED",
                     "Final repair acceptance must be ACCEPTED.", "acts", "review-acceptance", "closure");
+        }
+
+        if (entity.getPprTaskId() != null) {
+            Set<com.toir.enums.CompletionEvidenceType> missingEvidence =
+                    pprCompletionEvidenceService.missingEvidence(entity);
+            if (missingEvidence != null && !missingEvidence.isEmpty()) {
+                addBlocker(blockers, groups, "MISSING_PPR_EVIDENCE",
+                        "Missing required PPR completion evidence: " + missingEvidence,
+                        "acts", "add-completion-evidence", "closure");
+            }
         }
 
         Optional<String> safetyChecklistBlocker = safetyChecklistService.closeBlocker(entity);
@@ -1787,6 +1811,29 @@ public class WorkOrderService {
                 .orElseThrow(() -> RestException.notFound("PPR task not found: " + entity.getPprTaskId()));
         recalculatePlanStatus(task.getPlan());
         return toDto(entity);
+    }
+
+    private void markLinkedPprTaskInProgress(WorkOrder workOrder) {
+        if (workOrder.getPprTaskId() == null) {
+            return;
+        }
+        PprTask task = pprTaskRepository.findByIdAndIsDeletedFalse(workOrder.getPprTaskId())
+                .orElseThrow(() -> RestException.notFound("PPR task not found: " + workOrder.getPprTaskId()));
+        if (task.getStatus() == PprTaskStatus.COMPLETED || task.getStatus() == PprTaskStatus.CANCELLED) {
+            recalculatePlanStatus(task.getPlan());
+            return;
+        }
+        task.setStatus(PprTaskStatus.IN_PROGRESS);
+        PprTask saved = pprTaskRepository.save(task);
+        auditBuilderService.log(
+                "ppr_task",
+                task.getId().toString(),
+                AuditAction.UPDATE,
+                AuditModule.PPR_TASK,
+                "PPR task awaits acceptance for linked work order " + workOrder.getNumber(),
+                task,
+                saved);
+        recalculatePlanStatus(task.getPlan());
     }
 
     private void completeLinkedPprTask(WorkOrder workOrder) {

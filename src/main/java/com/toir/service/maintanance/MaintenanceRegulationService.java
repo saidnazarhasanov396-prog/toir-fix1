@@ -314,6 +314,9 @@ public class MaintenanceRegulationService {
                 .approvalResultAction(source.getApprovalResultAction())
                 .duplicatePolicy(source.getDuplicatePolicy())
                 .leadTimeDays(source.getLeadTimeDays())
+                .requiredEvidenceTypes(source.getRequiredEvidenceTypes() == null
+                        ? new java.util.HashSet<>()
+                        : new java.util.HashSet<>(source.getRequiredEvidenceTypes()))
                 .leadMeterPercent(source.getLeadMeterPercent())
                 .defaultDepartmentId(source.getDefaultDepartmentId())
                 .defaultResponsibleId(source.getDefaultResponsibleId())
@@ -750,6 +753,9 @@ public class MaintenanceRegulationService {
                 ? DuplicatePolicy.ONE_ITEM_PER_CYCLE
                 : request.duplicatePolicy());
         entity.setLeadTimeDays(request.leadTimeDays() == null ? 7 : request.leadTimeDays());
+        entity.setRequiredEvidenceTypes(request.requiredEvidenceTypes() == null
+                ? new java.util.HashSet<>()
+                : new java.util.HashSet<>(request.requiredEvidenceTypes()));
         entity.setLeadMeterPercent(request.leadMeterPercent());
         entity.setDefaultDepartmentId(request.defaultDepartmentId());
         entity.setDefaultResponsibleId(request.defaultResponsibleId());
@@ -955,6 +961,7 @@ public class MaintenanceRegulationService {
                 || effectiveApprovalResultAction(request) != ApprovalResultAction.CREATE_TASK
                 || effectiveDuplicatePolicy(request) != DuplicatePolicy.ONE_ITEM_PER_CYCLE
                 || request.leadTimeDays() != null
+                || request.requiredEvidenceTypes() != null && !request.requiredEvidenceTypes().isEmpty()
                 || request.leadMeterPercent() != null
                 || request.defaultDepartmentId() != null
                 || request.defaultResponsibleId() != null
@@ -968,7 +975,12 @@ public class MaintenanceRegulationService {
         return effectiveAutomationAction(request) != effectiveAutomationAction(existing)
                 || effectiveApprovalResultAction(request) != effectiveApprovalResultAction(existing)
                 || effectiveDuplicatePolicy(request) != effectiveDuplicatePolicy(existing)
-                || !Objects.equals(request.leadTimeDays(), existing.getLeadTimeDays())
+                || !Objects.equals(
+                        request.leadTimeDays() == null ? 7 : request.leadTimeDays(),
+                        existing.getLeadTimeDays() == null ? 7 : existing.getLeadTimeDays())
+                || !Objects.equals(
+                        request.requiredEvidenceTypes() == null ? java.util.Set.of() : request.requiredEvidenceTypes(),
+                        existing.getRequiredEvidenceTypes() == null ? java.util.Set.of() : existing.getRequiredEvidenceTypes())
                 || !Objects.equals(request.leadMeterPercent(), existing.getLeadMeterPercent())
                 || !Objects.equals(request.defaultDepartmentId(), existing.getDefaultDepartmentId())
                 || !Objects.equals(request.defaultResponsibleId(), existing.getDefaultResponsibleId())

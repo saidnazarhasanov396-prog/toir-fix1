@@ -211,6 +211,9 @@ public class PprPlanningVariantService {
         item.setWorkOrderLeadDays(source.getWorkOrderLeadDays() == null
                 ? 7
                 : source.getWorkOrderLeadDays());
+        item.setRequiredEvidenceTypes(source.getRequiredEvidenceTypes() == null
+                ? java.util.Set.of()
+                : java.util.Set.copyOf(source.getRequiredEvidenceTypes()));
         return item;
     }
 

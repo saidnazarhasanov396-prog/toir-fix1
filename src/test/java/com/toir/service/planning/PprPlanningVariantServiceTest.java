@@ -105,7 +105,9 @@ class PprPlanningVariantServiceTest {
             items.forEach(persisted::add);
             return persisted.size() == 1
                     && persisted.getFirst().getRevision() == 1
-                    && persisted.getFirst().getWorkOrderLeadDays() == 7;
+                    && persisted.getFirst().getWorkOrderLeadDays() == 7
+                    && persisted.getFirst().getRequiredEvidenceTypes().contains(
+                            com.toir.enums.CompletionEvidenceType.AFTER_PHOTO);
         }));
     }
 
@@ -223,6 +225,7 @@ class PprPlanningVariantServiceTest {
                 .equipmentNameSnapshot("Pump")
                 .maintenanceRuleNameSnapshot("Monthly service")
                 .taskTitleSnapshot("Monthly service — EQ-1")
+                .requiredEvidenceTypes(Set.of(com.toir.enums.CompletionEvidenceType.AFTER_PHOTO))
                 .build();
     }
 }

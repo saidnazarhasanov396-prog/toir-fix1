@@ -7,6 +7,8 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.enums.*;
 import com.toir.exception.RestException;
 import com.toir.repository.WorkOrderRepository;
+import com.toir.repository.PprPlanRepository;
+import com.toir.repository.PprTaskRepository;
 import com.toir.repository.maintenance.RepairAcceptanceDefectRepository;
 import com.toir.repository.maintenance.RepairAcceptanceRepository;
 import com.toir.security.ScopeAccessService;
@@ -26,8 +28,11 @@ public class RepairAcceptanceService {
     private final RepairAcceptanceRepository repository;
     private final RepairAcceptanceDefectRepository defectRepository;
     private final WorkOrderRepository workOrderRepository;
+    private final PprTaskRepository pprTaskRepository;
+    private final PprPlanRepository pprPlanRepository;
     private final ScopeAccessService scopeAccessService;
     private final AuditBuilderService auditBuilderService;
+    private final CompletionActService completionActService;
 
     @Transactional(readOnly = true)
     public List<RepairAcceptanceDto> list(UUID workOrderId) {
@@ -161,12 +166,16 @@ public class RepairAcceptanceService {
                 acceptance.setRemarks(request.remarks());
             }
         }
-        return saveUpdate(before, acceptance, "Repair acceptance accepted");
+        RepairAcceptanceDto result = saveUpdate(before, acceptance, "Repair acceptance accepted");
+        if (acceptance.getStage() == RepairAcceptanceStage.FINAL) {
+            completionActService.ensureForAcceptedFinal(workOrderId, acceptance.getId(), acceptance.getRemarks());
+        }
+        return result;
     }
 
     @Transactional
     public RepairAcceptanceDto reject(UUID workOrderId, UUID id, RepairAcceptanceDecisionRequest request) {
-        getWorkOrderForAccess(workOrderId);
+        WorkOrder workOrder = getWorkOrderForAccess(workOrderId);
         RepairAcceptance acceptance = getAcceptanceForWorkOrder(workOrderId, id);
         ensureMutableForDecision(acceptance);
         RepairAcceptance before = snapshot(acceptance);
@@ -181,7 +190,32 @@ public class RepairAcceptanceService {
                     : request.qualityGrade());
             acceptance.setRemarks(request.remarks());
         }
-        return saveUpdate(before, acceptance, "Repair acceptance rejected");
+        RepairAcceptanceDto result = saveUpdate(before, acceptance, "Repair acceptance rejected");
+        if (acceptance.getStage() == RepairAcceptanceStage.FINAL) {
+            reopenRejectedWork(workOrder);
+        }
+        return result;
+    }
+
+    private void reopenRejectedWork(WorkOrder workOrder) {
+        if (workOrder.getStatus() == WorkOrderStatus.COMPLETED) {
+            workOrder.setStatus(WorkOrderStatus.IN_PROGRESS);
+            workOrder.setCompletedAt(null);
+            workOrderRepository.save(workOrder);
+        }
+        if (workOrder.getPprTaskId() == null) {
+            return;
+        }
+        pprTaskRepository.findByIdAndIsDeletedFalse(workOrder.getPprTaskId()).ifPresent(task -> {
+            if (task.getStatus() != PprTaskStatus.CANCELLED) {
+                task.setStatus(PprTaskStatus.IN_PROGRESS);
+                pprTaskRepository.save(task);
+            }
+            if (task.getPlan() != null && task.getPlan().getStatus() != PlanStatus.CANCELLED) {
+                task.getPlan().setStatus(PlanStatus.IN_PROGRESS);
+                pprPlanRepository.save(task.getPlan());
+            }
+        });
     }
 
     private RepairAcceptanceDto saveUpdate(RepairAcceptance before, RepairAcceptance acceptance, String message) {

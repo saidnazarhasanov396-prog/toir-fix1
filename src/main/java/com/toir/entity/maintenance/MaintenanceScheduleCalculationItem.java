@@ -2,6 +2,7 @@ package com.toir.entity.maintenance;
 
 import com.toir.entity.BaseEntity;
 import com.toir.entity.PprPlan;
+import com.toir.enums.CompletionEvidenceType;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.PriorityLevel;
@@ -19,6 +20,8 @@ import jakarta.persistence.Transient;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -143,4 +146,8 @@ public class MaintenanceScheduleCalculationItem extends BaseEntity {
 
     @Transient
     private Integer workOrderLeadDays;
+
+    @Builder.Default
+    @Transient
+    private Set<CompletionEvidenceType> requiredEvidenceTypes = new HashSet<>();
 }

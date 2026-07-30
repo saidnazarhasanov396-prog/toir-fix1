@@ -1,6 +1,7 @@
 package com.toir.dto.equipmentmaintenance;
 
 import com.toir.enums.MaintenanceKind;
+import com.toir.enums.CompletionEvidenceType;
 import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
@@ -18,6 +19,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import java.util.Set;
 import java.util.UUID;
 
 public record EquipmentMaintenanceRuleRequest(
@@ -54,7 +56,8 @@ public record EquipmentMaintenanceRuleRequest(
         @Schema(hidden = true, deprecated = true)
         Boolean requiresApproval,
         String approvalRole,
-        String approvalPermission
+        String approvalPermission,
+        Set<CompletionEvidenceType> requiredEvidenceTypes
 ) {
     public EquipmentMaintenanceRuleRequest(
             UUID baseRegulationId,
@@ -78,7 +81,7 @@ public record EquipmentMaintenanceRuleRequest(
         this(baseRegulationId, templateId, name, description, maintenanceKind, normativeLaborHours, active,
                 periodicityUnit, periodicityValue, toleranceDays, requiresShutdown, triggerMeterType,
                 triggerMeterInterval, triggerPolicy, recalculationPolicy, disablesBaseRegulation, overrideReason,
-                null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     @AssertTrue(message = "triggerMeterType and triggerMeterInterval must be provided together")

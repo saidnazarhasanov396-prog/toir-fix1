@@ -16,6 +16,8 @@ import com.toir.enums.MaintenanceRegulationConditionOperator;
 import com.toir.enums.MaintenanceRuleOrigin;
 import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.exception.RestException;
+import com.toir.security.PermissionConstants;
+import com.toir.security.SecurityAccessService;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentAttributeValueRepository;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -34,6 +36,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +57,7 @@ public class EquipmentMaintenanceProfileService {
     private final EquipmentAttributeValueRepository attributeValueRepository;
     private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
     private final MaintenanceMeterBaselineService meterBaselineService;
+    private final SecurityAccessService securityAccessService;
 
     @Transactional(readOnly = true)
     public EquipmentMaintenanceProfileDto getProfile(UUID equipmentId) {
@@ -119,6 +124,7 @@ public class EquipmentMaintenanceProfileService {
 
     @Transactional
     public EquipmentMaintenanceRuleDto createRule(UUID equipmentId, EquipmentMaintenanceRuleRequest request) {
+        validateAutomationConfigurationPermission(request);
         Equipment equipment = equipmentOrThrow(equipmentId);
         validateReferences(equipment, request);
 
@@ -133,6 +139,7 @@ public class EquipmentMaintenanceProfileService {
 
     @Transactional
     public EquipmentMaintenanceRuleDto updateRule(UUID equipmentId, UUID ruleId, EquipmentMaintenanceRuleRequest request) {
+        validateAutomationConfigurationPermission(request);
         Equipment equipment = equipmentOrThrow(equipmentId);
         validateReferences(equipment, request);
         EquipmentMaintenanceRule rule = ruleRepository.findByIdAndIsDeletedFalse(ruleId)
@@ -176,6 +183,27 @@ public class EquipmentMaintenanceProfileService {
         }
     }
 
+    private void validateAutomationConfigurationPermission(EquipmentMaintenanceRuleRequest request) {
+        boolean configuresAutomation = request.initialSchedulePolicy() != null
+                || request.automationAction() != null
+                || request.approvalResultAction() != null
+                || request.duplicatePolicy() != null
+                || request.leadTimeDays() != null
+                || request.leadMeterPercent() != null
+                || request.defaultDepartmentId() != null
+                || request.defaultResponsibleId() != null
+                || request.defaultPriority() != null
+                || request.approvalRole() != null
+                || request.approvalPermission() != null
+                || request.requiredEvidenceTypes() != null;
+        if (configuresAutomation && !securityAccessService.hasPermission(
+                SecurityContextHolder.getContext().getAuthentication(),
+                PermissionConstants.MAINTENANCE_AUTOMATION_CONFIGURE)) {
+            throw new AccessDeniedException(
+                    "Missing permission: " + PermissionConstants.MAINTENANCE_AUTOMATION_CONFIGURE);
+        }
+    }
+
     private void apply(EquipmentMaintenanceRule rule, EquipmentMaintenanceRuleRequest request) {
         rule.setBaseRegulationId(request.baseRegulationId());
         rule.setTemplateId(request.templateId());
@@ -201,6 +229,9 @@ public class EquipmentMaintenanceProfileService {
         rule.setApprovalResultAction(request.approvalResultAction());
         rule.setDuplicatePolicy(request.duplicatePolicy());
         rule.setLeadTimeDays(request.leadTimeDays());
+        rule.setRequiredEvidenceTypes(request.requiredEvidenceTypes() == null
+                ? new java.util.HashSet<>()
+                : new java.util.HashSet<>(request.requiredEvidenceTypes()));
         rule.setLeadMeterPercent(request.leadMeterPercent());
         rule.setDefaultDepartmentId(request.defaultDepartmentId());
         rule.setDefaultResponsibleId(request.defaultResponsibleId());

@@ -63,6 +63,30 @@ public class CompletionActService {
     }
 
     @Transactional
+    public CompletionActDto ensureForAcceptedFinal(UUID workOrderId, UUID repairAcceptanceId, String summary) {
+        assertFinalAcceptanceAccepted(workOrderId);
+        return repository.findByWorkOrderIdAndIsDeletedFalse(workOrderId)
+                .map(CompletionActDto::from)
+                .orElseGet(() -> {
+                    CompletionAct act = new CompletionAct();
+                    act.setWorkOrderId(workOrderId);
+                    act.setRepairAcceptanceId(repairAcceptanceId);
+                    act.setActNumber("ACT-" + workOrderId);
+                    act.setSummary(summary);
+                    CompletionAct saved = repository.save(act);
+                    auditBuilderService.log(
+                            "completion_act",
+                            saved.getId().toString(),
+                            AuditAction.CREATE,
+                            AuditModule.COMPLETION_ACT,
+                            "Акт завершения автоматически создан после приёмки",
+                            null,
+                            saved);
+                    return CompletionActDto.from(saved);
+                });
+    }
+
+    @Transactional
     public CompletionActDto sign(UUID id, UUID signerId) {
         CompletionAct a = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Completion act not found: " + id));
