@@ -55,13 +55,9 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
         if (request.getTargetType() == ApprovalTargetType.PPR_PLAN
                 && actionType == ApprovalActionType.APPROVE) {
             ApprovalTemplate template = templateRepository
-                    .findByCodeAndActiveTrueAndIsDeletedFalse(
-                            "PPR_PLAN_APPROVAL")
-                    .filter(candidate ->
-                            candidate.getTargetType()
-                                    == ApprovalTargetType.PPR_PLAN
-                                    && candidate.getActionType()
-                                    == ApprovalActionType.APPROVE)
+                    .findFirstByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalseOrderByCreatedAtDesc(
+                            ApprovalTargetType.PPR_PLAN,
+                            ApprovalActionType.APPROVE)
                     .orElse(null);
             if (template == null || !hasConfiguredApproverStep(template)) {
                 return ApprovalRouteSnapshot.sequential(List.of());
