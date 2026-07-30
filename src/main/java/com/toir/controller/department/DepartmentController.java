@@ -1,5 +1,6 @@
 package com.toir.controller.department;
 import com.toir.dto.department.DepartmentDto;
+import com.toir.dto.department.DepartmentListItemDto;
 import com.toir.dto.department.DepartmentRequest;
 import com.toir.dto.department.DepartmentTreeDto;
 import com.toir.dto.hr.EmployeeDto;
@@ -38,6 +39,16 @@ public class DepartmentController {
         return ResponseEntity.ok(PaginationUtils.page(service.findAll(type,search), page, size));
     }
 
+    @GetMapping("/registry")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEPARTMENT_READ')")
+    public ResponseEntity<Page<DepartmentListItemDto>> registry(
+            @RequestParam(required = false) DepartmentType type,
+            @RequestParam(required = false, defaultValue = "") String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findRegistry(type, search), page, size));
+    }
 
     @GetMapping("/tree")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('DEPARTMENT_READ')")

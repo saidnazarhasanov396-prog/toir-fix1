@@ -8,7 +8,6 @@ import java.util.UUID;
 
 public record DepartmentTreeDto(
         UUID id,
-        String code,
         String name,
         String nameEn,
         String nameUz,
@@ -20,7 +19,6 @@ public record DepartmentTreeDto(
     public static DepartmentTreeDto from(Department d, List<DepartmentTreeDto> children) {
         return new DepartmentTreeDto(
                 d.getId(),
-                d.getCode(),
                 d.getName(),
                 d.getNameEn(),
                 d.getNameUz(),
