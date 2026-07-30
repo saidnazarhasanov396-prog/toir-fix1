@@ -25,6 +25,7 @@ import com.toir.service.approval.LifecycleApprovalRoutePolicy;
 import com.toir.service.approval.LifecycleApprovalStartPlan;
 import com.toir.service.approval.LifecycleRouteResolution;
 import com.toir.service.maintanance.MaintenanceRegulationService;
+import com.toir.service.maintanance.MaintenanceScheduleApprovalBinding;
 import com.toir.service.maintanance.MaintenanceScheduleApprovalBindingService;
 import com.toir.util.AuditBuilderService;
 import org.junit.jupiter.api.BeforeEach;
@@ -374,6 +375,47 @@ class ApprovalServiceTest {
         assertThat(result.steps()).hasSize(1);
         assertThat(result.steps().getFirst().approverId()).isNull();
         assertThat(result.steps().getFirst().approverRole()).isEqualTo(approverRole);
+    }
+
+    @Test
+    void pprApprovalWithoutConfiguredTemplateExplainsAdministratorOwnedRoute() {
+        UUID planId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        MaintenanceScheduleApprovalBinding binding = new MaintenanceScheduleApprovalBinding(
+                planId,
+                3L,
+                "a".repeat(64),
+                1,
+                "requester-fingerprint");
+        CreateApprovalRequest request = new CreateApprovalRequest(
+                ApprovalTargetType.PPR_PLAN.name(),
+                planId,
+                "PPR plan approval",
+                requesterId,
+                null,
+                List.of(),
+                ApprovalTargetType.PPR_PLAN,
+                planId,
+                ApprovalActionType.APPROVE);
+
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(maintenanceScheduleApprovalBindingService.resolveForSubmission(
+                ApprovalTargetType.PPR_PLAN,
+                planId,
+                ApprovalActionType.APPROVE,
+                requesterId)).thenReturn(binding);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOfSatisfying(RestException.class, exception -> {
+                    assertThat(exception.getErrorCode())
+                            .isEqualTo("PPR_APPROVAL_TEMPLATE_ROUTE_NOT_CONFIGURED");
+                    assertThat(exception.getMessage())
+                            .isEqualTo("Active PPR_PLAN_APPROVAL template with at least one "
+                                    + "configured approver step is required");
+                });
+
+        verify(requestRepository, never()).save(any(ApprovalRequest.class));
+        verify(requestRepository, never()).saveAndFlush(any(ApprovalRequest.class));
     }
 
     @Test
