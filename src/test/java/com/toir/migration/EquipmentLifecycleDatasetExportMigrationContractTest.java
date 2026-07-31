@@ -12,6 +12,9 @@ class EquipmentLifecycleDatasetExportMigrationContractTest {
     private static final Path MIGRATION = Path.of(
             "src/main/resources/db/migration/V20260731_1__equipment_lifecycle_dataset_export.sql"
     );
+    private static final Path HASH_TYPE_CORRECTION_MIGRATION = Path.of(
+            "src/main/resources/db/migration/V20260731_2__equipment_lifecycle_export_hash_column_types.sql"
+    );
 
     @Test
     void migrationPersistsJobsFrozenMembershipPartsAndArtifactsWithoutPayloadBlobs() throws Exception {
@@ -58,5 +61,26 @@ class EquipmentLifecycleDatasetExportMigrationContractTest {
                 "idx_equipment_lifecycle_export_membership_job_ordinal"
         );
         assertThat(sql).doesNotContain("references equipment(");
+    }
+
+    @Test
+    void forwardMigrationAlignsEveryExportHashColumnWithHibernateVarcharMapping() throws Exception {
+        String sql = Files.readString(HASH_TYPE_CORRECTION_MIGRATION).toLowerCase();
+
+        assertThat(sql).contains(
+                "alter table equipment_lifecycle_export_jobs\n"
+                        + "    alter column request_fingerprint type varchar(64)\n"
+                        + "    using request_fingerprint::varchar(64)",
+                "alter table equipment_lifecycle_export_jobs\n"
+                        + "    alter column policy_fingerprint type varchar(64)\n"
+                        + "    using policy_fingerprint::varchar(64)",
+                "alter table equipment_lifecycle_export_parts\n"
+                        + "    alter column sha256 type varchar(64)\n"
+                        + "    using sha256::varchar(64)",
+                "alter table equipment_lifecycle_export_artifacts\n"
+                        + "    alter column sha256 type varchar(64)\n"
+                        + "    using sha256::varchar(64)"
+        );
+        assertThat(sql).doesNotContain("drop table", "create table", "equipment_lifecycle_context");
     }
 }
