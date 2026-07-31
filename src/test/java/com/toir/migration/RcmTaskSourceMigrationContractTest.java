@@ -10,7 +10,7 @@ class RcmTaskSourceMigrationContractTest {
     @Test
     void migrationAddsPairedSourceMetadataAndPartialUniqueIndex() throws Exception {
         try (var stream = getClass().getResourceAsStream(
-                "/db/migration/V20260731_2__rcm_task_source_idempotency.sql")) {
+                "/db/migration/V20260731_4__rcm_task_source_idempotency.sql")) {
             assertThat(stream).isNotNull();
             String sql = new String(stream.readAllBytes(), StandardCharsets.UTF_8).toLowerCase();
             assertThat(sql).contains("source_type", "source_key", "ck_ppr_tasks_source_pair",
