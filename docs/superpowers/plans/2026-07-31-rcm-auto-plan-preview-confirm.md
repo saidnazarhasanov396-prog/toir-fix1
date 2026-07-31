@@ -35,7 +35,7 @@
 - Modify `src/main/java/com/toir/controller/RcmController.java`: preview and confirm endpoints.
 - Modify `src/main/java/com/toir/entity/PprTask.java` and
   `src/main/java/com/toir/repository/PprTaskRepository.java`: RCM source metadata/lookups.
-- Create `src/main/resources/db/migration/V20260731_2__rcm_task_source_idempotency.sql`.
+- Create `src/main/resources/db/migration/V20260731_4__rcm_task_source_idempotency.sql`.
 - Test in `RcmAutoPlanPreviewServiceTest`, `RcmAutoPlannerServiceTest`,
   `RcmControllerContractTest`, `RcmAutoPlanSecurityTest`, and
   `RcmTaskSourceMigrationContractTest`.
@@ -142,7 +142,7 @@ Expected: PASS with zero failures.
 - [ ] **Step 6: Commit persistence protection**
 
 ```bash
-git add src/main/resources/db/migration/V20260731_2__rcm_task_source_idempotency.sql \
+git add src/main/resources/db/migration/V20260731_4__rcm_task_source_idempotency.sql \
   src/main/java/com/toir/entity/PprTask.java \
   src/main/java/com/toir/repository/PprTaskRepository.java \
   src/test/java/com/toir/migration/RcmTaskSourceMigrationContractTest.java \

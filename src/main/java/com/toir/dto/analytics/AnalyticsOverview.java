@@ -10,8 +10,17 @@ public record AnalyticsOverview(
         List<DowntimeByDepartmentRow> downtimeByDepartment,
         List<ReliabilitySnapshotRow> reliabilitySnapshot,
         List<RepeatedDefectsRow> repeatedDefectsEquipment,
-        List<MaintenanceKpiRow> maintenanceKpis
+        List<MaintenanceKpiRow> maintenanceKpis,
+        AnalyticsContextDto analyticsContext
 ) {
+    public AnalyticsOverview(Totals totals, Kpis kpis, List<FailureReasonRow> topFailureReasons,
+                             List<DowntimeByDepartmentRow> downtimeByDepartment,
+                             List<ReliabilitySnapshotRow> reliabilitySnapshot,
+                             List<RepeatedDefectsRow> repeatedDefectsEquipment,
+                             List<MaintenanceKpiRow> maintenanceKpis) {
+        this(totals, kpis, topFailureReasons, downtimeByDepartment, reliabilitySnapshot,
+                repeatedDefectsEquipment, maintenanceKpis, null);
+    }
     public record Totals(long openRequests, long emergencyRequests, long closedWorkOrders, long activeDefects) {}
 
     public record Kpis(
