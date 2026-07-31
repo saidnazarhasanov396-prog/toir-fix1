@@ -8,17 +8,25 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderSparePartRequirement;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.warehouse.RepairMaterialReturn;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.entity.warehouse.WarehouseStockBalance;
 import com.toir.enums.MaterialReadinessStatus;
 import com.toir.enums.RepairMaterialReturnStatus;
 import com.toir.enums.ReservationStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.RepairMaterialReturnRepository;
 import com.toir.repository.ReservationRepository;
+import com.toir.repository.PurchaseOrderRepository;
+import com.toir.repository.WarehouseRepository;
+import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,11 +34,13 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class WorkOrderMaterialReadinessService {
 
     private final WorkOrderRepository workOrderRepository;
@@ -38,6 +48,9 @@ public class WorkOrderMaterialReadinessService {
     private final ReservationRepository reservationRepository;
     private final RepairMaterialUsageRepository materialUsageRepository;
     private final RepairMaterialReturnRepository materialReturnRepository;
+    private final WarehouseStockBalanceRepository warehouseStockBalanceRepository;
+    private final WarehouseRepository warehouseRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     @Transactional(readOnly = true)
     public WorkOrderMaterialReadinessDto getReadiness(UUID workOrderId) {
@@ -60,7 +73,7 @@ public class WorkOrderMaterialReadinessService {
                 .collect(Collectors.toMap(RepairMaterialUsage::getId, Function.identity(), (left, right) -> left));
 
         List<WorkOrderMaterialReadinessRowDto> rows = requirements.stream()
-                .map(requirement -> row(requirement, reservations, usages, returns, usageById))
+                .map(requirement -> row(workOrder, requirement, reservations, usages, returns, usageById))
                 .toList();
         MaterialReadinessStatus overallStatus = overallStatus(rows);
         boolean blocking = rows.stream().anyMatch(WorkOrderMaterialReadinessRowDto::blocking);
@@ -76,6 +89,7 @@ public class WorkOrderMaterialReadinessService {
     }
 
     private WorkOrderMaterialReadinessRowDto row(
+            WorkOrder workOrder,
             WorkOrderSparePartRequirement requirement,
             List<Reservation> reservations,
             List<RepairMaterialUsage> usages,
@@ -109,9 +123,19 @@ public class WorkOrderMaterialReadinessService {
 
         BigDecimal netIssued = issuedQty.subtract(returnedQty).max(BigDecimal.ZERO);
         BigDecimal coveredQty = reservedQty.add(netIssued);
-        BigDecimal shortageQty = requiredQty.subtract(coveredQty).max(BigDecimal.ZERO);
-        MaterialReadinessStatus status = rowStatus(requiredQty, reservedQty, netIssued, shortageQty, coveredQty);
-        boolean blocking = status == MaterialReadinessStatus.SHORTAGE || status == MaterialReadinessStatus.PARTIAL;
+        BigDecimal remainingQty = requiredQty.subtract(coveredQty).max(BigDecimal.ZERO);
+        UUID preferredWarehouseId = requirement.getWarehouseId() == null
+                ? workOrder.getWarehouseId()
+                : requirement.getWarehouseId();
+        StockSnapshot stock = stockSnapshot(sparePartId, preferredWarehouseId);
+        ReadinessDecision decision = decide(requiredQty, netIssued, coveredQty, remainingQty, stock,
+                preferredWarehouseId);
+        LocalDate expectedDeliveryDate = remainingQty.signum() <= 0
+                ? null
+                : expectedDeliveryDate(
+                        preferredWarehouseId == null ? stock.sourceWarehouseId() : preferredWarehouseId,
+                        sparePartId
+                );
         SparePart sparePart = requirement.getSparePart();
 
         return new WorkOrderMaterialReadinessRowDto(
@@ -119,18 +143,139 @@ public class WorkOrderMaterialReadinessService {
                 sparePartId,
                 sparePart == null ? null : sparePart.getName(),
                 requirement.getUnit(),
+                stock.sourceWarehouseId(),
+                stock.sourceWarehouseCode(),
+                stock.sourceWarehouseName(),
+                stock.onHandQty(),
+                stock.wmsReservedQty(),
+                stock.availableQty(),
                 requiredQty,
                 reservedQty,
                 issuedQty,
                 returnedQty,
-                shortageQty,
-                status,
-                blocking,
-                null,
-                null,
-                null,
+                decision.shortageQty(),
+                decision.status(),
+                decision.blocking(),
+                expectedDeliveryDate,
+                "TOIR_WMS",
+                stock.lastUpdatedAt(),
+                decision.nextAction(),
+                decision.nextActionQty(),
                 requirement.getNotes()
         );
+    }
+
+    private LocalDate expectedDeliveryDate(UUID warehouseId, UUID sparePartId) {
+        if (warehouseId == null || sparePartId == null) {
+            return null;
+        }
+        try {
+            return purchaseOrderRepository.findEarliestExpectedDeliveryDate(warehouseId, sparePartId);
+        } catch (RuntimeException error) {
+            log.warn("Purchase order ETA is unavailable for warehouseId={} sparePartId={}",
+                    warehouseId, sparePartId, error);
+            return null;
+        }
+    }
+
+    private StockSnapshot stockSnapshot(UUID sparePartId, UUID preferredWarehouseId) {
+        if (sparePartId == null) {
+            return StockSnapshot.empty();
+        }
+        List<WarehouseStockBalance> balances;
+        try {
+            balances = warehouseStockBalanceRepository.findAllBySparePartIdAndIsDeletedFalse(sparePartId);
+        } catch (RuntimeException error) {
+            log.warn("WMS stock balances are unavailable for sparePartId={}", sparePartId, error);
+            return StockSnapshot.unavailable();
+        }
+        Instant lastUpdatedAt = balances.stream()
+                .map(WarehouseStockBalance::getUpdatedAt)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElseGet(Instant::now);
+        Map<UUID, WarehouseTotals> totalsByWarehouse = new LinkedHashMap<>();
+        for (WarehouseStockBalance balance : balances) {
+            if (balance.getWarehouseId() == null) {
+                continue;
+            }
+            totalsByWarehouse.merge(
+                    balance.getWarehouseId(),
+                    WarehouseTotals.from(balance),
+                    WarehouseTotals::add
+            );
+        }
+        BigDecimal totalAvailable = totalsByWarehouse.values().stream()
+                .map(WarehouseTotals::availableQty)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        WarehouseTotals preferred = totalsByWarehouse.get(preferredWarehouseId);
+        WarehouseTotals best = totalsByWarehouse.values().stream()
+                .max(Comparator.comparing(WarehouseTotals::availableQty))
+                .orElse(null);
+        WarehouseTotals source = preferred != null && preferred.availableQty().signum() > 0 ? preferred : best;
+        if (source == null) {
+            source = preferred;
+        }
+
+        Map<UUID, Warehouse> warehouses = totalsByWarehouse.isEmpty()
+                ? Map.of()
+                : warehouseRepository.findAllByIdInAndIsDeletedFalse(List.copyOf(totalsByWarehouse.keySet())).stream()
+                        .collect(Collectors.toMap(Warehouse::getId, Function.identity(), (left, right) -> left));
+        Warehouse sourceWarehouse = source == null ? null : warehouses.get(source.warehouseId());
+        return new StockSnapshot(
+                source == null ? null : source.warehouseId(),
+                sourceWarehouse == null ? null : sourceWarehouse.getCode(),
+                sourceWarehouse == null ? null : sourceWarehouse.getName(),
+                source == null ? BigDecimal.ZERO : source.onHandQty(),
+                source == null ? BigDecimal.ZERO : source.reservedQty(),
+                source == null ? BigDecimal.ZERO : source.availableQty(),
+                preferred == null ? BigDecimal.ZERO : preferred.availableQty(),
+                totalAvailable,
+                lastUpdatedAt,
+                true
+        );
+    }
+
+    private ReadinessDecision decide(
+            BigDecimal requiredQty,
+            BigDecimal netIssued,
+            BigDecimal coveredQty,
+            BigDecimal remainingQty,
+            StockSnapshot stock,
+            UUID preferredWarehouseId
+    ) {
+        if (requiredQty.signum() <= 0) {
+            return ReadinessDecision.done(MaterialReadinessStatus.NOT_REQUIRED);
+        }
+        if (netIssued.compareTo(requiredQty) >= 0) {
+            return ReadinessDecision.done(MaterialReadinessStatus.ISSUED);
+        }
+        if (coveredQty.compareTo(requiredQty) >= 0) {
+            return ReadinessDecision.done(MaterialReadinessStatus.RESERVED);
+        }
+        if (!stock.wmsAvailable()) {
+            return ReadinessDecision.action(MaterialReadinessStatus.WMS_UNAVAILABLE, remainingQty,
+                    "NONE", BigDecimal.ZERO);
+        }
+        BigDecimal actualShortage = remainingQty.subtract(stock.totalAvailableQty()).max(BigDecimal.ZERO);
+        if (preferredWarehouseId == null && stock.availableQty().compareTo(remainingQty) >= 0) {
+            return ReadinessDecision.action(MaterialReadinessStatus.AVAILABLE, actualShortage,
+                    "RESERVE", remainingQty);
+        }
+        if (preferredWarehouseId != null && stock.preferredAvailableQty().compareTo(remainingQty) >= 0) {
+            return ReadinessDecision.action(MaterialReadinessStatus.AVAILABLE, actualShortage,
+                    "RESERVE", remainingQty);
+        }
+        if (stock.totalAvailableQty().compareTo(remainingQty) >= 0) {
+            return ReadinessDecision.action(MaterialReadinessStatus.TRANSFER_REQUIRED, BigDecimal.ZERO,
+                    "TRANSFER", remainingQty);
+        }
+        if (stock.totalAvailableQty().signum() > 0) {
+            return ReadinessDecision.action(MaterialReadinessStatus.PARTIALLY_AVAILABLE, actualShortage,
+                    "CREATE_PROCUREMENT", actualShortage);
+        }
+        return ReadinessDecision.action(MaterialReadinessStatus.PROCUREMENT_REQUIRED, remainingQty,
+                "CREATE_PROCUREMENT", remainingQty);
     }
 
     private boolean matchesRequirementOrFallback(
@@ -166,55 +311,39 @@ public class WorkOrderMaterialReadinessService {
                 && Objects.equals(returned.getSparePartId(), sparePartId(requirement));
     }
 
-    private MaterialReadinessStatus rowStatus(
-            BigDecimal requiredQty,
-            BigDecimal reservedQty,
-            BigDecimal netIssued,
-            BigDecimal shortageQty,
-            BigDecimal coveredQty
-    ) {
-        if (requiredQty.signum() <= 0) {
-            return MaterialReadinessStatus.NOT_REQUIRED;
-        }
-        if (netIssued.compareTo(requiredQty)>=0) {
-            return MaterialReadinessStatus.ISSUED;
-        }
-        if (reservedQty.compareTo(requiredQty)>=0 || coveredQty.compareTo(requiredQty)>=0) {
-            return MaterialReadinessStatus.READY;
-        }
-        if (shortageQty.signum()>0 && coveredQty.signum()>0) {
-            return MaterialReadinessStatus.PARTIAL;
-        }
-        if (shortageQty.signum()>0) {
-            return MaterialReadinessStatus.SHORTAGE;
-        }
-        return MaterialReadinessStatus.UNKNOWN;
-    }
-
     private MaterialReadinessStatus overallStatus(List<WorkOrderMaterialReadinessRowDto> rows) {
         if (rows.isEmpty()) {
             return MaterialReadinessStatus.NOT_REQUIRED;
         }
-        if (rows.stream().anyMatch(row -> row.blocking()
-                && row.readinessStatus() == MaterialReadinessStatus.SHORTAGE)) {
-            return MaterialReadinessStatus.SHORTAGE;
-        }
-        if (rows.stream().anyMatch(row -> row.blocking()
-                && row.readinessStatus() == MaterialReadinessStatus.PARTIAL)) {
-            return MaterialReadinessStatus.PARTIAL;
+        MaterialReadinessStatus[] blockingPriority = {
+                MaterialReadinessStatus.WMS_UNAVAILABLE,
+                MaterialReadinessStatus.RECONCILIATION_REQUIRED,
+                MaterialReadinessStatus.PROCUREMENT_REQUIRED,
+                MaterialReadinessStatus.SHORTAGE,
+                MaterialReadinessStatus.TRANSFER_REQUIRED,
+                MaterialReadinessStatus.PARTIALLY_AVAILABLE,
+                MaterialReadinessStatus.PARTIAL,
+                MaterialReadinessStatus.AVAILABLE
+        };
+        for (MaterialReadinessStatus status : blockingPriority) {
+            if (rows.stream().anyMatch(row -> row.blocking() && row.readinessStatus() == status)) {
+                return status;
+            }
         }
         if (rows.stream().allMatch(row -> row.readinessStatus() == MaterialReadinessStatus.ISSUED)) {
             return MaterialReadinessStatus.ISSUED;
         }
-        boolean allReadyIssuedOrNotRequired = rows.stream().allMatch(row ->
-                row.readinessStatus() == MaterialReadinessStatus.READY
+        boolean allReservedIssuedOrNotRequired = rows.stream().allMatch(row ->
+                row.readinessStatus() == MaterialReadinessStatus.RESERVED
+                        || row.readinessStatus() == MaterialReadinessStatus.READY
                         || row.readinessStatus() == MaterialReadinessStatus.ISSUED
                         || row.readinessStatus() == MaterialReadinessStatus.NOT_REQUIRED);
-        boolean anyReadyOrIssued = rows.stream().anyMatch(row ->
-                row.readinessStatus() == MaterialReadinessStatus.READY
+        boolean anyReservedOrIssued = rows.stream().anyMatch(row ->
+                row.readinessStatus() == MaterialReadinessStatus.RESERVED
+                        || row.readinessStatus() == MaterialReadinessStatus.READY
                         || row.readinessStatus() == MaterialReadinessStatus.ISSUED);
-        if (allReadyIssuedOrNotRequired && anyReadyOrIssued) {
-            return MaterialReadinessStatus.READY;
+        if (allReservedIssuedOrNotRequired && anyReservedOrIssued) {
+            return MaterialReadinessStatus.RESERVED;
         }
         if (rows.stream().allMatch(row -> row.readinessStatus() == MaterialReadinessStatus.NOT_REQUIRED)) {
             return MaterialReadinessStatus.NOT_REQUIRED;
@@ -234,5 +363,78 @@ public class WorkOrderMaterialReadinessService {
 
     private BigDecimal positive(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value.max(BigDecimal.ZERO);
+    }
+
+    private record WarehouseTotals(
+            UUID warehouseId,
+            BigDecimal onHandQty,
+            BigDecimal reservedQty,
+            BigDecimal availableQty
+    ) {
+        static WarehouseTotals from(WarehouseStockBalance balance) {
+            return new WarehouseTotals(
+                    balance.getWarehouseId(),
+                    zero(balance.getQtyOnHand()),
+                    zero(balance.getQtyReserved()),
+                    zero(balance.getAvailableQty()).max(BigDecimal.ZERO)
+            );
+        }
+
+        WarehouseTotals add(WarehouseTotals other) {
+            return new WarehouseTotals(
+                    warehouseId,
+                    onHandQty.add(other.onHandQty),
+                    reservedQty.add(other.reservedQty),
+                    availableQty.add(other.availableQty)
+            );
+        }
+
+        private static BigDecimal zero(BigDecimal value) {
+            return value == null ? BigDecimal.ZERO : value;
+        }
+    }
+
+    private record StockSnapshot(
+            UUID sourceWarehouseId,
+            String sourceWarehouseCode,
+            String sourceWarehouseName,
+            BigDecimal onHandQty,
+            BigDecimal wmsReservedQty,
+            BigDecimal availableQty,
+            BigDecimal preferredAvailableQty,
+            BigDecimal totalAvailableQty,
+            Instant lastUpdatedAt,
+            boolean wmsAvailable
+    ) {
+        static StockSnapshot empty() {
+            return new StockSnapshot(null, null, null, BigDecimal.ZERO, BigDecimal.ZERO,
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, Instant.now(), true);
+        }
+
+        static StockSnapshot unavailable() {
+            return new StockSnapshot(null, null, null, BigDecimal.ZERO, BigDecimal.ZERO,
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, null, false);
+        }
+    }
+
+    private record ReadinessDecision(
+            MaterialReadinessStatus status,
+            boolean blocking,
+            BigDecimal shortageQty,
+            String nextAction,
+            BigDecimal nextActionQty
+    ) {
+        static ReadinessDecision done(MaterialReadinessStatus status) {
+            return new ReadinessDecision(status, false, BigDecimal.ZERO, "NONE", BigDecimal.ZERO);
+        }
+
+        static ReadinessDecision action(
+                MaterialReadinessStatus status,
+                BigDecimal shortageQty,
+                String nextAction,
+                BigDecimal nextActionQty
+        ) {
+            return new ReadinessDecision(status, true, shortageQty, nextAction, nextActionQty);
+        }
     }
 }

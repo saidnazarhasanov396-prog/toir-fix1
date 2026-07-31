@@ -4,20 +4,30 @@ import com.toir.enums.ErrorType;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 @Getter
 public class RestException extends RuntimeException {
 
     private final HttpStatus status;
     private final String errorCode;
+    private final Map<String, Object> params;
 
     public RestException(String message, HttpStatus status) {
         this(message, status, null);
     }
 
     public RestException(String message, HttpStatus status, String errorCode) {
+        this(message, status, errorCode, Map.of());
+    }
+
+    public RestException(String message, HttpStatus status, String errorCode, Map<String, ?> params) {
         super(message);
         this.status = status;
         this.errorCode = errorCode;
+        this.params = immutableParams(params);
     }
 
     public static RestException badRequest(String message) {
@@ -53,6 +63,19 @@ public class RestException extends RuntimeException {
     }
 
     public static RestException restThrow(ErrorType errorType) {
-        return new RestException(errorType.getMessage(), errorType.getStatus());
+        return new RestException(errorType.getMessage(), errorType.getStatus(), errorType.name());
+    }
+
+    public static RestException localized(HttpStatus status, String errorCode, Map<String, ?> params) {
+        return new RestException(null, status, errorCode, params);
+    }
+
+    private static Map<String, Object> immutableParams(Map<String, ?> params) {
+        if (params == null || params.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> copy = new LinkedHashMap<>();
+        params.forEach(copy::put);
+        return Collections.unmodifiableMap(copy);
     }
 }
