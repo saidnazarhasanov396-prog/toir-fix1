@@ -43,11 +43,31 @@ public record WorkOrderRequest(
         Boolean requiresIsolation,
         String generationKey,
         UUID plannedShutdownId,
-        UUID shutdownWorkItemId
+        UUID shutdownWorkItemId,
+        UUID performerEmployeeId,
+        UUID performerBrigadeMemberId
 ) {
     public WorkOrderRequest {
         requiresShutdown = Boolean.TRUE.equals(requiresShutdown);
         requiresIsolation = Boolean.TRUE.equals(requiresIsolation);
+    }
+
+    public WorkOrderRequest(
+            String number, String title, UUID equipmentId, UUID equipmentNodeId, UUID locationId,
+            UUID departmentId, String workLocationNote, UUID repairRequestId, UUID defectId,
+            UUID defectListId, UUID pprTaskId, UUID counteragentId, UUID performerId, WorkOrderType type,
+            WorkType workType, UUID warehouseId, UUID replacementEquipmentId, PriorityLevel priority,
+            Instant startPlannedAt, Instant endPlannedAt, UUID createdById, String summary,
+            UUID maintenanceDueEventId, String cycleKey, Boolean repairActRequired, Boolean stoppageActRequired,
+            UUID repairCampaignId, UUID repairCampaignStageId, UUID budgetLineId, Boolean requiresShutdown,
+            Boolean requiresIsolation, String generationKey, UUID plannedShutdownId, UUID shutdownWorkItemId
+    ) {
+        this(number, title, equipmentId, equipmentNodeId, locationId, departmentId, workLocationNote,
+                repairRequestId, defectId, defectListId, pprTaskId, counteragentId, performerId, type, workType,
+                warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById, summary,
+                maintenanceDueEventId, cycleKey, repairActRequired, stoppageActRequired, repairCampaignId,
+                repairCampaignStageId, budgetLineId, requiresShutdown, requiresIsolation, generationKey,
+                plannedShutdownId, shutdownWorkItemId, null, null);
     }
 
     public WorkOrderRequest(
@@ -357,7 +377,9 @@ public record WorkOrderRequest(
                 requiresIsolation,
                 generationKey,
                 plannedShutdownId,
-                shutdownWorkItemId
+                shutdownWorkItemId,
+        performerEmployeeId,
+        performerBrigadeMemberId
         );
     }
 
@@ -368,7 +390,9 @@ public record WorkOrderRequest(
                 warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById, summary,
                 maintenanceDueEventId, cycleKey, repairActRequired, stoppageActRequired, repairCampaignId,
                 repairCampaignStageId, budgetLineId, requiresShutdown, requiresIsolation, generationKey,
-                plannedShutdownId, shutdownWorkItemId
+                plannedShutdownId, shutdownWorkItemId,
+        performerEmployeeId,
+        performerBrigadeMemberId
         );
     }
 
@@ -379,7 +403,7 @@ public record WorkOrderRequest(
                 warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById, summary,
                 maintenanceDueEventId, cycleKey, repairActRequired, stoppageActRequired, repairCampaignId,
                 repairCampaignStageId, budgetLineId, requiresShutdown, requiresIsolation, generationKey,
-                plannedShutdownId, shutdownWorkItemId);
+                plannedShutdownId, shutdownWorkItemId, performerEmployeeId, performerBrigadeMemberId);
     }
 
     public WorkOrderRequest withSafetyRequirements(boolean requiresShutdown, boolean requiresIsolation) {
@@ -389,6 +413,6 @@ public record WorkOrderRequest(
                 warehouseId, replacementEquipmentId, priority, startPlannedAt, endPlannedAt, createdById, summary,
                 maintenanceDueEventId, cycleKey, repairActRequired, stoppageActRequired, repairCampaignId,
                 repairCampaignStageId, budgetLineId, requiresShutdown, requiresIsolation, generationKey,
-                plannedShutdownId, shutdownWorkItemId);
+                plannedShutdownId, shutdownWorkItemId, performerEmployeeId, performerBrigadeMemberId);
     }
 }

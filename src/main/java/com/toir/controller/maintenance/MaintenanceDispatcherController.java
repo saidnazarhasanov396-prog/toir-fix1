@@ -59,13 +59,19 @@ public class MaintenanceDispatcherController {
     }
 
     @PostMapping("/assign")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_UPDATE') or hasAuthority('REPAIR_REQUEST_UPDATE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or " +
+            "(#request.objectType != null and #request.objectType.equalsIgnoreCase('WORK_ORDER') and hasAuthority('WORK_ORDER_UPDATE')) or " +
+            "(#request.objectType != null and #request.objectType.equalsIgnoreCase('REPAIR_REQUEST') and hasAuthority('REPAIR_REQUEST_UPDATE')) or " +
+            "(#request.objectType != null and #request.objectType.equalsIgnoreCase('DEFECT') and hasAuthority('WORK_ORDER_UPDATE'))")
     public ResponseEntity<MaintenanceDispatcherActionResponse> assign(@RequestBody MaintenanceDispatcherActionRequest request) {
         return ResponseEntity.ok(service.assign(request));
     }
 
     @PostMapping("/escalate")
-    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_UPDATE') or hasAuthority('REPAIR_REQUEST_UPDATE')")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or " +
+            "(#request.objectType != null and #request.objectType.equalsIgnoreCase('WORK_ORDER') and hasAuthority('WORK_ORDER_UPDATE')) or " +
+            "(#request.objectType != null and #request.objectType.equalsIgnoreCase('REPAIR_REQUEST') and hasAuthority('REPAIR_REQUEST_UPDATE')) or " +
+            "(#request.objectType != null and #request.objectType.equalsIgnoreCase('DEFECT') and hasAuthority('WORK_ORDER_UPDATE'))")
     public ResponseEntity<MaintenanceDispatcherActionResponse> escalate(@RequestBody MaintenanceDispatcherActionRequest request) {
         return ResponseEntity.ok(service.escalate(request));
     }

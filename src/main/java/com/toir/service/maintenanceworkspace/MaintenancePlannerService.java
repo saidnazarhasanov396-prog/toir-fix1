@@ -91,7 +91,7 @@ public class MaintenancePlannerService {
         WorkOrderMaterialReadinessDto materialReadiness =
                 materialReadinessService.getReadiness(workOrder.getId());
         String material = materialReadiness.overallStatus().name();
-        String labor = workOrder.getPerformer() == null ? "BLOCKED" : "READY";
+        String labor = workOrder.getPerformerEmployee() == null && workOrder.getPerformer() == null ? "BLOCKED" : "READY";
         String approval = workOrder.getStatus() == WorkOrderStatus.DRAFT ? "BLOCKED" : "READY";
         String downtime = workOrder.getStartPlannedAt() == null || workOrder.getEndPlannedAt() == null ? "PENDING" : "READY";
         String blocker = firstBlocker(materialReadiness.blocking(), material, labor, approval, downtime);

@@ -31,20 +31,29 @@ public class WorkOrderAssignmentEligibilityService {
     }
 
     private boolean eligiblePerformer(WorkOrder workOrder) {
-        BrigadeMember performer = workOrder.getPerformer();
-        if (performer == null || !performer.isActive() || performer.isDeleted() || performer.getUserId() == null) {
+        Employee employee = workOrder.getPerformerEmployee();
+        BrigadeMember member = workOrder.getPerformer();
+        if (employee == null && member != null && member.getUserId() != null) {
+            var matches = employeeRepository.findAllByUserIdAndIsDeletedFalse(member.getUserId());
+            employee = matches.size() == 1 ? matches.getFirst() : null;
+        }
+        if (employee == null || employee.isDeleted() || !employee.isActive()
+                || !java.util.Objects.equals(employee.getDepartmentId(), workOrder.getDepartmentId())) {
             return false;
         }
-        Brigade brigade = performer.getBrigade();
-        if (brigade == null || brigade.isDeleted() || !brigade.isActive()
-                || !java.util.Objects.equals(brigade.getDepartmentId(), workOrder.getDepartmentId())) {
-            return false;
+        if (member != null) {
+            Brigade brigade = member.getBrigade();
+            if (!member.isActive() || member.isDeleted() || brigade == null || brigade.isDeleted()
+                    || !brigade.isActive()
+                    || !java.util.Objects.equals(brigade.getDepartmentId(), workOrder.getDepartmentId())
+                    || employee.getUserId() == null
+                    || !java.util.Objects.equals(employee.getUserId(), member.getUserId())) {
+                return false;
+            }
         }
-        Employee employee = employeeRepository.findByUserIdAndIsDeletedFalse(performer.getUserId()).orElse(null);
-        return employee != null && employee.isActive()
-                && java.util.Objects.equals(employee.getDepartmentId(), workOrder.getDepartmentId())
-                && workOrderService.hasEligiblePerformerSkills(workOrder);
+        return workOrderService.hasEligiblePerformerSkills(workOrder);
     }
+
 
     private boolean eligibleContractor(WorkOrder workOrder) {
         if (workOrder.getCounteragentId() == null) return false;

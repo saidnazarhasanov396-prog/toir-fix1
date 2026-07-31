@@ -39,6 +39,7 @@ import com.toir.entity.repair.RepairRequestTemplateAction;
 import com.toir.entity.users.UserCertification;
 import com.toir.entity.users.Brigade;
 import com.toir.entity.users.BrigadeMember;
+import com.toir.entity.users.Employee;
 import com.toir.entity.users.User;
 import com.toir.entity.warehouse.WarehouseEquipmentItem;
 import com.toir.enums.PlanStatus;
@@ -112,6 +113,7 @@ import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.repository.projects.BudgetLineRepository;
 import com.toir.repository.projection.WorkOrderCalendarBucketProjection;
 import com.toir.repository.users.UserRepository;
+import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.security.AuthenticatedUser;
 import com.toir.security.ScopeAccessService;
@@ -198,6 +200,8 @@ public class WorkOrderService {
     private final DefectListRepository defectListRepository;
     private final CounteragentService counteragentService;
     private final BrigadeMemberRepository brigadeMemberRepository;
+    private final EmployeeRepository employeeRepository;
+    private final WorkOrderPerformerAssignmentPolicy performerAssignmentPolicy;
     private final UserRepository userRepository;
     private final UserCertificationRepository userCertificationRepository;
     private final CertificationTypeRepository certificationTypeRepository;
@@ -780,6 +784,75 @@ public class WorkOrderService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public Page<WorkOrderEmployeePerformerOptionDto> employeePerformerOptions(
+            UUID departmentId, String search, int page, int size
+    ) {
+        scopeAccessService.assertCanAccessDepartment(departmentId);
+        String normalized = normalizeSearch(search);
+        String[] parts = normalized == null ? new String[0] : normalized.split("\\s+", 3);
+        Page<Employee> employees = employeeRepository.searchEmployees(
+                normalized,
+                parts.length > 1 ? parts[0] : null,
+                parts.length > 1 ? parts[1] : null,
+                true,
+                departmentId,
+                null,
+                PaginationUtils.pageRequest(page, size)
+        );
+        List<UUID> userIds = employees.getContent().stream()
+                .map(Employee::getUserId).filter(Objects::nonNull).distinct().toList();
+        Map<UUID, List<BrigadeMember>> memberships = userIds.isEmpty()
+                ? Map.of()
+                : brigadeMemberRepository.findActiveByUserIdIn(userIds).stream()
+                .filter(member -> member.getBrigade() != null
+                        && Objects.equals(departmentId, member.getBrigade().getDepartmentId()))
+                .collect(Collectors.groupingBy(BrigadeMember::getUserId, LinkedHashMap::new, Collectors.toList()));
+        return employees.map(employee -> new WorkOrderEmployeePerformerOptionDto(
+                employee.getId(),
+                employeeFullName(employee),
+                employee.getUserId(),
+                employee.getDepartmentId(),
+                memberships.getOrDefault(employee.getUserId(), List.of()).stream()
+                        .map(member -> new WorkOrderEmployeePerformerOptionDto.BrigadeMembership(
+                                member.getId(), member.getBrigade().getId(), member.getBrigade().getName(), member.getRoleCode()))
+                        .toList()
+        ));
+    }
+
+    @Transactional
+    public WorkOrderDto reassignPerformer(UUID workOrderId, WorkOrderPerformerAssignmentRequest request) {
+        WorkOrder workOrder = getOrThrow(workOrderId);
+        scopeAccessService.assertCanAccessDepartment(workOrder.getDepartmentId());
+        WorkOrderPerformerAssignmentPolicy.ResolvedAssignment resolved = performerAssignmentPolicy.resolve(
+                request.performerId(), request.performerEmployeeId(), request.performerBrigadeMemberId(),
+                workOrder.getDepartmentId());
+        workOrder.setPerformerEmployee(resolved.employee());
+        workOrder.setPerformer(resolved.brigadeMember());
+        WorkOrder saved = repository.save(workOrder);
+        validatePerformerSkillsForWorkOrder(saved);
+        erpWorkOrderDeltas.queueDelta(saved.getId());
+        notifyAssignedPerformer(saved);
+        return toDto(saved);
+    }
+
+    @Transactional
+    public WorkOrderDto reassignPerformerFromDispatcher(
+            UUID workOrderId, UUID legacyOwnerUserId, UUID employeeId, UUID memberId
+    ) {
+        WorkOrder workOrder = getOrThrow(workOrderId);
+        scopeAccessService.assertCanAccessDepartment(workOrder.getDepartmentId());
+        WorkOrderPerformerAssignmentPolicy.ResolvedAssignment resolved = performerAssignmentPolicy.resolveLegacyOwner(
+                legacyOwnerUserId, employeeId, memberId, workOrder.getDepartmentId());
+        workOrder.setPerformerEmployee(resolved.employee());
+        workOrder.setPerformer(resolved.brigadeMember());
+        WorkOrder saved = repository.save(workOrder);
+        validatePerformerSkillsForWorkOrder(saved);
+        erpWorkOrderDeltas.queueDelta(saved.getId());
+        notifyAssignedPerformer(saved);
+        return toDto(saved);
+    }
+
     @Transactional
     public WorkOrderDto create(WorkOrderRequest request) {
         return createPublic(request, null);
@@ -858,10 +931,9 @@ public class WorkOrderService {
         UUID effectiveDepartmentId = resolveEffectiveDepartmentId(request, equipment);
         UUID effectiveLocationId = resolveEffectiveLocationId(request, equipment, effectiveDepartmentId);
         RepairCampaignStage linkedCampaignStage = validateCampaignLink(request, effectiveDepartmentId);
-        BrigadeMember performer = validatePerformerForCreate(
-                request.performerId(),
-                effectiveDepartmentId,
-                request.equipmentId());
+        WorkOrderPerformerAssignmentPolicy.ResolvedAssignment performer = performerAssignmentPolicy.resolve(
+                request.performerId(), request.performerEmployeeId(), request.performerBrigadeMemberId(),
+                effectiveDepartmentId);
         UUID effectiveBudgetLineId = resolveWorkOrderBudgetLineId(request.budgetLineId(), linkedCampaignStage);
         reserveReplacementEquipmentOnCreate(request, effectiveWorkType);
         WorkOrder entity = new WorkOrder();
@@ -887,7 +959,8 @@ public class WorkOrderService {
         entity.setPlannedShutdownId(request.plannedShutdownId());
         entity.setShutdownWorkItemId(request.shutdownWorkItemId());
         entity.setCounteragentId(request.counteragentId());
-        entity.setPerformer(performer);
+        entity.setPerformer(performer.brigadeMember());
+        entity.setPerformerEmployee(performer.employee());
         entity.setType(request.type());
         entity.setWorkType(effectiveWorkType);
         entity.setWarehouseId(request.warehouseId());
@@ -926,10 +999,10 @@ public class WorkOrderService {
     }
 
     private void notifyAssignedPerformer(WorkOrder workOrder, Equipment equipment) {
-        if (workOrder == null || workOrder.getId() == null || workOrder.getPerformer() == null) {
+        if (workOrder == null || workOrder.getId() == null) {
             return;
         }
-        UUID performerUserId = workOrder.getPerformer().getUserId();
+        UUID performerUserId = performerUserId(workOrder);
         if (performerUserId == null) {
             return;
         }
@@ -2366,28 +2439,6 @@ public class WorkOrderService {
         return "Approved DefectList is required for " + type;
     }
 
-    private BrigadeMember validatePerformerForCreate(UUID performerId, UUID requestDepartmentId, UUID equipmentId) {
-        if (performerId == null) {
-            return null;
-        }
-        BrigadeMember performer = brigadeMemberRepository.findByIdAndIsDeletedFalse(performerId)
-                .orElseThrow(() -> RestException.notFound("Performer not found: " + performerId));
-        if (!performer.isActive()) {
-            throw RestException.badRequest("Performer is inactive");
-        }
-        Brigade brigade = performer.getBrigade();
-        if (brigade == null || brigade.isDeleted() || !brigade.isActive()) {
-            throw RestException.badRequest("Performer brigade is inactive");
-        }
-        UUID expectedDepartmentId = requestDepartmentId != null
-                ? requestDepartmentId
-                : resolveEquipmentDepartmentId(equipmentId);
-        if (expectedDepartmentId != null && !expectedDepartmentId.equals(brigade.getDepartmentId())) {
-            throw RestException.badRequest("Performer does not belong to selected department");
-        }
-        return performer;
-    }
-
     private void validatePerformerSkillsForWorkOrder(WorkOrder workOrder) {
         if (workOrder == null || workOrder.getPerformer() == null) {
             return;
@@ -3086,7 +3137,13 @@ public class WorkOrderService {
                 entity.isRequiresShutdown(),
                 entity.isRequiresIsolation(),
                 entity.getPlannedShutdownId(),
-                entity.getShutdownWorkItemId());
+                entity.getShutdownWorkItemId(),
+                entity.getPerformerEmployee() == null ? null : entity.getPerformerEmployee().getId(),
+                performerName(entity),
+                performerUserId(entity),
+                performerId(entity),
+                entity.getPerformer() == null || entity.getPerformer().getBrigade() == null ? null : entity.getPerformer().getBrigade().getId(),
+                entity.getPerformer() == null || entity.getPerformer().getBrigade() == null ? null : entity.getPerformer().getBrigade().getName());
     }
 
     private WorkOrderDto.CounteragentRef counteragentRef(UUID counteragentId) {
@@ -3249,14 +3306,26 @@ public class WorkOrderService {
     }
 
     private String performerName(WorkOrder entity) {
-        BrigadeMember performer = entity.getPerformer();
-        if (performer == null || performer.getUserId() == null) {
-            return null;
+        if (entity.getPerformerEmployee() != null) {
+            return employeeFullName(entity.getPerformerEmployee());
         }
-        return userRepository.findByIdAndIsDeletedFalse(performer.getUserId())
-                .map(User::getFullName)
-                .orElse(null);
+        BrigadeMember performer = entity.getPerformer();
+        if (performer == null || performer.getUserId() == null) return null;
+        return userRepository.findByIdAndIsDeletedFalse(performer.getUserId()).map(User::getFullName).orElse(null);
     }
+
+    private String employeeFullName(Employee employee) {
+        return java.util.stream.Stream.of(employee.getLastName(), employee.getFirstName(), employee.getMiddleName())
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.joining(" "));
+    }
+
+    private UUID performerUserId(WorkOrder entity) {
+        return entity.getPerformerEmployee() != null
+                ? entity.getPerformerEmployee().getUserId()
+                : entity.getPerformer() == null ? null : entity.getPerformer().getUserId();
+    }
+
 
     private RepairRequestBriefDto repairRequestBrief(RepairRequest repairRequest) {
         if (repairRequest == null) {

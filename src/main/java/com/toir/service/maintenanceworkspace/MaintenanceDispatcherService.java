@@ -6,6 +6,7 @@ import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherQueues;
 import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherSummary;
 import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceItem;
 import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceFilter;
+import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
@@ -22,6 +23,7 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.projects.BrigadeMemberRepository;
 import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
+import com.toir.service.WorkOrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +44,7 @@ public class MaintenanceDispatcherService {
     private final BrigadeMemberRepository brigadeMemberRepository;
     private final EquipmentRepository equipmentRepository;
     private final ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
+    private final WorkOrderService workOrderService;
 
     @Transactional(readOnly = true)
     public MaintenanceDispatcherSummary summary() {
@@ -121,15 +124,11 @@ public class MaintenanceDispatcherService {
             return actionResponse("ASSIGN", objectType, request);
         }
         if ("WORK_ORDER".equals(objectType)) {
-            WorkOrder workOrder = workOrderRepository.findByIdAndIsDeletedFalse(request.objectId())
-                    .orElseThrow(() -> RestException.notFound("Work order not found: " + request.objectId()));
-            BrigadeMember performer = brigadeMemberRepository.findAllByUserIdAndIsDeletedFalse(request.ownerId()).stream()
-                    .findFirst()
-                    .orElseThrow(() -> RestException.badRequest("Performer is not linked to an active brigade member: " + request.ownerId()));
-            workOrder.setPerformer(performer);
-            workOrderRepository.save(workOrder);
-            erpWorkOrderDeltas.queueDelta(workOrder.getId());
-            return actionResponse("ASSIGN", objectType, request);
+            WorkOrderDto assigned = workOrderService.reassignPerformerFromDispatcher(
+                    request.objectId(), request.ownerId(), request.performerEmployeeId(), request.performerBrigadeMemberId());
+            return new MaintenanceDispatcherActionResponse(
+                    "ASSIGN", objectType, request.objectId(), request.ownerId(), "APPLIED", request.comment(), Instant.now(),
+                    assigned.performerEmployeeId(), assigned.performerBrigadeMemberId());
         }
         if ("DEFECT".equals(objectType)) {
             throw RestException.badRequest("Defects do not support owner assignment; create or assign a linked work order instead");
@@ -180,7 +179,7 @@ public class MaintenanceDispatcherService {
         if (request.objectId() == null) {
             throw RestException.badRequest("objectId is required");
         }
-        if (ownerRequired && request.ownerId() == null) {
+        if (ownerRequired && request.ownerId() == null && request.performerEmployeeId() == null) {
             throw RestException.badRequest("ownerId is required");
         }
     }
@@ -347,7 +346,9 @@ public class MaintenanceDispatcherService {
     }
 
     private java.util.UUID performerUserId(WorkOrder workOrder) {
-        return workOrder.getPerformer() == null ? null : workOrder.getPerformer().getUserId();
+        return workOrder.getPerformerEmployee() != null
+                ? workOrder.getPerformerEmployee().getUserId()
+                : workOrder.getPerformer() == null ? null : workOrder.getPerformer().getUserId();
     }
 
     private Long ageHours(Instant start, Instant now) {
