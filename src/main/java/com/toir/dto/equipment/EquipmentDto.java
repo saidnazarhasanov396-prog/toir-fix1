@@ -12,6 +12,8 @@ import com.toir.enums.LifetimeStatus;
 import com.toir.enums.MeterType;
 import com.toir.enums.PlacementType;
 import com.toir.enums.WarehouseEquipmentStatus;
+import com.toir.service.equipment.EquipmentLifetimeCalculator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Period;
 import java.time.LocalDate;
@@ -481,7 +483,7 @@ public record EquipmentDto(
                 lifetimeUnit(e, lifetimeMeter),
                 e.getAverageDailyUsage(),
                 responsible,
-                e.getDaysOfResourceRemaining(),
+                lifetimeRemainingDays(e, lifetimeMeter),
                 e.getForecastConsumedResource(),
                 e.getForecastRemainingResource(),
                 e.getForecastAvgUsagePerActiveDay(),
@@ -654,6 +656,12 @@ public record EquipmentDto(
         return ((current - lifetimeBaselineValue(e)) / limit) * 100.0;
     }
 
+    private static Long lifetimeRemainingDays(Equipment e, EquipmentMeter lifetimeMeter) {
+        Double remaining = lifetimeRemainingValue(e, lifetimeMeter);
+        Long calculated = EquipmentLifetimeCalculator.remainingDays(remaining, e.getAverageDailyUsage());
+        return remaining == null ? e.getDaysOfResourceRemaining() : calculated;
+    }
+
     private static String lifetimeUnit(Equipment e, EquipmentMeter lifetimeMeter) {
         if (lifetimeMeter != null && lifetimeMeter.getUnit() != null && !lifetimeMeter.getUnit().isBlank()) {
             return lifetimeMeter.getUnit();
@@ -670,5 +678,99 @@ public record EquipmentDto(
             case KWH_CONSUMED -> "kWh";
             case CUSTOM -> null;
         };
+    }
+
+    @JsonProperty("lifetimeStatusReasons")
+    public List<LifetimeStatusReasonRef> lifetimeStatusReasons() {
+        List<LifetimeStatusReasonRef> reasons = new java.util.ArrayList<>();
+        if (expectedEndDate != null) {
+            LifetimeStatus calendarStatus;
+            String reasonCode;
+            if (expectedEndDate.isBefore(LocalDate.now())) {
+                calendarStatus = LifetimeStatus.EXPIRED;
+                reasonCode = "CALENDAR_LIFETIME_EXPIRED";
+            } else if (!expectedEndDate.isAfter(LocalDate.now().plusMonths(3))) {
+                calendarStatus = LifetimeStatus.EXPIRING_SOON;
+                reasonCode = "CALENDAR_LIFETIME_EXPIRING_SOON";
+            } else {
+                calendarStatus = LifetimeStatus.NORMAL;
+                reasonCode = "CALENDAR_LIFETIME_ACTIVE";
+            }
+            reasons.add(new LifetimeStatusReasonRef(
+                    "CALENDAR", reasonCode, calendarStatus, false, expectedEndDate,
+                    null, null, null, null, null, List.of()
+            ));
+        }
+
+        if (lifetimeCurrentValue != null && lifetimeTargetValue != null
+                && lifetimeRemainingValue != null && lifetimeLimitValue != null
+                && lifetimeLimitValue > 0) {
+            double threshold = Math.max(1.0,
+                    lifetimeLimitValue * (lifetimeWarningPercent == null ? 10.0 : lifetimeWarningPercent) / 100.0);
+            LifetimeStatus meterStatus;
+            String reasonCode;
+            if (lifetimeBaselineValue != null && lifetimeCurrentValue < lifetimeBaselineValue) {
+                meterStatus = LifetimeStatus.UNKNOWN;
+                reasonCode = "METER_READING_BELOW_BASELINE";
+            } else if (lifetimeRemainingValue <= 0) {
+                meterStatus = LifetimeStatus.EXPIRED;
+                reasonCode = "METER_RESOURCE_EXHAUSTED";
+            } else if (lifetimeRemainingValue <= threshold) {
+                meterStatus = LifetimeStatus.EXPIRING_SOON;
+                reasonCode = "METER_REMAINING_WITHIN_WARNING_THRESHOLD";
+            } else {
+                meterStatus = LifetimeStatus.NORMAL;
+                reasonCode = "METER_RESOURCE_AVAILABLE";
+            }
+            reasons.add(new LifetimeStatusReasonRef(
+                    "METER", reasonCode, meterStatus, false, null,
+                    lifetimeCurrentValue, lifetimeTargetValue, lifetimeRemainingValue,
+                    threshold, lifetimeUnit, List.of()
+            ));
+        }
+
+        boolean hasKnownReason = reasons.stream().anyMatch(reason -> reason.status() != LifetimeStatus.UNKNOWN);
+        if (hasKnownReason) {
+            reasons.removeIf(reason -> reason.status() == LifetimeStatus.UNKNOWN);
+        }
+        if (reasons.isEmpty()) {
+            List<String> missing = new java.util.ArrayList<>();
+            if (expectedEndDate == null) missing.add("expectedEndDate");
+            if (lifetimeLimitValue == null) missing.add("lifetimeLimitValue");
+            if (lifetimeCurrentValue == null) missing.add("lifetimeCurrentValue");
+            reasons.add(new LifetimeStatusReasonRef(
+                    "METER", "LIFETIME_INPUTS_MISSING", LifetimeStatus.UNKNOWN, true, null,
+                    lifetimeCurrentValue, lifetimeTargetValue, lifetimeRemainingValue,
+                    null, lifetimeUnit, missing
+            ));
+            return List.copyOf(reasons);
+        }
+
+        return reasons.stream()
+                .map(reason -> new LifetimeStatusReasonRef(
+                        reason.source(), reason.reasonCode(), reason.status(),
+                        reason.status() == lifetimeStatus, reason.endDate(),
+                        reason.currentValue(), reason.targetValue(), reason.remainingValue(),
+                        reason.thresholdValue(), reason.unit(), reason.missingFields()
+                ))
+                .toList();
+    }
+
+    public record LifetimeStatusReasonRef(
+            String source,
+            String reasonCode,
+            LifetimeStatus status,
+            boolean determining,
+            LocalDate endDate,
+            Double currentValue,
+            Double targetValue,
+            Double remainingValue,
+            Double thresholdValue,
+            String unit,
+            List<String> missingFields
+    ) {
+        public LifetimeStatusReasonRef {
+            missingFields = missingFields == null ? List.of() : List.copyOf(missingFields);
+        }
     }
 }

@@ -43,6 +43,35 @@ public interface EquipmentRepository extends JpaRepository<Equipment, UUID> {
     @Query(value = "SELECT * FROM equipment WHERE id IN (:ids) AND is_deleted = false", nativeQuery = true)
     List<Equipment> findAllByIdInAndIsDeletedFalse(@Param("ids") Collection<UUID> ids);
 
+    @Query("""
+            select equipment.id
+            from Equipment equipment
+            where equipment.id in :ids
+              and equipment.isDeleted = false
+              and (:scopeDepartmentId is null
+                    or coalesce(equipment.responsibleDepartmentId, equipment.departmentId) = :scopeDepartmentId)
+            """)
+    List<UUID> findActiveIdsForExport(
+            @Param("ids") Collection<UUID> ids,
+            @Param("scopeDepartmentId") UUID scopeDepartmentId
+    );
+
+    @Query(value = """
+            SELECT id
+            FROM equipment
+            WHERE is_deleted = false
+              AND (CAST(:scopeDepartmentId AS uuid) IS NULL
+                    OR COALESCE(responsible_department_id, department_id) = CAST(:scopeDepartmentId AS uuid))
+              AND (CAST(:afterId AS uuid) IS NULL OR id > CAST(:afterId AS uuid))
+            ORDER BY id ASC
+            LIMIT :batchSize
+            """, nativeQuery = true)
+    List<UUID> findActiveIdsForExportAfter(
+            @Param("scopeDepartmentId") UUID scopeDepartmentId,
+            @Param("afterId") UUID afterId,
+            @Param("batchSize") int batchSize
+    );
+
     @Query(value = "SELECT EXISTS(SELECT 1 FROM equipment WHERE id = cast(:id as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByIdAndIsDeletedFalse(@Param("id") UUID id);
 

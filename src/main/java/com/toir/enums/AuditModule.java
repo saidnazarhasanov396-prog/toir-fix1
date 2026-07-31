@@ -2,6 +2,7 @@ package com.toir.enums;
 
 public enum AuditModule {
     EQUIPMENT,
+    EQUIPMENT_LIFECYCLE_DATASET_EXPORT,
     EQUIPMENT_TYPE,
     WAREHOUSE,
     LOCATION,

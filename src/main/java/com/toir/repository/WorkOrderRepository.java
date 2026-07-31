@@ -21,6 +21,22 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, JpaSpecificationExecutor<WorkOrder> {
+    @Query(value = """
+            SELECT *
+            FROM work_orders
+            WHERE equipment_id = :equipmentId
+              AND COALESCE(completed_at, started_at, start_planned_at, created_at) >= :historyStart
+              AND COALESCE(completed_at, started_at, start_planned_at, created_at) <= :asOf
+              AND is_deleted = false
+            ORDER BY COALESCE(completed_at, started_at, start_planned_at, created_at) ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<WorkOrder> findLifecycleWorkOrders(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("historyStart") Instant historyStart,
+            @Param("asOf") Instant asOf,
+            @Param("limitPlusOne") int limitPlusOne);
+
     @Query(value = "SELECT * FROM work_orders WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<WorkOrder> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 

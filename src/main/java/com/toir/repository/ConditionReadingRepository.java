@@ -51,4 +51,20 @@ public interface ConditionReadingRepository extends JpaRepository<ConditionReadi
             AND (:departmentId IS NULL OR e.department_id = :departmentId)
             """, nativeQuery = true)
     long countBySeveritiesAndDepartment(@Param("severities") List<String> severities, @Param("departmentId") UUID departmentId);
+
+    @Query(value = """
+            SELECT *
+            FROM condition_readings
+            WHERE equipment_id = :equipmentId
+              AND recorded_at >= :historyStart
+              AND recorded_at <= :asOf
+              AND is_deleted = false
+            ORDER BY recorded_at ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<ConditionReading> findLifecycleReadings(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("historyStart") Instant historyStart,
+            @Param("asOf") Instant asOf,
+            @Param("limitPlusOne") int limitPlusOne);
 }

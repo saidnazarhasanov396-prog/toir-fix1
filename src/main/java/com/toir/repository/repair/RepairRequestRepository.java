@@ -17,6 +17,22 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface RepairRequestRepository extends JpaRepository<RepairRequest, UUID>, JpaSpecificationExecutor<RepairRequest> {
+    @Query(value = """
+            SELECT *
+            FROM repair_requests
+            WHERE equipment_id = :equipmentId
+              AND detected_at >= :historyStart
+              AND detected_at <= :asOf
+              AND is_deleted = false
+            ORDER BY detected_at ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<RepairRequest> findLifecycleRequests(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("historyStart") java.time.Instant historyStart,
+            @Param("asOf") java.time.Instant asOf,
+            @Param("limitPlusOne") int limitPlusOne);
+
     @Query(value = "SELECT * FROM repair_requests WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<RepairRequest> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
