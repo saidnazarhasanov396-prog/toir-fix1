@@ -199,6 +199,7 @@ public final class PermissionConstants {
     public static final String FINANCE_REVIEW_UNALLOCATE = "FINANCE_REVIEW_UNALLOCATE";
 
     public static final String EQUIPMENT_READ = "EQUIPMENT_READ";
+    public static final String EQUIPMENT_LIFECYCLE_DATASET_EXPORT = "EQUIPMENT_LIFECYCLE_DATASET_EXPORT";
     public static final String EQUIPMENT_CREATE = "EQUIPMENT_CREATE";
     public static final String EQUIPMENT_UPDATE = "EQUIPMENT_UPDATE";
     public static final String EQUIPMENT_DELETE = "EQUIPMENT_DELETE";
