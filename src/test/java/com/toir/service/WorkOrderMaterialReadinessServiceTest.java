@@ -7,12 +7,18 @@ import com.toir.entity.maintenance.WorkOrder;
 import com.toir.entity.maintenance.WorkOrderSparePartRequirement;
 import com.toir.entity.repair.RepairMaterialUsage;
 import com.toir.entity.warehouse.RepairMaterialReturn;
+import com.toir.entity.warehouse.Warehouse;
+import com.toir.entity.warehouse.WarehouseStockBalance;
 import com.toir.enums.MaterialReadinessStatus;
 import com.toir.enums.RepairMaterialReturnStatus;
 import com.toir.enums.ReservationStatus;
+import com.toir.enums.WarehouseStockStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.RepairMaterialReturnRepository;
 import com.toir.repository.ReservationRepository;
+import com.toir.repository.PurchaseOrderRepository;
+import com.toir.repository.WarehouseRepository;
+import com.toir.repository.WarehouseStockBalanceRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.maintenance.WorkOrderSparePartRequirementRepository;
 import com.toir.repository.repair.RepairMaterialUsageRepository;
@@ -48,6 +54,15 @@ class WorkOrderMaterialReadinessServiceTest {
     @Mock
     RepairMaterialReturnRepository materialReturnRepository;
 
+    @Mock
+    WarehouseStockBalanceRepository warehouseStockBalanceRepository;
+
+    @Mock
+    WarehouseRepository warehouseRepository;
+
+    @Mock
+    PurchaseOrderRepository purchaseOrderRepository;
+
     WorkOrderMaterialReadinessService service;
 
     UUID workOrderId;
@@ -61,7 +76,10 @@ class WorkOrderMaterialReadinessServiceTest {
                 requirementRepository,
                 reservationRepository,
                 materialUsageRepository,
-                materialReturnRepository
+                materialReturnRepository,
+                warehouseStockBalanceRepository,
+                warehouseRepository,
+                purchaseOrderRepository
         );
         workOrderId = UUID.randomUUID();
         equipmentId = UUID.randomUUID();
@@ -85,17 +103,17 @@ class WorkOrderMaterialReadinessServiceTest {
     }
 
     @Test
-    void fullyReservedRequirementIsReady() {
+    void fullyReservedRequirementIsReserved() {
         WorkOrderSparePartRequirement requirement = requirement(10, "pcs", "Bearing", "Needs kit");
         Reservation reservation = reservation(requirement.getId(), requirement.getSparePartId(), 10);
         givenMaterialState(List.of(requirement), List.of(reservation), List.of(), List.of());
 
         WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
 
-        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.READY);
+        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.RESERVED);
         assertThat(result.blocking()).isFalse();
         assertThat(result.rows()).singleElement().satisfies(row -> {
-            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.READY);
+            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.RESERVED);
             assertThat(row.requiredQty()).isEqualByComparingTo("10");
             assertThat(row.reservedQty()).isEqualByComparingTo("10");
             assertThat(row.shortageQty()).isZero();
@@ -104,9 +122,121 @@ class WorkOrderMaterialReadinessServiceTest {
             assertThat(row.unit()).isEqualTo("pcs");
             assertThat(row.notes()).isEqualTo("Needs kit");
             assertThat(row.expectedDate()).isNull();
-            assertThat(row.sourceSystem()).isNull();
-            assertThat(row.lastSyncedAt()).isNull();
+            assertThat(row.sourceSystem()).isEqualTo("TOIR_WMS");
+            assertThat(row.lastSyncedAt()).isNotNull();
+            assertThat(row.nextAction()).isEqualTo("NONE");
         });
+    }
+
+    @Test
+    void availableStockAtWorkOrderWarehouseOffersExactReservation() {
+        UUID warehouseId = UUID.randomUUID();
+        workOrder.setWarehouseId(warehouseId);
+        WorkOrderSparePartRequirement requirement = requirement(10, "pcs", "Bearing", null);
+        Warehouse warehouse = warehouse(warehouseId, "WH-01", "Main warehouse");
+        WarehouseStockBalance balance = stock(warehouseId, requirement.getSparePartId(), 12, 2);
+        givenMaterialState(List.of(requirement), List.of(), List.of(), List.of());
+        when(warehouseStockBalanceRepository.findAllBySparePartIdAndIsDeletedFalse(requirement.getSparePartId()))
+                .thenReturn(List.of(balance));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId))).thenReturn(List.of(warehouse));
+
+        WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
+
+        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.AVAILABLE);
+        assertThat(result.blocking()).isTrue();
+        assertThat(result.rows()).singleElement().satisfies(row -> {
+            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.AVAILABLE);
+            assertThat(row.sourceWarehouseId()).isEqualTo(warehouseId);
+            assertThat(row.sourceWarehouseCode()).isEqualTo("WH-01");
+            assertThat(row.sourceWarehouseName()).isEqualTo("Main warehouse");
+            assertThat(row.onHandQty()).isEqualByComparingTo("12");
+            assertThat(row.wmsReservedQty()).isEqualByComparingTo("2");
+            assertThat(row.availableQty()).isEqualByComparingTo("10");
+            assertThat(row.shortageQty()).isZero();
+            assertThat(row.nextAction()).isEqualTo("RESERVE");
+            assertThat(row.nextActionQty()).isEqualByComparingTo("10");
+            assertThat(row.sourceSystem()).isEqualTo("TOIR_WMS");
+            assertThat(row.lastSyncedAt()).isNotNull();
+        });
+    }
+
+    @Test
+    void stockAtAnotherWarehouseOffersTransfer() {
+        UUID targetWarehouseId = UUID.randomUUID();
+        UUID sourceWarehouseId = UUID.randomUUID();
+        workOrder.setWarehouseId(targetWarehouseId);
+        WorkOrderSparePartRequirement requirement = requirement(6, "pcs", "Seal", null);
+        givenMaterialState(List.of(requirement), List.of(), List.of(), List.of());
+        when(warehouseStockBalanceRepository.findAllBySparePartIdAndIsDeletedFalse(requirement.getSparePartId()))
+                .thenReturn(List.of(stock(sourceWarehouseId, requirement.getSparePartId(), 8, 1)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(sourceWarehouseId)))
+                .thenReturn(List.of(warehouse(sourceWarehouseId, "WH-02", "Remote warehouse")));
+
+        WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
+
+        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.TRANSFER_REQUIRED);
+        assertThat(result.rows()).singleElement().satisfies(row -> {
+            assertThat(row.sourceWarehouseId()).isEqualTo(sourceWarehouseId);
+            assertThat(row.availableQty()).isEqualByComparingTo("7");
+            assertThat(row.shortageQty()).isZero();
+            assertThat(row.nextAction()).isEqualTo("TRANSFER");
+            assertThat(row.nextActionQty()).isEqualByComparingTo("6");
+        });
+    }
+
+    @Test
+    void partialGlobalStockOffersProcurementOnlyForActualShortage() {
+        UUID warehouseId = UUID.randomUUID();
+        workOrder.setWarehouseId(warehouseId);
+        WorkOrderSparePartRequirement requirement = requirement(10, "pcs", "Filter", null);
+        givenMaterialState(List.of(requirement), List.of(), List.of(), List.of());
+        when(warehouseStockBalanceRepository.findAllBySparePartIdAndIsDeletedFalse(requirement.getSparePartId()))
+                .thenReturn(List.of(stock(warehouseId, requirement.getSparePartId(), 5, 1)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId)))
+                .thenReturn(List.of(warehouse(warehouseId, "WH-01", "Main warehouse")));
+
+        WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
+
+        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.PARTIALLY_AVAILABLE);
+        assertThat(result.rows()).singleElement().satisfies(row -> {
+            assertThat(row.availableQty()).isEqualByComparingTo("4");
+            assertThat(row.shortageQty()).isEqualByComparingTo("6");
+            assertThat(row.nextAction()).isEqualTo("CREATE_PROCUREMENT");
+            assertThat(row.nextActionQty()).isEqualByComparingTo("6");
+        });
+    }
+
+    @Test
+    void unavailableWmsIsExplicitAndBlocking() {
+        WorkOrderSparePartRequirement requirement = requirement(2, "pcs", "Belt", null);
+        givenMaterialState(List.of(requirement), List.of(), List.of(), List.of());
+        when(warehouseStockBalanceRepository.findAllBySparePartIdAndIsDeletedFalse(requirement.getSparePartId()))
+                .thenThrow(new IllegalStateException("WMS database is unavailable"));
+
+        WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
+
+        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.WMS_UNAVAILABLE);
+        assertThat(result.blocking()).isTrue();
+        assertThat(result.rows()).singleElement().satisfies(row -> {
+            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.WMS_UNAVAILABLE);
+            assertThat(row.nextAction()).isEqualTo("NONE");
+        });
+    }
+
+    @Test
+    void openSupplierOrderProvidesExpectedDeliveryDate() {
+        UUID warehouseId = UUID.randomUUID();
+        workOrder.setWarehouseId(warehouseId);
+        WorkOrderSparePartRequirement requirement = requirement(3, "pcs", "Bearing", null);
+        givenMaterialState(List.of(requirement), List.of(), List.of(), List.of());
+        java.time.LocalDate expectedDelivery = java.time.LocalDate.of(2026, 8, 12);
+        when(purchaseOrderRepository.findEarliestExpectedDeliveryDate(
+                warehouseId, requirement.getSparePartId())).thenReturn(expectedDelivery);
+
+        WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
+
+        assertThat(result.rows()).singleElement().satisfies(row ->
+                assertThat(row.expectedDate()).isEqualTo(expectedDelivery));
     }
 
     @Test
@@ -126,7 +256,7 @@ class WorkOrderMaterialReadinessServiceTest {
     }
 
     @Test
-    void partialCoverageIsBlockingPartial() {
+    void partialCoverageWithoutStockRequiresProcurement() {
         WorkOrderSparePartRequirement requirement = requirement(8, "pcs", "Seal", null);
         givenMaterialState(
                 List.of(requirement),
@@ -137,25 +267,27 @@ class WorkOrderMaterialReadinessServiceTest {
 
         WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
 
-        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.PARTIAL);
+        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.PROCUREMENT_REQUIRED);
         assertThat(result.blocking()).isTrue();
         assertThat(result.rows()).singleElement().satisfies(row -> {
-            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.PARTIAL);
+            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.PROCUREMENT_REQUIRED);
             assertThat(row.shortageQty()).isEqualByComparingTo("3");
             assertThat(row.blocking()).isTrue();
+            assertThat(row.nextAction()).isEqualTo("CREATE_PROCUREMENT");
+            assertThat(row.nextActionQty()).isEqualByComparingTo("3");
         });
     }
 
     @Test
-    void noCoverageIsBlockingShortage() {
+    void noCoverageRequiresProcurement() {
         WorkOrderSparePartRequirement requirement = requirement(4, "pcs", "Filter", null);
         givenMaterialState(List.of(requirement), List.of(), List.of(), List.of());
 
         WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
 
-        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.SHORTAGE);
+        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.PROCUREMENT_REQUIRED);
         assertThat(result.rows()).singleElement().satisfies(row -> {
-            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.SHORTAGE);
+            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.PROCUREMENT_REQUIRED);
             assertThat(row.shortageQty()).isEqualByComparingTo("4");
             assertThat(row.blocking()).isTrue();
         });
@@ -170,17 +302,17 @@ class WorkOrderMaterialReadinessServiceTest {
 
         WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
 
-        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.PARTIAL);
+        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.PROCUREMENT_REQUIRED);
         assertThat(result.rows()).singleElement().satisfies(row -> {
             assertThat(row.issuedQty()).isEqualByComparingTo("5");
             assertThat(row.returnedQty()).isEqualByComparingTo("2");
             assertThat(row.shortageQty()).isEqualByComparingTo("2");
-            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.PARTIAL);
+            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.PROCUREMENT_REQUIRED);
         });
     }
 
     @Test
-    void multipleRequirementsPreferShortageOverPartialForOverall() {
+    void multipleRequirementsPreferProcurementRequirementForOverall() {
         WorkOrderSparePartRequirement ready = requirement(3, "pcs", "Ready part", null);
         WorkOrderSparePartRequirement partial = requirement(4, "pcs", "Partial part", null);
         WorkOrderSparePartRequirement shortage = requirement(2, "pcs", "Missing part", null);
@@ -193,12 +325,12 @@ class WorkOrderMaterialReadinessServiceTest {
 
         WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
 
-        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.SHORTAGE);
+        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.PROCUREMENT_REQUIRED);
         assertThat(result.rows()).extracting("readinessStatus")
                 .containsExactly(
-                        MaterialReadinessStatus.READY,
-                        MaterialReadinessStatus.PARTIAL,
-                        MaterialReadinessStatus.SHORTAGE
+                        MaterialReadinessStatus.RESERVED,
+                        MaterialReadinessStatus.PROCUREMENT_REQUIRED,
+                        MaterialReadinessStatus.PROCUREMENT_REQUIRED
                 );
     }
 
@@ -231,12 +363,12 @@ class WorkOrderMaterialReadinessServiceTest {
 
         WorkOrderMaterialReadinessDto result = service.getReadiness(workOrderId);
 
-        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.READY);
+        assertThat(result.overallStatus()).isEqualTo(MaterialReadinessStatus.RESERVED);
         assertThat(result.rows()).singleElement().satisfies(row -> {
             assertThat(row.reservedQty()).isEqualByComparingTo("2");
             assertThat(row.issuedQty()).isEqualByComparingTo("4");
             assertThat(row.shortageQty()).isZero();
-            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.READY);
+            assertThat(row.readinessStatus()).isEqualTo(MaterialReadinessStatus.RESERVED);
         });
     }
 
@@ -266,6 +398,12 @@ class WorkOrderMaterialReadinessServiceTest {
                 .thenReturn(usages);
         when(materialReturnRepository.findAllByWorkOrderIdAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderId))
                 .thenReturn(returns);
+        requirements.stream()
+                .map(WorkOrderSparePartRequirement::getSparePartId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .forEach(sparePartId -> when(warehouseStockBalanceRepository
+                        .findAllBySparePartIdAndIsDeletedFalse(sparePartId)).thenReturn(List.of()));
     }
 
     private WorkOrderSparePartRequirement requirement(
@@ -321,5 +459,25 @@ class WorkOrderMaterialReadinessServiceTest {
         returned.setQuantity(BigDecimal.valueOf(quantity));
         returned.setStatus(RepairMaterialReturnStatus.POSTED);
         return returned;
+    }
+
+    private Warehouse warehouse(UUID id, String code, String name) {
+        Warehouse warehouse = new Warehouse();
+        warehouse.setId(id);
+        warehouse.setCode(code);
+        warehouse.setName(name);
+        return warehouse;
+    }
+
+    private WarehouseStockBalance stock(UUID warehouseId, UUID sparePartId, double onHand, double reserved) {
+        WarehouseStockBalance balance = new WarehouseStockBalance();
+        balance.setId(UUID.randomUUID());
+        balance.setWarehouseId(warehouseId);
+        balance.setSparePartId(sparePartId);
+        balance.setStockStatus(WarehouseStockStatus.AVAILABLE);
+        balance.setQtyOnHand(BigDecimal.valueOf(onHand));
+        balance.setQtyReserved(BigDecimal.valueOf(reserved));
+        balance.setUpdatedAt(java.time.Instant.now().minusSeconds(120));
+        return balance;
     }
 }
