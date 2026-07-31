@@ -1,5 +1,6 @@
 package com.toir.exception;
 
+import com.toir.enums.ErrorType;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -73,6 +74,20 @@ class GlobalExceptionHandlerLocalizationTest {
         assertThat(body.errorCode()).isEqualTo("RESERVATION_DUPLICATE");
         assertThat(body.message()).isEqualTo("Операция конфликтует с текущим состоянием ресурса");
         assertThat(body.params()).isEmpty();
+    }
+
+    @Test
+    void localizesExistingTypedFileErrorsWithoutLosingTheirSpecificMeaning() {
+        RestException exception = RestException.restThrow(ErrorType.FILE_TOO_LARGE);
+
+        ErrorResponse ru = (ErrorResponse) handler.handleRestException(exception, request("ru")).getBody();
+        ErrorResponse uz = (ErrorResponse) handler.handleRestException(exception, request("uz")).getBody();
+        ErrorResponse en = (ErrorResponse) handler.handleRestException(exception, request("en")).getBody();
+
+        assertThat(ru.errorCode()).isEqualTo("FILE_TOO_LARGE");
+        assertThat(ru.message()).isEqualTo("Размер файла превышает допустимый предел");
+        assertThat(uz.message()).isEqualTo("Fayl hajmi ruxsat etilgan chegaradan oshadi");
+        assertThat(en.message()).isEqualTo("File size exceeds the allowed limit");
     }
 
     private MockHttpServletRequest request(String acceptLanguage) {

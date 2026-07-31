@@ -33,7 +33,20 @@ public final class BackendErrorLocalizer {
             entry("REJECTION_COMMENT_REQUIRED", "Rejection comment is required", "Укажите причину отклонения", "Rad etish sababini ko‘rsating"),
             entry("UNSUPPORTED_MEDIA_TYPE", "Unsupported media type", "Неподдерживаемый формат данных", "Ma’lumot formati qo‘llab-quvvatlanmaydi"),
             entry("INTERNAL_SERVER_ERROR", "Unexpected server error", "Внутренняя ошибка сервера", "Serverning ichki xatosi"),
-            entry("HTTP_ERROR", "Request failed", "Не удалось выполнить запрос", "So‘rovni bajarib bo‘lmadi")
+            entry("HTTP_ERROR", "Request failed", "Не удалось выполнить запрос", "So‘rovni bajarib bo‘lmadi"),
+            entry("FILE_TOO_LARGE", "File size exceeds the allowed limit", "Размер файла превышает допустимый предел", "Fayl hajmi ruxsat etilgan chegaradan oshadi"),
+            entry("INVALID_FILE", "Invalid file", "Некорректный файл", "Fayl noto‘g‘ri"),
+            entry("FILE_EMPTY", "File is empty", "Файл пуст", "Fayl bo‘sh"),
+            entry("FILE_TYPE_NOT_ALLOWED", "File type is not allowed", "Тип файла не поддерживается", "Fayl turiga ruxsat berilmagan"),
+            entry("FILE_NOT_FOUND", "File not found", "Файл не найден", "Fayl topilmadi"),
+            entry("FILE_ACCESS_DENIED", "File access denied", "Доступ к файлу запрещён", "Faylga kirish taqiqlangan"),
+            entry("FILE_UPLOAD_FAILED", "File upload failed", "Не удалось загрузить файл", "Faylni yuklab bo‘lmadi"),
+            entry("FILE_STORAGE_ACCESS_DENIED", "File storage access denied or misconfigured", "Доступ к файловому хранилищу запрещён или оно настроено неверно", "Fayl omboriga kirish taqiqlangan yoki u noto‘g‘ri sozlangan"),
+            entry("FILE_STORAGE_CONFIGURATION_FAILED", "File storage configuration error", "Ошибка настройки файлового хранилища", "Fayl omborini sozlashda xatolik"),
+            entry("FILE_DELETE_FAILED", "File delete failed", "Не удалось удалить файл", "Faylni o‘chirib bo‘lmadi"),
+            entry("FILE_DOWNLOAD_FAILED", "File download failed", "Не удалось скачать файл", "Faylni yuklab olib bo‘lmadi"),
+            entry("PRESIGNED_URL_FAILED", "Could not generate presigned URL", "Не удалось создать временную ссылку на файл", "Fayl uchun vaqtinchalik havola yaratib bo‘lmadi"),
+            entry("UPLOAD_FILES_FAILED", "File upload failed", "Не удалось загрузить файлы", "Fayllarni yuklab bo‘lmadi")
     );
 
     private BackendErrorLocalizer() {
@@ -48,7 +61,14 @@ public final class BackendErrorLocalizer {
             boolean allowLegacyEnglish
     ) {
         Locale locale = resolveLocale(request == null ? null : request.getHeader(HttpHeaders.ACCEPT_LANGUAGE));
-        String code = requestedCode == null || requestedCode.isBlank() ? defaultCode(status) : requestedCode;
+        String code;
+        if (requestedCode != null && !requestedCode.isBlank()) {
+            code = requestedCode;
+        } else if (legacyEnglishMessage != null && legacyEnglishMessage.matches("[A-Z][A-Z0-9_]+")) {
+            code = legacyEnglishMessage;
+        } else {
+            code = defaultCode(status);
+        }
         Map<String, Object> params = immutableParams(requestedParams);
 
         if ("LIFETIME_EXPIRED".equals(code)) {
