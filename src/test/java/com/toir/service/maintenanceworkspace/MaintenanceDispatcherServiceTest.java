@@ -4,6 +4,8 @@ import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherActionRequest;
 import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherActionResponse;
 import com.toir.dto.maintenanceworkspace.MaintenanceDispatcherQueues;
 import com.toir.dto.maintenanceworkspace.MaintenanceWorkspaceFilter;
+import com.toir.dto.workorder.WorkOrderDto;
+import com.toir.service.WorkOrderService;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.WorkOrder;
@@ -58,6 +60,9 @@ class MaintenanceDispatcherServiceTest {
 
     @Mock
     ToirErpWorkOrderSnapshotPublisher erpWorkOrderDeltas;
+
+    @Mock
+    WorkOrderService workOrderService;
 
     @InjectMocks
     MaintenanceDispatcherService service;
@@ -125,7 +130,8 @@ class MaintenanceDispatcherServiceTest {
                 workOrderRepository,
                 brigadeMemberRepository,
                 equipmentRepository,
-                erpWorkOrderDeltas
+                erpWorkOrderDeltas,
+                workOrderService
         );
         MaintenanceWorkspaceFilter filter = new MaintenanceWorkspaceFilter(
                 "pump",
@@ -183,36 +189,26 @@ class MaintenanceDispatcherServiceTest {
     }
 
     @Test
-    void assignAppliesWorkOrderPerformerByUserId() {
+    void assignWorkOrderPreservesLegacyOwnerUserIdAndUsesCanonicalService() {
         UUID ownerId = UUID.randomUUID();
-        WorkOrder workOrder = blockedWorkOrder(
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                "WO-ASSIGN",
-                "Assign performer",
-                PriorityLevel.HIGH,
-                WorkOrderStatus.APPROVED,
-                Instant.parse("2026-07-10T09:00:00Z")
-        );
-        BrigadeMember member = new BrigadeMember();
-        member.setId(UUID.randomUUID());
-        member.setUserId(ownerId);
-        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrder.getId())).thenReturn(Optional.of(workOrder));
-        when(brigadeMemberRepository.findAllByUserIdAndIsDeletedFalse(ownerId)).thenReturn(List.of(member));
-        when(workOrderRepository.save(workOrder)).thenReturn(workOrder);
-        MaintenanceDispatcherService service = service();
+        UUID workOrderId = UUID.randomUUID();
+        WorkOrderDto assigned = mock(WorkOrderDto.class);
+        UUID employeeId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+        when(assigned.performerEmployeeId()).thenReturn(employeeId);
+        when(assigned.performerBrigadeMemberId()).thenReturn(memberId);
+        when(workOrderService.reassignPerformerFromDispatcher(workOrderId, ownerId, null, null))
+                .thenReturn(assigned);
 
-        MaintenanceDispatcherActionResponse response = service.assign(new MaintenanceDispatcherActionRequest(
-                "WORK_ORDER",
-                workOrder.getId(),
-                ownerId,
-                "Assign performer"
-        ));
+        MaintenanceDispatcherActionResponse response = service().assign(new MaintenanceDispatcherActionRequest(
+                "WORK_ORDER", workOrderId, ownerId, "Assign performer"));
 
-        assertThat(workOrder.getPerformer()).isSameAs(member);
-        assertThat(response.status()).isEqualTo("APPLIED");
-        verify(workOrderRepository).save(workOrder);
+        assertThat(response.performerEmployeeId()).isEqualTo(employeeId);
+        assertThat(response.performerBrigadeMemberId()).isEqualTo(memberId);
+        verify(workOrderService).reassignPerformerFromDispatcher(workOrderId, ownerId, null, null);
+        verifyNoInteractions(brigadeMemberRepository);
     }
+
 
     @Test
     void escalateRaisesRepairRequestPriorityAndReason() {
@@ -589,7 +585,8 @@ class MaintenanceDispatcherServiceTest {
                 workOrderRepository,
                 brigadeMemberRepository,
                 equipmentRepository,
-                erpWorkOrderDeltas
+                erpWorkOrderDeltas,
+                workOrderService
         );
     }
 

@@ -76,7 +76,13 @@ public record WorkOrderDto(
         Boolean requiresShutdown,
         Boolean requiresIsolation,
         UUID plannedShutdownId,
-        UUID shutdownWorkItemId
+        UUID shutdownWorkItemId,
+        UUID performerEmployeeId,
+        String performerFullName,
+        UUID performerUserId,
+        UUID performerBrigadeMemberId,
+        UUID performerBrigadeId,
+        String performerBrigadeName
 ) {
     public WorkOrderDto {
         repairActRequired = Boolean.TRUE.equals(repairActRequired);
@@ -144,7 +150,7 @@ public record WorkOrderDto(
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes, createdById,
                 approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName, tasks, repairRequest,
                 defect, operationsCount, materialsCount, repairActRequired, stoppageActRequired, repairActFileId,
-                stoppageActFileId, materialUsages, updatedAt, null, null, null, null, null, null, null, null, null);
+                stoppageActFileId, materialUsages, updatedAt, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderDto(UUID id,
@@ -210,7 +216,7 @@ public record WorkOrderDto(
                 approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName, tasks, repairRequest,
                 defect, operationsCount, materialsCount, repairActRequired, stoppageActRequired, repairActFileId,
                 stoppageActFileId, materialUsages, updatedAt, repairCampaignId, repairCampaignStageId,
-                repairCampaignName, repairCampaignStageName, null, null, null, null, null);
+                repairCampaignName, repairCampaignStageName, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderDto(UUID id,
@@ -255,7 +261,7 @@ public record WorkOrderDto(
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
                 materialsCount, false, false, null, null, List.of(), null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderDto(UUID id,
@@ -302,7 +308,7 @@ public record WorkOrderDto(
                 startedAt, completedAt, summary, result, closureNotes, createdById, approvedById, warehouseId,
                 replacementEquipmentId, replacementEquipmentName, tasks, repairRequest, defect, operationsCount,
                 materialsCount, false, false, null, null, List.of(), null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderDto(UUID id,
@@ -343,7 +349,7 @@ public record WorkOrderDto(
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
                 tasks, repairRequest, defect, operationsCount, materialsCount, false, false, null, null, List.of(), null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public WorkOrderDto(UUID id,
@@ -386,7 +392,7 @@ public record WorkOrderDto(
                 startPlannedAt, endPlannedAt, startedAt, completedAt, summary, result, closureNotes,
                 createdById, approvedById, warehouseId, replacementEquipmentId, replacementEquipmentName,
                 tasks, repairRequest, defect, operationsCount, materialsCount, false, false, null, null, List.of(), null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public record CounteragentRef(UUID id, String code, String name) {
