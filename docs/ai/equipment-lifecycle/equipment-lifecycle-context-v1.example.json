@@ -1,0 +1,501 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-07-31T12:00:00Z",
+  "asOf": "2026-07-31T11:00:00Z",
+  "contextFingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+  "consistency": {
+    "level": "TRANSACTION_READ_ONLY_DEFAULT_ISOLATION",
+    "historicalSnapshot": false
+  },
+  "equipment": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-07-30T08:00:00Z",
+      "coverageEnd": "2026-07-30T08:00:00Z",
+      "maxSourceTime": "2026-07-30T08:00:00Z",
+      "sources": ["equipment+equipment_passports"]
+    },
+    "value": {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "code": "EQ-SYNTHETIC-001",
+      "name": "Synthetic process pump",
+      "inventoryNumber": "INV-SYNTHETIC-001",
+      "technicalNumber": null,
+      "serialNumber": null,
+      "model": "MODEL-DEMO",
+      "producedYear": 2024,
+      "equipmentTypeId": "00000000-0000-0000-0000-000000000002",
+      "departmentId": "00000000-0000-0000-0000-000000000003",
+      "locationId": null,
+      "currentLocationType": "DEPARTMENT",
+      "currentWarehouseId": null,
+      "responsibleDepartmentId": "00000000-0000-0000-0000-000000000003",
+      "parentId": null,
+      "criticalityClassId": null,
+      "manufacturer": "Synthetic Manufacturer",
+      "status": "ACTIVE",
+      "category": "PRODUCTION_EQUIPMENT",
+      "commissionedAt": null,
+      "arrivalDate": "2025-01-10",
+      "operationStartDate": null,
+      "expectedLifetimeMonths": null,
+      "expectedLifetimeYears": 10,
+      "expectedLifetimeHours": null,
+      "lifetimeCounterType": "ENGINE_HOURS",
+      "lifetimeMeterId": "00000000-0000-0000-0000-000000000004",
+      "lifetimeLimitValue": null,
+      "passport": {
+        "passportNumber": "PASSPORT-SYNTHETIC",
+        "factoryNumber": null,
+        "manufacturerSerial": null,
+        "power": {
+          "value": 18.5,
+          "unit": "kW"
+        },
+        "voltage": null,
+        "pressure": null,
+        "installDate": null,
+        "lastInspectionDate": "2026-07-01"
+      }
+    }
+  },
+  "hierarchy": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": true,
+      "coverageStart": "2026-07-01T08:00:00Z",
+      "coverageEnd": "2026-07-01T08:00:00Z",
+      "maxSourceTime": "2026-07-01T08:00:00Z",
+      "sources": ["equipment_nodes"]
+    },
+    "items": [
+      {
+        "sourceId": "00000000-0000-0000-0000-000000000010",
+        "parentId": null,
+        "code": "PUMP",
+        "name": "Synthetic pump assembly",
+        "nodeType": "ASSEMBLY"
+      }
+    ]
+  },
+  "technicalAttributes": {
+    "metadata": {
+      "availability": "AVAILABLE_BUT_OPTIONAL",
+      "reliability": "OPTIONAL",
+      "returnedCount": 0,
+      "truncated": false,
+      "coverageStart": null,
+      "coverageEnd": null,
+      "maxSourceTime": null,
+      "sources": ["equipment_attribute_values"]
+    },
+    "items": []
+  },
+  "lifecycleHistory": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-01-15T06:00:00Z",
+      "coverageEnd": "2026-01-15T06:00:00Z",
+      "maxSourceTime": "2026-01-15T06:00:00Z",
+      "sources": ["equipment_status_history+equipment_location_history"]
+    },
+    "items": [
+      {
+        "sourceId": "00000000-0000-0000-0000-000000000020",
+        "sourceType": "EQUIPMENT_STATUS_HISTORY",
+        "eventTime": "2026-01-15T06:00:00Z",
+        "effectiveTime": "2026-01-15T06:00:00Z",
+        "previousValues": {"status": "INACTIVE"},
+        "newValues": {"status": "ACTIVE"},
+        "source": "MANUAL",
+        "relatedEntityType": null,
+        "relatedEntityId": null
+      }
+    ]
+  },
+  "meterHistory": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-07-30T05:00:00Z",
+      "coverageEnd": "2026-07-30T05:00:00Z",
+      "maxSourceTime": "2026-07-30T05:00:00Z",
+      "sources": ["meter_readings"]
+    },
+    "items": [
+      {
+        "sourceId": "00000000-0000-0000-0000-000000000030",
+        "meterId": "00000000-0000-0000-0000-000000000004",
+        "meterType": "ENGINE_HOURS",
+        "unit": "h",
+        "value": 1200.5,
+        "delta": 8.0,
+        "readAt": "2026-07-30T05:00:00Z",
+        "source": "MANUAL",
+        "readingContext": "MANUAL_UPDATE",
+        "repairRequestId": null,
+        "workOrderId": null,
+        "defectId": null
+      }
+    ]
+  },
+  "maintenanceSummary": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-06-10T07:00:00Z",
+      "coverageEnd": "2026-06-10T07:00:00Z",
+      "maxSourceTime": "2026-06-10T07:00:00Z",
+      "sources": ["maintenance_completion_anchors+work_orders"]
+    },
+    "value": {
+      "canonicalCompletionCount": 1,
+      "lastCompletedAt": "2026-06-10T07:00:00Z",
+      "completedWorkOrderCount": 1,
+      "overduePlannedMaintenanceCount": null
+    }
+  },
+  "maintenanceHistory": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-06-10T07:00:00Z",
+      "coverageEnd": "2026-06-10T07:00:00Z",
+      "maxSourceTime": "2026-06-10T07:00:00Z",
+      "sources": ["maintenance_completion_anchors+work_orders"]
+    },
+    "items": [
+      {
+        "sourceId": "00000000-0000-0000-0000-000000000040",
+        "sourceType": "MAINTENANCE_COMPLETION_ANCHOR",
+        "actualCompletionAt": "2026-06-10T07:00:00Z",
+        "workOrderStatus": null,
+        "workOrderId": "00000000-0000-0000-0000-000000000041",
+        "pprTaskId": "00000000-0000-0000-0000-000000000042",
+        "maintenanceDueEventId": "00000000-0000-0000-0000-000000000043",
+        "regulationId": null,
+        "equipmentMaintenanceRuleId": null,
+        "plannedDueAt": "2026-06-09T05:00:00Z"
+      }
+    ]
+  },
+  "plannedMaintenance": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-08-15T05:00:00Z",
+      "coverageEnd": "2026-08-15T05:00:00Z",
+      "maxSourceTime": "2026-08-15T05:00:00Z",
+      "sources": ["ppr_tasks+maintenance_due_events"]
+    },
+    "items": [
+      {
+        "sourceId": "00000000-0000-0000-0000-000000000050",
+        "sourceType": "MAINTENANCE_DUE_EVENT",
+        "sourceCalculationItemId": null,
+        "pprTaskId": null,
+        "maintenanceDueEventId": "00000000-0000-0000-0000-000000000050",
+        "linkedWorkOrderId": null,
+        "status": "UPCOMING",
+        "scheduledStart": null,
+        "scheduledEnd": null,
+        "dueAt": "2026-08-15T05:00:00Z",
+        "meterType": "ENGINE_HOURS",
+        "meterUnit": "h",
+        "meterCurrentValue": 1200.5,
+        "meterRemaining": 99.5
+      }
+    ]
+  },
+  "workOrders": {
+    "metadata": {
+      "availability": "OUT_OF_SCOPE_FOR_V1",
+      "reliability": "OUT_OF_SCOPE",
+      "returnedCount": 0,
+      "truncated": false,
+      "coverageStart": null,
+      "coverageEnd": null,
+      "maxSourceTime": null,
+      "sources": []
+    },
+    "items": []
+  },
+  "defects": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-05-01T04:00:00Z",
+      "coverageEnd": "2026-05-01T04:00:00Z",
+      "maxSourceTime": "2026-05-01T04:00:00Z",
+      "sources": ["defects"]
+    },
+    "items": [
+      {
+        "sourceId": "00000000-0000-0000-0000-000000000060",
+        "equipmentNodeId": "00000000-0000-0000-0000-000000000010",
+        "repairRequestId": "00000000-0000-0000-0000-000000000061",
+        "category": "BEARING",
+        "severity": "HIGH",
+        "failureReason": null,
+        "rootCause": null,
+        "status": "RESOLVED",
+        "detectedAt": "2026-05-01T04:00:00Z",
+        "resolvedAt": "2026-05-02T04:00:00Z",
+        "derivedRepeatedFailureCount": null,
+        "recurrenceReliability": "UNRELIABLE"
+      }
+    ]
+  },
+  "repairRequests": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-05-01T04:00:00Z",
+      "coverageEnd": "2026-05-01T04:00:00Z",
+      "maxSourceTime": "2026-05-01T04:00:00Z",
+      "sources": ["repair_requests"]
+    },
+    "items": [
+      {
+        "sourceId": "00000000-0000-0000-0000-000000000061",
+        "departmentId": "00000000-0000-0000-0000-000000000003",
+        "locationId": null,
+        "priority": "HIGH",
+        "criticality": "HIGH",
+        "status": "COMPLETED",
+        "source": "MANUAL",
+        "detectedAt": "2026-05-01T04:00:00Z",
+        "reactedAt": null,
+        "targetCompletionAt": null,
+        "actualCompletionAt": "2026-05-02T04:00:00Z",
+        "warrantyActiveAtCreation": null,
+        "warrantyHandling": null
+      }
+    ]
+  },
+  "inspections": {
+    "metadata": {
+      "availability": "AVAILABLE_BUT_OPTIONAL",
+      "reliability": "OPTIONAL",
+      "returnedCount": 0,
+      "truncated": false,
+      "coverageStart": null,
+      "coverageEnd": null,
+      "maxSourceTime": null,
+      "sources": ["inspection_round_results"]
+    },
+    "items": []
+  },
+  "conditionMeasurements": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-07-30T05:10:00Z",
+      "coverageEnd": "2026-07-30T05:10:00Z",
+      "maxSourceTime": "2026-07-30T05:10:00Z",
+      "sources": ["condition_readings"]
+    },
+    "items": [
+      {
+        "sourceId": "00000000-0000-0000-0000-000000000070",
+        "parameter": "VIBRATION",
+        "value": 3.2,
+        "unit": "mm/s",
+        "recordedAt": "2026-07-30T05:10:00Z",
+        "warnHigh": 4.5,
+        "alarmHigh": 7.1,
+        "warnLow": null,
+        "alarmLow": null,
+        "severity": "OK"
+      }
+    ]
+  },
+  "installedComponents": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-02-01T06:00:00Z",
+      "coverageEnd": "2026-02-01T06:00:00Z",
+      "maxSourceTime": "2026-02-01T06:00:00Z",
+      "sources": ["spare_part_installations"]
+    },
+    "items": [
+      {
+        "sourceId": "00000000-0000-0000-0000-000000000080",
+        "equipmentNodeId": "00000000-0000-0000-0000-000000000010",
+        "slotCode": "BEARING-A",
+        "sparePartId": "00000000-0000-0000-0000-000000000081",
+        "quantity": 1.0,
+        "status": "ACTIVE",
+        "installedAt": "2026-02-01T06:00:00Z",
+        "installWorkOrderId": null,
+        "sourceMaterialUsageId": null,
+        "appliedLifeRuleId": null,
+        "appliedRuleRevision": null,
+        "lifecycleEvaluationState": "OK",
+        "nextCalendarDueAt": null
+      }
+    ]
+  },
+  "componentReplacementHistory": {
+    "metadata": {
+      "availability": "AVAILABLE_BUT_OPTIONAL",
+      "reliability": "OPTIONAL",
+      "returnedCount": 0,
+      "truncated": false,
+      "coverageStart": null,
+      "coverageEnd": null,
+      "maxSourceTime": null,
+      "sources": ["spare_part_installations"]
+    },
+    "items": []
+  },
+  "warranty": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-07-30T08:00:00Z",
+      "coverageEnd": "2026-07-30T08:00:00Z",
+      "maxSourceTime": "2026-07-30T08:00:00Z",
+      "sources": ["equipment"]
+    },
+    "value": {
+      "hasWarranty": false,
+      "warrantyStartDate": null,
+      "warrantyEndDate": null,
+      "warrantyCounteragentId": null,
+      "procurementRequestId": null,
+      "procurementRequestLineId": null
+    }
+  },
+  "costSummary": {
+    "metadata": {
+      "availability": "DERIVABLE",
+      "reliability": "DERIVED",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-05-03T05:00:00Z",
+      "coverageEnd": "2026-05-03T05:00:00Z",
+      "maxSourceTime": "2026-05-03T05:00:00Z",
+      "sources": ["actual_costs"]
+    },
+    "value": {
+      "total": {"amount": 1250000.0, "currency": "UZS"},
+      "approved": {"amount": 1250000.0, "currency": "UZS"},
+      "pending": {"amount": 0, "currency": "UZS"},
+      "rejected": {"amount": 0, "currency": "UZS"},
+      "directLinksOnly": true
+    }
+  },
+  "environmentContext": {
+    "metadata": {
+      "availability": "AVAILABLE_AND_POPULATED",
+      "reliability": "RELIABLE",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-07-30T08:00:00Z",
+      "coverageEnd": "2026-07-30T08:00:00Z",
+      "maxSourceTime": "2026-07-30T08:00:00Z",
+      "sources": ["equipment"]
+    },
+    "value": {
+      "departmentId": "00000000-0000-0000-0000-000000000003",
+      "responsibleDepartmentId": "00000000-0000-0000-0000-000000000003",
+      "locationId": null,
+      "locationType": "DEPARTMENT",
+      "warehouseId": null,
+      "outsideReason": null,
+      "outsideStartedDate": null,
+      "outsideExpectedReturnDate": null
+    }
+  },
+  "documentMetadata": {
+    "metadata": {
+      "availability": "REQUIRES_DOCUMENT_PARSING",
+      "reliability": "PARSER_REQUIRED",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-03-01T05:00:00Z",
+      "coverageEnd": "2026-03-01T05:00:00Z",
+      "maxSourceTime": "2026-03-01T05:00:00Z",
+      "sources": ["technical_documents"]
+    },
+    "items": [
+      {
+        "sourceId": "00000000-0000-0000-0000-000000000090",
+        "sourceType": "TECHNICAL_DOCUMENT",
+        "equipmentNodeId": null,
+        "documentType": "PASSPORT",
+        "title": "Synthetic equipment passport metadata",
+        "revision": "R1",
+        "documentDate": "2026-03-01",
+        "requiresParsing": true
+      }
+    ]
+  },
+  "dataQuality": {
+    "issues": [
+      {
+        "section": "context",
+        "code": "SNAPSHOT_CONSISTENCY_LIMITED",
+        "severity": "INFO",
+        "summary": "Context is assembled in one read-only transaction at the database default isolation level",
+        "affectedSourceIds": []
+      },
+      {
+        "section": "defects",
+        "code": "UNRELIABLE_RECURRENCE",
+        "severity": "WARNING",
+        "summary": "Stored recurrence is not canonical without normalized failure grouping",
+        "affectedSourceIds": ["00000000-0000-0000-0000-000000000060"]
+      }
+    ],
+    "missingCriticalFields": []
+  },
+  "sourceWatermarks": [
+    {
+      "source": "equipment_nodes",
+      "maxSourceTime": "2026-07-01T08:00:00Z",
+      "returnedCount": 1,
+      "truncated": true,
+      "coverageStart": "2026-07-01T08:00:00Z",
+      "coverageEnd": "2026-07-01T08:00:00Z",
+      "reliability": "RELIABLE"
+    },
+    {
+      "source": "meter_readings",
+      "maxSourceTime": "2026-07-30T05:00:00Z",
+      "returnedCount": 1,
+      "truncated": false,
+      "coverageStart": "2026-07-30T05:00:00Z",
+      "coverageEnd": "2026-07-30T05:00:00Z",
+      "reliability": "RELIABLE"
+    }
+  ]
+}

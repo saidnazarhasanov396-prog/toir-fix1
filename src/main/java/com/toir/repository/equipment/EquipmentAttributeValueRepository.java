@@ -36,4 +36,16 @@ public interface EquipmentAttributeValueRepository extends JpaRepository<Equipme
     Optional<EquipmentAttributeValue> findByEquipmentIdAndDefinitionIdAndIsDeletedFalse(
             @Param("equipmentId") UUID equipmentId,
             @Param("attributeDefinitionId") UUID attributeDefinitionId);
+
+    @Query(value = """
+            SELECT *
+            FROM equipment_attribute_values
+            WHERE equipment_id = :equipmentId
+              AND is_deleted = false
+            ORDER BY attribute_definition_id ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<EquipmentAttributeValue> findLifecycleValues(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("limitPlusOne") int limitPlusOne);
 }

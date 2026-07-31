@@ -108,4 +108,20 @@ public interface MeterReadingRepository extends JpaRepository<MeterReading, UUID
             @Param("direction") String direction,
             Pageable pageable
     );
+
+    @Query(value = """
+            SELECT *
+            FROM meter_readings
+            WHERE equipment_id = :equipmentId
+              AND read_at >= :historyStart
+              AND read_at <= :asOf
+              AND is_deleted = false
+            ORDER BY read_at ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<MeterReading> findLifecycleReadings(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("historyStart") Instant historyStart,
+            @Param("asOf") Instant asOf,
+            @Param("limitPlusOne") int limitPlusOne);
 }
