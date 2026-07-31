@@ -13,7 +13,7 @@ import java.util.List;
 @Setter
 @ConfigurationProperties(prefix = "toir.ai.equipment-lifecycle.export")
 public class EquipmentLifecycleExportProperties {
-    private boolean enabled = false;
+    private boolean enabled = true;
     private int maximumEquipment = 10_000;
     private int selectionBatchSize = 250;
     private int checkpointRecords = 25;

@@ -74,11 +74,11 @@ toir:
           future-planning-horizon: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_FUTURE_HORIZON:P365D}
           section-limit: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_SECTION_LIMIT:500}
         s3:
-          endpoint: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_ENDPOINT:}
-          bucket: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_BUCKET:}
-          prefix: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_PREFIX:}
-          access-key: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_ACCESS_KEY:}
-          secret-key: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_SECRET_KEY:}
+          endpoint: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_ENDPOINT:https://s3.tenzorsoft.uz}
+          bucket: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_BUCKET:s3-toir}
+          prefix: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_PREFIX:equipment-lifecycle-exports/test/}
+          access-key: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_ACCESS_KEY:s3_tenzorsoft_minio_user}
+          secret-key: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_SECRET_KEY:b7Qbuf8DpyAdZmlok2X3PSlD6n9jilSuhctZRd2b}
           region: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_REGION:}
           tls-trust-store: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_TLS_TRUST_STORE:}
           tls-trust-store-password: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_S3_TLS_TRUST_STORE_PASSWORD:}
