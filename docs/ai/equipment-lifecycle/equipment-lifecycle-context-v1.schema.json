@@ -1,0 +1,901 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://toir.local/schemas/equipment-lifecycle-context-v1.schema.json",
+  "title": "EquipmentLifecycleContext v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "asOf",
+    "contextFingerprint",
+    "consistency",
+    "equipment",
+    "hierarchy",
+    "technicalAttributes",
+    "lifecycleHistory",
+    "meterHistory",
+    "maintenanceSummary",
+    "maintenanceHistory",
+    "plannedMaintenance",
+    "workOrders",
+    "defects",
+    "repairRequests",
+    "inspections",
+    "conditionMeasurements",
+    "installedComponents",
+    "componentReplacementHistory",
+    "warranty",
+    "costSummary",
+    "environmentContext",
+    "documentMetadata",
+    "dataQuality",
+    "sourceWatermarks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "generatedAt": {
+      "$ref": "#/$defs/instant"
+    },
+    "asOf": {
+      "$ref": "#/$defs/instant"
+    },
+    "contextFingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Opaque SHA-256 content identity; not numerically sortable."
+    },
+    "consistency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "historicalSnapshot"],
+      "properties": {
+        "level": {"type": "string"},
+        "historicalSnapshot": {"type": "boolean"}
+      }
+    },
+    "equipment": {
+      "$ref": "#/$defs/equipmentSection"
+    },
+    "hierarchy": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/hierarchyNode"}
+            }
+          }
+        }
+      ]
+    },
+    "technicalAttributes": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/technicalAttribute"}
+            }
+          }
+        }
+      ]
+    },
+    "lifecycleHistory": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/lifecycleEvent"}
+            }
+          }
+        }
+      ]
+    },
+    "meterHistory": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/meterReading"}
+            }
+          }
+        }
+      ]
+    },
+    "maintenanceSummary": {
+      "allOf": [
+        {"$ref": "#/$defs/valueSection"},
+        {
+          "properties": {
+            "value": {"$ref": "#/$defs/maintenanceSummary"}
+          }
+        }
+      ]
+    },
+    "maintenanceHistory": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/maintenanceEvent"}
+            }
+          }
+        }
+      ]
+    },
+    "plannedMaintenance": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/plannedMaintenance"}
+            }
+          }
+        }
+      ]
+    },
+    "workOrders": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/workOrder"}
+            }
+          }
+        }
+      ]
+    },
+    "defects": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/defect"}
+            }
+          }
+        }
+      ]
+    },
+    "repairRequests": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/repairRequest"}
+            }
+          }
+        }
+      ]
+    },
+    "inspections": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/inspection"}
+            }
+          }
+        }
+      ]
+    },
+    "conditionMeasurements": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/conditionMeasurement"}
+            }
+          }
+        }
+      ]
+    },
+    "installedComponents": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/installedComponent"}
+            }
+          }
+        }
+      ]
+    },
+    "componentReplacementHistory": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/componentReplacement"}
+            }
+          }
+        }
+      ]
+    },
+    "warranty": {
+      "allOf": [
+        {"$ref": "#/$defs/valueSection"},
+        {
+          "properties": {
+            "value": {"$ref": "#/$defs/warranty"}
+          }
+        }
+      ]
+    },
+    "costSummary": {
+      "allOf": [
+        {"$ref": "#/$defs/valueSection"},
+        {
+          "properties": {
+            "value": {"$ref": "#/$defs/costSummary"}
+          }
+        }
+      ]
+    },
+    "environmentContext": {
+      "allOf": [
+        {"$ref": "#/$defs/valueSection"},
+        {
+          "properties": {
+            "value": {"$ref": "#/$defs/environment"}
+          }
+        }
+      ]
+    },
+    "documentMetadata": {
+      "allOf": [
+        {"$ref": "#/$defs/itemsSection"},
+        {
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/documentMetadata"}
+            }
+          }
+        }
+      ]
+    },
+    "dataQuality": {
+      "$ref": "#/$defs/dataQuality"
+    },
+    "sourceWatermarks": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/sourceWatermark"}
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "nullableUuid": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "instant": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nullableInstant": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "nullableDate": {
+      "type": ["string", "null"],
+      "format": "date"
+    },
+    "nullableString": {
+      "type": ["string", "null"]
+    },
+    "nullableNumber": {
+      "type": ["number", "null"]
+    },
+    "nullableInteger": {
+      "type": ["integer", "null"]
+    },
+    "availability": {
+      "enum": [
+        "AVAILABLE_AND_POPULATED",
+        "AVAILABLE_BUT_OPTIONAL",
+        "AVAILABLE_BUT_UNRELIABLE",
+        "DERIVABLE",
+        "MISSING",
+        "REQUIRES_DOCUMENT_PARSING",
+        "OUT_OF_SCOPE_FOR_V1"
+      ]
+    },
+    "reliability": {
+      "enum": [
+        "RELIABLE",
+        "OPTIONAL",
+        "UNRELIABLE",
+        "DERIVED",
+        "MISSING",
+        "PARSER_REQUIRED",
+        "OUT_OF_SCOPE"
+      ]
+    },
+    "sectionMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "availability",
+        "reliability",
+        "returnedCount",
+        "truncated",
+        "coverageStart",
+        "coverageEnd",
+        "maxSourceTime",
+        "sources"
+      ],
+      "properties": {
+        "availability": {"$ref": "#/$defs/availability"},
+        "reliability": {"$ref": "#/$defs/reliability"},
+        "returnedCount": {"type": "integer", "minimum": 0},
+        "truncated": {"type": "boolean"},
+        "coverageStart": {"$ref": "#/$defs/nullableInstant"},
+        "coverageEnd": {"$ref": "#/$defs/nullableInstant"},
+        "maxSourceTime": {"$ref": "#/$defs/nullableInstant"},
+        "sources": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "itemsSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metadata", "items"],
+      "properties": {
+        "metadata": {"$ref": "#/$defs/sectionMetadata"},
+        "items": {"type": "array"}
+      }
+    },
+    "valueSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metadata", "value"],
+      "properties": {
+        "metadata": {"$ref": "#/$defs/sectionMetadata"},
+        "value": {}
+      }
+    },
+    "measurement": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": {
+        "value": {"$ref": "#/$defs/nullableNumber"},
+        "unit": {"type": "string"}
+      }
+    },
+    "passport": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "passportNumber",
+        "factoryNumber",
+        "manufacturerSerial",
+        "power",
+        "voltage",
+        "pressure",
+        "installDate",
+        "lastInspectionDate"
+      ],
+      "properties": {
+        "passportNumber": {"$ref": "#/$defs/nullableString"},
+        "factoryNumber": {"$ref": "#/$defs/nullableString"},
+        "manufacturerSerial": {"$ref": "#/$defs/nullableString"},
+        "power": {"$ref": "#/$defs/measurement"},
+        "voltage": {"$ref": "#/$defs/measurement"},
+        "pressure": {"$ref": "#/$defs/measurement"},
+        "installDate": {"$ref": "#/$defs/nullableDate"},
+        "lastInspectionDate": {"$ref": "#/$defs/nullableDate"}
+      }
+    },
+    "equipmentSection": {
+      "allOf": [
+        {"$ref": "#/$defs/valueSection"},
+        {
+          "properties": {
+            "value": {"$ref": "#/$defs/equipment"}
+          }
+        }
+      ]
+    },
+    "equipment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code",
+        "name",
+        "inventoryNumber",
+        "technicalNumber",
+        "serialNumber",
+        "model",
+        "producedYear",
+        "equipmentTypeId",
+        "departmentId",
+        "locationId",
+        "currentLocationType",
+        "currentWarehouseId",
+        "responsibleDepartmentId",
+        "parentId",
+        "criticalityClassId",
+        "manufacturer",
+        "status",
+        "category",
+        "commissionedAt",
+        "arrivalDate",
+        "operationStartDate",
+        "expectedLifetimeMonths",
+        "expectedLifetimeYears",
+        "expectedLifetimeHours",
+        "lifetimeCounterType",
+        "lifetimeMeterId",
+        "lifetimeLimitValue",
+        "passport"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/uuid"},
+        "code": {"type": "string"},
+        "name": {"type": "string"},
+        "inventoryNumber": {"type": "string"},
+        "technicalNumber": {"$ref": "#/$defs/nullableString"},
+        "serialNumber": {"$ref": "#/$defs/nullableString"},
+        "model": {"$ref": "#/$defs/nullableString"},
+        "producedYear": {"$ref": "#/$defs/nullableInteger"},
+        "equipmentTypeId": {"$ref": "#/$defs/nullableUuid"},
+        "departmentId": {"$ref": "#/$defs/nullableUuid"},
+        "locationId": {"$ref": "#/$defs/nullableUuid"},
+        "currentLocationType": {"$ref": "#/$defs/nullableString"},
+        "currentWarehouseId": {"$ref": "#/$defs/nullableUuid"},
+        "responsibleDepartmentId": {"$ref": "#/$defs/nullableUuid"},
+        "parentId": {"$ref": "#/$defs/nullableUuid"},
+        "criticalityClassId": {"$ref": "#/$defs/nullableUuid"},
+        "manufacturer": {"$ref": "#/$defs/nullableString"},
+        "status": {"$ref": "#/$defs/nullableString"},
+        "category": {"$ref": "#/$defs/nullableString"},
+        "commissionedAt": {"$ref": "#/$defs/nullableDate"},
+        "arrivalDate": {"$ref": "#/$defs/nullableDate"},
+        "operationStartDate": {"$ref": "#/$defs/nullableDate"},
+        "expectedLifetimeMonths": {"$ref": "#/$defs/nullableInteger"},
+        "expectedLifetimeYears": {"$ref": "#/$defs/nullableInteger"},
+        "expectedLifetimeHours": {"$ref": "#/$defs/nullableInteger"},
+        "lifetimeCounterType": {"$ref": "#/$defs/nullableString"},
+        "lifetimeMeterId": {"$ref": "#/$defs/nullableUuid"},
+        "lifetimeLimitValue": {"$ref": "#/$defs/nullableNumber"},
+        "passport": {"$ref": "#/$defs/passport"}
+      }
+    },
+    "hierarchyNode": {
+      "type": "object",
+      "required": ["sourceId", "parentId", "code", "name", "nodeType"],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "parentId": {"$ref": "#/$defs/nullableUuid"},
+        "code": {"$ref": "#/$defs/nullableString"},
+        "name": {"$ref": "#/$defs/nullableString"},
+        "nodeType": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "technicalAttribute": {
+      "type": "object",
+      "required": [
+        "sourceId", "definitionId", "key", "label", "dataType", "unit",
+        "textValue", "numberValue", "dateValue", "booleanValue", "optionValue"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "definitionId": {"$ref": "#/$defs/nullableUuid"},
+        "key": {"$ref": "#/$defs/nullableString"},
+        "label": {"$ref": "#/$defs/nullableString"},
+        "dataType": {"$ref": "#/$defs/nullableString"},
+        "unit": {"$ref": "#/$defs/nullableString"},
+        "textValue": {"$ref": "#/$defs/nullableString"},
+        "numberValue": {"$ref": "#/$defs/nullableNumber"},
+        "dateValue": {"$ref": "#/$defs/nullableDate"},
+        "booleanValue": {"type": ["boolean", "null"]},
+        "optionValue": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "lifecycleEvent": {
+      "type": "object",
+      "required": [
+        "sourceId", "sourceType", "eventTime", "effectiveTime", "previousValues",
+        "newValues", "source", "relatedEntityType", "relatedEntityId"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "sourceType": {"type": "string"},
+        "eventTime": {"$ref": "#/$defs/nullableInstant"},
+        "effectiveTime": {"$ref": "#/$defs/nullableInstant"},
+        "previousValues": {"type": "object", "additionalProperties": {"type": "string"}},
+        "newValues": {"type": "object", "additionalProperties": {"type": "string"}},
+        "source": {"$ref": "#/$defs/nullableString"},
+        "relatedEntityType": {"$ref": "#/$defs/nullableString"},
+        "relatedEntityId": {"$ref": "#/$defs/nullableUuid"}
+      }
+    },
+    "meterReading": {
+      "type": "object",
+      "required": [
+        "sourceId", "meterId", "meterType", "unit", "value", "delta", "readAt",
+        "source", "readingContext", "repairRequestId", "workOrderId", "defectId"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "meterId": {"$ref": "#/$defs/nullableUuid"},
+        "meterType": {"$ref": "#/$defs/nullableString"},
+        "unit": {"$ref": "#/$defs/nullableString"},
+        "value": {"$ref": "#/$defs/nullableNumber"},
+        "delta": {"$ref": "#/$defs/nullableNumber"},
+        "readAt": {"$ref": "#/$defs/nullableInstant"},
+        "source": {"$ref": "#/$defs/nullableString"},
+        "readingContext": {"$ref": "#/$defs/nullableString"},
+        "repairRequestId": {"$ref": "#/$defs/nullableUuid"},
+        "workOrderId": {"$ref": "#/$defs/nullableUuid"},
+        "defectId": {"$ref": "#/$defs/nullableUuid"}
+      }
+    },
+    "maintenanceSummary": {
+      "type": ["object", "null"],
+      "required": [
+        "canonicalCompletionCount", "lastCompletedAt",
+        "completedWorkOrderCount", "overduePlannedMaintenanceCount"
+      ],
+      "properties": {
+        "canonicalCompletionCount": {"$ref": "#/$defs/nullableInteger"},
+        "lastCompletedAt": {"$ref": "#/$defs/nullableInstant"},
+        "completedWorkOrderCount": {"$ref": "#/$defs/nullableInteger"},
+        "overduePlannedMaintenanceCount": {"$ref": "#/$defs/nullableInteger"}
+      }
+    },
+    "maintenanceEvent": {
+      "type": "object",
+      "required": [
+        "sourceId", "sourceType", "actualCompletionAt", "workOrderStatus",
+        "workOrderId", "pprTaskId", "maintenanceDueEventId", "regulationId",
+        "equipmentMaintenanceRuleId", "plannedDueAt"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "sourceType": {"type": "string"},
+        "actualCompletionAt": {"$ref": "#/$defs/nullableInstant"},
+        "workOrderStatus": {"$ref": "#/$defs/nullableString"},
+        "workOrderId": {"$ref": "#/$defs/nullableUuid"},
+        "pprTaskId": {"$ref": "#/$defs/nullableUuid"},
+        "maintenanceDueEventId": {"$ref": "#/$defs/nullableUuid"},
+        "regulationId": {"$ref": "#/$defs/nullableUuid"},
+        "equipmentMaintenanceRuleId": {"$ref": "#/$defs/nullableUuid"},
+        "plannedDueAt": {"$ref": "#/$defs/nullableInstant"}
+      }
+    },
+    "plannedMaintenance": {
+      "type": "object",
+      "required": [
+        "sourceId", "sourceType", "sourceCalculationItemId", "pprTaskId",
+        "maintenanceDueEventId", "linkedWorkOrderId", "status", "scheduledStart",
+        "scheduledEnd", "dueAt", "meterType", "meterUnit",
+        "meterCurrentValue", "meterRemaining"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "sourceType": {"type": "string"},
+        "sourceCalculationItemId": {"$ref": "#/$defs/nullableUuid"},
+        "pprTaskId": {"$ref": "#/$defs/nullableUuid"},
+        "maintenanceDueEventId": {"$ref": "#/$defs/nullableUuid"},
+        "linkedWorkOrderId": {"$ref": "#/$defs/nullableUuid"},
+        "status": {"$ref": "#/$defs/nullableString"},
+        "scheduledStart": {"$ref": "#/$defs/nullableInstant"},
+        "scheduledEnd": {"$ref": "#/$defs/nullableInstant"},
+        "dueAt": {"$ref": "#/$defs/nullableInstant"},
+        "meterType": {"$ref": "#/$defs/nullableString"},
+        "meterUnit": {"$ref": "#/$defs/nullableString"},
+        "meterCurrentValue": {"$ref": "#/$defs/nullableNumber"},
+        "meterRemaining": {"$ref": "#/$defs/nullableNumber"}
+      }
+    },
+    "workOrder": {
+      "type": "object",
+      "required": [
+        "sourceId", "number", "status", "type", "workType", "priority",
+        "equipmentNodeId", "repairRequestId", "defectId", "pprTaskId",
+        "maintenanceDueEventId", "startPlannedAt", "endPlannedAt",
+        "startedAt", "completedAt"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "number": {"$ref": "#/$defs/nullableString"},
+        "status": {"$ref": "#/$defs/nullableString"},
+        "type": {"$ref": "#/$defs/nullableString"},
+        "workType": {"$ref": "#/$defs/nullableString"},
+        "priority": {"$ref": "#/$defs/nullableString"},
+        "equipmentNodeId": {"$ref": "#/$defs/nullableUuid"},
+        "repairRequestId": {"$ref": "#/$defs/nullableUuid"},
+        "defectId": {"$ref": "#/$defs/nullableUuid"},
+        "pprTaskId": {"$ref": "#/$defs/nullableUuid"},
+        "maintenanceDueEventId": {"$ref": "#/$defs/nullableUuid"},
+        "startPlannedAt": {"$ref": "#/$defs/nullableInstant"},
+        "endPlannedAt": {"$ref": "#/$defs/nullableInstant"},
+        "startedAt": {"$ref": "#/$defs/nullableInstant"},
+        "completedAt": {"$ref": "#/$defs/nullableInstant"}
+      }
+    },
+    "defect": {
+      "type": "object",
+      "required": [
+        "sourceId", "equipmentNodeId", "repairRequestId", "category", "severity",
+        "failureReason", "rootCause", "status", "detectedAt", "resolvedAt",
+        "derivedRepeatedFailureCount", "recurrenceReliability"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "equipmentNodeId": {"$ref": "#/$defs/nullableUuid"},
+        "repairRequestId": {"$ref": "#/$defs/nullableUuid"},
+        "category": {"$ref": "#/$defs/nullableString"},
+        "severity": {"$ref": "#/$defs/nullableString"},
+        "failureReason": {"$ref": "#/$defs/nullableString"},
+        "rootCause": {"$ref": "#/$defs/nullableString"},
+        "status": {"$ref": "#/$defs/nullableString"},
+        "detectedAt": {"$ref": "#/$defs/nullableInstant"},
+        "resolvedAt": {"$ref": "#/$defs/nullableInstant"},
+        "derivedRepeatedFailureCount": {"$ref": "#/$defs/nullableInteger"},
+        "recurrenceReliability": {"$ref": "#/$defs/reliability"}
+      }
+    },
+    "repairRequest": {
+      "type": "object",
+      "required": [
+        "sourceId", "departmentId", "locationId", "priority", "criticality",
+        "status", "source", "detectedAt", "reactedAt", "targetCompletionAt",
+        "actualCompletionAt", "warrantyActiveAtCreation", "warrantyHandling"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "departmentId": {"$ref": "#/$defs/nullableUuid"},
+        "locationId": {"$ref": "#/$defs/nullableUuid"},
+        "priority": {"$ref": "#/$defs/nullableString"},
+        "criticality": {"$ref": "#/$defs/nullableString"},
+        "status": {"$ref": "#/$defs/nullableString"},
+        "source": {"$ref": "#/$defs/nullableString"},
+        "detectedAt": {"$ref": "#/$defs/nullableInstant"},
+        "reactedAt": {"$ref": "#/$defs/nullableInstant"},
+        "targetCompletionAt": {"$ref": "#/$defs/nullableInstant"},
+        "actualCompletionAt": {"$ref": "#/$defs/nullableInstant"},
+        "warrantyActiveAtCreation": {"type": ["boolean", "null"]},
+        "warrantyHandling": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "inspection": {
+      "type": "object",
+      "required": [
+        "sourceId", "roundId", "checkpointId", "roundStatus", "resultStatus",
+        "startedAt", "completedAt", "measuredValue", "measuredUnit",
+        "expectedMin", "expectedMax", "expectedUnit", "defectId"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "roundId": {"$ref": "#/$defs/nullableUuid"},
+        "checkpointId": {"$ref": "#/$defs/nullableUuid"},
+        "roundStatus": {"$ref": "#/$defs/nullableString"},
+        "resultStatus": {"$ref": "#/$defs/nullableString"},
+        "startedAt": {"$ref": "#/$defs/nullableInstant"},
+        "completedAt": {"$ref": "#/$defs/nullableInstant"},
+        "measuredValue": {"$ref": "#/$defs/nullableNumber"},
+        "measuredUnit": {"$ref": "#/$defs/nullableString"},
+        "expectedMin": {"$ref": "#/$defs/nullableNumber"},
+        "expectedMax": {"$ref": "#/$defs/nullableNumber"},
+        "expectedUnit": {"$ref": "#/$defs/nullableString"},
+        "defectId": {"$ref": "#/$defs/nullableUuid"}
+      }
+    },
+    "conditionMeasurement": {
+      "type": "object",
+      "required": [
+        "sourceId", "parameter", "value", "unit", "recordedAt",
+        "warnHigh", "alarmHigh", "warnLow", "alarmLow", "severity"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "parameter": {"$ref": "#/$defs/nullableString"},
+        "value": {"$ref": "#/$defs/nullableNumber"},
+        "unit": {"$ref": "#/$defs/nullableString"},
+        "recordedAt": {"$ref": "#/$defs/nullableInstant"},
+        "warnHigh": {"$ref": "#/$defs/nullableNumber"},
+        "alarmHigh": {"$ref": "#/$defs/nullableNumber"},
+        "warnLow": {"$ref": "#/$defs/nullableNumber"},
+        "alarmLow": {"$ref": "#/$defs/nullableNumber"},
+        "severity": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "installedComponent": {
+      "type": "object",
+      "required": [
+        "sourceId", "equipmentNodeId", "slotCode", "sparePartId", "quantity",
+        "status", "installedAt", "installWorkOrderId", "sourceMaterialUsageId",
+        "appliedLifeRuleId", "appliedRuleRevision", "lifecycleEvaluationState",
+        "nextCalendarDueAt"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "equipmentNodeId": {"$ref": "#/$defs/nullableUuid"},
+        "slotCode": {"$ref": "#/$defs/nullableString"},
+        "sparePartId": {"$ref": "#/$defs/nullableUuid"},
+        "quantity": {"$ref": "#/$defs/nullableNumber"},
+        "status": {"$ref": "#/$defs/nullableString"},
+        "installedAt": {"$ref": "#/$defs/nullableInstant"},
+        "installWorkOrderId": {"$ref": "#/$defs/nullableUuid"},
+        "sourceMaterialUsageId": {"$ref": "#/$defs/nullableUuid"},
+        "appliedLifeRuleId": {"$ref": "#/$defs/nullableUuid"},
+        "appliedRuleRevision": {"$ref": "#/$defs/nullableInteger"},
+        "lifecycleEvaluationState": {"$ref": "#/$defs/nullableString"},
+        "nextCalendarDueAt": {"$ref": "#/$defs/nullableInstant"}
+      }
+    },
+    "componentReplacement": {
+      "type": "object",
+      "required": [
+        "sourceId", "sparePartId", "installedAt", "removedAt",
+        "installWorkOrderId", "removeWorkOrderId", "removalDisposition",
+        "replacesInstallationId", "replacedByInstallationId",
+        "replacementCorrelationId"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "sparePartId": {"$ref": "#/$defs/nullableUuid"},
+        "installedAt": {"$ref": "#/$defs/nullableInstant"},
+        "removedAt": {"$ref": "#/$defs/nullableInstant"},
+        "installWorkOrderId": {"$ref": "#/$defs/nullableUuid"},
+        "removeWorkOrderId": {"$ref": "#/$defs/nullableUuid"},
+        "removalDisposition": {"$ref": "#/$defs/nullableString"},
+        "replacesInstallationId": {"$ref": "#/$defs/nullableUuid"},
+        "replacedByInstallationId": {"$ref": "#/$defs/nullableUuid"},
+        "replacementCorrelationId": {"$ref": "#/$defs/nullableUuid"}
+      }
+    },
+    "warranty": {
+      "type": ["object", "null"],
+      "required": [
+        "hasWarranty", "warrantyStartDate", "warrantyEndDate",
+        "warrantyCounteragentId", "procurementRequestId", "procurementRequestLineId"
+      ],
+      "properties": {
+        "hasWarranty": {"type": ["boolean", "null"]},
+        "warrantyStartDate": {"$ref": "#/$defs/nullableDate"},
+        "warrantyEndDate": {"$ref": "#/$defs/nullableDate"},
+        "warrantyCounteragentId": {"$ref": "#/$defs/nullableUuid"},
+        "procurementRequestId": {"$ref": "#/$defs/nullableUuid"},
+        "procurementRequestLineId": {"$ref": "#/$defs/nullableUuid"}
+      }
+    },
+    "money": {
+      "type": "object",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": {"type": "number"},
+        "currency": {"const": "UZS"}
+      }
+    },
+    "costSummary": {
+      "type": ["object", "null"],
+      "required": ["total", "approved", "pending", "rejected", "directLinksOnly"],
+      "properties": {
+        "total": {"$ref": "#/$defs/money"},
+        "approved": {"$ref": "#/$defs/money"},
+        "pending": {"$ref": "#/$defs/money"},
+        "rejected": {"$ref": "#/$defs/money"},
+        "directLinksOnly": {"type": "boolean"}
+      }
+    },
+    "environment": {
+      "type": ["object", "null"],
+      "required": [
+        "departmentId", "responsibleDepartmentId", "locationId", "locationType",
+        "warehouseId", "outsideReason", "outsideStartedDate",
+        "outsideExpectedReturnDate"
+      ],
+      "properties": {
+        "departmentId": {"$ref": "#/$defs/nullableUuid"},
+        "responsibleDepartmentId": {"$ref": "#/$defs/nullableUuid"},
+        "locationId": {"$ref": "#/$defs/nullableUuid"},
+        "locationType": {"$ref": "#/$defs/nullableString"},
+        "warehouseId": {"$ref": "#/$defs/nullableUuid"},
+        "outsideReason": {"$ref": "#/$defs/nullableString"},
+        "outsideStartedDate": {"$ref": "#/$defs/nullableDate"},
+        "outsideExpectedReturnDate": {"$ref": "#/$defs/nullableDate"}
+      }
+    },
+    "documentMetadata": {
+      "type": "object",
+      "required": [
+        "sourceId", "sourceType", "equipmentNodeId", "documentType",
+        "title", "revision", "documentDate", "requiresParsing"
+      ],
+      "properties": {
+        "sourceId": {"$ref": "#/$defs/uuid"},
+        "sourceType": {"type": "string"},
+        "equipmentNodeId": {"$ref": "#/$defs/nullableUuid"},
+        "documentType": {"$ref": "#/$defs/nullableString"},
+        "title": {"$ref": "#/$defs/nullableString"},
+        "revision": {"$ref": "#/$defs/nullableString"},
+        "documentDate": {"$ref": "#/$defs/nullableDate"},
+        "requiresParsing": {"type": "boolean"}
+      }
+    },
+    "qualityIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["section", "code", "severity", "summary", "affectedSourceIds"],
+      "properties": {
+        "section": {"type": "string"},
+        "code": {"type": "string"},
+        "severity": {"enum": ["INFO", "WARNING", "ERROR"]},
+        "summary": {"type": "string"},
+        "affectedSourceIds": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/uuid"}
+        }
+      }
+    },
+    "dataQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issues", "missingCriticalFields"],
+      "properties": {
+        "issues": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/qualityIssue"}
+        },
+        "missingCriticalFields": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "sourceWatermark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source", "maxSourceTime", "returnedCount", "truncated",
+        "coverageStart", "coverageEnd", "reliability"
+      ],
+      "properties": {
+        "source": {"type": "string"},
+        "maxSourceTime": {"$ref": "#/$defs/nullableInstant"},
+        "returnedCount": {"type": "integer", "minimum": 0},
+        "truncated": {"type": "boolean"},
+        "coverageStart": {"$ref": "#/$defs/nullableInstant"},
+        "coverageEnd": {"$ref": "#/$defs/nullableInstant"},
+        "reliability": {"$ref": "#/$defs/reliability"}
+      }
+    }
+  }
+}

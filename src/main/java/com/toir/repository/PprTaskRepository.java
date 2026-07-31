@@ -19,6 +19,22 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
+    @Query(value = """
+            SELECT *
+            FROM ppr_tasks
+            WHERE equipment_id = :equipmentId
+              AND scheduled_start <= :planningEnd
+              AND due_date >= :historyStart
+              AND is_deleted = false
+            ORDER BY due_date ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<PprTask> findLifecycleTasks(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("historyStart") LocalDateTime historyStart,
+            @Param("planningEnd") LocalDateTime planningEnd,
+            @Param("limitPlusOne") int limitPlusOne);
+
     @Query(value = "SELECT * FROM ppr_tasks WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<PprTask> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 

@@ -62,4 +62,20 @@ public interface SparePartInstallationRepository extends JpaRepository<SparePart
             List<UUID> ids,
             SparePartInstallationStatus status
     );
+
+    @Query(value = """
+            SELECT *
+            FROM spare_part_installations
+            WHERE equipment_id = :equipmentId
+              AND installed_at <= :asOf
+              AND (removed_at IS NULL OR removed_at >= :historyStart)
+              AND is_deleted = false
+            ORDER BY installed_at ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<SparePartInstallation> findLifecycleInstallations(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("historyStart") java.time.Instant historyStart,
+            @Param("asOf") java.time.Instant asOf,
+            @Param("limitPlusOne") int limitPlusOne);
 }

@@ -63,4 +63,16 @@ public interface EquipmentNodeRepository extends JpaRepository<EquipmentNode, UU
     boolean existsByEquipmentIdAndSerialNumberAndIdNotAndIsDeletedFalse(@Param("equipmentId") UUID equipmentId,
                                                                         @Param("serialNumber") String serialNumber,
                                                                         @Param("id") UUID id);
+
+    @Query(value = """
+            SELECT *
+            FROM equipment_nodes
+            WHERE equipment_id = :equipmentId
+              AND is_deleted = false
+            ORDER BY code ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<EquipmentNode> findLifecycleNodes(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("limitPlusOne") int limitPlusOne);
 }

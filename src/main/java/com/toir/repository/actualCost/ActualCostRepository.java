@@ -155,4 +155,29 @@ public interface ActualCostRepository extends JpaRepository<ActualCost, UUID> {
               )
             """, nativeQuery = true)
     double sumAmountByEquipmentId(@Param("equipmentId") UUID equipmentId);
+
+    @Query(value = """
+            SELECT DISTINCT ac.*
+            FROM actual_costs ac
+            LEFT JOIN work_orders wo
+              ON wo.id = ac.work_order_id
+             AND wo.is_deleted = false
+            LEFT JOIN repair_requests rr
+              ON rr.id = ac.repair_request_id
+             AND rr.is_deleted = false
+            WHERE ac.is_deleted = false
+              AND ac.cost_date >= :historyStart
+              AND ac.cost_date <= :asOf
+              AND (
+                    wo.equipment_id = :equipmentId
+                 OR rr.equipment_id = :equipmentId
+              )
+            ORDER BY ac.cost_date ASC, ac.id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<ActualCost> findLifecycleCosts(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("historyStart") java.time.Instant historyStart,
+            @Param("asOf") java.time.Instant asOf,
+            @Param("limitPlusOne") int limitPlusOne);
 }
