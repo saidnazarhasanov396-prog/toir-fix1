@@ -53,6 +53,8 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
     @Query(value = "SELECT * FROM ppr_tasks WHERE is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<PprTask> findAllByIsDeletedFalseOrderByUpdatedAtDesc();
 
+    Optional<PprTask> findBySourceTypeAndSourceKeyAndIsDeletedFalse(String sourceType, String sourceKey);
+
     @Query(value = """
             select distinct t
             from PprTask t

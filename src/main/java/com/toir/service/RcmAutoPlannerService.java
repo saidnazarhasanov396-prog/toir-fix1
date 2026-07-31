@@ -1,127 +1,91 @@
 package com.toir.service;
 
-import com.toir.dto.rcm.EquipmentRiskScore;
+import com.toir.dto.rcm.autoplan.RcmAutoPlanConfirmRequest;
+import com.toir.dto.rcm.autoplan.RcmAutoPlanConfirmResult;
+import com.toir.dto.rcm.autoplan.RcmAutoPlanDecision;
+import com.toir.dto.rcm.autoplan.RcmAutoPlanPreviewResponse;
+import com.toir.dto.rcm.autoplan.RcmAutoPlanPreviewRow;
 import com.toir.entity.PprPlan;
 import com.toir.entity.PprTask;
-import com.toir.entity.equipment.Equipment;
-import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
 import com.toir.enums.PprTaskStatus;
-import com.toir.enums.PriorityLevel;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
-import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Автоматическая генерация задач ППР для оборудования с высоким RCM-риском.
- * Берёт top-N по рискам, для каждой позиции находит активную регламентную
- * карту по типу оборудования и создаёт PprTask в выбранном плане. Если план
- * не указан — используется первый план по текущему месяцу.
- */
 @Service
 @RequiredArgsConstructor
 public class RcmAutoPlannerService {
-
-    private final RcmService rcmService;
-    private final EquipmentRepository equipmentRepository;
-    private final MaintenanceRegulationRepository regulationRepository;
+    private final RcmAutoPlanPreviewService previewService;
     private final PprPlanRepository planRepository;
     private final PprTaskRepository taskRepository;
     private final AuditBuilderService auditBuilderService;
 
-
-
     @Transactional
-    public AutoPlanResult generate(int riskThreshold, UUID planId) {
-        List<EquipmentRiskScore> scores = rcmService.computeAll().stream()
-                .filter(s -> s.riskScore() >= riskThreshold)
-                .toList();
-        if (scores.isEmpty()) {
-            return new AutoPlanResult(0, 0, 0, List.of());
+    public RcmAutoPlanConfirmResult confirm(RcmAutoPlanConfirmRequest request) {
+        RcmAutoPlanPreviewResponse preview = previewService.preview(request.riskThreshold(), request.planId());
+        if (!fingerprintsMatch(preview.fingerprint(), request.previewFingerprint())) {
+            throw RestException.conflict("RCM preview inputs have changed; review the refreshed preview", "RCM_PREVIEW_STALE");
         }
-
-        PprPlan plan = resolvePlan(planId);
-        List<String> created = new ArrayList<>();
-        int matched = 0;
-        int skipped = 0;
-
-        for (EquipmentRiskScore s : scores) {
-            Equipment eq = equipmentRepository.findByIdAndIsDeletedFalse(s.equipmentId()).orElse(null);
-            if (eq == null || eq.getEquipmentTypeId() == null) {
-                skipped++;
-                continue;
-            }
-            List<MaintenanceRegulation> regs = regulationRepository
-                    .findAllByEquipmentTypeIdAndActiveTrueAndIsDeletedFalse(eq.getEquipmentTypeId());
-            if (regs.isEmpty()) {
-                skipped++;
-                continue;
-            }
-            MaintenanceRegulation reg = regs.getFirst();
-            String code = "RCM-" + eq.getCode() + "-" + System.currentTimeMillis() + "-" + matched;
-            LocalDateTime now = LocalDateTime.now();
+        PprPlan plan = null;
+        if (preview.tasksToCreate() > 0) {
+            UUID targetPlanId = preview.targetPlanId();
+            plan = planRepository.findByIdAndIsDeletedFalse(targetPlanId)
+                    .orElseThrow(() -> RestException.notFound("PprPlan not found: " + targetPlanId));
+        }
+        List<String> createdCodes = new ArrayList<>();
+        for (RcmAutoPlanPreviewRow row : preview.rows()) {
+            if (row.decision() != RcmAutoPlanDecision.CREATE) continue;
+            if (taskRepository.findBySourceTypeAndSourceKeyAndIsDeletedFalse(
+                    RcmAutoPlanPreviewService.SOURCE_TYPE, row.sourceKey()).isPresent()) continue;
             PprTask task = new PprTask();
-            task.setCode(code);
+            task.setCode("RCM-" + safeCode(row.equipmentCode()) + "-" + UUID.randomUUID().toString().substring(0, 8));
             task.setPlan(plan);
-            task.setRegulationId(reg.getId());
-            task.setEquipmentId(eq.getId());
-            task.setTitle("RCM-инициированное " + reg.getName() + " (risk=" + s.riskScore() + ")");
-            task.setScheduledStart(now.plusDays(1));
-            task.setScheduledEnd(now.plusDays(1).plusHours((long) reg.getNormativeLaborHours()));
-            task.setDueDate(now.plusDays(7));
+            task.setRegulationId(row.regulationId());
+            task.setEquipmentId(row.equipmentId());
+            task.setTitle("RCM: " + row.regulationName() + " (risk=" + row.riskScore() + ")");
+            task.setScheduledStart(row.scheduledStart());
+            task.setScheduledEnd(row.scheduledEnd());
+            task.setDueDate(row.dueDate());
             task.setStatus(PprTaskStatus.PLANNED);
-            task.setPriority(priorityFor(s));
-            task.setPlannedLaborHours(reg.getNormativeLaborHours());
+            task.setPriority(row.priority());
+            task.setPlannedLaborHours(Math.max(0.01,
+                    java.time.Duration.between(row.scheduledStart(), row.scheduledEnd()).toMinutes() / 60.0));
+            task.setSourceType(RcmAutoPlanPreviewService.SOURCE_TYPE);
+            task.setSourceKey(row.sourceKey());
             PprTask saved = taskRepository.save(task);
-
-            auditBuilderService.log(
-                    "ppr_task",
-                    saved.getId().toString(),
-                    AuditAction.CREATE,
-                    AuditModule.PPR_TASK,
-                    "Задача ППР создана",
-                    null,
-                    saved
-            );
-
-            matched++;
-            created.add(code);
+            auditBuilderService.log("ppr_task", saved.getId().toString(), AuditAction.CREATE,
+                    AuditModule.PPR_TASK, "RCM task confirmed from preview", null, saved);
+            createdCodes.add(saved.getCode());
         }
-        return new AutoPlanResult(scores.size(), matched, skipped, created);
+        int duplicateCount = preview.duplicates() + Math.max(0, preview.tasksToCreate() - createdCodes.size());
+        return new RcmAutoPlanConfirmResult(preview.candidates(), createdCodes.size(), duplicateCount,
+                preview.conflicts(), preview.skipped(), preview.fingerprint(), createdCodes);
     }
 
-    private PriorityLevel priorityFor(EquipmentRiskScore s) {
-        if (s.riskScore() >= 60) return PriorityLevel.HIGH;
-        if (s.riskScore() >= 30) return PriorityLevel.MEDIUM;
-        return PriorityLevel.LOW;
+    @Deprecated
+    public AutoPlanResult generate(int riskThreshold, UUID planId) {
+        throw RestException.conflict("Preview and explicit confirmation are required", "RCM_PREVIEW_REQUIRED");
     }
 
-    private PprPlan resolvePlan(UUID planId) {
-        if (planId != null) {
-            return planRepository.findByIdAndIsDeletedFalse(planId)
-                    .orElseThrow(() -> RestException.notFound("PprPlan not found: " + planId));
-        }
-        LocalDate today = LocalDate.now();
-        List<PprPlan> plans = planRepository.findAllActiveOnDate(today);
-        if (plans.isEmpty()) {
-            List<PprPlan> any = planRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
-            if (any.isEmpty()) throw RestException.badRequest("No PprPlan exists — create one first");
-            return any.getFirst();
-        }
-        return plans.getFirst();
+    private boolean fingerprintsMatch(String actual, String supplied) {
+        if (actual == null || supplied == null) return false;
+        return MessageDigest.isEqual(actual.getBytes(StandardCharsets.UTF_8), supplied.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String safeCode(String code) {
+        return code == null || code.isBlank() ? "EQUIPMENT" : code.replaceAll("[^A-Za-z0-9_-]", "-");
     }
 
     public record AutoPlanResult(int candidates, int tasksCreated, int skipped, List<String> createdCodes) {}

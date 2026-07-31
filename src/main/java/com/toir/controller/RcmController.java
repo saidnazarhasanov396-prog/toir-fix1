@@ -3,6 +3,11 @@ import com.toir.dto.rcm.EquipmentRiskScore;
 import com.toir.dto.rcm.RcmSnapshotCaptureResponse;
 import com.toir.entity.RcmSnapshot;
 import com.toir.service.RcmAutoPlannerService;
+import com.toir.service.RcmAutoPlanPreviewService;
+import com.toir.dto.rcm.autoplan.RcmAutoPlanConfirmRequest;
+import com.toir.dto.rcm.autoplan.RcmAutoPlanConfirmResult;
+import com.toir.dto.rcm.autoplan.RcmAutoPlanPreviewResponse;
+import jakarta.validation.Valid;
 import com.toir.service.RcmService;
 import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,6 +22,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,6 +35,7 @@ public class RcmController {
 
     private final RcmService service;
     private final RcmAutoPlannerService autoPlannerService;
+    private final RcmAutoPlanPreviewService previewService;
 
     @GetMapping("/risk-scores")
     public ResponseEntity<Page<EquipmentRiskScore>> list(@RequestParam(defaultValue = "0") int top,
@@ -57,6 +65,22 @@ public class RcmController {
         return ResponseEntity.ok(service.historyFor(equipmentId));
     }
 
+    @PostMapping("/auto-plan/preview")
+    @PreAuthorize("hasAnyAuthority('PPR_TASK_CREATE', 'SYSTEM_ADMIN', '*' )")
+    public ResponseEntity<RcmAutoPlanPreviewResponse> previewAutoPlan(
+            @RequestParam(defaultValue = "30") int riskThreshold,
+            @RequestParam(required = false) UUID planId) {
+        return ResponseEntity.ok(previewService.preview(riskThreshold, planId));
+    }
+
+    @PostMapping("/auto-plan/confirm")
+    @PreAuthorize("hasAnyAuthority('PPR_TASK_CREATE', 'SYSTEM_ADMIN', '*' )")
+    public ResponseEntity<RcmAutoPlanConfirmResult> confirmAutoPlan(
+            @Valid @RequestBody RcmAutoPlanConfirmRequest request) {
+        return ResponseEntity.ok(autoPlannerService.confirm(request));
+    }
+
+    @Deprecated
     @PostMapping("/auto-plan")
     public ResponseEntity<RcmAutoPlannerService.AutoPlanResult> autoPlan(@RequestParam(defaultValue = "30") int riskThreshold,
                                                          @RequestParam(required = false) UUID planId) {
