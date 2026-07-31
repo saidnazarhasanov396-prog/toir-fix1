@@ -85,6 +85,29 @@ binary artifact, credential, token, or Equipment foreign key that could cascade
 away frozen membership. The version did not collide with the baseline migration
 set during static inspection.
 
+### Startup schema-validation correction
+
+Spring Boot startup was subsequently blocked by a confirmed PostgreSQL/Hibernate
+type mismatch: the applied W2 migration created fixed-length `CHAR(64)` hash
+columns, while the W2 entities' `@Column(length = 64)` mappings require
+`VARCHAR(64)`. A complete W2-only entity-to-migration audit found four affected
+columns:
+
+- `equipment_lifecycle_export_jobs.request_fingerprint`;
+- `equipment_lifecycle_export_jobs.policy_fingerprint`;
+- `equipment_lifecycle_export_parts.sha256`;
+- `equipment_lifecycle_export_artifacts.sha256`.
+
+The forward-only migration
+`V20260731_2__equipment_lifecycle_export_hash_column_types.sql` converts all four
+columns to `VARCHAR(64)` using explicit casts. The original
+`V20260731_1__equipment_lifecycle_dataset_export.sql` was not edited because it
+may already be recorded in Flyway history; changing an applied migration would
+invalidate its checksum and violate forward-only migration practice. Existing
+values and the tables' constraints and indexes are retained by the in-place type
+changes. A manual migration/application restart is still required to verify
+Flyway application and Hibernate schema validation against PostgreSQL.
+
 ## 7. Authorization and permission decision
 
 All routes require `SYSTEM_ADMIN`, wildcard `*`, or the dedicated
@@ -322,7 +345,7 @@ filesystem paths, or stack traces to dataset-specific DTOs or manifest.
 
 ## 23. Tests written
 
-The recovered functional commit contains 65 focused `@Test` methods across
+The recovered implementation contains 66 focused `@Test` methods across
 configuration, migration contracts, request/profile fingerprints, frozen
 selection, idempotency/concurrent conflict, job authorization and expiry, lease
 takeover/fencing/cancellation, NDJSON, worker checkpoint ordering/resume/failure,
@@ -347,6 +370,9 @@ Permitted static evidence performed:
 - manifest synthetic example validation against its JSON Schema;
 - exact branch, baseline ancestry, remote-branch absence before first push,
   local/remote ref equality, and 0/0 divergence checks.
+- W2-only entity/migration inspection confirming that the four corrected
+  columns are the complete set of W2 `CHAR(64)`/Hibernate `VARCHAR(64)`
+  mismatches, with the applied migration left unchanged.
 
 Maven, Gradle, JUnit, Testcontainers, npm, Vitest, compilation, build,
 application startup, migration execution, MinIO runtime calls, and runtime
@@ -357,6 +383,8 @@ verification were not run.
 - Production MinIO/IAM/durability/reachability/multipart/retention readiness is
   blocked and unverified as detailed in section 13.
 - No build, compilation, test, migration, or startup result is available.
+- Flyway application and successful Hibernate schema validation require a
+  manual PostgreSQL-backed application restart after deployment.
 - A long export is not one MVCC snapshot; committed records are not rewritten if
   later source data changes.
 - Queue rejection or crash after commit and before dispatch requires manual
@@ -407,6 +435,10 @@ The functional commit contains 56 W2 files:
 No frontend, WorkOrder material-readiness, deployment, container, generic
 `S3Service`, or production secret file is in the functional commit.
 
+The startup correction adds only the new forward migration, the focused W2
+migration-contract test, and this report update. It does not change Java entity
+mappings or export behavior.
+
 ## 29. Commit and push result
 
 Functional W2 commit:
@@ -421,6 +453,11 @@ merge or merge request was created.
 The report closeout commit and its exact matching remote-ref verification are
 recorded in the final delivery response for the self-reference reason in
 section 3.
+
+The schema-correction work started from the matching local and remote report
+closeout HEAD `831ae3d76fb683b3e0756b1f7271000f37a4ba59`. Its exact commit SHA,
+push result, and final local/remote divergence are likewise recorded in the
+final delivery response because a commit cannot contain its own SHA.
 
 ## 30. Pre-existing untracked and unrelated files preserved
 
