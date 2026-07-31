@@ -100,7 +100,7 @@ public class DashboardDetailIntegrationService {
         RepairRequest request = repairRequest(row.getRepairRequestId());
         put(payload, "requestedAt", request == null ? null : request.getDetectedAt());
         put(payload, "failureDescription", request == null ? null : request.getDescription());
-        put(payload, "technicianId", row.getPerformer() == null ? null : row.getPerformer().getUserId());
+        put(payload, "technicianId", row.getPerformerEmployee() != null ? row.getPerformerEmployee().getUserId() : row.getPerformer() == null ? null : row.getPerformer().getUserId());
         return record("toir.work-orders.v1", row, row.getDepartmentId(),
                 first(row.getStartedAt(), row.getStartPlannedAt(), row.getCreatedAt()), payload);
     }

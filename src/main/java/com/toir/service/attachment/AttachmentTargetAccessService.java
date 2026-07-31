@@ -118,8 +118,10 @@ public class AttachmentTargetAccessService {
         if (scopeAccessService.canAccessDepartment(workOrder.getDepartmentId())) {
             return workOrder;
         }
-        if (workOrder.getPerformer() != null
-                && scopeAccessService.canAccessAssignedUser(workOrder.getPerformer().getUserId())) {
+        UUID performerUserId = workOrder.getPerformerEmployee() != null
+                ? workOrder.getPerformerEmployee().getUserId()
+                : workOrder.getPerformer() == null ? null : workOrder.getPerformer().getUserId();
+        if (performerUserId != null && scopeAccessService.canAccessAssignedUser(performerUserId)) {
             return workOrder;
         }
         throw new AccessDeniedException("Access denied by work order department or performer scope");

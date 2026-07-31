@@ -4,6 +4,7 @@ import com.toir.enums.PriorityLevel;
 import com.toir.enums.WorkOrderStatus;
 
 import com.toir.entity.users.BrigadeMember;
+import com.toir.entity.users.Employee;
 import com.toir.enums.WorkOrderType;
 import com.toir.enums.WorkType;
 import jakarta.persistence.*;
@@ -92,6 +93,10 @@ public class WorkOrder extends ActorStampedEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "brigade_member_id")
     private BrigadeMember performer;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "performer_employee_id")
+    private Employee performerEmployee;
 
     @Column(name = "warehouse_id")
     private UUID warehouseId;
