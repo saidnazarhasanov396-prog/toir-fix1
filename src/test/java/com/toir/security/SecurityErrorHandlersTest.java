@@ -3,6 +3,7 @@ package com.toir.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.exception.ErrorResponse;
 import com.toir.exception.GlobalExceptionHandler;
+import org.springframework.http.HttpHeaders;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -18,6 +19,7 @@ class SecurityErrorHandlersTest {
     @Test
     void authenticationEntryPointReturnsGeneric401WithoutExceptionDetails() throws Exception {
         MockHttpServletRequest request = request();
+        request.addHeader(HttpHeaders.ACCEPT_LANGUAGE, "uz");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         new JwtAuthenticationEntryPoint(objectMapper).commence(
@@ -29,7 +31,8 @@ class SecurityErrorHandlersTest {
         ErrorResponse body = objectMapper.readValue(response.getContentAsByteArray(), ErrorResponse.class);
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(response.getContentType()).startsWith("application/json");
-        assertThat(body.message()).isEqualTo("Unauthorized");
+        assertThat(body.message()).isEqualTo("Avtorizatsiya talab qilinadi");
+        assertThat(body.errorCode()).isEqualTo("AUTHENTICATION_REQUIRED");
         assertThat(body.path()).isEqualTo("/api/v1/protected");
         assertThat(response.getContentAsString()).doesNotContain("sensitive authentication detail");
     }
@@ -37,6 +40,7 @@ class SecurityErrorHandlersTest {
     @Test
     void accessDeniedHandlerReturnsGeneric403WithoutExceptionDetails() throws Exception {
         MockHttpServletRequest request = request();
+        request.addHeader(HttpHeaders.ACCEPT_LANGUAGE, "ru");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         new RestAccessDeniedHandler(objectMapper).handle(
@@ -48,7 +52,8 @@ class SecurityErrorHandlersTest {
         ErrorResponse body = objectMapper.readValue(response.getContentAsByteArray(), ErrorResponse.class);
         assertThat(response.getStatus()).isEqualTo(403);
         assertThat(response.getContentType()).startsWith("application/json");
-        assertThat(body.message()).isEqualTo("Access denied");
+        assertThat(body.message()).isEqualTo("Доступ запрещён");
+        assertThat(body.errorCode()).isEqualTo("ACCESS_DENIED");
         assertThat(body.path()).isEqualTo("/api/v1/protected");
         assertThat(response.getContentAsString()).doesNotContain("sensitive authorization detail");
     }

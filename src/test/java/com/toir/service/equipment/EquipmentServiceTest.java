@@ -238,6 +238,12 @@ class EquipmentServiceTest {
                 .thenAnswer(invocation -> Optional.of(department(invocation.getArgument(0))));
         lenient().when(equipmentMeterRepository.findAllByEquipmentIdInAndActiveTrueAndIsDeletedFalse(anyCollection()))
                 .thenReturn(List.of());
+        lenient().when(employeeRepository.findByIdAndIsDeletedFalse(any()))
+                .thenAnswer(invocation -> Optional.of(employee(invocation.getArgument(0), true)));
+        lenient().when(employeeRepository.findAllByIdInAndIsDeletedFalse(anyCollection()))
+                .thenAnswer(invocation -> ((Collection<UUID>) invocation.getArgument(0)).stream()
+                        .map(id -> employee(id, true))
+                        .toList());
     }
 
     @InjectMocks
@@ -485,16 +491,16 @@ class EquipmentServiceTest {
                 .getFirst();
 
         assertThat(dto.passportCompleteness()).isNotNull();
-        assertThat(dto.passportCompleteness().requiredCount()).isEqualTo(2);
-        assertThat(dto.passportCompleteness().filledCount()).isEqualTo(1);
-        assertThat(dto.passportCompleteness().missingCriticalCount()).isEqualTo(1);
+        assertThat(dto.passportCompleteness().requiredCount()).isEqualTo(6);
+        assertThat(dto.passportCompleteness().filledCount()).isEqualTo(2);
+        assertThat(dto.passportCompleteness().missingCriticalCount()).isEqualTo(4);
         assertThat(dto.passportCompleteness().complete()).isFalse();
         assertThat(dto.passportCompleteness().blockingReason()).contains("Missing required passport fields");
         assertThat(dto.passportCompleteness().fixAction()).isEqualTo("Fill equipment passport");
         assertThat(dto.passportCompleteness().fixLink()).isEqualTo("/equipment/" + equipmentId + "/passport");
         assertThat(dto.passportCompleteness().missingFields())
                 .extracting(EquipmentDto.MissingPassportFieldRef::key)
-                .containsExactly("serial_plate");
+                .containsExactly("criticalityClassId", "commissionedAt", "responsibleId", "serial_plate");
     }
 
     @Test
@@ -1393,7 +1399,7 @@ class EquipmentServiceTest {
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
 
-        EquipmentDto created = service.create(request);
+        EquipmentDto created = service.create(withRequiredFields(request));
 
         assertThat(created.code()).isEqualTo(expectedCode);
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
@@ -1403,19 +1409,15 @@ class EquipmentServiceTest {
     }
 
     @Test
-    void createAllowsMissingResponsiblePerson() {
+    void createRejectsMissingResponsiblePerson() {
         UUID departmentId = UUID.randomUUID();
-        EquipmentCreateRequest request = createRequest(null, "INV-RESP-OPTIONAL", departmentId, null);
-        stubCreateFlow("INV-RESP-OPTIONAL");
-        when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
-                .thenReturn(Optional.of(department(departmentId)));
+        EquipmentCreateRequest request = createRequest(null, "INV-RESP-REQUIRED", departmentId, null);
 
-        service.create(request);
-
-        ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
-        verify(repository).save(entityCaptor.capture());
-        assertThat(entityCaptor.getValue().getResponsibleId()).isNull();
-        verifyNoInteractions(employeeRepository);
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("EQUIPMENT_REQUIRED_FIELDS_MISSING")
+                .hasMessageContaining("responsibleId");
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -1430,7 +1432,7 @@ class EquipmentServiceTest {
         when(mxikRepository.findByIdAndIsDeletedFalse(mxikId)).thenReturn(Optional.of(mxik));
         when(mxikRepository.findAllByIdInAndIsDeletedFalse(anyCollection())).thenReturn(List.of(mxik));
 
-        EquipmentDto created = service.create(request);
+        EquipmentDto created = service.create(withRequiredFields(request));
 
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
@@ -1450,7 +1452,7 @@ class EquipmentServiceTest {
                 .thenReturn(Optional.of(department(departmentId)));
         when(mxikRepository.findByIdAndIsDeletedFalse(mxikId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("MXIK not found: " + mxikId);
         verify(repository, never()).save(any());
@@ -1467,7 +1469,7 @@ class EquipmentServiceTest {
         when(employeeRepository.findByIdAndIsDeletedFalse(responsibleId))
                 .thenReturn(Optional.of(employee(responsibleId, false)));
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Responsible employee is not active");
 
@@ -1507,16 +1509,19 @@ class EquipmentServiceTest {
     }
 
     @Test
-    void updateWithClearResponsibleClearsExistingEmployee() {
+    void updateWithClearResponsibleRejectsRemovingRequiredEmployee() {
         Equipment existing = equipment("EQ-RESP-CLEAR");
-        existing.setResponsibleId(UUID.randomUUID());
+        UUID responsibleId = UUID.randomUUID();
+        existing.setResponsibleId(responsibleId);
         when(repository.findByIdAndIsDeletedFalse(existing.getId())).thenReturn(Optional.of(existing));
-        when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        stubEnrichment();
+        assertThatThrownBy(() -> service.update(
+                existing.getId(), updateRequestWithResponsible(null, true)
+        ))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("EQUIPMENT_REQUIRED_FIELDS_MISSING")
+                .hasMessageContaining("responsibleId");
 
-        service.update(existing.getId(), updateRequestWithResponsible(null, true));
-
-        assertThat(existing.getResponsibleId()).isNull();
+        assertThat(existing.getResponsibleId()).isEqualTo(responsibleId);
         verifyNoInteractions(employeeRepository, userRepository);
     }
 
@@ -1532,7 +1537,8 @@ class EquipmentServiceTest {
                 updateRequestWithResponsible(responsibleId, true)
         ))
                 .isInstanceOf(RestException.class)
-                .hasMessageContaining("responsibleId must be omitted when clearResponsible is true");
+                .hasMessageContaining("EQUIPMENT_REQUIRED_FIELDS_MISSING")
+                .hasMessageContaining("responsibleId");
 
         verify(repository, never()).save(any());
         verifyNoInteractions(employeeRepository, userRepository);
@@ -1583,7 +1589,7 @@ class EquipmentServiceTest {
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
 
-        EquipmentDto created = service.create(request);
+        EquipmentDto created = service.create(withRequiredFields(request));
 
         assertThat(created.averageOperatingLifeHours()).isEqualTo(17_520L);
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
@@ -1599,7 +1605,7 @@ class EquipmentServiceTest {
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
 
-        EquipmentDto created = service.create(request);
+        EquipmentDto created = service.create(withRequiredFields(request));
 
         assertThat(created.averageOperatingLifeHours()).isEqualTo(13_180L);
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
@@ -1657,7 +1663,7 @@ class EquipmentServiceTest {
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
 
-        EquipmentDto created = service.create(request);
+        EquipmentDto created = service.create(withRequiredFields(request));
 
         assertThat(created.averageDailyUsage()).isEqualTo(200.0);
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
@@ -1668,7 +1674,7 @@ class EquipmentServiceTest {
     }
 
     @Test
-    void createCalculatesDaysOfResourceRemainingFromLifetimeLimitAndAverageDailyUsage() {
+    void createDoesNotCalculateRemainingDaysWithoutCurrentMeterReading() {
         UUID departmentId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequestWithDynamicLifetime(
                 "INV-DAYS-1",
@@ -1680,11 +1686,11 @@ class EquipmentServiceTest {
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
 
-        service.create(request);
+        service.create(withRequiredFields(request));
 
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
-        assertThat(entityCaptor.getValue().getDaysOfResourceRemaining()).isEqualTo(150L);
+        assertThat(entityCaptor.getValue().getDaysOfResourceRemaining()).isNull();
     }
 
     @Test
@@ -1700,7 +1706,7 @@ class EquipmentServiceTest {
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
 
-        service.create(request);
+        service.create(withRequiredFields(request));
 
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
@@ -1721,7 +1727,7 @@ class EquipmentServiceTest {
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
 
-        service.create(request);
+        service.create(withRequiredFields(request));
 
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
@@ -1782,7 +1788,7 @@ class EquipmentServiceTest {
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId))
                 .thenReturn(Optional.of(department(departmentId)));
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOfSatisfying(RestException.class, ex ->
                         assertThat(ex.getMessage()).contains("Expected lifetime must be specified and greater than zero"));
     }
@@ -1797,7 +1803,7 @@ class EquipmentServiceTest {
         doThrow(RestException.badRequest("Missing required equipment attributes: motor_power (required by equipment type)"))
                 .when(equipmentAttributeService).upsertValues(any(Equipment.class), eq(List.of()));
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOfSatisfying(RestException.class, ex ->
                         assertThat(ex.getMessage()).contains("Missing required equipment attributes"));
     }
@@ -1819,7 +1825,7 @@ class EquipmentServiceTest {
         doThrow(RestException.badRequest("Missing required equipment attributes: motor_power (required by equipment type)"))
                 .when(equipmentAttributeService).upsertValues(any(Equipment.class), eq(List.of()));
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOfSatisfying(RestException.class, ex ->
                         assertThat(ex.getMessage()).contains("Missing required equipment attributes"));
     }
@@ -1846,7 +1852,7 @@ class EquipmentServiceTest {
                         Instant.now()
                 ));
 
-        EquipmentDto created = service.create(request);
+        EquipmentDto created = service.create(withRequiredFields(request));
 
         assertThat(created.code()).isEqualTo(expectedCode);
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
@@ -1870,7 +1876,7 @@ class EquipmentServiceTest {
         UUID warehouseId = UUID.randomUUID();
         EquipmentCreateRequest request = createRequest(null, "INV-NEW-3", departmentId, warehouseId);
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("departmentId and warehouseId cannot both be provided");
 
@@ -1899,7 +1905,7 @@ class EquipmentServiceTest {
         stubCreateFlow("INV-LOC-DEP");
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
 
-        service.create(request);
+        service.create(withRequiredFields(request));
 
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
@@ -1973,7 +1979,7 @@ class EquipmentServiceTest {
         when(departmentRepository.findByIdAndIsDeletedFalse(responsibleDepartmentId))
                 .thenReturn(Optional.of(department(responsibleDepartmentId)));
 
-        service.create(request);
+        service.create(withRequiredFields(request));
 
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
@@ -1992,7 +1998,7 @@ class EquipmentServiceTest {
     void createWithNeitherThrowsBadRequest() {
         EquipmentCreateRequest request = createRequest(null, "INV-NEW-4", null, null);
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("departmentId or warehouseId is required");
 
@@ -2005,7 +2011,7 @@ class EquipmentServiceTest {
         EquipmentCreateRequest request = createRequest(null, "INV-NEW-5", departmentId, null);
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Department not found: " + departmentId);
 
@@ -2018,7 +2024,7 @@ class EquipmentServiceTest {
         EquipmentCreateRequest request = createRequest(null, "INV-NEW-6", null, warehouseId);
         when(warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Warehouse not found: " + warehouseId);
 
@@ -2064,7 +2070,7 @@ class EquipmentServiceTest {
         when(fileAssetRepository.findByIdAndIsDeletedFalse(warrantyAttachmentId))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("File not found: " + warrantyAttachmentId);
     }
@@ -2113,7 +2119,7 @@ class EquipmentServiceTest {
         when(counteragentService.loadActive(eq(counteragentId), any()))
                 .thenReturn(counteragent(counteragentId, "Equipment Vendor", CounteragentStatus.ACTIVE));
 
-        EquipmentDto created = service.create(request);
+        EquipmentDto created = service.create(withRequiredFields(request));
 
         assertThat(created.hasWarranty()).isTrue();
         assertThat(created.warrantyStartDate()).isEqualTo(LocalDate.of(2026, 6, 1));
@@ -2169,7 +2175,7 @@ class EquipmentServiceTest {
         when(counteragentService.loadActive(eq(counteragentId), any()))
                 .thenReturn(counteragent(counteragentId, "Equipment Vendor", CounteragentStatus.ACTIVE));
 
-        service.create(request);
+        service.create(withRequiredFields(request));
 
         ArgumentCaptor<Equipment> entityCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(repository).save(entityCaptor.capture());
@@ -2215,7 +2221,7 @@ class EquipmentServiceTest {
                 null
         );
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("Warranty counteragent is required");
@@ -2263,7 +2269,7 @@ class EquipmentServiceTest {
         when(counteragentService.loadActive(eq(counteragentId), any()))
                 .thenThrow(RestException.badRequest("Inactive counteragents cannot be selected for equipment counteragent"));
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOfSatisfying(RestException.class, ex -> {
                     assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(ex.getMessage()).contains("Inactive counteragents");
@@ -2306,7 +2312,7 @@ class EquipmentServiceTest {
                 null
         );
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Warranty end date must be after or equal to warranty start date");
 
@@ -2317,7 +2323,7 @@ class EquipmentServiceTest {
     void createWithClientProvidedCodeShouldFailBadRequest() {
         EquipmentCreateRequest request = createRequest("EQ-2026-0017", "INV-NEW-7", UUID.randomUUID(), null);
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("Equipment code is generated by system and must not be provided");
 
@@ -2339,7 +2345,7 @@ class EquipmentServiceTest {
         when(warehouseEquipmentItemService.assign(eq(warehouseId), any(WarehouseEquipmentAssignRequest.class)))
                 .thenThrow(RestException.conflict("Equipment is already assigned to another warehouse"));
 
-        assertThatThrownBy(() -> service.create(request))
+        assertThatThrownBy(() -> service.create(withRequiredFields(request)))
                 .isInstanceOf(RestException.class)
                 .hasMessageContaining("already assigned to another warehouse");
 
@@ -3054,7 +3060,7 @@ class EquipmentServiceTest {
         stubCreateFlow("INV-P-101");
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
 
-        EquipmentDto created = service.create(request);
+        EquipmentDto created = service.create(withRequiredFields(request));
 
         assertThat(created.name()).isEqualTo("Pump P-101");
         verify(equipmentAttributeService).upsertValues(any(Equipment.class), eq(request.attributes()));
@@ -3074,7 +3080,7 @@ class EquipmentServiceTest {
         stubCreateFlow("INV-OFFICIAL-ATTR");
         when(departmentRepository.findByIdAndIsDeletedFalse(departmentId)).thenReturn(Optional.of(department(departmentId)));
 
-        service.create(request);
+        service.create(withRequiredFields(request));
 
         verify(equipmentAttributeService).upsertValues(any(Equipment.class), eq(request.attributes()));
         verify(equipmentManualAttributeService, never()).replaceAll(any(), any());
@@ -3089,7 +3095,7 @@ class EquipmentServiceTest {
         stubCreateFlow("INV-MANUAL-DISABLED");
         when(departmentRepository.findByIdAndIsDeletedFalse(request.departmentId())).thenReturn(Optional.of(department(request.departmentId())));
 
-        service.create(request);
+        service.create(withRequiredFields(request));
 
         verify(equipmentManualAttributeService).replaceAll(any(UUID.class), argThat(bulk ->
                 bulk.attributes().size() == 1
@@ -4288,4 +4294,64 @@ class EquipmentServiceTest {
         assertThat(result).extracting(EquipmentDocumentDto::documentNumber).containsExactly("AKT-2024-001", "DRW-2024-001");
         assertThat(result).extracting(EquipmentDocumentDto::documentName).containsExactly("Technical Passport", "Drawing");
     }
+
+
+    @Test
+    void searchCountsGlobalPassportRequirementsWhenTypeHasNoRequiredAttributes() {
+        UUID equipmentId = UUID.randomUUID();
+        Equipment equipment = equipment("EQ-GLOBAL-PASSPORT");
+        equipment.setId(equipmentId);
+        equipment.setDepartmentId(null);
+
+        stubEnrichment();
+        when(repository.search(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(equipment), PageRequest.of(0, 20), 1));
+        when(attributeDefinitionRepository.findAllByEquipmentTypeIdInAndIsDeletedFalse(anyCollection()))
+                .thenReturn(List.of());
+
+        EquipmentDto dto = service.search(null, null, null, null, null, false, null, 0, 20)
+                .getContent()
+                .getFirst();
+
+        assertThat(dto.passportCompleteness().complete()).isFalse();
+        assertThat(dto.passportCompleteness().requiredCount()).isEqualTo(4);
+        assertThat(dto.passportCompleteness().filledCount()).isZero();
+        assertThat(dto.passportCompleteness().missingFields())
+                .extracting(EquipmentDto.MissingPassportFieldRef::key)
+                .containsExactly("criticalityClassId", "locationId", "commissionedAt", "responsibleId");
+    }
+
+
+    @Test
+    void createRejectsEquipmentWithoutGlobalRequiredFieldsBeforePersistence() {
+        EquipmentCreateRequest request = createRequest(null, "INV-GLOBAL-REQUIRED", UUID.randomUUID(), null, 10_000L);
+
+        assertThatThrownBy(() -> service.create(request))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("EQUIPMENT_REQUIRED_FIELDS_MISSING")
+                .hasMessageContaining("criticalityClassId")
+                                .hasMessageContaining("commissionedAt")
+                .hasMessageContaining("responsibleId");
+        verify(repository, never()).save(any());
+    }
+    private EquipmentCreateRequest withRequiredFields(EquipmentCreateRequest request) {
+        return new EquipmentCreateRequest(
+                request.code(), request.name(), request.inventoryNumber(), request.technicalNumber(),
+                request.serialNumber(), request.model(), request.producedYear(), request.equipmentTypeId(),
+                request.departmentId(), request.warehouseId(), request.locationId(), request.parentId(),
+                request.criticalityClassId() == null ? UUID.randomUUID() : request.criticalityClassId(),
+                request.responsibleId() == null ? UUID.randomUUID() : request.responsibleId(),
+                request.manufacturer(), request.status(), request.category(),
+                request.commissionedAt() == null ? LocalDate.of(2024, 1, 1) : request.commissionedAt(),
+                request.arrivalDate(), request.warrantyUntil(), request.hasWarranty(),
+                request.warrantyAttachmentId(), request.warrantyStartDate(), request.warrantyEndDate(),
+                request.description(), request.operationStartDate(), request.expectedLifetimeMonths(),
+                request.expectedLifetimeYears(), request.expectedLifetimeHours(), request.attributes(),
+                request.manualAttributes(), request.location(), request.lifetimeCounterType(),
+                request.lifetimeMeterId(), request.lifetimeLimitValue(), request.lifetimeBaselineValue(),
+                request.lifetimeWarningPercent(), request.averageDailyUsage(), request.counteragentId(),
+                request.warrantyCounteragentId(), request.mxikId()
+        );
+    }
+
 }

@@ -2,6 +2,13 @@ package com.toir.enums;
 
 public enum MaterialReadinessStatus {
     READY,
+    RESERVED,
+    AVAILABLE,
+    PARTIALLY_AVAILABLE,
+    TRANSFER_REQUIRED,
+    PROCUREMENT_REQUIRED,
+    WMS_UNAVAILABLE,
+    RECONCILIATION_REQUIRED,
     PARTIAL,
     SHORTAGE,
     ISSUED,
