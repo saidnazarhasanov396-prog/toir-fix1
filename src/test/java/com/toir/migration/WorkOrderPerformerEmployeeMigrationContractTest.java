@@ -12,7 +12,7 @@ class WorkOrderPerformerEmployeeMigrationContractTest {
     @Test
     void migrationAddsCanonicalEmployeeAndOnlyBackfillsUniqueUserMatches() throws Exception {
         Path migration = Path.of(
-                "src/main/resources/db/migration/V20260731_2__work_order_performer_employee.sql"
+                "src/main/resources/db/migration/V20260731_3__work_order_performer_employee.sql"
         );
 
         String sql = Files.readString(migration).toLowerCase();
