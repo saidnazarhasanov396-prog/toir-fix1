@@ -1,6 +1,9 @@
 package com.toir.controller;
 
 import com.toir.dto.analytics.AnalyticsOverview;
+import com.toir.dto.analytics.AnalyticsPeriod;
+import com.toir.dto.analytics.AnalyticsContextDto;
+import com.toir.dto.analytics.FailureParetoResponse;
 import com.toir.service.AnalyticsService;
 import com.toir.service.InventoryAnalyticsService;
 import com.toir.service.ErpPresentationDatasetProvider;
@@ -17,6 +20,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.UUID;
 import java.util.List;
+import java.time.Instant;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -52,9 +56,18 @@ class AnalyticsControllerContractTest {
     }
 
     @Test
+    void overviewPassesSelectedPeriodToService() throws Exception {
+        mockMvc.perform(get("/api/v1/analytics/overview")
+                        .param("period", "LAST_7_DAYS"))
+                .andExpect(status().isOk());
+
+        verify(service).overview(AnalyticsPeriod.LAST_7_DAYS);
+    }
+
+    @Test
     void downtimeEventsPassesDepartmentAndPaginationToService() throws Exception {
         UUID departmentId = UUID.randomUUID();
-        when(service.downtimeEvents(departmentId, 2, 15))
+        when(service.downtimeEvents(departmentId, 2, 15, AnalyticsPeriod.LAST_30_DAYS))
                 .thenReturn(Page.empty(PageRequest.of(2, 15)));
 
         mockMvc.perform(get("/api/v1/analytics/downtime-events")
@@ -63,7 +76,42 @@ class AnalyticsControllerContractTest {
                         .param("size", "15"))
                 .andExpect(status().isOk());
 
-        verify(service).downtimeEvents(departmentId, 2, 15);
+        verify(service).downtimeEvents(departmentId, 2, 15, AnalyticsPeriod.LAST_30_DAYS);
+    }
+
+    @Test
+    void downtimeEventsExposeSelectedPeriodAndCalculationContext() throws Exception {
+        AnalyticsContextDto context = context(AnalyticsPeriod.LAST_7_DAYS);
+        when(service.downtimeEvents(null, 0, 20, AnalyticsPeriod.LAST_7_DAYS))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+        when(service.analyticsContext(AnalyticsPeriod.LAST_7_DAYS,
+                List.of("DOWNTIME_EVENTS", "WORK_ORDERS", "REPAIR_REQUESTS"))).thenReturn(context);
+
+        mockMvc.perform(get("/api/v1/analytics/downtime-events").param("period", "LAST_7_DAYS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.analyticsContext.period").value("LAST_7_DAYS"))
+                .andExpect(jsonPath("$.analyticsContext.scope.type").value("ALL_AUTHORIZED"))
+                .andExpect(jsonPath("$.analyticsContext.sources[0]").value("DOWNTIME_EVENTS"));
+    }
+
+    @Test
+    void paretoPassesPeriodAndExposesContext() throws Exception {
+        AnalyticsContextDto context = context(AnalyticsPeriod.LAST_30_DAYS);
+        when(service.failurePareto(AnalyticsPeriod.LAST_30_DAYS))
+                .thenReturn(new FailureParetoResponse(List.of(), context));
+
+        mockMvc.perform(get("/api/v1/analytics/pareto/failures"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.analyticsContext.period").value("LAST_30_DAYS"));
+
+        verify(service).failurePareto(AnalyticsPeriod.LAST_30_DAYS);
+    }
+
+    private static AnalyticsContextDto context(AnalyticsPeriod period) {
+        Instant to = Instant.parse("2026-07-31T10:00:00Z");
+        return new AnalyticsContextDto(period, to.minusSeconds(604800), to, "Asia/Tashkent",
+                new AnalyticsContextDto.Scope("ALL_AUTHORIZED", null, null), to,
+                List.of("DOWNTIME_EVENTS"));
     }
 
     @Test

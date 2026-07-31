@@ -12,6 +12,9 @@ import com.toir.dto.rcm.RiskSeverity;
 import com.toir.exception.RestException;
 import com.toir.entity.RcmSnapshot;
 import com.toir.service.RcmAutoPlannerService;
+import com.toir.service.RcmAutoPlanPreviewService;
+import com.toir.dto.rcm.autoplan.RcmAutoPlanConfirmResult;
+import com.toir.dto.rcm.autoplan.RcmAutoPlanPreviewResponse;
 import com.toir.service.RcmService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,11 +44,14 @@ class RcmControllerContractTest {
     @Mock
     RcmAutoPlannerService autoPlannerService;
 
+    @Mock
+    RcmAutoPlanPreviewService previewService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new RcmController(service, autoPlannerService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RcmController(service, autoPlannerService, previewService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -170,6 +176,32 @@ class RcmControllerContractTest {
                 .andExpect(jsonPath("$.content[0].explanation.steps[2].unit").value("/100"));
 
         verify(service).computeAll("probability", "asc");
+    }
+
+    @Test
+    void previewsBeforeCreatingAndConfirmsExactFingerprint() throws Exception {
+        UUID planId = UUID.randomUUID();
+        when(previewService.preview(40, planId)).thenReturn(new RcmAutoPlanPreviewResponse(
+                40, planId, "Plan", Instant.parse("2026-07-31T10:00:00Z"),
+                3, 1, 1, 1, 0, "abc", List.of()));
+        when(autoPlannerService.confirm(org.mockito.ArgumentMatchers.any())).thenReturn(
+                new RcmAutoPlanConfirmResult(3, 1, 1, 1, 0, "abc", List.of("RCM-EQ-1")));
+
+        mockMvc.perform(post("/api/v1/rcm/auto-plan/preview")
+                        .param("riskThreshold", "40").param("planId", planId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasksToCreate").value(1))
+                .andExpect(jsonPath("$.duplicates").value(1))
+                .andExpect(jsonPath("$.conflicts").value(1))
+                .andExpect(jsonPath("$.fingerprint").value("abc"));
+        verify(previewService).preview(40, planId);
+
+        mockMvc.perform(post("/api/v1/rcm/auto-plan/confirm")
+                        .contentType("application/json")
+                        .content("{\"riskThreshold\":40,\"planId\":\"" + planId
+                                + "\",\"previewFingerprint\":\"abc\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasksCreated").value(1));
     }
 
     private RcmSnapshot snapshot(UUID equipmentId, String equipmentCode) {

@@ -1,5 +1,7 @@
 package com.toir.controller;
 import com.toir.dto.analytics.AnalyticsOverview;
+import com.toir.dto.analytics.AnalyticsPeriod;
+import com.toir.dto.analytics.AnalyticsPageResponse;
 import com.toir.dto.analytics.AnalyticsDowntimeEventRow;
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.dto.analytics.FailureParetoResponse;
@@ -10,6 +12,7 @@ import com.toir.service.AnalyticsService;
 import com.toir.service.ReliabilityPassportService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
+import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -32,26 +35,32 @@ public class AnalyticsController {
     private final ReliabilityPassportService reliabilityPassportService;
 
     @GetMapping("/overview")
-    public ResponseEntity<AnalyticsOverview> overview() {
-        return ResponseEntity.ok(service.overview());
+    public ResponseEntity<AnalyticsOverview> overview(
+            @RequestParam(defaultValue = "LAST_30_DAYS") AnalyticsPeriod period) {
+        return ResponseEntity.ok(service.overview(period));
     }
 
     @GetMapping("/downtime-events")
-    public ResponseEntity<Page<AnalyticsDowntimeEventRow>> downtimeEvents(
+    public ResponseEntity<AnalyticsPageResponse<AnalyticsDowntimeEventRow>> downtimeEvents(
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(service.downtimeEvents(departmentId, page, size));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "LAST_30_DAYS") AnalyticsPeriod period) {
+        Page<AnalyticsDowntimeEventRow> result = service.downtimeEvents(departmentId, page, size, period);
+        return ResponseEntity.ok(AnalyticsPageResponse.from(result,
+                service.analyticsContext(period, List.of("DOWNTIME_EVENTS", "WORK_ORDERS", "REPAIR_REQUESTS"))));
     }
 
     @GetMapping("/pareto/failures")
-    public ResponseEntity<FailureParetoResponse> paretoFailures() {
-        return ResponseEntity.ok(service.failurePareto());
+    public ResponseEntity<FailureParetoResponse> paretoFailures(
+            @RequestParam(defaultValue = "LAST_30_DAYS") AnalyticsPeriod period) {
+        return ResponseEntity.ok(service.failurePareto(period));
     }
 
     @GetMapping("/rca/overview")
-    public ResponseEntity<RcaOverviewResponse> rcaOverview() {
-        return ResponseEntity.ok(service.rcaOverview());
+    public ResponseEntity<RcaOverviewResponse> rcaOverview(
+            @RequestParam(defaultValue = "LAST_30_DAYS") AnalyticsPeriod period) {
+        return ResponseEntity.ok(service.rcaOverview(period));
     }
 
     @GetMapping("/rca/equipment/{equipmentId}")
@@ -65,11 +74,15 @@ public class AnalyticsController {
     }
 
     @GetMapping("/reliability")
-    public ResponseEntity<Page<ReliabilityPassport>> reliabilityList(
+    public ResponseEntity<AnalyticsPageResponse<ReliabilityPassport>> reliabilityList(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "8") int size) {
-        return ResponseEntity.ok(reliabilityPassportService.list(equipmentId, search, null, page, size));
+            @RequestParam(defaultValue = "8") int size,
+            @RequestParam(defaultValue = "LAST_30_DAYS") AnalyticsPeriod period) {
+        Page<ReliabilityPassport> result = reliabilityPassportService.list(equipmentId, search, null, page, size);
+        return ResponseEntity.ok(AnalyticsPageResponse.from(result,
+                service.analyticsContext(period, List.of("EQUIPMENT", "DEFECTS", "DOWNTIME_EVENTS",
+                        "WORK_ORDERS", "REPAIR_REQUESTS"))));
     }
 }
