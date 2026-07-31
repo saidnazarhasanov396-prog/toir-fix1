@@ -27,6 +27,26 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, UU
     List<PurchaseOrder> findAllByProcurementRequestIdAndIsDeletedFalse(UUID procurementRequestId);
 
     @Query("""
+            select min(po.expectedDeliveryDate)
+            from PurchaseOrder po
+            join po.lines line
+            where po.isDeleted = false
+              and line.isDeleted = false
+              and po.warehouseId = :warehouseId
+              and line.sparePartId = :sparePartId
+              and line.remainingQuantity > 0
+              and po.expectedDeliveryDate is not null
+              and po.status in (
+                    com.toir.enums.PurchaseOrderStatus.SENT,
+                    com.toir.enums.PurchaseOrderStatus.PARTIALLY_RECEIVED
+              )
+            """)
+    LocalDate findEarliestExpectedDeliveryDate(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("sparePartId") UUID sparePartId
+    );
+
+    @Query("""
             select po
             from PurchaseOrder po
             where po.isDeleted = false
