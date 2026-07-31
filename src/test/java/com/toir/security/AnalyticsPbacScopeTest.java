@@ -38,6 +38,7 @@ import com.toir.repository.repair.RepairRequestRepository;
 import com.toir.repository.users.EmployeeRepository;
 import com.toir.repository.users.UserCertificationRepository;
 import com.toir.repository.users.UserRepository;
+import com.toir.service.AnalyticsContextService;
 import com.toir.service.AnalyticsService;
 import com.toir.service.CounteragentService;
 import com.toir.service.DashboardService;
@@ -180,7 +181,8 @@ class AnalyticsPbacScopeTest {
                 equipmentRepository,
                 departmentRepository,
                 actualCostRepository,
-                scopeAccessService
+                scopeAccessService,
+                new AnalyticsContextService(java.time.Clock.systemUTC())
         );
         stubDashboardEmptyData();
     }
@@ -527,7 +529,8 @@ class AnalyticsPbacScopeTest {
                 equipmentRepository,
                 departmentRepository,
                 actualCostRepository,
-                new ScopeAccessService(mock(com.toir.repository.users.EmployeeRepository.class))
+                new ScopeAccessService(mock(com.toir.repository.users.EmployeeRepository.class)),
+                new AnalyticsContextService(java.time.Clock.systemUTC())
         );
     }
 
