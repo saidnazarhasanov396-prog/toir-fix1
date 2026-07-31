@@ -54,7 +54,7 @@ toir:
   ai:
     equipment-lifecycle:
       export:
-        enabled: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_ENABLED:false}
+        enabled: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_ENABLED:true}
         maximum-equipment: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_MAXIMUM_EQUIPMENT:10000}
         selection-batch-size: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_SELECTION_BATCH_SIZE:250}
         checkpoint-records: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_CHECKPOINT_RECORDS:25}
