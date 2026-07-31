@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://toir.internal/schemas/equipment-lifecycle-export-manifest-v1.schema.json",
+  "title": "Equipment Lifecycle Export Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifestVersion",
+    "exportJobId",
+    "datasetRecordType",
+    "schemaVersion",
+    "exportFormat",
+    "encoding",
+    "lineEnding",
+    "createdAt",
+    "startedAt",
+    "completedAt",
+    "asOf",
+    "contextProfile",
+    "resolvedPolicy",
+    "requestFingerprint",
+    "policyFingerprint",
+    "selectionMode",
+    "selectedCount",
+    "exportedRecordCount",
+    "datasetByteSize",
+    "finalizedInputs",
+    "contextVersionAlgorithm",
+    "orderingRule",
+    "truncationAndDataQualitySummary",
+    "consistency",
+    "expiresAt",
+    "warnings"
+  ],
+  "properties": {
+    "manifestVersion": { "const": "1.0" },
+    "exportJobId": { "type": "string", "format": "uuid" },
+    "datasetRecordType": { "const": "EquipmentLifecycleContextV1" },
+    "schemaVersion": { "const": "1.0" },
+    "exportFormat": { "const": "NDJSON" },
+    "encoding": { "const": "UTF-8" },
+    "lineEnding": { "const": "LF" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "asOf": { "type": "string", "format": "date-time" },
+    "contextProfile": { "type": "string", "minLength": 1 },
+    "resolvedPolicy": { "type": "object" },
+    "requestFingerprint": { "$ref": "#/$defs/sha256" },
+    "policyFingerprint": { "$ref": "#/$defs/sha256" },
+    "selectionMode": { "enum": ["EXPLICIT_IDS", "ALL_AUTHORIZED"] },
+    "selectedCount": { "type": "integer", "minimum": 1 },
+    "exportedRecordCount": { "type": "integer", "minimum": 1 },
+    "datasetByteSize": { "type": "integer", "minimum": 1 },
+    "finalizedInputs": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "contextVersionAlgorithm": { "const": "W1_DETERMINISTIC_CANONICAL_JSON_SHA256" },
+    "orderingRule": { "const": "FROZEN_MEMBERSHIP_ORDINAL_ASC" },
+    "truncationAndDataQualitySummary": { "type": "object" },
+    "consistency": { "$ref": "#/$defs/consistency" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "mediaType", "size", "sha256"],
+      "properties": {
+        "filename": {
+          "enum": [
+            "equipment-lifecycle-context-v1.ndjson",
+            "equipment-lifecycle-context-v1.schema.json"
+          ]
+        },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "size": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "consistency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "equipmentMembershipFrozen",
+        "singleDatabaseSnapshot",
+        "transactionIsolation",
+        "sourceRowsMayChangeDuringExport",
+        "traceability"
+      ],
+      "properties": {
+        "model": {
+          "const": "FIXED_AS_OF_WITH_FROZEN_EQUIPMENT_SELECTION_AND_READ_COMMITTED_SOURCE_READS"
+        },
+        "equipmentMembershipFrozen": { "const": true },
+        "singleDatabaseSnapshot": { "const": false },
+        "transactionIsolation": { "const": "READ_COMMITTED" },
+        "sourceRowsMayChangeDuringExport": { "const": true },
+        "traceability": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
