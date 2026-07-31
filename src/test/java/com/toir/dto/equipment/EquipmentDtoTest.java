@@ -10,8 +10,11 @@ import org.junit.jupiter.api.Test;
 import com.toir.dto.equipmentpassport.ProductivityEntryDto;
 
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -137,6 +140,7 @@ class EquipmentDtoTest {
         assertThat(dto.lifetimeConsumedPercent()).isEqualTo(94.0);
         assertThat(dto.lifetimeUnit()).isEqualTo("cycle");
         assertThat(dto.lifetimeStatus()).isEqualTo(LifetimeStatus.EXPIRING_SOON);
+        assertThat(dto.daysOfResourceRemaining()).isEqualTo(3L);
     }
 
     @Test
@@ -156,5 +160,33 @@ class EquipmentDtoTest {
         EquipmentDto dto = EquipmentDto.from(equipment);
 
         assertThat(dto.daysOfResourceRemaining()).isNull();
+    }
+
+
+    @Test
+    void fromExplainsWhichMeterEvidenceDeterminedLifetimeStatus() {
+        Equipment equipment = new Equipment();
+        equipment.setLifetimeCounterType(MeterType.CYCLES);
+        equipment.setLifetimeLimitValue(10_000.0);
+        equipment.setLifetimeBaselineValue(100.0);
+        equipment.setLifetimeWarningPercent(10.0);
+
+        EquipmentMeter meter = new EquipmentMeter();
+        meter.setMeterType(MeterType.CYCLES);
+        meter.setUnit("cycle");
+        meter.setCurrentValue(9_500);
+
+        Map<?, ?> payload = new ObjectMapper().convertValue(EquipmentDto.from(equipment, meter), Map.class);
+
+        assertThat(payload.get("lifetimeStatusReasons"))
+                .asList()
+                .singleElement()
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("source", "METER")
+                .containsEntry("reasonCode", "METER_REMAINING_WITHIN_WARNING_THRESHOLD")
+                .containsEntry("determining", true)
+                .containsEntry("remainingValue", 600.0)
+                .containsEntry("thresholdValue", 1_000.0)
+                .containsEntry("unit", "cycle");
     }
 }

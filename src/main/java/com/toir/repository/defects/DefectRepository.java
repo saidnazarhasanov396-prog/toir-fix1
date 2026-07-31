@@ -19,6 +19,22 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface DefectRepository extends JpaRepository<Defect, UUID>, JpaSpecificationExecutor<Defect> {
+    @Query(value = """
+            SELECT *
+            FROM defects
+            WHERE equipment_id = :equipmentId
+              AND detected_at >= :historyStart
+              AND detected_at <= :asOf
+              AND is_deleted = false
+            ORDER BY detected_at ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<Defect> findLifecycleDefects(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("historyStart") java.time.Instant historyStart,
+            @Param("asOf") java.time.Instant asOf,
+            @Param("limitPlusOne") int limitPlusOne);
+
     @Query(value = "SELECT * FROM defects WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<Defect> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 

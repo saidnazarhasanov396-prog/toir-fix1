@@ -19,6 +19,22 @@ import org.springframework.stereotype.Repository;
 public interface MaintenanceDueEventRepository extends JpaRepository<MaintenanceDueEvent, UUID>,
         JpaSpecificationExecutor<MaintenanceDueEvent> {
 
+    @Query(value = """
+            SELECT *
+            FROM maintenance_due_events
+            WHERE equipment_id = :equipmentId
+              AND detected_at <= :asOf
+              AND (due_at IS NULL OR due_at <= :planningEnd)
+              AND is_deleted = false
+            ORDER BY COALESCE(due_at, detected_at) ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<MaintenanceDueEvent> findLifecycleDueEvents(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("asOf") Instant asOf,
+            @Param("planningEnd") Instant planningEnd,
+            @Param("limitPlusOne") int limitPlusOne);
+
     Optional<MaintenanceDueEvent> findByIdAndIsDeletedFalse(UUID id);
 
     @Query("""

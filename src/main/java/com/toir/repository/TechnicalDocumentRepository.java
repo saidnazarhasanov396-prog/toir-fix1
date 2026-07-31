@@ -36,4 +36,18 @@ public interface TechnicalDocumentRepository extends JpaRepository<TechnicalDocu
 
     @Query(value = "SELECT EXISTS(SELECT 1 FROM technical_documents WHERE equipment_node_id = cast(:equipmentNodeId as uuid) AND is_deleted = false)", nativeQuery = true)
     boolean existsByEquipmentNodeIdAndIsDeletedFalse(@Param("equipmentNodeId") UUID equipmentNodeId);
+
+    @Query(value = """
+            SELECT *
+            FROM technical_documents
+            WHERE equipment_id = :equipmentId
+              AND updated_at <= :asOf
+              AND is_deleted = false
+            ORDER BY document_date ASC NULLS LAST, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<TechnicalDocument> findLifecycleDocuments(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("asOf") java.time.Instant asOf,
+            @Param("limitPlusOne") int limitPlusOne);
 }
