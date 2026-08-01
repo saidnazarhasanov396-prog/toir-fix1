@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ApprovalRejectionPoliciesMigrationContractTest {
 
     private static final Path MIGRATION = Path.of(
-            "src/main/resources/db/migration/V20260801_7__approval_rejection_policies.sql");
+            "src/main/resources/db/migration/V20260801_9__approval_rejection_policies.sql");
 
     @Test
     void migrationAddsPolicySnapshotsReworkAndDecisionEvidence() throws Exception {
