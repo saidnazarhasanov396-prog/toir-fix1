@@ -6,6 +6,7 @@ import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MeterType;
 import com.toir.enums.VehicleRegistrationPlateType;
 import com.toir.enums.VehicleType;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -54,9 +55,12 @@ public record VehicleRequest(
         UUID lifetimeMeterId,
         @Positive Double lifetimeLimitValue,
         @PositiveOrZero Double lifetimeBaselineValue,
-        @Positive Double lifetimeWarningPercent,
+        @Positive @DecimalMax("100.0") Double lifetimeWarningPercent,
         @Positive Double averageDailyUsage,
-        UUID mxikId
+        UUID mxikId,
+        @NotNull UUID responsibleId,
+        @NotNull UUID criticalityClassId,
+        @NotNull LocalDate commissionedAt
 ) {
     public VehicleRequest(
             String code,
@@ -95,7 +99,7 @@ public record VehicleRequest(
                 bodyNumber, chassisNumber, engineNumber, fuelType, fuelTankCapacity, carryingCapacity,
                 seatCount, assignedDriverId, null, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
-                technicalInspectionExpiryDate, gpsDeviceId, null, null, null, null, null, null, null, null, null);
+                technicalInspectionExpiryDate, gpsDeviceId, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public VehicleRequest(
@@ -138,7 +142,7 @@ public record VehicleRequest(
                 seatCount, assignedDriverId, null, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
                 technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     public VehicleRequest(
@@ -182,7 +186,7 @@ public record VehicleRequest(
                 seatCount, assignedDriverId, null, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
                 technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     public VehicleRequest(
@@ -223,7 +227,7 @@ public record VehicleRequest(
             UUID lifetimeMeterId,
             @Positive Double lifetimeLimitValue,
             @PositiveOrZero Double lifetimeBaselineValue,
-            @Positive Double lifetimeWarningPercent,
+            @Positive @DecimalMax("100.0") Double lifetimeWarningPercent,
             @Positive Double averageDailyUsage
     ) {
         this(code, name, inventoryNumber, technicalNumber, serialNumber, equipmentTypeId, departmentId,
@@ -233,7 +237,7 @@ public record VehicleRequest(
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
                 technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes,
                 lifetimeCounterType, lifetimeMeterId, lifetimeLimitValue, lifetimeBaselineValue,
-                lifetimeWarningPercent, averageDailyUsage, null);
+                lifetimeWarningPercent, averageDailyUsage, null, null, null, null);
     }
 
     public VehicleRequest(
@@ -278,17 +282,28 @@ public record VehicleRequest(
                 seatCount, assignedDriverId, assignedDriverUsageLimitMinutes, currentOdometerKm, currentEngineHours,
                 registrationCertificateNumber, insurancePolicyNumber, insuranceExpiryDate,
                 technicalInspectionExpiryDate, gpsDeviceId, attributes, manualAttributes,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
-    public static VehicleRequest minimal(String code, String name, String inventoryNumber,
-                                         UUID equipmentTypeId, UUID departmentId,
-                                         String plateNumber, VehicleType vehicleType) {
+    public static VehicleRequest minimal(
+            String code,
+            String name,
+            String inventoryNumber,
+            UUID equipmentTypeId,
+            UUID departmentId,
+            String plateNumber,
+            VehicleType vehicleType,
+            UUID responsibleId,
+            UUID criticalityClassId,
+            LocalDate commissionedAt
+    ) {
         return new VehicleRequest(
                 code, name, inventoryNumber, null, null, equipmentTypeId, departmentId,
                 null, EquipmentStatus.ACTIVE, plateNumber, null, null, null, null, null,
                 vehicleType, null, null, null, null, null, null, null, null,
-                null, 0.0, 0.0, null, null, null, null, null, null, null
+                null, 0.0, 0.0, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, responsibleId,
+                criticalityClassId, commissionedAt
         );
     }
 
@@ -334,7 +349,10 @@ public record VehicleRequest(
                 lifetimeBaselineValue,
                 lifetimeWarningPercent,
                 averageDailyUsage,
-                mxikId
+                mxikId,
+                responsibleId,
+                criticalityClassId,
+                commissionedAt
         );
     }
 }

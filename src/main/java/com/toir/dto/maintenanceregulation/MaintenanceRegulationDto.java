@@ -1,6 +1,7 @@
 package com.toir.dto.maintenanceregulation;
 
 import com.toir.enums.MaintenanceKind;
+import com.toir.enums.CompletionEvidenceType;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.ApprovalResultAction;
@@ -16,6 +17,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public record MaintenanceRegulationDto(
@@ -59,7 +61,8 @@ public record MaintenanceRegulationDto(
         String scope,
         UUID equipmentId,
         String equipmentName,
-        UUID baseRegulationId
+        UUID baseRegulationId,
+        Set<CompletionEvidenceType> requiredEvidenceTypes
 ) {
     public MaintenanceRegulationDto(
             UUID id,
@@ -101,7 +104,7 @@ public record MaintenanceRegulationDto(
                 requiresShutdown, triggerMeterType, triggerMeterInterval, triggerPolicy, recalculationPolicy,
                 initialSchedulePolicy, automationAction, approvalResultAction, duplicatePolicy, leadTimeDays,
                 leadMeterPercent, defaultDepartmentId, defaultResponsibleId, defaultPriority, requiresApproval,
-                approvalRole, approvalPermission, attributeConditions, List.of(), "TYPE", null, null, null);
+                approvalRole, approvalPermission, attributeConditions, List.of(), "TYPE", null, null, null, Set.of());
     }
 
     public MaintenanceRegulationDto(
@@ -144,7 +147,7 @@ public record MaintenanceRegulationDto(
                 MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, automationAction, approvalResultAction,
                 duplicatePolicy, leadTimeDays, leadMeterPercent, defaultDepartmentId, defaultResponsibleId,
                 defaultPriority, requiresApproval, approvalRole, approvalPermission, attributeConditions, List.of(),
-                "TYPE", null, null, null);
+                "TYPE", null, null, null, Set.of());
     }
 
     public MaintenanceRegulationDto(
@@ -174,7 +177,7 @@ public record MaintenanceRegulationDto(
                 MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, AutomationAction.REQUIRE_APPROVAL,
                 ApprovalResultAction.CREATE_TASK, DuplicatePolicy.ONE_ITEM_PER_CYCLE,
                 null, null, null, null, null, true, null, null,
-                List.of(), List.of(), "TYPE", null, null, null);
+                List.of(), List.of(), "TYPE", null, null, null, Set.of());
     }
 
     public MaintenanceRegulationDto(
@@ -205,7 +208,7 @@ public record MaintenanceRegulationDto(
                 MaintenanceInitialSchedulePolicy.FROM_OPERATION_START, AutomationAction.REQUIRE_APPROVAL,
                 ApprovalResultAction.CREATE_TASK, DuplicatePolicy.ONE_ITEM_PER_CYCLE,
                 null, null, null, null, null, true, null, null,
-                attributeConditions == null ? List.of() : attributeConditions, List.of(), "TYPE", null, null, null);
+                attributeConditions == null ? List.of() : attributeConditions, List.of(), "TYPE", null, null, null, Set.of());
     }
 
     public static MaintenanceRegulationDto from(MaintenanceRegulation r, String equipmentTypeName) {
@@ -256,7 +259,8 @@ public record MaintenanceRegulationDto(
                 "TYPE",
                 null,
                 null,
-                null
+                null,
+                r.getRequiredEvidenceTypes() == null ? Set.of() : Set.copyOf(r.getRequiredEvidenceTypes())
         );
     }
 
@@ -312,7 +316,8 @@ public record MaintenanceRegulationDto(
                 "EQUIPMENT",
                 rule.getEquipmentId(),
                 equipmentName,
-                rule.getBaseRegulationId()
+                rule.getBaseRegulationId(),
+                rule.getRequiredEvidenceTypes() == null ? Set.of() : Set.copyOf(rule.getRequiredEvidenceTypes())
         );
     }
 }

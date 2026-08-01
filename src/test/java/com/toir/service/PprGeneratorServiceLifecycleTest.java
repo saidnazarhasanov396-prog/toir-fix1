@@ -45,6 +45,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -656,6 +657,28 @@ class PprGeneratorServiceLifecycleTest {
         assertThat(result.skippedCount()).isEqualTo(1);
         assertThat(result.skippedItems()).extracting(PprGeneratorService.WorkOrderGenerationSkippedItem::reason)
                 .containsExactly("WORK_ORDER_ALREADY_EXISTS");
+        verify(workOrderService, never()).create(any());
+    }
+
+    @Test
+    void taskBeforeConfiguredLeadTimeIsSkippedWhenGeneratingWorkOrdersManually() {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        UUID equipmentId = UUID.randomUUID();
+        PprPlan plan = executablePlan(planId, PprType.PREVENTIVE_MAINTENANCE, departmentId);
+        PprTask task = approvedTask(plan, UUID.randomUUID(), equipmentId);
+        task.setWorkOrderLeadDays(7);
+        task.setScheduledStart(LocalDateTime.of(2099, 1, 15, 9, 0));
+        task.setScheduledEnd(LocalDateTime.of(2099, 1, 15, 11, 0));
+        stubWorkOrderGeneration(plan, List.of(task), List.of(), List.of());
+
+        PprGeneratorService.WorkOrderGenerationResult result =
+                service.generateWorkOrdersForPlan(planId, UUID.randomUUID());
+
+        assertThat(result.createdCount()).isZero();
+        assertThat(result.skippedItems())
+                .extracting(PprGeneratorService.WorkOrderGenerationSkippedItem::reason)
+                .containsExactly("GENERATION_TIME_NOT_REACHED");
         verify(workOrderService, never()).create(any());
     }
 

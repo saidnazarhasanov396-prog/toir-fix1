@@ -149,7 +149,7 @@ class VehicleServiceTest {
     void createVehicleCreatesEquipmentWithVehicleCategoryAndDetails() {
         UUID equipmentTypeId = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
-        VehicleRequest request = new VehicleRequest(
+        VehicleRequest request = withGlobalRequirements(new VehicleRequest(
                 null,
                 "Truck 001",
                 "INV-VH-001",
@@ -180,7 +180,7 @@ class VehicleServiceTest {
                 LocalDate.of(2026, 12, 31),
                 LocalDate.of(2026, 10, 31),
                 "GPS-001"
-        );
+        ));
 
         lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-001")).thenReturn(false);
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-001")).thenReturn(false);
@@ -252,7 +252,10 @@ class VehicleServiceTest {
                 equipmentTypeId,
                 departmentId,
                 "01A177AA",
-                VehicleType.TRUCK
+                VehicleType.TRUCK,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                LocalDate.of(2024, 1, 1)
         );
 
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-PLACE-001")).thenReturn(false);
@@ -293,14 +296,14 @@ class VehicleServiceTest {
 
     @Test
     void createVehiclePersistsEquipmentUsageAndLifetimeFields() {
-        VehicleRequest request = withEquipmentUsage(
+        VehicleRequest request = withCurrentOdometer(withEquipmentUsage(
                 fullRequest("VH-USAGE-001", "Truck Usage", "INV-VH-USAGE-001", "01A155AA", null),
                 MeterType.MILEAGE_KM,
                 300_000.0,
                 10_000.0,
                 15.0,
                 250.0
-        );
+        ), 10_000.0);
 
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-USAGE-001")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A155AA")).thenReturn(false);
@@ -343,14 +346,14 @@ class VehicleServiceTest {
 
     @Test
     void createVehicleCalculatesDaysOfResourceRemaining() {
-        VehicleRequest request = withEquipmentUsage(
+        VehicleRequest request = withCurrentOdometer(withEquipmentUsage(
                 fullRequest("VH-DAYS-001", "Truck Days", "INV-VH-DAYS-001", "01A166AA", null),
                 MeterType.MILEAGE_KM,
                 45_000.0,
                 0.0,
                 10.0,
                 300.0
-        );
+        ), 40_000.0);
 
         when(equipmentRepository.existsByInventoryNumberAndIsDeletedFalse("INV-VH-DAYS-001")).thenReturn(false);
         when(vehicleDetailsRepository.existsByPlateNumberAndIsDeletedFalse("01A166AA")).thenReturn(false);
@@ -386,7 +389,7 @@ class VehicleServiceTest {
 
         ArgumentCaptor<Equipment> equipmentCaptor = ArgumentCaptor.forClass(Equipment.class);
         verify(equipmentRepository).save(equipmentCaptor.capture());
-        assertThat(equipmentCaptor.getValue().getDaysOfResourceRemaining()).isEqualTo(150L);
+        assertThat(equipmentCaptor.getValue().getDaysOfResourceRemaining()).isEqualTo(16L);
     }
 
     @Test
@@ -824,7 +827,10 @@ class VehicleServiceTest {
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 "01A999AA",
-                VehicleType.TRUCK
+                VehicleType.TRUCK,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                LocalDate.of(2024, 1, 1)
         );
 
         lenient().when(equipmentRepository.existsByCodeAndIsDeletedFalse("VH-002")).thenReturn(false);
@@ -1067,7 +1073,10 @@ class VehicleServiceTest {
                 equipment.getEquipmentTypeId(),
                 toDepartmentId,
                 "01A021AA",
-                VehicleType.TRUCK
+                VehicleType.TRUCK,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                LocalDate.of(2024, 1, 1)
         );
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
@@ -2220,38 +2229,42 @@ class VehicleServiceTest {
 
 
 
-    private static VehicleRequest fullRequest(String code, String name, String inventoryNumber, String plateNumber, String vin) {
+    private static VehicleRequest withGlobalRequirements(VehicleRequest request) {
         return new VehicleRequest(
-                null,
-                name,
-                inventoryNumber,
-                null,
-                null,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                null,
-                EquipmentStatus.ACTIVE,
-                plateNumber,
-                vin,
-                "MAN",
-                "TGS",
-                2022,
-                VehicleType.TRUCK,
-                null,
-                null,
-                null,
-                "DIESEL",
-                null,
-                null,
-                null,
-                null,
-                0.0,
-                0.0,
-                null,
-                null,
-                null,
-                null,
-                null
+                request.code(), request.name(), request.inventoryNumber(), request.technicalNumber(),
+                request.serialNumber(), request.equipmentTypeId(), request.departmentId(),
+                request.locationId(), request.status(), request.plateNumber(), request.plateType(),
+                request.vin(), request.brand(), request.model(), request.manufactureYear(),
+                request.vehicleType(), request.bodyNumber(), request.chassisNumber(),
+                request.engineNumber(), request.fuelType(), request.fuelTankCapacity(),
+                request.carryingCapacity(), request.seatCount(), request.assignedDriverId(),
+                request.assignedDriverUsageLimitMinutes(), request.currentOdometerKm(),
+                request.currentEngineHours(), request.registrationCertificateNumber(),
+                request.insurancePolicyNumber(), request.insuranceExpiryDate(),
+                request.technicalInspectionExpiryDate(), request.gpsDeviceId(), request.attributes(),
+                request.manualAttributes(), request.lifetimeCounterType(), request.lifetimeMeterId(),
+                request.lifetimeLimitValue(), request.lifetimeBaselineValue(),
+                request.lifetimeWarningPercent(), request.averageDailyUsage(), request.mxikId(),
+                request.responsibleId() == null ? UUID.randomUUID() : request.responsibleId(),
+                request.criticalityClassId() == null ? UUID.randomUUID() : request.criticalityClassId(),
+                request.commissionedAt() == null ? LocalDate.of(2024, 1, 1) : request.commissionedAt()
+        );
+    }
+
+    private static VehicleRequest fullRequest(
+            String code,
+            String name,
+            String inventoryNumber,
+            String plateNumber,
+            String vin
+    ) {
+        return new VehicleRequest(
+                null, name, inventoryNumber, null, null, UUID.randomUUID(), UUID.randomUUID(),
+                null, EquipmentStatus.ACTIVE, plateNumber, null, vin, "MAN", "TGS", 2022,
+                VehicleType.TRUCK, null, null, null, "DIESEL", null, null, null, null,
+                null, 0.0, 0.0, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, UUID.randomUUID(),
+                UUID.randomUUID(), LocalDate.of(2024, 1, 1)
         );
     }
 
@@ -2297,7 +2310,30 @@ class VehicleServiceTest {
                 request.lifetimeBaselineValue(),
                 request.lifetimeWarningPercent(),
                 request.averageDailyUsage(),
-                mxikId
+                mxikId,
+                request.responsibleId(),
+                request.criticalityClassId(),
+                request.commissionedAt()
+        );
+    }
+
+    private static VehicleRequest withCurrentOdometer(VehicleRequest request, Double currentOdometerKm) {
+        return new VehicleRequest(
+                request.code(), request.name(), request.inventoryNumber(), request.technicalNumber(),
+                request.serialNumber(), request.equipmentTypeId(), request.departmentId(),
+                request.locationId(), request.status(), request.plateNumber(), request.plateType(),
+                request.vin(), request.brand(), request.model(), request.manufactureYear(),
+                request.vehicleType(), request.bodyNumber(), request.chassisNumber(),
+                request.engineNumber(), request.fuelType(), request.fuelTankCapacity(),
+                request.carryingCapacity(), request.seatCount(), request.assignedDriverId(),
+                request.assignedDriverUsageLimitMinutes(), currentOdometerKm,
+                request.currentEngineHours(), request.registrationCertificateNumber(),
+                request.insurancePolicyNumber(), request.insuranceExpiryDate(),
+                request.technicalInspectionExpiryDate(), request.gpsDeviceId(), request.attributes(),
+                request.manualAttributes(), request.lifetimeCounterType(), request.lifetimeMeterId(),
+                request.lifetimeLimitValue(), request.lifetimeBaselineValue(),
+                request.lifetimeWarningPercent(), request.averageDailyUsage(), request.mxikId(),
+                request.responsibleId(), request.criticalityClassId(), request.commissionedAt()
         );
     }
 
@@ -2350,12 +2386,15 @@ class VehicleServiceTest {
                 lifetimeBaselineValue,
                 lifetimeWarningPercent,
                 averageDailyUsage,
-                request.mxikId()
+                request.mxikId(),
+                request.responsibleId(),
+                request.criticalityClassId(),
+                request.commissionedAt()
         );
     }
 
     private static VehicleRequest withClientCode(VehicleRequest request, String code) {
-        return new VehicleRequest(
+        return withGlobalRequirements(new VehicleRequest(
                 code,
                 request.name(),
                 request.inventoryNumber(),
@@ -2388,14 +2427,14 @@ class VehicleServiceTest {
                 request.gpsDeviceId(),
                 request.attributes(),
                 request.manualAttributes()
-        );
+        ));
     }
 
     private static VehicleRequest withManualAttributes(
             VehicleRequest request,
             List<EquipmentManualAttributeRequest> manualAttributes
     ) {
-        return new VehicleRequest(
+        return withGlobalRequirements(new VehicleRequest(
                 request.code(),
                 request.name(),
                 request.inventoryNumber(),
@@ -2428,14 +2467,14 @@ class VehicleServiceTest {
                 request.gpsDeviceId(),
                 request.attributes(),
                 manualAttributes
-        );
+        ));
     }
 
     private static VehicleRequest withPlateType(
             VehicleRequest request,
             VehicleRegistrationPlateType plateType
     ) {
-        return new VehicleRequest(
+        return withGlobalRequirements(new VehicleRequest(
                 request.code(),
                 request.name(),
                 request.inventoryNumber(),
@@ -2469,7 +2508,7 @@ class VehicleServiceTest {
                 request.gpsDeviceId(),
                 request.attributes(),
                 request.manualAttributes()
-        );
+        ));
     }
 
     private static VehicleRequest withEquipmentTypeAndAttributes(
@@ -2477,7 +2516,7 @@ class VehicleServiceTest {
             UUID equipmentTypeId,
             List<EquipmentAttributeValueRequest> attributes
     ) {
-        return new VehicleRequest(
+        return withGlobalRequirements(new VehicleRequest(
                 request.code(),
                 request.name(),
                 request.inventoryNumber(),
@@ -2510,7 +2549,7 @@ class VehicleServiceTest {
                 request.gpsDeviceId(),
                 attributes,
                 request.manualAttributes()
-        );
+        ));
     }
 
     private static EquipmentAttributeValueDto attributeValue(UUID equipmentId, String key, Double value) {

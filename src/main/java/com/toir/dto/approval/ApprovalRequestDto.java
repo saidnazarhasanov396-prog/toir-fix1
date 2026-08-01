@@ -173,6 +173,7 @@ public record ApprovalRequestDto(
         return switch (targetType) {
             case "WORK_ORDER" -> "/work-orders/" + targetId;
             case "PPR_PLAN" -> "/ppr-plans/" + targetId;
+            case "PPR_PLANNING_SESSION" -> "/ppr-planning-sessions/" + targetId;
             case "PROCUREMENT_REQUEST" -> "/procurement-requests/" + targetId;
             case "MAINTENANCE_BUDGET", "BUDGET" -> "/budgets/" + targetId;
             case "MAINTENANCE_DUE_EVENT" -> "/maintenance-due-events/" + targetId;

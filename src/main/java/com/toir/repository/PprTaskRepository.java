@@ -382,6 +382,31 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
             """, nativeQuery = true)
     List<PprTask> findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(@Param("planId") UUID planId);
 
+    @Query(value = """
+            SELECT task.*
+            FROM ppr_tasks task
+            JOIN ppr_plans plan ON plan.id = task.plan_id
+            WHERE task.is_deleted = false
+              AND plan.is_deleted = false
+              AND plan.status IN ('APPROVED', 'IN_PROGRESS')
+              AND task.status = 'APPROVED'
+              AND task.equipment_id IS NOT NULL
+              AND task.scheduled_start
+                    - (task.work_order_lead_days * INTERVAL '1 day') <= :now
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM work_orders work_order
+                    WHERE work_order.ppr_task_id = task.id
+                      AND work_order.is_deleted = false
+              )
+            ORDER BY task.scheduled_start ASC, task.id ASC
+            LIMIT :batchSize
+            FOR UPDATE OF task SKIP LOCKED
+            """, nativeQuery = true)
+    List<PprTask> findDueForWorkOrderGeneration(
+            @Param("now") LocalDateTime now,
+            @Param("batchSize") int batchSize);
+
     boolean existsByCode(String code);
 
     @Query(value = """

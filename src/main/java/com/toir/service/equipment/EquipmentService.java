@@ -770,7 +770,7 @@ public class EquipmentService {
         entity.setCode(nextCode());
         apply(entity, request);
         applyLocation(entity, location);
-        validateRequiredEquipmentFields(entity);
+        EquipmentRequiredFields.validate(entity);
         Equipment saved = repository.save(entity);
         if (equipmentAttributeService != null) {
             equipmentAttributeService.upsertValues(
@@ -832,6 +832,7 @@ public class EquipmentService {
             applyLocation(entity, location);
         }
         validateParent(entity.getId(), entity.getParentId());
+        EquipmentRequiredFields.validate(entity);
 
         Equipment saved = repository.save(entity);
         if (equipmentAttributeService != null && request.attributes() != null) {
@@ -1131,7 +1132,7 @@ public class EquipmentService {
         List<EquipmentDto.MissingPassportFieldRef> missingFields = new ArrayList<>();
         addMissingGlobalField(missingFields, equipment.getCriticalityClassId(),
                 "criticalityClassId", "Criticality class", 0);
-        addMissingGlobalField(missingFields, hasEquipmentLocation(equipment) ? Boolean.TRUE : null,
+        addMissingGlobalField(missingFields, EquipmentRequiredFields.hasLocation(equipment) ? Boolean.TRUE : null,
                 "locationId", "Location", 1);
         addMissingGlobalField(missingFields, equipment.getCommissionedAt(),
                 "commissionedAt", "Commissioning date", 2);
@@ -1396,31 +1397,6 @@ public class EquipmentService {
         if (request.commissionedAt() == null) missing.add("commissionedAt");
         if (request.responsibleId() == null) missing.add("responsibleId");
         throwIfRequiredFieldsMissing(missing);
-    }
-
-    private void validateRequiredEquipmentFields(Equipment equipment) {
-        List<String> missing = new ArrayList<>();
-        if (equipment.getCriticalityClassId() == null) missing.add("criticalityClassId");
-        if (!hasEquipmentLocation(equipment)) missing.add("locationId");
-        if (equipment.getCommissionedAt() == null) missing.add("commissionedAt");
-        if (equipment.getResponsibleId() == null) missing.add("responsibleId");
-        throwIfRequiredFieldsMissing(missing);
-    }
-
-    private static boolean hasEquipmentLocation(Equipment equipment) {
-        if (equipment.getLocationId() != null) {
-            return true;
-        }
-        if (equipment.getCurrentLocationType() == EquipmentLocationType.DEPARTMENT) {
-            return equipment.getDepartmentId() != null;
-        }
-        if (equipment.getCurrentLocationType() == EquipmentLocationType.WAREHOUSE) {
-            return equipment.getCurrentWarehouseId() != null;
-        }
-        if (equipment.getCurrentLocationType() == EquipmentLocationType.OUTSIDE_FACILITY) {
-            return StringUtils.hasText(equipment.getOutsideDestination());
-        }
-        return equipment.getDepartmentId() != null || equipment.getCurrentWarehouseId() != null;
     }
 
     private void throwIfRequiredFieldsMissing(List<String> missing) {
@@ -2217,6 +2193,9 @@ public class EquipmentService {
         UUID meterId = request.lifetimeMeterId();
         Double baselineValue = request.lifetimeBaselineValue();
         Double warningPercent = request.lifetimeWarningPercent();
+        EquipmentLifetimeValidator.validate(
+                limitValue, baselineValue, warningPercent, request.averageDailyUsage(), null
+        );
 
         if (counterType == null && limitValue == null
                 && request.expectedLifetimeHours() != null
@@ -2233,6 +2212,10 @@ public class EquipmentService {
     }
 
     private void applyDynamicLifetimeForUpdate(Equipment entity, EquipmentUpdateRequest request) {
+        EquipmentLifetimeValidator.validate(
+                request.lifetimeLimitValue(), request.lifetimeBaselineValue(),
+                request.lifetimeWarningPercent(), request.averageDailyUsage(), null
+        );
         boolean hasDynamicLifetimeRequest = request.lifetimeCounterType() != null
                 || request.lifetimeMeterId() != null
                 || request.lifetimeLimitValue() != null

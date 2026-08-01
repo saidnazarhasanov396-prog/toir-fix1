@@ -35,6 +35,8 @@ import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
 import com.toir.service.maintanance.MaintenanceScheduleApprovalBinding;
 import com.toir.service.maintanance.MaintenanceScheduleApprovalBindingService;
+import com.toir.service.planning.PprPlanningApprovalBinding;
+import com.toir.service.planning.PprPlanningApprovalBindingService;
 import com.toir.service.approval.ApprovalActionExecutor;
 import com.toir.service.approval.ApprovalGovernanceService;
 import com.toir.service.approval.ApprovalOrchestrator;
@@ -87,6 +89,7 @@ public class ApprovalService implements ApprovalOrchestrator {
     private static final Set<String> INTEGRATED_DOCUMENT_TYPES = Set.of(
             "WORK_ORDER",
             "PPR_PLAN",
+            "PPR_PLANNING_SESSION",
             "PROCUREMENT_REQUEST",
             "MAINTENANCE_BUDGET",
             "MAINTENANCE_DUE_EVENT",
@@ -116,6 +119,8 @@ public class ApprovalService implements ApprovalOrchestrator {
     private LifecycleApprovalRoutePolicy lifecycleApprovalRoutePolicy = new LifecycleApprovalRoutePolicy();
     @Autowired
     private MaintenanceScheduleApprovalBindingService maintenanceScheduleApprovalBindingService;
+    @Autowired
+    private PprPlanningApprovalBindingService pprPlanningApprovalBindingService;
     private final ObjectProvider<WorkOrderService> workOrderServiceProvider;
     private final ObjectProvider<PprPlanService> pprPlanServiceProvider;
     private final ObjectProvider<ProcurementRequestService> procurementRequestServiceProvider;
@@ -439,6 +444,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         return switch (targetType) {
             case WORK_ORDER -> "select number as code, title as title from work_orders where id = ? and is_deleted = false";
             case PPR_PLAN -> "select code as code, name as title from ppr_plans where id = ? and is_deleted = false";
+            case PPR_PLANNING_SESSION -> "select null as code, name as title from ppr_planning_sessions where id = ? and is_deleted = false";
             case PROCUREMENT_REQUEST, PROCUREMENT -> "select number as code, title as title from procurement_requests where id = ? and is_deleted = false";
             case MAINTENANCE_BUDGET, BUDGET -> "select code as code, name as title from maintenance_budgets where id = ? and is_deleted = false";
             case REPAIR_REQUEST -> "select number as code, title as title from repair_requests where id = ? and is_deleted = false";
@@ -457,6 +463,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         switch (targetType) {
             case WORK_ORDER -> workOrderServiceProvider.getObject().validateCanApprove(targetId);
             case PPR_PLAN -> pprPlanServiceProvider.getObject().validateCanApprove(targetId);
+            case PPR_PLANNING_SESSION -> pprPlanningApprovalBindingService.resolveForSubmission(targetId);
             case PROCUREMENT_REQUEST, PROCUREMENT -> procurementRequestServiceProvider.getObject().validateCanApprove(targetId);
             case REPAIR_REQUEST -> repairRequestServiceProvider.getObject().assertMeterReadingsReadyForApproval(targetId);
             case MAINTENANCE_REGULATION -> maintenanceRegulationServiceProvider.getObject().validateCanApprove(targetId);
@@ -982,12 +989,27 @@ public class ApprovalService implements ApprovalOrchestrator {
                         documentId,
                         effectiveActionType,
                         effectiveRequesterId);
+        PprPlanningApprovalBinding planningBinding =
+                resolvePlanningBinding(targetType, documentId, effectiveActionType);
         List<ApprovalRequest> pendingApprovals = findPendingApprovals(
                 targetType, normalizedType, documentId, effectiveActionType);
         ApprovalRequest reusable = null;
         if (!pendingApprovals.isEmpty()) {
             String currentPayload = currentScopePayload(targetType, documentId);
             for (ApprovalRequest candidate : pendingApprovals) {
+                if (planningBinding != null) {
+                    if (pprPlanningApprovalBindingService.matches(candidate, planningBinding)
+                            && reusable == null) {
+                        reusable = candidate;
+                    } else {
+                        candidate.setStatus(ApprovalStatus.SUPERSEDED);
+                        candidate.setResolutionCode(ApprovalResolutionCode.NEW_REVISION);
+                        candidate.setFailureReason("PPR_PLANNING_APPROVAL_STALE");
+                        candidate.setCompletedAt(Instant.now());
+                        requestRepository.saveAndFlush(candidate);
+                    }
+                    continue;
+                }
                 if (calculationBinding != null) {
                     ApprovalRouteSnapshot currentRoute =
                             routeResolver.resolveRouteSnapshot(candidate);
@@ -1178,6 +1200,9 @@ public class ApprovalService implements ApprovalOrchestrator {
     @Transactional
     public ApprovalRequestDto returnToStep(UUID requestId, ReturnApprovalRequest returnRequest) {
         ApprovalRequest request = lockLifecycleMutationRequest(requestId);
+        if (pprPlanningApprovalBindingService != null) {
+            pprPlanningApprovalBindingService.validateApprovalCommand(request);
+        }
         if (effectiveFlowType(request) == ApprovalFlowType.PARALLEL_ALL) {
             throw RestException.conflict("PARALLEL_APPROVAL_RETURN_NOT_SUPPORTED");
         }
@@ -1290,6 +1315,9 @@ public class ApprovalService implements ApprovalOrchestrator {
 
     private ApprovalRequestDto applyDecision(UUID requestId, UUID expectedStepId, DecisionRequest decision, ApprovalDecision outcome) {
         ApprovalRequest request = lockLifecycleMutationRequest(requestId);
+        if (pprPlanningApprovalBindingService != null) {
+            pprPlanningApprovalBindingService.validateApprovalCommand(request);
+        }
         UUID actorId = effectiveDecisionActor(decision);
         String decisionComment = decision == null ? null : decision.comment();
         if (isIdempotentApprovalFirstRetry(request, outcome, actorId)) {
@@ -1801,6 +1829,22 @@ public class ApprovalService implements ApprovalOrchestrator {
                 effectiveTargetType(request), effectiveActionType(request.getActionType()));
     }
 
+    private PprPlanningApprovalBinding resolvePlanningBinding(
+            ApprovalTargetType targetType,
+            UUID targetId,
+            ApprovalActionType actionType) {
+        if (targetType != ApprovalTargetType.PPR_PLANNING_SESSION) {
+            return null;
+        }
+        if (pprPlanningApprovalBindingService == null) {
+            throw RestException.conflict("PPR_PLANNING_APPROVAL_SERVICE_UNAVAILABLE");
+        }
+        if (actionType != ApprovalActionType.APPROVE) {
+            throw RestException.conflict("PPR_PLANNING_SESSION_ONLY_SUPPORTS_APPROVE");
+        }
+        return pprPlanningApprovalBindingService.resolveForSubmission(targetId);
+    }
+
     private MaintenanceScheduleApprovalBinding resolveCalculationBinding(
             ApprovalTargetType targetType,
             UUID targetId,
@@ -2040,6 +2084,11 @@ public class ApprovalService implements ApprovalOrchestrator {
                         effectiveActionType(actionType),
                         requesterId);
         bindCalculation(request, calculationBinding);
+        PprPlanningApprovalBinding planningBinding =
+                resolvePlanningBinding(targetType, targetId, effectiveActionType(actionType));
+        if (pprPlanningApprovalBindingService != null) {
+            pprPlanningApprovalBindingService.bind(request, planningBinding);
+        }
         if (targetType == ApprovalTargetType.PLANNED_SHUTDOWN) {
             PlannedShutdownApprovalSnapshot snapshot = loadPlannedShutdownApprovalSnapshot(targetId);
             request.setPayloadJson(plannedShutdownApprovalPayload(snapshot));
@@ -2125,6 +2174,10 @@ public class ApprovalService implements ApprovalOrchestrator {
         ApprovalRequest saved = flushBeforeSideEffects
                 ? requestRepository.saveAndFlush(request)
                 : requestRepository.save(request);
+        if (planningBinding != null) {
+            requestRepository.flush();
+            pprPlanningApprovalBindingService.markSubmitted(saved, planningBinding);
+        }
         governanceService.record(saved, null, ApprovalStatus.PENDING, requesterId, "Approval created");
         notifyCurrentStep(saved);
 
@@ -2324,7 +2377,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         }
         return switch (targetType) {
             case WORK_ORDER -> NotificationEntityTypes.WORK_ORDER;
-            case PPR_PLAN -> NotificationEntityTypes.PPR_PLAN;
+            case PPR_PLAN, PPR_PLANNING_SESSION -> NotificationEntityTypes.PPR_PLAN;
             case PROCUREMENT_REQUEST, PROCUREMENT -> "PROCUREMENT_REQUEST";
             case MAINTENANCE_BUDGET, BUDGET -> NotificationEntityTypes.MAINTENANCE_BUDGET;
             case MAINTENANCE_DUE_EVENT -> NotificationEntityTypes.MAINTENANCE_DUE_EVENT;
@@ -2537,6 +2590,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         return switch (targetType) {
             case "WORK_ORDER" -> "/work-orders/" + targetId;
             case "PPR_PLAN" -> "/ppr-plans/" + targetId;
+            case "PPR_PLANNING_SESSION" -> "/ppr-planning-sessions/" + targetId;
             case "PROCUREMENT_REQUEST" -> "/procurement-requests/" + targetId;
             case "MAINTENANCE_BUDGET", "BUDGET" -> "/budgets/" + targetId;
             case "MAINTENANCE_DUE_EVENT" -> "/maintenance-due-events/" + targetId;

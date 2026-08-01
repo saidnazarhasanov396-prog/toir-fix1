@@ -23,9 +23,11 @@ public record AtilVehicleUpsertRequest(
         @NotNull UUID departmentId,
         UUID locationId,
         UUID assignedDriverId,
+        @NotNull UUID responsibleId,
         String gpsDeviceId,
         Double currentOdometerKm,
         Double currentEngineHours,
-        LocalDate commissionedAt,
+        @NotNull UUID criticalityClassId,
+        @NotNull LocalDate commissionedAt,
         String status
 ) {}

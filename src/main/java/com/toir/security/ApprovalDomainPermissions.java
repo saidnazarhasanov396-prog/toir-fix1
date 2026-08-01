@@ -20,7 +20,7 @@ public final class ApprovalDomainPermissions {
         }
         return switch (targetType) {
             case WORK_ORDER -> optional(PermissionConstants.WORK_ORDER_APPROVE);
-            case PPR_PLAN -> optional(PermissionConstants.PPR_PLAN_APPROVE);
+            case PPR_PLAN, PPR_PLANNING_SESSION -> optional(PermissionConstants.PPR_PLAN_APPROVE);
             case PPR_TASK -> optional(PermissionConstants.PPR_TASK_APPROVE);
             case REPAIR_REQUEST -> optional(PermissionConstants.REPAIR_REQUEST_APPROVE);
             case DEFECT_LIST -> optional(PermissionConstants.DEFECT_LIST_APPROVE);

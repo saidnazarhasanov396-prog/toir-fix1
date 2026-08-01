@@ -47,6 +47,15 @@ class RepairAcceptanceServiceTest {
     @Mock
     AuditBuilderService auditBuilderService;
 
+    @Mock
+    com.toir.repository.PprTaskRepository pprTaskRepository;
+
+    @Mock
+    com.toir.repository.PprPlanRepository pprPlanRepository;
+
+    @Mock
+    CompletionActService completionActService;
+
     @InjectMocks
     RepairAcceptanceService service;
 
@@ -106,12 +115,53 @@ class RepairAcceptanceServiceTest {
                 new RepairAcceptanceDecisionRequest(UUID.randomUUID(), RepairAcceptanceQualityGrade.GOOD, "ok"));
 
         verify(repository).save(any(RepairAcceptance.class));
+        verify(completionActService).ensureForAcceptedFinal(workOrderId, acceptanceId, "ok");
+    }
+
+    @Test
+    void rejectFinalAcceptanceReturnsCompletedWorkOrderAndPprTaskToWork() {
+        UUID workOrderId = UUID.randomUUID();
+        UUID acceptanceId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        RepairAcceptance acceptance = acceptance(workOrderId, acceptanceId);
+        WorkOrder workOrder = new WorkOrder();
+        workOrder.setId(workOrderId);
+        workOrder.setDepartmentId(UUID.randomUUID());
+        workOrder.setStatus(com.toir.enums.WorkOrderStatus.COMPLETED);
+        workOrder.setPprTaskId(taskId);
+        com.toir.entity.PprPlan plan = new com.toir.entity.PprPlan();
+        plan.setId(UUID.randomUUID());
+        plan.setStatus(com.toir.enums.PlanStatus.IN_PROGRESS);
+        com.toir.entity.PprTask task = new com.toir.entity.PprTask();
+        task.setId(taskId);
+        task.setPlan(plan);
+        task.setStatus(com.toir.enums.PprTaskStatus.IN_PROGRESS);
+
+        when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
+        when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(repository.findByIdAndIsDeletedFalse(acceptanceId)).thenReturn(Optional.of(acceptance));
+        when(repository.save(any(RepairAcceptance.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(defectRepository.findAllByAcceptance_IdAndIsDeletedFalseOrderByUpdatedAtDesc(acceptanceId))
+                .thenReturn(List.of());
+        when(pprTaskRepository.findByIdAndIsDeletedFalse(taskId)).thenReturn(Optional.of(task));
+
+        service.reject(workOrderId, acceptanceId,
+                new RepairAcceptanceDecisionRequest(UUID.randomUUID(), RepairAcceptanceQualityGrade.NOT_ACCEPTED,
+                        "Исправить замечания"));
+
+        org.assertj.core.api.Assertions.assertThat(workOrder.getStatus())
+                .isEqualTo(com.toir.enums.WorkOrderStatus.IN_PROGRESS);
+        org.assertj.core.api.Assertions.assertThat(task.getStatus()).isEqualTo(com.toir.enums.PprTaskStatus.IN_PROGRESS);
+        org.assertj.core.api.Assertions.assertThat(plan.getStatus()).isEqualTo(com.toir.enums.PlanStatus.IN_PROGRESS);
+        verify(workOrderRepository).save(workOrder);
+        verify(pprTaskRepository).save(task);
     }
 
     private void stubAccess(UUID workOrderId, RepairAcceptance acceptance) {
         WorkOrder workOrder = new WorkOrder();
         workOrder.setId(workOrderId);
         workOrder.setDepartmentId(UUID.randomUUID());
+        workOrder.setStatus(com.toir.enums.WorkOrderStatus.COMPLETED);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repository.findByIdAndIsDeletedFalse(acceptance.getId())).thenReturn(Optional.of(acceptance));

@@ -433,6 +433,25 @@ class MaintenanceRegulationServiceTest {
     }
 
     @Test
+    void createDefaultsWorkOrderLeadTimeToSevenDays() {
+        int year = Year.now().getValue();
+        String codePrefix = "MR-" + year + "-";
+        String expectedCode = "MR-" + year + "-0001";
+
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.existsByCode(expectedCode)).thenReturn(false);
+        when(repository.save(any(MaintenanceRegulation.class))).thenAnswer(invocation -> {
+            MaintenanceRegulation regulation = invocation.getArgument(0);
+            regulation.setId(UUID.randomUUID());
+            return regulation;
+        });
+
+        MaintenanceRegulationDto created = service.create(request(null));
+
+        assertThat(created.leadTimeDays()).isEqualTo(7);
+    }
+
+    @Test
     void createActiveMeterTriggeredRegulationSeedsInitialMeterBaseline() {
         int year = Year.now().getValue();
         String codePrefix = "MR-" + year + "-";

@@ -7,6 +7,7 @@ import java.util.Locale;
 public enum ApprovalTargetType {
     WORK_ORDER,
     PPR_PLAN,
+    PPR_PLANNING_SESSION,
     PPR_TASK,
     PROCUREMENT_REQUEST,
     PROCUREMENT,

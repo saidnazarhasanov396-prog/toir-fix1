@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -131,6 +132,8 @@ public class MaintenanceScheduleSnapshotDraftFactory {
                     .sourceCodeSnapshot(sourceCode)
                     .sourceNameSnapshot(sourceName)
                     .taskTitleSnapshot(sourceName + " — " + preview.equipmentCode())
+                    .workOrderLeadDays(resolveWorkOrderLeadDays(rule, regulation))
+                    .requiredEvidenceTypes(resolveRequiredEvidenceTypes(rule, regulation))
                     .build();
             item.setSourceItemKey(sourceItemKeyGenerator.generate(
                     new MaintenanceScheduleSourceItemCoordinates(
@@ -148,5 +151,30 @@ public class MaintenanceScheduleSnapshotDraftFactory {
             result.add(item);
         }
         return List.copyOf(result);
+    }
+
+    private static Set<com.toir.enums.CompletionEvidenceType> resolveRequiredEvidenceTypes(
+            EquipmentMaintenanceRule rule,
+            MaintenanceRegulation regulation) {
+        if (rule != null && rule.getRequiredEvidenceTypes() != null
+                && !rule.getRequiredEvidenceTypes().isEmpty()) {
+            return Set.copyOf(rule.getRequiredEvidenceTypes());
+        }
+        if (regulation != null && regulation.getRequiredEvidenceTypes() != null) {
+            return Set.copyOf(regulation.getRequiredEvidenceTypes());
+        }
+        return Set.of();
+    }
+
+    private static int resolveWorkOrderLeadDays(
+            EquipmentMaintenanceRule rule,
+            MaintenanceRegulation regulation) {
+        if (rule != null && rule.getLeadTimeDays() != null) {
+            return rule.getLeadTimeDays();
+        }
+        if (regulation != null && regulation.getLeadTimeDays() != null) {
+            return regulation.getLeadTimeDays();
+        }
+        return 7;
     }
 }

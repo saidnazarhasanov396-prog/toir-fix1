@@ -18,6 +18,7 @@ import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.UserStatus;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.PprTaskRepository;
+import com.toir.repository.planning.PprPlanningSessionRepository;
 import com.toir.repository.ProcurementRequestRepository;
 import com.toir.repository.WorkOrderRepository;
 import com.toir.repository.PlannedShutdownRepository;
@@ -31,6 +32,7 @@ import com.toir.security.ScopeAccessService;
 import com.toir.security.PermissionConstants;
 import com.toir.security.SecurityAccessService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -51,6 +53,8 @@ public class ApprovalScopeService {
     private final ScopeAccessService scopeAccessService;
     private final PprPlanRepository pprPlanRepository;
     private final PprTaskRepository pprTaskRepository;
+    @Autowired(required = false)
+    private PprPlanningSessionRepository pprPlanningSessionRepository;
     private final RepairRequestRepository repairRequestRepository;
     private final WorkOrderRepository workOrderRepository;
     private final ProcurementRequestRepository procurementRequestRepository;
@@ -298,6 +302,10 @@ public class ApprovalScopeService {
         return switch (targetType) {
             case PPR_PLAN -> pprPlanRepository.findByIdAndIsDeletedFalse(targetId)
                     .map(PprPlan::getDepartmentId);
+            case PPR_PLANNING_SESSION -> pprPlanningSessionRepository == null
+                    ? Optional.empty()
+                    : pprPlanningSessionRepository.findByIdAndIsDeletedFalse(targetId)
+                            .map(com.toir.entity.planning.PprPlanningSession::getDepartmentId);
             case PPR_TASK -> pprTaskRepository.findByIdAndIsDeletedFalseWithPlan(targetId)
                     .map(PprTask::getPlan)
                     .map(PprPlan::getDepartmentId);
@@ -343,7 +351,7 @@ public class ApprovalScopeService {
             return false;
         }
         return switch (targetType) {
-            case PPR_PLAN, PPR_TASK, REPAIR_REQUEST, WORK_ORDER,
+            case PPR_PLAN, PPR_PLANNING_SESSION, PPR_TASK, REPAIR_REQUEST, WORK_ORDER,
                  PROCUREMENT, PROCUREMENT_REQUEST, BUDGET, MAINTENANCE_BUDGET, ACTUAL_COST,
                  EQUIPMENT_COMMISSIONING, PLANNED_SHUTDOWN, REPAIR_CAMPAIGN -> true;
             default -> false;

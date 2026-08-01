@@ -4,6 +4,7 @@ import com.toir.entity.BaseEntity;
 import com.toir.enums.ApprovalResultAction;
 import com.toir.enums.AutomationAction;
 import com.toir.enums.DuplicatePolicy;
+import com.toir.enums.CompletionEvidenceType;
 import com.toir.enums.MaintenanceInitialSchedulePolicy;
 import com.toir.enums.MaintenanceKind;
 import com.toir.enums.MaintenanceRecalculationPolicy;
@@ -11,11 +12,17 @@ import com.toir.enums.MaintenanceTriggerPolicy;
 import com.toir.enums.MeterType;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PriorityLevel;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -113,6 +120,15 @@ public class EquipmentMaintenanceRule extends BaseEntity {
 
     @Column(name = "lead_time_days")
     private Integer leadTimeDays;
+
+    @Builder.Default
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "equipment_maintenance_rule_required_evidence",
+            joinColumns = @JoinColumn(name = "maintenance_rule_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "evidence_type", nullable = false, length = 32)
+    private Set<CompletionEvidenceType> requiredEvidenceTypes = new HashSet<>();
 
     @Column(name = "lead_meter_percent")
     private Double leadMeterPercent;
