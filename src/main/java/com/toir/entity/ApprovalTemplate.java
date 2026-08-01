@@ -2,6 +2,7 @@ package com.toir.entity;
 
 import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalFlowType;
+import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.NotificationSeverity;
@@ -34,6 +35,10 @@ public class ApprovalTemplate extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "flow_type", nullable = false)
     private ApprovalFlowType flowType = ApprovalFlowType.SEQUENTIAL;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rejection_policy", nullable = false)
+    private ApprovalRejectionPolicy rejectionPolicy = ApprovalRejectionPolicy.TERMINATE;
 
     @Column(nullable = false, unique = true)
     private String code;

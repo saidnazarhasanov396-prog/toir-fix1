@@ -18,6 +18,7 @@ import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalFlowType;
+import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.ApprovalResolutionCode;
@@ -651,6 +652,7 @@ public class ApprovalService implements ApprovalOrchestrator {
                 resolution.steps(),
                 resolution.reason(),
                 resolution.flowType(),
+                resolution.rejectionPolicy(),
                 resolution.templateId(),
                 resolution.templateVersion());
     }
@@ -699,6 +701,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         request.setDescription(description);
         request.setPayloadJson(payloadAfterFlush);
         request.setFlowType(plan.flowType());
+        request.setRejectionPolicy(plan.rejectionPolicy());
         request.setTemplateId(plan.templateId());
         request.setTemplateVersion(plan.templateVersion());
         request.setApprovalRound(nextApprovalRound(plan.targetType(), plan.targetId(), effectivePlanAction));
@@ -757,11 +760,12 @@ public class ApprovalService implements ApprovalOrchestrator {
             List<CreateApprovalRequest.StepInput> frozenSteps,
             LifecycleApprovalRoutePolicy.Reason failure,
             ApprovalFlowType flowType,
+            ApprovalRejectionPolicy rejectionPolicy,
             UUID templateId,
             Long templateVersion) {
         return new LifecycleApprovalStartPlan(
                 targetType, targetId, actionType, reusableRequest, frozenSteps, failure,
-                flowType, templateId, templateVersion);
+                flowType, rejectionPolicy, templateId, templateVersion);
     }
 
     private LifecycleApprovalRoutePolicy.Reason lifecycleReuseFailure(
@@ -799,6 +803,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         normalized.setStatus(request.getStatus());
         normalized.setCurrentStep(request.getCurrentStep());
         normalized.setFlowType(effectiveFlowType(request));
+        normalized.setRejectionPolicy(effectiveRejectionPolicy(request));
         normalized.setApprovalRound(request.getApprovalRound());
         normalized.setSteps(request.getSteps() == null
                 ? new ArrayList<>()
@@ -879,6 +884,12 @@ public class ApprovalService implements ApprovalOrchestrator {
         return request.getFlowType() == null
                 ? ApprovalFlowType.SEQUENTIAL
                 : request.getFlowType();
+    }
+
+    private ApprovalRejectionPolicy effectiveRejectionPolicy(ApprovalRequest request) {
+        return request.getRejectionPolicy() == null
+                ? ApprovalRejectionPolicy.TERMINATE
+                : request.getRejectionPolicy();
     }
 
     @Transactional
@@ -1277,6 +1288,40 @@ public class ApprovalService implements ApprovalOrchestrator {
     }
 
     @Transactional
+    public ApprovalRequestDto resubmit(UUID requestId) {
+        ApprovalRequest request = lockLifecycleMutationRequest(requestId);
+        if (request.getStatus() != ApprovalStatus.REWORK) {
+            throw RestException.conflict("Request is not in rework: " + request.getStatus());
+        }
+        UUID actorId = currentAuthenticatedActorId();
+        if (actorId == null || !Objects.equals(request.getRequesterId(), actorId)) {
+            throw RestException.forbidden("Only the persisted requester can resubmit this approval");
+        }
+
+        int nextRound = Math.max(1, request.getApprovalRound()) + 1;
+        request.setApprovalRound(nextRound);
+        request.setStatus(ApprovalStatus.PENDING);
+        request.setCompletedAt(null);
+        request.setCurrentStep(effectiveFlowType(request) == ApprovalFlowType.PARALLEL_ALL ? 0 : 1);
+        request.getSteps().stream()
+                .filter(step -> !step.isDeleted())
+                .forEach(step -> {
+                    resetStepProjection(step);
+                    step.setApprovalRound(nextRound);
+                });
+
+        ApprovalRequest saved = requestRepository.save(request);
+        governanceService.record(
+                saved, ApprovalStatus.REWORK, ApprovalStatus.PENDING, actorId,
+                "Approval resubmitted", ApprovalActionType.SUBMIT);
+        notifyCurrentStep(saved);
+        auditBuilderService.log(
+                "approval_request", saved.getId().toString(), AuditAction.UPDATE,
+                AuditModule.APPROVAL_REQUEST, "Approval resubmitted", null, saved);
+        return toDto(saved);
+    }
+
+    @Transactional
     public ApprovalRequestDto cancel(UUID requestId) {
         ApprovalRequest request = lockLifecycleMutationRequest(requestId);
         approvalScopeService.assertCanCancelApproval(request);
@@ -1352,10 +1397,41 @@ public class ApprovalService implements ApprovalOrchestrator {
         current.setComment(decisionComment);
 
         boolean isTerminal = false;
+        boolean returnedToPrevious = false;
+        boolean returnedToInitiator = false;
+        boolean decisionHistoryRecorded = false;
+        ApprovalRejectionPolicy rejectionPolicy = effectiveRejectionPolicy(request);
         if (outcome == ApprovalDecision.REJECTED) {
-            request.setStatus(ApprovalStatus.REJECTED);
-            request.setCompletedAt(Instant.now());
-            isTerminal = true;
+            if (rejectionPolicy == ApprovalRejectionPolicy.RETURN_TO_PREVIOUS_STEP
+                    && request.getCurrentStep() > 1) {
+                int fromStep = request.getCurrentStep();
+                int previousStep = fromStep - 1;
+                governanceService.record(
+                        request, ApprovalStatus.PENDING, ApprovalStatus.PENDING, actorId,
+                        current.getDelegatedForId(), decisionComment, ApprovalActionType.REJECT, current);
+                decisionHistoryRecorded = true;
+                request.getSteps().stream()
+                        .filter(step -> step.getStepNumber() == previousStep
+                                || step.getStepNumber() == fromStep)
+                        .forEach(this::resetStepProjection);
+                request.setCurrentStep(previousStep);
+                request.setLastReturnedAt(Instant.now());
+                request.setLastReturnedBy(actorId);
+                request.setLastReturnComment(decisionComment);
+                returnedToPrevious = true;
+            } else if (rejectionPolicy == ApprovalRejectionPolicy.RETURN_TO_INITIATOR
+                    || rejectionPolicy == ApprovalRejectionPolicy.RETURN_TO_PREVIOUS_STEP) {
+                request.setStatus(ApprovalStatus.REWORK);
+                request.setCompletedAt(null);
+                request.setLastReturnedAt(Instant.now());
+                request.setLastReturnedBy(actorId);
+                request.setLastReturnComment(decisionComment);
+                returnedToInitiator = true;
+            } else {
+                request.setStatus(ApprovalStatus.REJECTED);
+                request.setCompletedAt(Instant.now());
+                isTerminal = true;
+            }
         } else {
             int next = request.getCurrentStep() + 1;
             boolean hasNext = request.getSteps().stream()
@@ -1376,11 +1452,31 @@ public class ApprovalService implements ApprovalOrchestrator {
         }
 
         ApprovalRequest saved = requestRepository.save(request);
-        if (isTerminal) {
-            governanceService.record(saved, oldStatus, saved.getStatus(), actorId, decisionComment);
+        if (!decisionHistoryRecorded) {
+            if (isTerminal) {
+                governanceService.record(
+                        saved, oldStatus, saved.getStatus(), actorId, current.getDelegatedForId(),
+                        decisionComment,
+                        outcome == ApprovalDecision.APPROVED
+                                ? ApprovalActionType.APPROVE
+                                : ApprovalActionType.REJECT,
+                        current);
+            } else {
+                governanceService.record(
+                        saved, oldStatus, saved.getStatus(), actorId, current.getDelegatedForId(),
+                        decisionComment,
+                        outcome == ApprovalDecision.APPROVED
+                                ? ApprovalActionType.APPROVE
+                                : ApprovalActionType.REJECT,
+                        current);
+            }
         }
         if (isTerminal) {
             notifyFinalDecision(saved, outcome);
+        } else if (returnedToInitiator) {
+            notifyInitiatorRework(saved);
+        } else if (returnedToPrevious) {
+            notifyReturned(saved, current.getStepNumber(), saved.getCurrentStep());
         } else {
             notifyCurrentStep(saved);
         }
@@ -1455,8 +1551,39 @@ public class ApprovalService implements ApprovalOrchestrator {
         task.setComment(decisionComment);
 
         ApprovalStatus oldStatus = request.getStatus();
+        ApprovalRejectionPolicy rejectionPolicy = effectiveRejectionPolicy(request);
         boolean terminal = false;
-        if (outcome == ApprovalDecision.REJECTED) {
+        boolean returnedToInitiator = false;
+        ApprovalDecision aggregateOutcome = outcome;
+        if (outcome == ApprovalDecision.REJECTED
+                && rejectionPolicy == ApprovalRejectionPolicy.RETURN_TO_INITIATOR) {
+            request.setStatus(ApprovalStatus.REWORK);
+            request.setCompletedAt(null);
+            request.setLastReturnedAt(actedAt);
+            request.setLastReturnedBy(actorId);
+            request.setLastReturnComment(decisionComment);
+            returnedToInitiator = true;
+        } else if (rejectionPolicy == ApprovalRejectionPolicy.MAJORITY) {
+            List<ApprovalStep> roundSteps = currentRoundSteps(request);
+            boolean allDecided = roundSteps.stream()
+                    .noneMatch(step -> step.getDecision() == ApprovalDecision.PENDING);
+            if (allDecided) {
+                long approvedVotes = roundSteps.stream()
+                        .filter(step -> step.getDecision() == ApprovalDecision.APPROVED)
+                        .count();
+                aggregateOutcome = approvedVotes > roundSteps.size() / 2
+                        ? ApprovalDecision.APPROVED
+                        : ApprovalDecision.REJECTED;
+                if (aggregateOutcome == ApprovalDecision.APPROVED) {
+                    validatePersistedLifecycleCompletion(request);
+                    request.setStatus(ApprovalStatus.APPROVED);
+                } else {
+                    request.setStatus(ApprovalStatus.REJECTED);
+                }
+                request.setCompletedAt(actedAt);
+                terminal = true;
+            }
+        } else if (outcome == ApprovalDecision.REJECTED) {
             currentRoundSteps(request).stream()
                     .filter(step -> step != task && step.getDecision() == ApprovalDecision.PENDING)
                     .forEach(step -> {
@@ -1474,25 +1601,25 @@ public class ApprovalService implements ApprovalOrchestrator {
                 validatePersistedLifecycleCompletion(request);
                 request.setStatus(ApprovalStatus.APPROVED);
                 request.setCompletedAt(actedAt);
+                aggregateOutcome = ApprovalDecision.APPROVED;
                 terminal = true;
             }
         }
 
         if (terminal) {
-            executeTerminalAction(request, outcome);
+            executeTerminalAction(request, aggregateOutcome);
         }
         ApprovalRequest saved = requestRepository.save(request);
         governanceService.record(
-                saved,
-                oldStatus,
-                saved.getStatus(),
-                actorId,
-                decisionComment,
+                saved, oldStatus, saved.getStatus(), actorId, null, decisionComment,
                 outcome == ApprovalDecision.APPROVED
                         ? ApprovalActionType.APPROVE
-                        : ApprovalActionType.REJECT);
+                        : ApprovalActionType.REJECT,
+                task);
         if (terminal) {
-            notifyFinalDecision(saved, outcome);
+            notifyFinalDecision(saved, aggregateOutcome);
+        } else if (returnedToInitiator) {
+            notifyInitiatorRework(saved);
         }
         auditBuilderService.log(
                 "approval_request",
@@ -1503,6 +1630,14 @@ public class ApprovalService implements ApprovalOrchestrator {
                 null,
                 saved);
         return toDto(saved);
+    }
+
+    private void resetStepProjection(ApprovalStep step) {
+        step.setDecision(ApprovalDecision.PENDING);
+        step.setDecidedById(null);
+        step.setDelegatedForId(null);
+        step.setDecidedAt(null);
+        step.setComment(null);
     }
 
     private List<ApprovalStep> currentRoundSteps(ApprovalRequest request) {
@@ -2133,6 +2268,7 @@ public class ApprovalService implements ApprovalOrchestrator {
             throw RestException.badRequest("At least one approval step is required");
         }
         request.setFlowType(routeSnapshot.flowType());
+        request.setRejectionPolicy(routeSnapshot.rejectionPolicy());
         request.setTemplateId(routeSnapshot.templateId());
         request.setTemplateVersion(routeSnapshot.templateVersion());
         if (calculationBinding != null) {
@@ -2316,6 +2452,18 @@ public class ApprovalService implements ApprovalOrchestrator {
                 effectiveTargetId(request),
                 request.getId()
         );
+    }
+
+    private void notifyInitiatorRework(ApprovalRequest request) {
+        notificationService.notifyApprovalResult(
+                request.getRequesterId(),
+                "Approval returned for rework: " + request.getTitle(),
+                "Approval request " + request.getTitle() + " was returned for rework.",
+                NotificationSeverity.WARNING,
+                NotificationEventType.APPROVAL_RETURNED_TO_REQUESTER,
+                notificationEntityType(effectiveTargetType(request)),
+                effectiveTargetId(request),
+                request.getId());
     }
 
     private void notifyReturned(ApprovalRequest request, int fromStep, int returnToStep) {
@@ -2505,6 +2653,11 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (canCancel) {
             allowedActions.add("CANCEL");
         }
+        if (request.getStatus() == ApprovalStatus.REWORK
+                && actorId != null
+                && Objects.equals(request.getRequesterId(), actorId)) {
+            allowedActions.add("RESUBMIT");
+        }
 
         return new ApprovalRequestDto(
                 request.getId(),
@@ -2551,6 +2704,7 @@ public class ApprovalService implements ApprovalOrchestrator {
                 staleRoute,
                 staleRoute ? "NONCANONICAL_ROUTE" : null,
                 flowType,
+                effectiveRejectionPolicy(request),
                 request.getApprovalRound(),
                 request.getTemplateId(),
                 request.getTemplateVersion(),

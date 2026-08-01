@@ -286,6 +286,7 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
                 count(distinct p.id) filter (where p.status = 'DRAFT') as "draftPlans",
                 count(distinct p.id) filter (where p.status = 'GENERATED') as "generatedPlans",
                 count(distinct p.id) filter (where p.status = 'APPROVED') as "approvedPlans",
+                count(t.id) as "totalTasks",
                 count(t.id) filter (where t.status = 'PLANNED') as "plannedTasks",
                 count(t.id) filter (where t.status = 'IN_PROGRESS') as "inProgressTasks",
                 count(t.id) filter (where t.status = 'COMPLETED') as "completedTasks",

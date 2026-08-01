@@ -5,6 +5,8 @@ import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,13 @@ public class RepairMaterialUsageController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(PaginationUtils.page(service.findByRepairRequest(repairRequestId), page, size));
+    }
+
+    @GetMapping("/ppr-plans/tasks/material-counts")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MATERIAL_USAGE_READ')")
+    public ResponseEntity<Map<UUID, Long>> countByPprTasks(
+            @RequestParam List<UUID> taskIds) {
+        return ResponseEntity.ok(service.countByPprTaskIds(taskIds));
     }
 
     @GetMapping("/ppr-plans/tasks/{taskId}/material-usage")

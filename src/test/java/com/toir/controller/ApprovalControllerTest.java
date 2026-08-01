@@ -192,6 +192,19 @@ class ApprovalControllerTest {
     }
 
     @Test
+    void resubmitUsesRequesterOnlyServiceTransition() throws Exception {
+        UUID approvalId = UUID.randomUUID();
+        ApprovalRequestDto response = response(approvalId, UUID.randomUUID(), UUID.randomUUID());
+        when(service.resubmit(approvalId)).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/approvals/{id}/resubmit", approvalId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(approvalId.toString()));
+
+        verify(service).resubmit(approvalId);
+    }
+
+    @Test
     void getPreservesIndependentAuthoritativeActionFlags() throws Exception {
         UUID approvalId = UUID.randomUUID();
         UUID requesterId = UUID.randomUUID();

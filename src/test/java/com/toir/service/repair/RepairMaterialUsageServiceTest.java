@@ -43,6 +43,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.BeforeEach;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -411,6 +412,65 @@ class RepairMaterialUsageServiceTest {
         assertThat(result.getFirst().workOrderNumber()).isEqualTo("WO-7");
         assertThat(result.getFirst().workOrderTitle()).isEqualTo("Pump repair");
         assertThat(result.getFirst().warehouseId()).isEqualTo(warehouseId);
+    }
+
+    @Test
+    void countByPprTaskIdsUsesBoundedBatchQueriesForTheVisibleTaskPage() {
+        UUID taskId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        WorkOrder workOrder = workOrder(workOrderId, WorkOrderStatus.IN_PROGRESS);
+        workOrder.setPprTaskId(taskId);
+        List<RepairMaterialUsage> usages = List.of(
+                usage(workOrderId, warehouseId),
+                usage(workOrderId, warehouseId),
+                usage(workOrderId, warehouseId));
+        Warehouse warehouse = warehouse(warehouseId);
+
+        when(workOrderRepository.findAllByPprTaskIdInAndIsDeletedFalse(List.of(taskId)))
+                .thenReturn(List.of(workOrder));
+        when(repository.findAllByWorkOrderIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(workOrderId)))
+                .thenReturn(usages);
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId)))
+                .thenReturn(List.of(warehouse));
+
+        assertThat(service.countByPprTaskIds(List.of(taskId)))
+                .containsEntry(taskId, 3L);
+        verify(workOrderRepository).findAllByPprTaskIdInAndIsDeletedFalse(List.of(taskId));
+        verify(repository)
+                .findAllByWorkOrderIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(workOrderId));
+        verify(warehouseRepository).findAllByIdInAndIsDeletedFalse(List.of(warehouseId));
+        verify(workOrderRepository, never())
+                .findFirstByPprTaskIdAndIsDeletedFalseOrderByUpdatedAtDesc(any());
+        verify(warehouseRepository, never()).findByIdAndIsDeletedFalse(any());
+        verify(repository, never()).countByWorkOrderIds(any());
+    }
+
+    @Test
+    void countByPprTaskIdsExcludesUsageFromWarehouseOutsideUserScope() {
+        UUID taskId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID workOrderDepartmentId = UUID.randomUUID();
+        UUID warehouseDepartmentId = UUID.randomUUID();
+        UUID warehouseId = UUID.randomUUID();
+        WorkOrder workOrder = workOrder(workOrderId, WorkOrderStatus.IN_PROGRESS);
+        workOrder.setPprTaskId(taskId);
+        workOrder.setDepartmentId(workOrderDepartmentId);
+        Warehouse warehouse = warehouse(warehouseId);
+        warehouse.setDepartmentId(warehouseDepartmentId);
+
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.canAccessDepartment(workOrderDepartmentId)).thenReturn(true);
+        when(scopeAccessService.canAccessDepartment(warehouseDepartmentId)).thenReturn(false);
+        when(workOrderRepository.findAllByPprTaskIdInAndIsDeletedFalse(List.of(taskId)))
+                .thenReturn(List.of(workOrder));
+        when(repository.findAllByWorkOrderIdInAndIsDeletedFalseOrderByUpdatedAtDesc(List.of(workOrderId)))
+                .thenReturn(List.of(usage(workOrderId, warehouseId)));
+        when(warehouseRepository.findAllByIdInAndIsDeletedFalse(List.of(warehouseId)))
+                .thenReturn(List.of(warehouse));
+
+        assertThat(service.countByPprTaskIds(List.of(taskId)))
+                .containsEntry(taskId, 0L);
     }
 
     @Test

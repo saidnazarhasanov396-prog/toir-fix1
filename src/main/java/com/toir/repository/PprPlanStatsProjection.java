@@ -9,6 +9,8 @@ public interface PprPlanStatsProjection {
 
     Long getApprovedPlans();
 
+    Long getTotalTasks();
+
     Long getPlannedTasks();
 
     Long getInProgressTasks();

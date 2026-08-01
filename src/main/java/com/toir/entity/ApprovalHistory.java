@@ -1,6 +1,7 @@
 package com.toir.entity;
 
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import jakarta.persistence.Column;
@@ -37,6 +38,19 @@ public class ApprovalHistory extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "new_status", nullable = false)
     private ApprovalStatus newStatus;
+
+    @Column(name = "step_id")
+    private UUID stepId;
+
+    @Column(name = "step_number")
+    private Integer stepNumber;
+
+    @Column(name = "approval_round")
+    private Integer approvalRound;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "decision")
+    private ApprovalDecision decision;
 
     @Column(name = "changed_by")
     private UUID changedBy;

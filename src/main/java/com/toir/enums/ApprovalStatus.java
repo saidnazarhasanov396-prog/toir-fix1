@@ -5,6 +5,7 @@ public enum ApprovalStatus {
     PENDING,
     APPROVED,
     REJECTED,
+    REWORK,
     CANCELLED,
     EXPIRED,
     FAILED,
@@ -21,7 +22,7 @@ public enum ApprovalStatus {
     public boolean isTerminal() {
         return switch (this) {
             case APPROVED, REJECTED, CANCELLED, EXPIRED, FAILED, SUPERSEDED -> true;
-            case DRAFT, PENDING -> false;
+            case DRAFT, PENDING, REWORK -> false;
         };
     }
 }

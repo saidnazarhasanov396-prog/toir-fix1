@@ -2,6 +2,7 @@ package com.toir.dto.approval;
 
 import com.toir.entity.ApprovalHistory;
 import com.toir.enums.ApprovalActionType;
+import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 
@@ -19,7 +20,11 @@ public record ApprovalHistoryDto(
         Instant changedAt,
         ApprovalActionType actionType,
         ApprovalTargetType targetType,
-        UUID targetId
+        UUID targetId,
+        UUID stepId,
+        Integer stepNumber,
+        Integer approvalRound,
+        ApprovalDecision decision
 ) {
     public static ApprovalHistoryDto from(ApprovalHistory history) {
         return new ApprovalHistoryDto(
@@ -33,7 +38,11 @@ public record ApprovalHistoryDto(
                 history.getChangedAt(),
                 history.getActionType(),
                 history.getTargetType(),
-                history.getTargetId()
+                history.getTargetId(),
+                history.getStepId(),
+                history.getStepNumber(),
+                history.getApprovalRound(),
+                history.getDecision()
         );
     }
 }

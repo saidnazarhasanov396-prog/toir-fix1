@@ -2,6 +2,7 @@ package com.toir.dto.approval;
 
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalFlowType;
+import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalTargetType;
 
 import java.util.List;
@@ -16,8 +17,24 @@ public record ApprovalRuleDto(
         List<Step> steps,
         boolean active,
         ApprovalFlowType flowType,
+        ApprovalRejectionPolicy rejectionPolicy,
         Long version
 ) {
+    public ApprovalRuleDto(
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType,
+            String documentName,
+            int stepsCount,
+            List<Step> steps,
+            boolean active,
+            ApprovalFlowType flowType,
+            ApprovalRejectionPolicy rejectionPolicy,
+            Long version
+    ) {
+        this(null, targetType, actionType, documentName, stepsCount, steps, active,
+                flowType, rejectionPolicy, version);
+    }
+
     public ApprovalRuleDto(
             UUID id,
             ApprovalTargetType targetType,
@@ -28,7 +45,7 @@ public record ApprovalRuleDto(
             boolean active
     ) {
         this(id, targetType, actionType, documentName, stepsCount, steps, active,
-                ApprovalFlowType.SEQUENTIAL, null);
+                ApprovalFlowType.SEQUENTIAL, ApprovalRejectionPolicy.TERMINATE, null);
     }
 
     public ApprovalRuleDto(
@@ -40,7 +57,7 @@ public record ApprovalRuleDto(
             boolean active
     ) {
         this(null, targetType, actionType, documentName, stepsCount, steps, active,
-                ApprovalFlowType.SEQUENTIAL, null);
+                ApprovalFlowType.SEQUENTIAL, ApprovalRejectionPolicy.TERMINATE, null);
     }
 
     public ApprovalRuleDto(
@@ -53,7 +70,30 @@ public record ApprovalRuleDto(
             ApprovalFlowType flowType,
             Long version
     ) {
-        this(null, targetType, actionType, documentName, stepsCount, steps, active, flowType, version);
+        this(null, targetType, actionType, documentName, stepsCount, steps, active,
+                flowType, ApprovalRejectionPolicy.TERMINATE, version);
+    }
+
+    public ApprovalRuleDto(
+            UUID id,
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType,
+            String documentName,
+            int stepsCount,
+            List<Step> steps,
+            boolean active,
+            ApprovalFlowType flowType,
+            Long version
+    ) {
+        this(id, targetType, actionType, documentName, stepsCount, steps, active,
+                flowType, ApprovalRejectionPolicy.TERMINATE, version);
+    }
+
+    public ApprovalRuleDto {
+        flowType = flowType == null ? ApprovalFlowType.SEQUENTIAL : flowType;
+        rejectionPolicy = rejectionPolicy == null
+                ? ApprovalRejectionPolicy.TERMINATE
+                : rejectionPolicy;
     }
 
     public record Step(

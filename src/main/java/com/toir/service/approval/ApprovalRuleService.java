@@ -6,6 +6,7 @@ import com.toir.entity.ApprovalTemplateStep;
 import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalFlowType;
+import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.UserStatus;
@@ -113,6 +114,7 @@ public class ApprovalRuleService {
                 request.steps(),
                 request.active(),
                 request.flowType() == null ? template.getFlowType() : request.flowType(),
+                effectiveRejectionPolicy(request.rejectionPolicy()),
                 request.version()
         );
         List<Assignment> assignments = validateRule(effectiveRequest);
@@ -132,6 +134,7 @@ public class ApprovalRuleService {
         ApprovalActionType actionType = effectiveActionType(request.actionType());
         String code = ruleCode(request.targetType(), actionType);
         ApprovalFlowType flowType = effectiveFlowType(request.flowType());
+        ApprovalRejectionPolicy rejectionPolicy = effectiveRejectionPolicy(request.rejectionPolicy());
         boolean lifecycleTarget = lifecycleRoutePolicy.supports(request.targetType(), actionType);
         boolean lifecycleRule = lifecycleTarget && flowType == ApprovalFlowType.SEQUENTIAL;
         if (lifecycleRule) {
@@ -155,6 +158,7 @@ public class ApprovalRuleService {
         template.setTargetType(request.targetType());
         template.setActionType(actionType);
         template.setFlowType(flowType);
+        template.setRejectionPolicy(rejectionPolicy);
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
         Assignment first = assignments.getFirst();
         template.setApproverId(first.approverId());
@@ -243,6 +247,7 @@ public class ApprovalRuleService {
                 steps,
                 template.isActive(),
                 effectiveFlowType(template.getFlowType()),
+                effectiveRejectionPolicy(template.getRejectionPolicy()),
                 template.getVersion()
         );
     }
@@ -254,8 +259,15 @@ public class ApprovalRuleService {
         if (request.targetType() == null) {
             throw RestException.badRequest("targetType is required");
         }
+        ApprovalFlowType flowType = effectiveFlowType(request.flowType());
+        ApprovalRejectionPolicy rejectionPolicy = effectiveRejectionPolicy(request.rejectionPolicy());
+        if (rejectionPolicy == ApprovalRejectionPolicy.MAJORITY
+                && (request.steps() == null || request.steps().isEmpty())) {
+            throw RestException.conflict("APPROVAL_MAJORITY_REQUIRES_ODD_ASSIGNMENTS");
+        }
         List<Assignment> assignments = validateAssignments(request.steps());
-        if (effectiveFlowType(request.flowType()) == ApprovalFlowType.PARALLEL_ALL) {
+        validateRejectionPolicy(flowType, rejectionPolicy, assignments.size());
+        if (flowType == ApprovalFlowType.PARALLEL_ALL) {
             validateParallelAssignments(assignments);
         }
         return assignments;
@@ -440,6 +452,27 @@ public class ApprovalRuleService {
 
     private ApprovalActionType effectiveActionType(ApprovalActionType actionType) {
         return actionType == null ? ApprovalActionType.APPROVE : actionType;
+    }
+
+    private ApprovalRejectionPolicy effectiveRejectionPolicy(ApprovalRejectionPolicy rejectionPolicy) {
+        return rejectionPolicy == null ? ApprovalRejectionPolicy.TERMINATE : rejectionPolicy;
+    }
+
+    private void validateRejectionPolicy(
+            ApprovalFlowType flowType,
+            ApprovalRejectionPolicy rejectionPolicy,
+            int assignmentCount
+    ) {
+        boolean incompatible = flowType == ApprovalFlowType.SEQUENTIAL
+                ? rejectionPolicy == ApprovalRejectionPolicy.MAJORITY
+                : rejectionPolicy == ApprovalRejectionPolicy.RETURN_TO_PREVIOUS_STEP;
+        if (incompatible) {
+            throw RestException.conflict("APPROVAL_REJECTION_POLICY_FLOW_MISMATCH");
+        }
+        if (rejectionPolicy == ApprovalRejectionPolicy.MAJORITY
+                && assignmentCount % 2 == 0) {
+            throw RestException.conflict("APPROVAL_MAJORITY_REQUIRES_ODD_ASSIGNMENTS");
+        }
     }
 
     private ApprovalFlowType effectiveFlowType(ApprovalFlowType flowType) {

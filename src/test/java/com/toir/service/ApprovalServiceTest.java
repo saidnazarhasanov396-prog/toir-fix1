@@ -8,6 +8,7 @@ import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalFlowType;
+import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.enums.UserStatus;
@@ -173,6 +174,134 @@ class ApprovalServiceTest {
                 "Approval request updated",
                 ApprovalActionType.UPDATED
         );
+    }
+
+    @Test
+    void sequentialRejectionReturnsToPreviousStepWithoutTerminating() {
+        UUID approvalId = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(
+                approvalId, UUID.randomUUID(), 2, first, second, UUID.randomUUID());
+        approval.setRejectionPolicy(ApprovalRejectionPolicy.RETURN_TO_PREVIOUS_STEP);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.reject(
+                approvalId, new DecisionRequest(second, "Needs another review"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.PENDING);
+        assertThat(result.currentStep()).isEqualTo(1);
+        assertThat(approval.getSteps()).extracting(ApprovalStep::getDecision)
+                .containsExactly(ApprovalDecision.PENDING, ApprovalDecision.PENDING, ApprovalDecision.PENDING);
+        verifyNoInteractions(approvalActionExecutor);
+    }
+
+    @Test
+    void previousStepPolicyAtFirstStepReturnsToInitiator() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requester = UUID.randomUUID();
+        UUID approver = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(approvalId, requester, 1, approver);
+        approval.setRejectionPolicy(ApprovalRejectionPolicy.RETURN_TO_PREVIOUS_STEP);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.reject(
+                approvalId, new DecisionRequest(approver, "Fix the request"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.REWORK);
+        assertThat(result.canApprove()).isFalse();
+        assertThat(result.canReject()).isFalse();
+        verifyNoInteractions(approvalActionExecutor);
+    }
+
+    @Test
+    void returnToInitiatorPolicyMovesParallelRequestToReworkWithoutCancellingPeers() {
+        UUID approvalId = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        ApprovalRequest approval = parallelApproval(approvalId, 2, first, second);
+        approval.setRejectionPolicy(ApprovalRejectionPolicy.RETURN_TO_INITIATOR);
+        stubParallelLock(approvalId, approval);
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.rejectStep(
+                approvalId, approval.getSteps().getFirst().getId(), new DecisionRequest(first, "Rework"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.REWORK);
+        assertThat(approval.getSteps()).extracting(ApprovalStep::getDecision)
+                .containsExactly(ApprovalDecision.REJECTED, ApprovalDecision.PENDING);
+        verifyNoInteractions(approvalActionExecutor);
+    }
+
+    @Test
+    void majorityWaitsForEveryVoteAndUsesStrictMajority() {
+        UUID approvalId = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        UUID third = UUID.randomUUID();
+        ApprovalRequest approval = parallelApproval(approvalId, 4, first, second, third);
+        approval.setRejectionPolicy(ApprovalRejectionPolicy.MAJORITY);
+        stubParallelLock(approvalId, approval);
+        when(requestRepository.save(approval)).thenReturn(approval);
+        when(approvalActionExecutor.execute(approval)).thenReturn("{\"approved\":true}");
+
+        ApprovalRequestDto firstVote = service.rejectStep(
+                approvalId, approval.getSteps().getFirst().getId(), new DecisionRequest(first, "Risk"));
+        ApprovalRequestDto secondVote = service.approveStep(
+                approvalId, approval.getSteps().get(1).getId(), new DecisionRequest(second, "ok"));
+        ApprovalRequestDto finalVote = service.approveStep(
+                approvalId, approval.getSteps().get(2).getId(), new DecisionRequest(third, "ok"));
+
+        assertThat(firstVote.status()).isEqualTo(ApprovalStatus.PENDING);
+        assertThat(secondVote.status()).isEqualTo(ApprovalStatus.PENDING);
+        assertThat(finalVote.status()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(finalVote.approvedCount()).isEqualTo(2);
+        assertThat(finalVote.rejectedCount()).isEqualTo(1);
+        verify(approvalActionExecutor, times(1)).execute(approval);
+    }
+
+    @Test
+    void requesterResubmitsReworkUsingPersistedParallelSnapshot() {
+        UUID approvalId = UUID.randomUUID();
+        UUID requester = UUID.randomUUID();
+        ApprovalRequest approval = parallelApproval(
+                approvalId, 2, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+        approval.setRequesterId(requester);
+        approval.setRejectionPolicy(ApprovalRejectionPolicy.RETURN_TO_INITIATOR);
+        approval.setStatus(ApprovalStatus.REWORK);
+        approval.getSteps().getFirst().setDecision(ApprovalDecision.REJECTED);
+        stubParallelLock(approvalId, approval);
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(requester);
+        when(requestRepository.save(approval)).thenReturn(approval);
+
+        ApprovalRequestDto result = service.resubmit(approvalId);
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.PENDING);
+        assertThat(result.approvalRound()).isEqualTo(3);
+        assertThat(result.currentStep()).isZero();
+        assertThat(result.rejectionPolicy()).isEqualTo(ApprovalRejectionPolicy.RETURN_TO_INITIATOR);
+        assertThat(approval.getSteps()).allSatisfy(step -> {
+            assertThat(step.getApprovalRound()).isEqualTo(3);
+            assertThat(step.getDecision()).isEqualTo(ApprovalDecision.PENDING);
+        });
+        assertThat(result.allowedActions()).doesNotContain("RESUBMIT");
+    }
+
+    @Test
+    void onlyPersistedRequesterCanResubmitRework() {
+        UUID approvalId = UUID.randomUUID();
+        ApprovalRequest approval = pendingMultiStepApproval(
+                approvalId, UUID.randomUUID(), 1, UUID.randomUUID());
+        approval.setStatus(ApprovalStatus.REWORK);
+        when(requestRepository.findByIdAndIsDeletedFalse(approvalId)).thenReturn(Optional.of(approval));
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.resubmit(approvalId))
+                .isInstanceOf(RestException.class)
+                .hasMessageContaining("requester");
+        verify(requestRepository, never()).save(approval);
     }
 
     @Test
@@ -1463,6 +1592,37 @@ class ApprovalServiceTest {
             assertThat(step.getApproverRole()).isNull();
             assertThat(step.getFlowType()).isEqualTo(ApprovalFlowType.PARALLEL_ALL);
         });
+    }
+
+    @Test
+    void lifecycleMaterializationSnapshotsRejectionPolicy() {
+        LifecycleApprovalStartPlan plan = new LifecycleApprovalStartPlan(
+                ApprovalTargetType.REPAIR_CAMPAIGN,
+                UUID.randomUUID(),
+                ApprovalActionType.APPROVE,
+                null,
+                List.of(new CreateApprovalRequest.StepInput(null, "MANAGER")),
+                LifecycleApprovalRoutePolicy.Reason.VALID,
+                ApprovalFlowType.SEQUENTIAL,
+                ApprovalRejectionPolicy.RETURN_TO_INITIATOR,
+                UUID.randomUUID(),
+                5L);
+        when(slaPolicyService.slaFor(any(ApprovalRequest.class))).thenReturn(Duration.ofHours(24));
+        when(requestRepository.saveAndFlush(any(ApprovalRequest.class))).thenAnswer(invocation -> {
+            ApprovalRequest saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            ReflectionTestUtils.setField(saved, "createdAt", Instant.now());
+            ReflectionTestUtils.setField(saved, "updatedAt", Instant.now());
+            return saved;
+        });
+
+        service.materializeLifecycleApproval(
+                plan, UUID.randomUUID(), "Campaign approval", null, "{}");
+
+        ArgumentCaptor<ApprovalRequest> saved = ArgumentCaptor.forClass(ApprovalRequest.class);
+        verify(requestRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getRejectionPolicy())
+                .isEqualTo(ApprovalRejectionPolicy.RETURN_TO_INITIATOR);
     }
 
     @ParameterizedTest

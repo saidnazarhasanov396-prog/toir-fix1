@@ -127,6 +127,18 @@ public class ApprovalGovernanceService {
                        UUID delegatedForId,
                        String comment,
                        ApprovalActionType historyActionType) {
+        record(request, oldStatus, newStatus, changedBy, delegatedForId, comment, historyActionType, null);
+    }
+
+    @Transactional
+    public void record(ApprovalRequest request,
+                       ApprovalStatus oldStatus,
+                       ApprovalStatus newStatus,
+                       UUID changedBy,
+                       UUID delegatedForId,
+                       String comment,
+                       ApprovalActionType historyActionType,
+                       ApprovalStep decisionStep) {
         if (request == null || request.getId() == null || newStatus == null) {
             return;
         }
@@ -141,6 +153,12 @@ public class ApprovalGovernanceService {
         history.setActionType(historyActionType);
         history.setTargetType(request.getTargetType());
         history.setTargetId(request.getTargetId());
+        if (decisionStep != null) {
+            history.setStepId(decisionStep.getId());
+            history.setStepNumber(decisionStep.getStepNumber());
+            history.setApprovalRound(decisionStep.getApprovalRound());
+            history.setDecision(decisionStep.getDecision());
+        }
         historyRepository.save(history);
     }
 

@@ -3,6 +3,7 @@ package com.toir.dto.approval;
 import com.toir.entity.ApprovalRequest;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalFlowType;
+import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 
@@ -48,6 +49,7 @@ public record ApprovalRequestDto(
         boolean stale,
         String staleReason,
         ApprovalFlowType flowType,
+        ApprovalRejectionPolicy rejectionPolicy,
         int approvalRound,
         UUID templateId,
         Long templateVersion,
@@ -91,7 +93,7 @@ public record ApprovalRequestDto(
                 createdAt, steps, targetType, targetId, actionType, requesterName, currentApproverName, totalSteps,
                 expiresAt, escalated, overdue, targetDisplayName, targetUrl, resultJson, failureReason,
                 canApprove, canReject, canCancel, targetSummary, false, null, null, null, false, false, null,
-                ApprovalFlowType.SEQUENTIAL, 1, null, null, totalSteps, 0, totalSteps, 0, 0, null, Set.of());
+                ApprovalFlowType.SEQUENTIAL, ApprovalRejectionPolicy.TERMINATE, 1, null, null, totalSteps, 0, totalSteps, 0, 0, null, Set.of());
     }
 
     public ApprovalRequestDto(UUID id,
@@ -108,7 +110,7 @@ public record ApprovalRequestDto(
         this(id, documentType, documentId, title, requesterId, status, currentStep, completedAt, description,
                 createdAt, steps, null, null, null, null, null, steps == null ? 0 : steps.size(), null, false,
                 false, title, null, null, null, false, false, false, null, false, null, null, null, false, false, null,
-                ApprovalFlowType.SEQUENTIAL, 1, null, null, steps == null ? 0 : steps.size(), 0,
+                ApprovalFlowType.SEQUENTIAL, ApprovalRejectionPolicy.TERMINATE, 1, null, null, steps == null ? 0 : steps.size(), 0,
                 steps == null ? 0 : steps.size(), 0, 0, null, Set.of());
     }
 
@@ -154,6 +156,9 @@ public record ApprovalRequestDto(
                 false,
                 null,
                 r.getFlowType() == null ? ApprovalFlowType.SEQUENTIAL : r.getFlowType(),
+                r.getRejectionPolicy() == null
+                        ? ApprovalRejectionPolicy.TERMINATE
+                        : r.getRejectionPolicy(),
                 r.getApprovalRound(),
                 r.getTemplateId(),
                 r.getTemplateVersion(),

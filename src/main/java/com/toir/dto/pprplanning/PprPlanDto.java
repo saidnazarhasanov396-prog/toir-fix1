@@ -232,6 +232,44 @@ public record PprPlanDto(
         );
     }
 
+    public static PprPlanDto summaryFrom(
+            PprPlan p,
+            String departmentName,
+            Map<UUID, String> equipmentNames,
+            Map<UUID, String> equipmentTypeNames,
+            Map<UUID, String> regulationNames,
+            long taskCount) {
+        return new PprPlanDto(
+                p.getId(), p.getCode(), p.getName(), p.getStatus(),
+                p.getDepartmentId(), departmentName, p.getCreatedById(), p.getApprovedById(), p.getNotes(),
+                List.of(),
+                taskCount,
+                p.getStartDate(),
+                p.getEndDate(),
+                p.getPprType(),
+                p.getScheduleType(),
+                p.getFrequency(),
+                p.getIntervalHours(),
+                p.getScopeType(),
+                p.getTargets().stream()
+                        .filter(target -> !target.isDeleted())
+                        .map(target -> PprPlanTargetDto.from(
+                                target,
+                                target.getTargetType() == PprTargetType.EQUIPMENT
+                                        ? equipmentNames.get(target.getEquipmentId())
+                                        : null,
+                                target.getTargetType() == PprTargetType.EQUIPMENT_TYPE
+                                        ? equipmentTypeNames.get(target.getEquipmentTypeId())
+                                        : null,
+                                target.getTargetType() == PprTargetType.REGULATION
+                                        ? regulationNames.get(target.getRegulationId())
+                                        : null))
+                        .toList(),
+                null,
+                null,
+                p.getAnchorMode());
+    }
+
     public PprPlanDto withGenerationMessage(String message) {
         return new PprPlanDto(
                 id,
