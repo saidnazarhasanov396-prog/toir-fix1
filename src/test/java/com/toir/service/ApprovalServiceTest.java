@@ -11,6 +11,7 @@ import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.ApprovalTieBreakPolicy;
 import com.toir.enums.UserStatus;
 import com.toir.enums.NotificationSeverity;
 import com.toir.exception.RestException;
@@ -259,6 +260,84 @@ class ApprovalServiceTest {
         assertThat(finalVote.status()).isEqualTo(ApprovalStatus.APPROVED);
         assertThat(finalVote.approvedCount()).isEqualTo(2);
         assertThat(finalVote.rejectedCount()).isEqualTo(1);
+        verify(approvalActionExecutor, times(1)).execute(approval);
+    }
+
+    @Test
+    void majorityApprovesExactTieWhenSnapshotSaysApproveOnTie() {
+        UUID approvalId = UUID.randomUUID();
+        UUID[] approvers = java.util.stream.Stream.generate(UUID::randomUUID)
+                .limit(6)
+                .toArray(UUID[]::new);
+        ApprovalRequest approval = parallelApproval(approvalId, 1, approvers);
+        approval.setRejectionPolicy(ApprovalRejectionPolicy.MAJORITY);
+        approval.setTieBreakPolicy(ApprovalTieBreakPolicy.APPROVE_ON_TIE);
+        decideParallelVotes(approval, 3, 2);
+        stubParallelLock(approvalId, approval);
+        when(requestRepository.save(approval)).thenReturn(approval);
+        when(approvalActionExecutor.execute(approval)).thenReturn("{\"approved\":true}");
+
+        ApprovalRequestDto result = service.rejectStep(
+                approvalId,
+                approval.getSteps().get(5).getId(),
+                new DecisionRequest(approvers[5], "tie vote"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(result.approvedCount()).isEqualTo(3);
+        assertThat(result.rejectedCount()).isEqualTo(3);
+        assertThat(result.tieBreakPolicy()).isEqualTo(ApprovalTieBreakPolicy.APPROVE_ON_TIE);
+        assertThat(result.tieBreakApplied()).isTrue();
+        verify(approvalActionExecutor, times(1)).execute(approval);
+    }
+
+    @Test
+    void majorityRejectsExactTieWhenSnapshotSaysRejectOnTie() {
+        UUID approvalId = UUID.randomUUID();
+        UUID[] approvers = java.util.stream.Stream.generate(UUID::randomUUID)
+                .limit(6)
+                .toArray(UUID[]::new);
+        ApprovalRequest approval = parallelApproval(approvalId, 1, approvers);
+        approval.setRejectionPolicy(ApprovalRejectionPolicy.MAJORITY);
+        approval.setTieBreakPolicy(ApprovalTieBreakPolicy.REJECT_ON_TIE);
+        decideParallelVotes(approval, 3, 2);
+        stubParallelLock(approvalId, approval);
+        when(requestRepository.save(approval)).thenReturn(approval);
+        when(approvalActionExecutor.execute(approval)).thenReturn("{\"rejected\":true}");
+
+        ApprovalRequestDto result = service.rejectStep(
+                approvalId,
+                approval.getSteps().get(5).getId(),
+                new DecisionRequest(approvers[5], "tie vote"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.REJECTED);
+        assertThat(result.tieBreakPolicy()).isEqualTo(ApprovalTieBreakPolicy.REJECT_ON_TIE);
+        assertThat(result.tieBreakApplied()).isTrue();
+        verify(approvalActionExecutor, times(1)).execute(approval);
+    }
+
+    @Test
+    void majorityIgnoresTieBreakWhenStrictMajorityExists() {
+        UUID approvalId = UUID.randomUUID();
+        UUID[] approvers = java.util.stream.Stream.generate(UUID::randomUUID)
+                .limit(6)
+                .toArray(UUID[]::new);
+        ApprovalRequest approval = parallelApproval(approvalId, 1, approvers);
+        approval.setRejectionPolicy(ApprovalRejectionPolicy.MAJORITY);
+        approval.setTieBreakPolicy(ApprovalTieBreakPolicy.REJECT_ON_TIE);
+        decideParallelVotes(approval, 3, 2);
+        stubParallelLock(approvalId, approval);
+        when(requestRepository.save(approval)).thenReturn(approval);
+        when(approvalActionExecutor.execute(approval)).thenReturn("{\"approved\":true}");
+
+        ApprovalRequestDto result = service.approveStep(
+                approvalId,
+                approval.getSteps().get(5).getId(),
+                new DecisionRequest(approvers[5], "majority vote"));
+
+        assertThat(result.status()).isEqualTo(ApprovalStatus.APPROVED);
+        assertThat(result.approvedCount()).isEqualTo(4);
+        assertThat(result.rejectedCount()).isEqualTo(2);
+        assertThat(result.tieBreakApplied()).isFalse();
         verify(approvalActionExecutor, times(1)).execute(approval);
     }
 
@@ -2909,6 +2988,15 @@ class ApprovalServiceTest {
             approval.getSteps().add(step);
         }
         return approval;
+    }
+
+    private void decideParallelVotes(ApprovalRequest approval, int approved, int rejected) {
+        for (int index = 0; index < approved; index++) {
+            approval.getSteps().get(index).setDecision(ApprovalDecision.APPROVED);
+        }
+        for (int index = approved; index < approved + rejected; index++) {
+            approval.getSteps().get(index).setDecision(ApprovalDecision.REJECTED);
+        }
     }
 
     private void stubParallelLock(UUID approvalId, ApprovalRequest approval) {

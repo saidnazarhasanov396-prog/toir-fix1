@@ -22,6 +22,7 @@ import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.ApprovalTieBreakPolicy;
 import com.toir.enums.ApprovalResolutionCode;
 import com.toir.enums.AuditAction;
 import com.toir.enums.AuditModule;
@@ -654,6 +655,7 @@ public class ApprovalService implements ApprovalOrchestrator {
                 resolution.reason(),
                 resolution.flowType(),
                 resolution.rejectionPolicy(),
+                resolution.tieBreakPolicy(),
                 resolution.templateId(),
                 resolution.templateVersion());
     }
@@ -703,6 +705,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         request.setPayloadJson(payloadAfterFlush);
         request.setFlowType(plan.flowType());
         request.setRejectionPolicy(plan.rejectionPolicy());
+        request.setTieBreakPolicy(plan.tieBreakPolicy());
         request.setTemplateId(plan.templateId());
         request.setTemplateVersion(plan.templateVersion());
         request.setApprovalRound(nextApprovalRound(plan.targetType(), plan.targetId(), effectivePlanAction));
@@ -762,11 +765,12 @@ public class ApprovalService implements ApprovalOrchestrator {
             LifecycleApprovalRoutePolicy.Reason failure,
             ApprovalFlowType flowType,
             ApprovalRejectionPolicy rejectionPolicy,
+            ApprovalTieBreakPolicy tieBreakPolicy,
             UUID templateId,
             Long templateVersion) {
         return new LifecycleApprovalStartPlan(
                 targetType, targetId, actionType, reusableRequest, frozenSteps, failure,
-                flowType, rejectionPolicy, templateId, templateVersion);
+                flowType, rejectionPolicy, tieBreakPolicy, templateId, templateVersion);
     }
 
     private LifecycleApprovalRoutePolicy.Reason lifecycleReuseFailure(
@@ -805,6 +809,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         normalized.setCurrentStep(request.getCurrentStep());
         normalized.setFlowType(effectiveFlowType(request));
         normalized.setRejectionPolicy(effectiveRejectionPolicy(request));
+        normalized.setTieBreakPolicy(request.getTieBreakPolicy());
         normalized.setApprovalRound(request.getApprovalRound());
         normalized.setSteps(request.getSteps() == null
                 ? new ArrayList<>()
@@ -1572,9 +1577,18 @@ public class ApprovalService implements ApprovalOrchestrator {
                 long approvedVotes = roundSteps.stream()
                         .filter(step -> step.getDecision() == ApprovalDecision.APPROVED)
                         .count();
-                aggregateOutcome = approvedVotes > roundSteps.size() / 2
-                        ? ApprovalDecision.APPROVED
-                        : ApprovalDecision.REJECTED;
+                long doubledApprovedVotes = approvedVotes * 2;
+                if (doubledApprovedVotes > roundSteps.size()) {
+                    aggregateOutcome = ApprovalDecision.APPROVED;
+                } else if (doubledApprovedVotes < roundSteps.size()) {
+                    aggregateOutcome = ApprovalDecision.REJECTED;
+                } else if (request.getTieBreakPolicy() == ApprovalTieBreakPolicy.APPROVE_ON_TIE) {
+                    aggregateOutcome = ApprovalDecision.APPROVED;
+                } else if (request.getTieBreakPolicy() == ApprovalTieBreakPolicy.REJECT_ON_TIE) {
+                    aggregateOutcome = ApprovalDecision.REJECTED;
+                } else {
+                    throw RestException.conflict("APPROVAL_MAJORITY_TIE_BREAK_REQUIRED");
+                }
                 if (aggregateOutcome == ApprovalDecision.APPROVED) {
                     validatePersistedLifecycleCompletion(request);
                     request.setStatus(ApprovalStatus.APPROVED);
@@ -2270,6 +2284,7 @@ public class ApprovalService implements ApprovalOrchestrator {
         }
         request.setFlowType(routeSnapshot.flowType());
         request.setRejectionPolicy(routeSnapshot.rejectionPolicy());
+        request.setTieBreakPolicy(routeSnapshot.tieBreakPolicy());
         request.setTemplateId(routeSnapshot.templateId());
         request.setTemplateVersion(routeSnapshot.templateVersion());
         if (calculationBinding != null) {
@@ -2707,6 +2722,12 @@ public class ApprovalService implements ApprovalOrchestrator {
                 .filter(step -> step.decision() == ApprovalDecision.REJECTED).count();
         int cancelledCount = (int) steps.stream()
                 .filter(step -> step.decision() == ApprovalDecision.CANCELLED).count();
+        boolean tieBreakApplied = effectiveRejectionPolicy(request) == ApprovalRejectionPolicy.MAJORITY
+                && request.getTieBreakPolicy() != null
+                && (request.getStatus() == ApprovalStatus.APPROVED
+                    || request.getStatus() == ApprovalStatus.REJECTED)
+                && pendingCount == 0
+                && approvedCount * 2 == steps.size();
         Set<String> allowedActions = new LinkedHashSet<>();
         if (canApprove) {
             allowedActions.add("APPROVE");
@@ -2769,6 +2790,8 @@ public class ApprovalService implements ApprovalOrchestrator {
                 staleRoute ? "NONCANONICAL_ROUTE" : null,
                 flowType,
                 effectiveRejectionPolicy(request),
+                request.getTieBreakPolicy(),
+                tieBreakApplied,
                 request.getApprovalRound(),
                 request.getTemplateId(),
                 request.getTemplateVersion(),

@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @ConditionalOnProperty(prefix = "toir.ppr-lifecycle", name = "planning-sessions-enabled", havingValue = "true")
-@RequestMapping("/api/ppr-planning-sessions")
+@RequestMapping("/api/v1/ppr-planning-sessions")
 @RequiredArgsConstructor
 public class PprPlanningSessionController {
 

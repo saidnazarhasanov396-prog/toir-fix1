@@ -5,6 +5,7 @@ import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.ApprovalTieBreakPolicy;
 import com.toir.enums.NotificationSeverity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -39,6 +40,10 @@ public class ApprovalTemplate extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "rejection_policy", nullable = false)
     private ApprovalRejectionPolicy rejectionPolicy = ApprovalRejectionPolicy.TERMINATE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tie_break_policy")
+    private ApprovalTieBreakPolicy tieBreakPolicy;
 
     @Column(nullable = false, unique = true)
     private String code;
