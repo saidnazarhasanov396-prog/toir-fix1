@@ -83,6 +83,18 @@ class ProductionConfigSecretsTest {
     }
 
     @Test
+    void productionPprDueGenerationIsExplicitOptInWhenActorIsNotDefaulted() throws IOException {
+        List<String> lines = Files.readAllLines(PROD_CONFIG);
+
+        assertThat(findTrimmedLine(lines, "due-work-order-generation-enabled:"))
+                .as("prod must not enable scheduled PPR due work-order generation without an explicit actor")
+                .isEqualTo("due-work-order-generation-enabled: ${TOIR_PPR_LIFECYCLE_DUE_WORK_ORDER_GENERATION_ENABLED:false}");
+        assertThat(findTrimmedLine(lines, "actor-id:"))
+                .as("the generation actor must still be supplied by deployment when generation is enabled")
+                .isEqualTo("actor-id: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_ACTOR_ID:}");
+    }
+
+    @Test
     void gitlabDeployDoesNotUseLegacyFirebaseEnvironmentSwitches() throws IOException {
         String gitlabCi = Files.readString(GITLAB_CI);
 
