@@ -156,3 +156,8 @@ Thrown via `com.toir.exception.RestException` and mapped by `GlobalExceptionHand
 - JWT payload: `sub`, `username`, `authorities` (role codes), `permissions`, `departmentId`, `primaryRoleCode`
 - `@CurrentUser` parameter resolver injects `AuthenticatedUser` into controllers
 - `JwtAuthenticationEntryPoint` and `RestAccessDeniedHandler` return the unified error format
+# PPR lifecycle production configuration
+
+The production profile enables annual planning sessions, strict work-order closure and due work-order generation by default. Set `TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_ACTOR_ID` to the UUID of the technical user whose permissions and audit identity are used by the scheduler. The application intentionally refuses to start when generation is enabled without this value.
+
+Optional settings are `TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_TIMEZONE` (default `Asia/Tashkent`), `TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_CRON` (default `0 10 * * * *`) and `TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_BATCH_SIZE` (default `100`). After deployment verify that `/api/ppr-planning-sessions` responds successfully and that the scheduler logs a completed generation run without duplicate work orders.
