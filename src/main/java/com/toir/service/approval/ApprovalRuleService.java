@@ -9,6 +9,7 @@ import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.ApprovalTieBreakPolicy;
 import com.toir.enums.UserStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalTemplateRepository;
@@ -115,6 +116,7 @@ public class ApprovalRuleService {
                 request.active(),
                 request.flowType() == null ? template.getFlowType() : request.flowType(),
                 effectiveRejectionPolicy(request.rejectionPolicy()),
+                request.tieBreakPolicy(),
                 request.version()
         );
         List<Assignment> assignments = validateRule(effectiveRequest);
@@ -135,6 +137,7 @@ public class ApprovalRuleService {
         String code = ruleCode(request.targetType(), actionType);
         ApprovalFlowType flowType = effectiveFlowType(request.flowType());
         ApprovalRejectionPolicy rejectionPolicy = effectiveRejectionPolicy(request.rejectionPolicy());
+        ApprovalTieBreakPolicy tieBreakPolicy = request.tieBreakPolicy();
         boolean lifecycleTarget = lifecycleRoutePolicy.supports(request.targetType(), actionType);
         boolean lifecycleRule = lifecycleTarget && flowType == ApprovalFlowType.SEQUENTIAL;
         if (lifecycleRule) {
@@ -159,6 +162,7 @@ public class ApprovalRuleService {
         template.setActionType(actionType);
         template.setFlowType(flowType);
         template.setRejectionPolicy(rejectionPolicy);
+        template.setTieBreakPolicy(tieBreakPolicy);
         template.setRoutePolicy(ApprovalRoutePolicy.ROLE_BASED);
         Assignment first = assignments.getFirst();
         template.setApproverId(first.approverId());
@@ -248,6 +252,7 @@ public class ApprovalRuleService {
                 template.isActive(),
                 effectiveFlowType(template.getFlowType()),
                 effectiveRejectionPolicy(template.getRejectionPolicy()),
+                template.getTieBreakPolicy(),
                 template.getVersion()
         );
     }
@@ -261,12 +266,22 @@ public class ApprovalRuleService {
         }
         ApprovalFlowType flowType = effectiveFlowType(request.flowType());
         ApprovalRejectionPolicy rejectionPolicy = effectiveRejectionPolicy(request.rejectionPolicy());
-        if (rejectionPolicy == ApprovalRejectionPolicy.MAJORITY
-                && (request.steps() == null || request.steps().isEmpty())) {
-            throw RestException.conflict("APPROVAL_MAJORITY_REQUIRES_ODD_ASSIGNMENTS");
+        if (flowType == ApprovalFlowType.PARALLEL_ALL
+                && rejectionPolicy == ApprovalRejectionPolicy.MAJORITY
+                && (request.steps() == null || request.steps().size() < 2)) {
+            throw RestException.conflict("APPROVAL_MAJORITY_REQUIRES_AT_LEAST_TWO_ASSIGNMENTS");
         }
         List<Assignment> assignments = validateAssignments(request.steps());
-        validateRejectionPolicy(flowType, rejectionPolicy, assignments.size());
+        validateRejectionPolicy(
+                flowType,
+                rejectionPolicy,
+                request.tieBreakPolicy(),
+                assignments.size());
+        if (rejectionPolicy == ApprovalRejectionPolicy.MAJORITY
+                && assignments.stream().anyMatch(
+                        assignment -> assignment.approverType() != ApprovalRuleDto.ApproverType.USER)) {
+            throw RestException.conflict("APPROVAL_MAJORITY_REQUIRES_EXPLICIT_USERS");
+        }
         if (flowType == ApprovalFlowType.PARALLEL_ALL) {
             validateParallelAssignments(assignments);
         }
@@ -461,6 +476,7 @@ public class ApprovalRuleService {
     private void validateRejectionPolicy(
             ApprovalFlowType flowType,
             ApprovalRejectionPolicy rejectionPolicy,
+            ApprovalTieBreakPolicy tieBreakPolicy,
             int assignmentCount
     ) {
         boolean incompatible = flowType == ApprovalFlowType.SEQUENTIAL
@@ -469,9 +485,20 @@ public class ApprovalRuleService {
         if (incompatible) {
             throw RestException.conflict("APPROVAL_REJECTION_POLICY_FLOW_MISMATCH");
         }
-        if (rejectionPolicy == ApprovalRejectionPolicy.MAJORITY
-                && assignmentCount % 2 == 0) {
-            throw RestException.conflict("APPROVAL_MAJORITY_REQUIRES_ODD_ASSIGNMENTS");
+        if (rejectionPolicy != ApprovalRejectionPolicy.MAJORITY) {
+            if (tieBreakPolicy != null) {
+                throw RestException.conflict("APPROVAL_MAJORITY_TIE_BREAK_NOT_APPLICABLE");
+            }
+            return;
+        }
+        if (assignmentCount < 2) {
+            throw RestException.conflict("APPROVAL_MAJORITY_REQUIRES_AT_LEAST_TWO_ASSIGNMENTS");
+        }
+        if (assignmentCount % 2 == 0 && tieBreakPolicy == null) {
+            throw RestException.conflict("APPROVAL_MAJORITY_TIE_BREAK_REQUIRED");
+        }
+        if (assignmentCount % 2 != 0 && tieBreakPolicy != null) {
+            throw RestException.conflict("APPROVAL_MAJORITY_TIE_BREAK_NOT_APPLICABLE");
         }
     }
 

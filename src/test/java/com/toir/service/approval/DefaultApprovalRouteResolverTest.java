@@ -10,6 +10,7 @@ import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRoutePolicy;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.ApprovalTieBreakPolicy;
 import com.toir.enums.UserStatus;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.repository.users.RoleRepository;
@@ -335,6 +336,7 @@ class DefaultApprovalRouteResolverTest {
         template.setTargetType(ApprovalTargetType.WORK_ORDER);
         template.setActionType(ApprovalActionType.APPROVE);
         template.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        template.setTieBreakPolicy(ApprovalTieBreakPolicy.REJECT_ON_TIE);
         template.getSteps().add(explicitStep(1, first));
         template.getSteps().add(explicitStep(2, second));
         ApprovalRequest request = request(ApprovalTargetType.WORK_ORDER, ApprovalActionType.APPROVE);
@@ -344,6 +346,7 @@ class DefaultApprovalRouteResolverTest {
         ApprovalRouteSnapshot snapshot = resolver.resolveRouteSnapshot(request);
 
         assertThat(snapshot.flowType()).isEqualTo(ApprovalFlowType.PARALLEL_ALL);
+        assertThat(snapshot.tieBreakPolicy()).isEqualTo(ApprovalTieBreakPolicy.REJECT_ON_TIE);
         assertThat(snapshot.templateId()).isEqualTo(templateId);
         assertThat(snapshot.templateVersion()).isEqualTo(7L);
         assertThat(snapshot.steps()).extracting(CreateApprovalRequest.StepInput::approverId)

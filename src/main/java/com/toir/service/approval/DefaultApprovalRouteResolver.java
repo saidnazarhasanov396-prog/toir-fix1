@@ -50,6 +50,7 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
             return new ApprovalRouteSnapshot(
                     resolution.flowType(),
                     resolution.rejectionPolicy(),
+                    resolution.tieBreakPolicy(),
                     resolution.templateId(),
                     resolution.templateVersion(),
                     resolution.steps());
@@ -71,6 +72,7 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
             return new ApprovalRouteSnapshot(
                     effectiveFlowType(template),
                     effectiveRejectionPolicy(template),
+                    template.getTieBreakPolicy(),
                     template.getId(),
                     template.getVersion(),
                     steps);
@@ -87,6 +89,7 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                 .map(template -> new ApprovalRouteSnapshot(
                         effectiveFlowType(template),
                         effectiveRejectionPolicy(template),
+                        template.getTieBreakPolicy(),
                         template.getId(),
                         template.getVersion(),
                         stepsFromTemplate(template)))
@@ -141,6 +144,7 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                 validation.reason(),
                 effectiveFlowType(template),
                 effectiveRejectionPolicy(template),
+                template.getTieBreakPolicy(),
                 template.getId(),
                 template.getVersion());
     }

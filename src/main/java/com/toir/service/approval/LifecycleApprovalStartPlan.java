@@ -5,6 +5,7 @@ import com.toir.entity.ApprovalRequest;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRejectionPolicy;
+import com.toir.enums.ApprovalTieBreakPolicy;
 import com.toir.enums.ApprovalTargetType;
 
 import java.util.List;
@@ -19,6 +20,7 @@ public record LifecycleApprovalStartPlan(
         LifecycleApprovalRoutePolicy.Reason failure,
         ApprovalFlowType flowType,
         ApprovalRejectionPolicy rejectionPolicy,
+        ApprovalTieBreakPolicy tieBreakPolicy,
         UUID templateId,
         Long templateVersion
 ) {
@@ -31,7 +33,7 @@ public record LifecycleApprovalStartPlan(
             LifecycleApprovalRoutePolicy.Reason failure
     ) {
         this(targetType, targetId, actionType, reusableRequest, frozenSteps, failure,
-                ApprovalFlowType.SEQUENTIAL, ApprovalRejectionPolicy.TERMINATE, null, null);
+                ApprovalFlowType.SEQUENTIAL, ApprovalRejectionPolicy.TERMINATE, null, null, null);
     }
 
     public LifecycleApprovalStartPlan(
@@ -46,7 +48,23 @@ public record LifecycleApprovalStartPlan(
             Long templateVersion
     ) {
         this(targetType, targetId, actionType, reusableRequest, frozenSteps, failure,
-                flowType, ApprovalRejectionPolicy.TERMINATE, templateId, templateVersion);
+                flowType, ApprovalRejectionPolicy.TERMINATE, null, templateId, templateVersion);
+    }
+
+    public LifecycleApprovalStartPlan(
+            ApprovalTargetType targetType,
+            UUID targetId,
+            ApprovalActionType actionType,
+            ApprovalRequest reusableRequest,
+            List<CreateApprovalRequest.StepInput> frozenSteps,
+            LifecycleApprovalRoutePolicy.Reason failure,
+            ApprovalFlowType flowType,
+            ApprovalRejectionPolicy rejectionPolicy,
+            UUID templateId,
+            Long templateVersion
+    ) {
+        this(targetType, targetId, actionType, reusableRequest, frozenSteps, failure,
+                flowType, rejectionPolicy, null, templateId, templateVersion);
     }
 
     public LifecycleApprovalStartPlan {
