@@ -17,7 +17,7 @@ compile:
   stage: compile
   script:
     - chmod +x ./mvnw
-    - ./mvnw -DskipTests package --no-transfer-progress
+    - ./mvnw -DskipTests clean package --no-transfer-progress
   artifacts:
     paths:
       - target/*.jar
