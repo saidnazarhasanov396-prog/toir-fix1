@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -138,6 +139,30 @@ class FirebasePushNotificationSenderTest {
         sender.sendToUser(notification(userId));
 
         verify(messaging).send(org.mockito.ArgumentMatchers.any(Message.class));
+    }
+
+    @Test
+    void payloadUsesTokenLanguageAndCarriesAllTranslations() {
+        FirebasePushNotificationSender sender = new FirebasePushNotificationSender(
+                firebaseMessagingProvider, tokenRepository, new FirebaseProperties());
+        NotificationDto notification = new NotificationDto(
+                UUID.randomUUID(), UUID.randomUUID(),
+                "Русский заголовок", "Русский текст",
+                NotificationChannel.WEB, NotificationStatus.SENT, NotificationSeverity.INFO,
+                "WORK_ORDER", UUID.randomUUID().toString(), null, null, java.util.Map.of(),
+                null, Instant.parse("2026-06-15T05:00:00Z"), null, null, null,
+                "O‘zbekcha sarlavha", "O‘zbekcha matn", "English title", "English body"
+        );
+
+        var payload = sender.payload(notification, "uz-UZ");
+
+        assertThat(payload)
+                .containsEntry("title", "O‘zbekcha sarlavha")
+                .containsEntry("body", "O‘zbekcha matn")
+                .containsEntry("titleRu", "Русский заголовок")
+                .containsEntry("messageRu", "Русский текст")
+                .containsEntry("titleEn", "English title")
+                .containsEntry("messageEn", "English body");
     }
 
     private NotificationDto notification(UUID userId) {

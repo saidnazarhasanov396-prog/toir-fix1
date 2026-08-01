@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.attachment.AttachmentPhotoSummary;
 import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.meter.MeterReadingRequest;
+import com.toir.dto.notification.NotificationContent;
 import com.toir.dto.repairrequest.RepairRequestMeterReadingBatchRequest;
 import com.toir.dto.repairrequest.RepairRequestFilterRequest;
 import com.toir.dto.repairrequest.RepairRequestMeterRequirementDto;
@@ -291,8 +292,14 @@ public class RepairRequestService {
         notificationService.notifyDepartmentByPermission(
                 saved.getDepartmentId(),
                 PermissionConstants.REPAIR_REQUEST_ASSIGN,
-                "Repair request created: " + saved.getNumber(),
-                "Yangi ta'mirlash arizasi bor, ijrochi biriktirish kerak.",
+                new NotificationContent(
+                        "Создана заявка на ремонт: " + saved.getNumber(),
+                        "Создана новая заявка на ремонт; необходимо назначить исполнителя.",
+                        "Ta’mirlash arizasi yaratildi: " + saved.getNumber(),
+                        "Yangi ta’mirlash arizasi yaratildi; ijrochini tayinlash kerak.",
+                        "Repair request created: " + saved.getNumber(),
+                        "A new repair request was created and requires an assignee."
+                ),
                 NotificationSeverity.INFO,
                 NotificationEventType.REPAIR_REQUEST_CREATED,
                 NotificationEntityTypes.REPAIR_REQUEST,
@@ -844,8 +851,14 @@ public class RepairRequestService {
         );
         notificationService.notifyUser(
                 assigneeId,
-                "Repair request assigned: " + entity.getNumber(),
-                "Sizga ushbu qurilma bo'yicha ta'mirlash vazifasi biriktirildi.",
+                new NotificationContent(
+                        "Назначена заявка на ремонт: " + entity.getNumber(),
+                        "Вам назначена задача по осмотру или ремонту оборудования.",
+                        "Ta’mirlash arizasi tayinlandi: " + entity.getNumber(),
+                        "Sizga uskunani ko‘rikdan o‘tkazish yoki ta’mirlash vazifasi tayinlandi.",
+                        "Repair request assigned: " + entity.getNumber(),
+                        "You were assigned an equipment inspection or repair task."
+                ),
                 NotificationSeverity.INFO,
                 NotificationEventType.REPAIR_REQUEST_ASSIGNED,
                 NotificationEntityTypes.REPAIR_REQUEST,
@@ -961,8 +974,11 @@ public class RepairRequestService {
         }
         notificationService.notifyUser(
                 recipientId,
-                "Clarification requested: " + entity.getNumber(),
-                comment,
+                new NotificationContent(
+                        "Запрошено уточнение: " + entity.getNumber(), comment,
+                        "Aniqlashtirish so‘raldi: " + entity.getNumber(), comment,
+                        "Clarification requested: " + entity.getNumber(), comment
+                ),
                 NotificationSeverity.INFO,
                 NotificationEventType.REPAIR_REQUEST_CLARIFICATION_REQUESTED,
                 NotificationEntityTypes.REPAIR_REQUEST,

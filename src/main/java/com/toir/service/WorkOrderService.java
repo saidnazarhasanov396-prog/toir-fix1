@@ -7,6 +7,7 @@ import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.attachment.AttachmentPhotoSummary;
 import com.toir.dto.equipment.EquipmentPlacementRequest;
 import com.toir.dto.meter.MeterReadingRequest;
+import com.toir.dto.notification.NotificationContent;
 import com.toir.dto.workorder.*;
 import com.toir.dto.triad.DefectBriefDto;
 import com.toir.dto.triad.RepairRequestBriefDto;
@@ -1015,8 +1016,7 @@ public class WorkOrderService {
         }
         notificationService.notifyUser(
                 performerUserId,
-                "WorkOrder biriktirildi: " + workOrder.getNumber(),
-                performerNotificationMessage(workOrder, equipment),
+                performerNotificationContent(workOrder, equipment),
                 NotificationSeverity.INFO,
                 NotificationEventType.WORK_ORDER_ASSIGNED,
                 NotificationEntityTypes.WORK_ORDER,
@@ -1028,20 +1028,31 @@ public class WorkOrderService {
         notifyAssignedPerformer(workOrder, null);
     }
 
-    private String performerNotificationMessage(WorkOrder workOrder, Equipment equipment) {
+    private NotificationContent performerNotificationContent(WorkOrder workOrder, Equipment equipment) {
         String equipmentName = equipment != null
                 ? formatEquipmentName(equipment)
                 : equipmentRepository.findByIdAndIsDeletedFalse(workOrder.getEquipmentId())
                 .map(this::formatEquipmentName)
-                .orElse("ushbu qurilma");
-        String timing = plannedTimingText(workOrder.getStartPlannedAt());
-        return "%s bo'yicha texnik ko'rikdan o'tkazish yoki ta'mirlashni %s."
-                .formatted(equipmentName, timing);
+                .orElse(null);
+        String ruEquipment = equipmentName != null ? equipmentName : "Это оборудование";
+        String uzEquipment = equipmentName != null ? equipmentName : "Ushbu qurilma";
+        String enEquipment = equipmentName != null ? equipmentName : "This equipment";
+        return new NotificationContent(
+                "Назначен заказ-наряд: " + workOrder.getNumber(),
+                ruEquipment + ": технический осмотр или ремонт необходимо выполнить "
+                        + plannedTimingText(workOrder.getStartPlannedAt(), "ru") + ".",
+                "Ish buyurtmasi tayinlandi: " + workOrder.getNumber(),
+                uzEquipment + " bo‘yicha texnik ko‘rik yoki ta’mirlashni "
+                        + plannedTimingText(workOrder.getStartPlannedAt(), "uz") + ".",
+                "Work order assigned: " + workOrder.getNumber(),
+                enEquipment + ": the inspection or repair must be completed "
+                        + plannedTimingText(workOrder.getStartPlannedAt(), "en") + "."
+        );
     }
 
     private String formatEquipmentName(Equipment equipment) {
         if (equipment == null) {
-            return "ushbu qurilma";
+            return null;
         }
         String code = equipment.getCode();
         String name = equipment.getName();
@@ -1051,7 +1062,7 @@ public class WorkOrderService {
         if (name != null && !name.isBlank()) {
             return name;
         }
-        return "ushbu qurilma";
+        return null;
     }
 
     @Transactional
@@ -3428,19 +3439,35 @@ public class WorkOrderService {
         return user == null ? member.getUserId().toString() : user.getFullName();
     }
 
-    private String plannedTimingText(Instant startPlannedAt) {
+    private String plannedTimingText(Instant startPlannedAt, String language) {
         if (startPlannedAt == null) {
-            return "rejalashtirilgan vaqtda bajarishingiz kerak";
+            return switch (language) {
+                case "ru" -> "в запланированное время";
+                case "en" -> "at the planned time";
+                default -> "rejalashtirilgan vaqtda bajarishingiz kerak";
+            };
         }
         LocalDate plannedDate = startPlannedAt.atZone(CALENDAR_ZONE).toLocalDate();
         LocalDate today = LocalDate.now(CALENDAR_ZONE);
         if (plannedDate.isEqual(today)) {
-            return "bugun bajarishingiz kerak";
+            return switch (language) {
+                case "ru" -> "сегодня";
+                case "en" -> "today";
+                default -> "bugun bajarishingiz kerak";
+            };
         }
         if (plannedDate.isEqual(today.plusDays(1))) {
-            return "ertaga bajarishingiz kerak";
+            return switch (language) {
+                case "ru" -> "завтра";
+                case "en" -> "tomorrow";
+                default -> "ertaga bajarishingiz kerak";
+            };
         }
-        return plannedDate + " sanasida bajarishingiz kerak";
+        return switch (language) {
+            case "ru" -> plannedDate + "";
+            case "en" -> "on " + plannedDate;
+            default -> plannedDate + " sanasida bajarishingiz kerak";
+        };
     }
 
     private EquipmentNode resolveEquipmentNode(UUID equipmentNodeId, Map<UUID, EquipmentNode> equipmentNodeById) {

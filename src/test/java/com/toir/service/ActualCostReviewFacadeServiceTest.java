@@ -384,8 +384,7 @@ class ActualCostReviewFacadeServiceTest {
         when(notificationService.notifyDepartmentByPermission(
                 eq(departmentId),
                 eq(PermissionConstants.ACTUAL_COST_APPROVE),
-                anyString(),
-                anyString(),
+                any(com.toir.dto.notification.NotificationContent.class),
                 eq(NotificationSeverity.WARNING),
                 eq(com.toir.enums.NotificationEventType.ACTUAL_COST_REVIEW_REMINDER),
                 eq("ACTUAL_COST"),
@@ -394,8 +393,7 @@ class ActualCostReviewFacadeServiceTest {
         when(notificationService.notifyDepartmentByPermission(
                 eq(departmentId),
                 eq(PermissionConstants.ACTUAL_COST_APPROVE),
-                anyString(),
-                anyString(),
+                any(com.toir.dto.notification.NotificationContent.class),
                 eq(NotificationSeverity.INFO),
                 eq(com.toir.enums.NotificationEventType.ACTUAL_COST_REVIEW_REMINDER),
                 eq("ACTUAL_COST"),

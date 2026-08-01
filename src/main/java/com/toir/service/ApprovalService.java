@@ -6,6 +6,7 @@ import com.toir.dto.approval.ApprovalHistoryDto;
 import com.toir.dto.approval.ApprovalStartRequest;
 import com.toir.dto.approval.ApprovalStatisticsDto;
 import com.toir.dto.approval.CreateApprovalRequest;
+import com.toir.dto.notification.NotificationContent;
 import com.toir.dto.approval.DecisionRequest;
 import com.toir.dto.approval.ReturnApprovalRequest;
 import com.toir.dto.approval.UpdateApprovalRequest;
@@ -2412,8 +2413,7 @@ public class ApprovalService implements ApprovalOrchestrator {
                     .filter(step -> step.getDecision() == ApprovalDecision.PENDING)
                     .forEach(step -> notifyStepApprovers(
                             step,
-                            "Approval requested: " + request.getTitle(),
-                            "Approval request " + request.getTitle() + " requires your decision.",
+                            approvalRequestedContent(request.getTitle()),
                             NotificationSeverity.INFO,
                             NotificationEventType.APPROVAL_REQUESTED,
                             NotificationEntityTypes.APPROVAL_REQUEST,
@@ -2426,8 +2426,7 @@ public class ApprovalService implements ApprovalOrchestrator {
                 .findFirst()
                 .ifPresent(step -> notifyStepApprovers(
                         step,
-                        "Approval requested: " + request.getTitle(),
-                        "Approval request " + request.getTitle() + " requires your decision.",
+                            approvalRequestedContent(request.getTitle()),
                         NotificationSeverity.INFO,
                         NotificationEventType.APPROVAL_REQUESTED,
                         NotificationEntityTypes.APPROVAL_REQUEST,
@@ -2436,16 +2435,9 @@ public class ApprovalService implements ApprovalOrchestrator {
     }
 
     private void notifyFinalDecision(ApprovalRequest request, ApprovalDecision outcome) {
-        String decisionText = switch (request.getStatus()) {
-            case FAILED -> "failed";
-            case EXPIRED -> "expired";
-            case CANCELLED -> "cancelled";
-            default -> outcome == ApprovalDecision.APPROVED ? "approved" : "rejected";
-        };
         notificationService.notifyApprovalResult(
                 request.getRequesterId(),
-                "Approval " + decisionText + ": " + request.getTitle(),
-                "Approval request " + request.getTitle() + " was " + decisionText + ".",
+                approvalDecisionContent(request, outcome),
                 request.getStatus() == ApprovalStatus.APPROVED ? NotificationSeverity.INFO : NotificationSeverity.WARNING,
                 finalDecisionEvent(request, outcome),
                 notificationEntityType(effectiveTargetType(request)),
@@ -2455,10 +2447,17 @@ public class ApprovalService implements ApprovalOrchestrator {
     }
 
     private void notifyInitiatorRework(ApprovalRequest request) {
+        String title = request.getTitle();
         notificationService.notifyApprovalResult(
                 request.getRequesterId(),
-                "Approval returned for rework: " + request.getTitle(),
-                "Approval request " + request.getTitle() + " was returned for rework.",
+                new NotificationContent(
+                        "Согласование возвращено на доработку: " + title,
+                        "Запрос на согласование " + title + " возвращён на доработку.",
+                        "Tasdiqlash qayta ishlash uchun qaytarildi: " + title,
+                        title + " tasdiqlash so‘rovi qayta ishlash uchun qaytarildi.",
+                        "Approval returned for rework: " + title,
+                        "Approval request " + title + " was returned for rework."
+                ),
                 NotificationSeverity.WARNING,
                 NotificationEventType.APPROVAL_RETURNED_TO_REQUESTER,
                 notificationEntityType(effectiveTargetType(request)),
@@ -2467,11 +2466,9 @@ public class ApprovalService implements ApprovalOrchestrator {
     }
 
     private void notifyReturned(ApprovalRequest request, int fromStep, int returnToStep) {
-        String message = "Approval was returned to step " + returnToStep + " for correction.";
         notificationService.notifyApprovalResult(
                 request.getRequesterId(),
-                "Approval returned: " + request.getTitle(),
-                message,
+                approvalReturnedContent(request.getTitle(), returnToStep, false),
                 NotificationSeverity.WARNING,
                 NotificationEventType.APPROVAL_RETURNED_TO_REQUESTER,
                 notificationEntityType(effectiveTargetType(request)),
@@ -2483,8 +2480,7 @@ public class ApprovalService implements ApprovalOrchestrator {
                 .findFirst()
                 .ifPresent(step -> notifyStepApprovers(
                         step,
-                        "Approval returned to your step: " + request.getTitle(),
-                        message,
+                        approvalReturnedContent(request.getTitle(), returnToStep, true),
                         NotificationSeverity.INFO,
                         NotificationEventType.APPROVAL_RETURNED_TO_APPROVER,
                         NotificationEntityTypes.APPROVAL_REQUEST,
@@ -2492,19 +2488,87 @@ public class ApprovalService implements ApprovalOrchestrator {
                 ));
     }
 
+    private NotificationContent approvalRequestedContent(String title) {
+        return new NotificationContent(
+                "Согласование запрошено: " + title,
+                "Запрос на согласование " + title + " требует вашего решения.",
+                "Tasdiqlash so‘raldi: " + title,
+                title + " tasdiqlash so‘rovi sizning qaroringizni talab qiladi.",
+                "Approval requested: " + title,
+                "Approval request " + title + " requires your decision."
+        );
+    }
+
+    private NotificationContent approvalDecisionContent(ApprovalRequest request, ApprovalDecision outcome) {
+        String englishDecision;
+        String russianDecision;
+        String uzbekDecision;
+        switch (request.getStatus()) {
+            case FAILED -> {
+                englishDecision = "failed";
+                russianDecision = "завершилось ошибкой";
+                uzbekDecision = "muvaffaqiyatsiz yakunlandi";
+            }
+            case EXPIRED -> {
+                englishDecision = "expired";
+                russianDecision = "истекло";
+                uzbekDecision = "muddati tugadi";
+            }
+            case CANCELLED -> {
+                englishDecision = "cancelled";
+                russianDecision = "отменено";
+                uzbekDecision = "bekor qilindi";
+            }
+            default -> {
+                boolean approved = outcome == ApprovalDecision.APPROVED;
+                englishDecision = approved ? "approved" : "rejected";
+                russianDecision = approved ? "одобрено" : "отклонено";
+                uzbekDecision = approved ? "tasdiqlandi" : "rad etildi";
+            }
+        }
+        String title = request.getTitle();
+        return new NotificationContent(
+                "Согласование " + russianDecision + ": " + title,
+                "Запрос на согласование " + title + " " + russianDecision + ".",
+                "Tasdiqlash " + uzbekDecision + ": " + title,
+                title + " tasdiqlash so‘rovi " + uzbekDecision + ".",
+                "Approval " + englishDecision + ": " + title,
+                "Approval request " + title + " was " + englishDecision + "."
+        );
+    }
+
+    private NotificationContent approvalReturnedContent(String title, int returnToStep, boolean forApprover) {
+        String ruTitle = forApprover
+                ? "Согласование возвращено на ваш этап: " + title
+                : "Согласование возвращено: " + title;
+        String uzTitle = forApprover
+                ? "Tasdiqlash sizning bosqichingizga qaytarildi: " + title
+                : "Tasdiqlash qaytarildi: " + title;
+        String enTitle = forApprover
+                ? "Approval returned to your step: " + title
+                : "Approval returned: " + title;
+        return new NotificationContent(
+                ruTitle,
+                "Согласование возвращено на этап " + returnToStep + " для исправления.",
+                uzTitle,
+                "Tasdiqlash tuzatish uchun " + returnToStep + "-bosqichga qaytarildi.",
+                enTitle,
+                "Approval was returned to step " + returnToStep + " for correction."
+        );
+    }
+
     private void notifyStepApprovers(ApprovalStep step,
-                                     String title,
-                                     String message,
+                                     NotificationContent content,
                                      NotificationSeverity severity,
                                      NotificationEventType eventType,
                                      String entityType,
                                      String entityId) {
         if (step.getApproverId() != null) {
-            notificationService.notifyUser(step.getApproverId(), title, message, severity, eventType, entityType, entityId);
+            notificationService.notifyUser(step.getApproverId(), content, severity, eventType, entityType, entityId);
             return;
         }
         activeUsersWithRole(step.getApproverRole())
-                .forEach(user -> notificationService.notifyUser(user.getId(), title, message, severity, eventType, entityType, entityId));
+                .forEach(user -> notificationService.notifyUser(user.getId(), content, severity, eventType, entityType, entityId));
     }
 
     private NotificationEventType finalDecisionEvent(ApprovalRequest request, ApprovalDecision outcome) {

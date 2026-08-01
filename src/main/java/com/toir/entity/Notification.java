@@ -30,6 +30,18 @@ public class Notification extends BaseEntity {
     @Column(nullable = false, columnDefinition = "text")
     private String message;
 
+    @Column(name = "title_uz", nullable = false)
+    private String titleUz;
+
+    @Column(name = "message_uz", nullable = false, columnDefinition = "text")
+    private String messageUz;
+
+    @Column(name = "title_en", nullable = false)
+    private String titleEn;
+
+    @Column(name = "message_en", nullable = false, columnDefinition = "text")
+    private String messageEn;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private NotificationChannel channel = NotificationChannel.WEB;
@@ -69,4 +81,13 @@ public class Notification extends BaseEntity {
 
     @Column(name = "acknowledgement_comment", columnDefinition = "text")
     private String acknowledgementComment;
+
+    @PrePersist
+    @PreUpdate
+    void ensureLocalizedContent() {
+        if (titleUz == null || titleUz.isBlank()) titleUz = title;
+        if (messageUz == null || messageUz.isBlank()) messageUz = message;
+        if (titleEn == null || titleEn.isBlank()) titleEn = title;
+        if (messageEn == null || messageEn.isBlank()) messageEn = message;
+    }
 }

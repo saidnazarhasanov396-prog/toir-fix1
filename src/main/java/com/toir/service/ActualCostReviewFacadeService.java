@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.notification.NotificationContent;
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideCreateRequest;
 import com.toir.dto.actualcostrouteoverride.ActualCostReviewRouteOverrideDto;
@@ -269,14 +270,26 @@ public class ActualCostReviewFacadeService {
         NotificationCounts overdueNotifications = notifyReviewItems(
                 overdueItems,
                 NotificationSeverity.WARNING,
-                "Actual cost overdue",
-                "Actual cost is overdue for finance review."
+                new NotificationContent(
+                        "Просрочена проверка фактических затрат",
+                        "Фактические затраты просрочены для финансовой проверки.",
+                        "Haqiqiy xarajat tekshiruvi kechikdi",
+                        "Haqiqiy xarajatning moliyaviy tekshiruvi kechikdi.",
+                        "Actual cost overdue",
+                        "Actual cost is overdue for finance review."
+                )
         );
         NotificationCounts dueSoonNotifications = notifyReviewItems(
                 dueSoonItems,
                 NotificationSeverity.INFO,
-                "Actual cost review due soon",
-                "Actual cost is approaching its finance review SLA."
+                new NotificationContent(
+                        "Приближается срок проверки фактических затрат",
+                        "Фактические затраты приближаются к сроку SLA финансовой проверки.",
+                        "Haqiqiy xarajat tekshiruvi muddati yaqinlashmoqda",
+                        "Haqiqiy xarajat moliyaviy tekshiruv SLA muddatiga yaqinlashmoqda.",
+                        "Actual cost review due soon",
+                        "Actual cost is approaching its finance review SLA."
+                )
         );
         return new EvaluateOverdueActualCostsResponse(
                 threshold,
@@ -535,8 +548,7 @@ public class ActualCostReviewFacadeService {
 
     private NotificationCounts notifyReviewItems(List<ActualCostReviewItem> items,
                                                  NotificationSeverity severity,
-                                                 String title,
-                                                 String message) {
+                                                 NotificationContent content) {
         int created = 0;
         int skipped = 0;
         for (ActualCostReviewItem item : items) {
@@ -544,8 +556,7 @@ public class ActualCostReviewFacadeService {
             List<NotificationDto> notifications = notificationService.notifyDepartmentByPermission(
                     departmentId,
                     PermissionConstants.ACTUAL_COST_APPROVE,
-                    title,
-                    message,
+                    content,
                     severity,
                     NotificationEventType.ACTUAL_COST_REVIEW_REMINDER,
                     NotificationEntityTypes.ACTUAL_COST,

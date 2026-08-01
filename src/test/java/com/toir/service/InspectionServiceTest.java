@@ -98,7 +98,7 @@ class InspectionServiceTest {
         lenient().when(notificationService.notifyDepartmentByPermission(
                 any(),
                 any(),
-                any(),
+                any(com.toir.dto.notification.NotificationContent.class),
                 any(),
                 any(),
                 any(),
@@ -413,8 +413,11 @@ class InspectionServiceTest {
         verify(notificationService).notifyDepartmentByPermission(
                 eq(departmentId),
                 eq(PermissionConstants.DEFECT_READ),
-                org.mockito.ArgumentMatchers.contains("Inspection FAIL triage"),
-                org.mockito.ArgumentMatchers.contains(defect.getCode()),
+                org.mockito.ArgumentMatchers.argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains("Inspection failure triage")
+                                && content.messageEn().contains(defect.getCode())
+                                && content.titleRu().contains("разбор")
+                                && content.titleUz().contains("tahlili")),
                 eq(com.toir.enums.NotificationSeverity.WARNING),
                 eq(com.toir.enums.NotificationEventType.DEFECT_CREATED_FROM_INSPECTION),
                 eq("DEFECT"),

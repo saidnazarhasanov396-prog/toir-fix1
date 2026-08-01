@@ -38,12 +38,14 @@ class NotificationDeviceServiceTest {
         service.register(userId, new NotificationDeviceRegisterRequest(
                 " token-1 ",
                 FcmDevicePlatform.IOS,
-                "client-1"
+                "client-1",
+                "uz-UZ"
         ));
 
         assertThat(existing.getUserId()).isEqualTo(userId);
         assertThat(existing.getPlatform()).isEqualTo(FcmDevicePlatform.IOS);
         assertThat(existing.getDeviceId()).isEqualTo("client-1");
+        assertThat(existing.getLanguageCode()).isEqualTo("uz");
         assertThat(existing.isActive()).isTrue();
         assertThat(existing.getLastSeenAt()).isNotNull();
     }

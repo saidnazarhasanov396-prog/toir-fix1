@@ -32,6 +32,7 @@ public class NotificationDeviceService {
         entity.setToken(normalizedToken);
         entity.setPlatform(request.platform());
         entity.setDeviceId(normalizeOptional(request.deviceId()));
+        entity.setLanguageCode(normalizeLanguage(request.language()));
         entity.setActive(true);
         entity.setLastSeenAt(now);
         return NotificationDeviceDto.from(repository.save(entity));
@@ -65,6 +66,20 @@ public class NotificationDeviceService {
             throw RestException.badRequest("FCM token is required");
         }
         return token.trim();
+    }
+
+    private String normalizeLanguage(String language) {
+        if (language == null) {
+            return "ru";
+        }
+        String normalized = language.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.startsWith("uz")) {
+            return "uz";
+        }
+        if (normalized.startsWith("en")) {
+            return "en";
+        }
+        return "ru";
     }
 
     private String normalizeOptional(String value) {

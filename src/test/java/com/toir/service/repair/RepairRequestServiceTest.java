@@ -280,8 +280,7 @@ class RepairRequestServiceTest {
         verify(notificationService).notifyDepartmentByPermission(
                 eq(equipmentDepartmentId),
                 any(),
-                any(),
-                any(),
+                any(com.toir.dto.notification.NotificationContent.class),
                 any(),
                 any(),
                 any(),
@@ -954,8 +953,11 @@ class RepairRequestServiceTest {
 
         verify(notificationService).notifyUser(
                 eq(entity.getReporterId()),
-                org.mockito.ArgumentMatchers.contains("Clarification requested"),
-                org.mockito.ArgumentMatchers.contains("Need serial number"),
+                org.mockito.ArgumentMatchers.argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains("Clarification requested")
+                                && content.messageEn().contains("Need serial number")
+                                && content.titleRu().contains("Запрошено уточнение")
+                                && content.titleUz().contains("Aniqlashtirish")),
                 eq(com.toir.enums.NotificationSeverity.INFO),
                 any(com.toir.enums.NotificationEventType.class),
                 eq("REPAIR_REQUEST"),
@@ -983,8 +985,11 @@ class RepairRequestServiceTest {
         assertThat(result.clarificationReason()).isEqualTo("Need oil pressure trend");
         verify(notificationService).notifyUser(
                 eq(recipientId),
-                org.mockito.ArgumentMatchers.contains("Clarification requested"),
-                org.mockito.ArgumentMatchers.contains("Need oil pressure trend"),
+                org.mockito.ArgumentMatchers.argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains("Clarification requested")
+                                && content.messageEn().contains("Need oil pressure trend")
+                                && content.titleRu().contains("Запрошено уточнение")
+                                && content.titleUz().contains("Aniqlashtirish")),
                 eq(com.toir.enums.NotificationSeverity.INFO),
                 any(com.toir.enums.NotificationEventType.class),
                 eq("REPAIR_REQUEST"),
@@ -1006,7 +1011,11 @@ class RepairRequestServiceTest {
                 new RepairRequestClarificationRequest(recipientId, "Need oil pressure trend", "APPROVAL")
         )).hasMessageContaining("Clarification recipient not found");
 
-        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any());
+        verify(notificationService, never()).notifyUser(
+                any(UUID.class), any(com.toir.dto.notification.NotificationContent.class),
+                any(com.toir.enums.NotificationSeverity.class),
+                any(com.toir.enums.NotificationEventType.class), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()
+        );
     }
 
     @Test
@@ -1145,8 +1154,11 @@ class RepairRequestServiceTest {
         assertThat(result.assignedToId()).isEqualTo(assigneeId);
         verify(notificationService).notifyUser(
                 eq(assigneeId),
-                org.mockito.ArgumentMatchers.contains("Repair request assigned"),
-                eq("Sizga ushbu qurilma bo'yicha ta'mirlash vazifasi biriktirildi."),
+                org.mockito.ArgumentMatchers.argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains("Repair request assigned")
+                                && content.messageEn().contains("inspection or repair")
+                                && content.titleRu().contains("Назначена заявка")
+                                && content.titleUz().contains("tayinlandi")),
                 eq(com.toir.enums.NotificationSeverity.INFO),
                 any(com.toir.enums.NotificationEventType.class),
                 eq("REPAIR_REQUEST"),
@@ -1326,7 +1338,11 @@ class RepairRequestServiceTest {
         assertThatThrownBy(() -> service.assign(id, assigneeId))
                 .hasMessageContaining("Assignee not found");
 
-        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any());
+        verify(notificationService, never()).notifyUser(
+                any(UUID.class), any(com.toir.dto.notification.NotificationContent.class),
+                any(com.toir.enums.NotificationSeverity.class),
+                any(com.toir.enums.NotificationEventType.class), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()
+        );
     }
 
     @Test
@@ -1344,7 +1360,11 @@ class RepairRequestServiceTest {
         assertThatThrownBy(() -> service.assign(id, assigneeId))
                 .hasMessageContaining("Assignee is inactive");
 
-        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any());
+        verify(notificationService, never()).notifyUser(
+                any(UUID.class), any(com.toir.dto.notification.NotificationContent.class),
+                any(com.toir.enums.NotificationSeverity.class),
+                any(com.toir.enums.NotificationEventType.class), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()
+        );
     }
 
     @Test

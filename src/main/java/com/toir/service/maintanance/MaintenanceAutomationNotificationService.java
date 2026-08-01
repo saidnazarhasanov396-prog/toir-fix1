@@ -1,5 +1,6 @@
 package com.toir.service.maintanance;
 
+import com.toir.dto.notification.NotificationContent;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.MaintenanceDueEvent;
 import com.toir.enums.MaintenanceDueStatus;
@@ -38,8 +39,7 @@ public class MaintenanceAutomationNotificationService {
                 rule,
                 equipment,
                 statusEventType(event.getDueStatus()),
-                statusTitle(event.getDueStatus()),
-                statusMessage(event.getDueStatus(), event.getCycleKey()),
+                statusContent(event.getDueStatus(), event.getCycleKey()),
                 statusSeverity(event.getDueStatus())
         );
     }
@@ -52,8 +52,11 @@ public class MaintenanceAutomationNotificationService {
                 rule,
                 equipment,
                 NotificationEventType.MAINTENANCE_REQUIRES_APPROVAL,
-                MAINTENANCE_REQUIRES_APPROVAL,
-                "Maintenance requires approval: " + event.getCycleKey(),
+                new NotificationContent(
+                        "Требуется согласование ТО", "ТО требует согласования: " + event.getCycleKey(),
+                        "Texnik xizmatni tasdiqlash kerak", "Texnik xizmatni tasdiqlash kerak: " + event.getCycleKey(),
+                        "Maintenance requires approval", "Maintenance requires approval: " + event.getCycleKey()
+                ),
                 NotificationSeverity.WARNING
         );
     }
@@ -66,8 +69,11 @@ public class MaintenanceAutomationNotificationService {
                 rule,
                 equipment,
                 NotificationEventType.MAINTENANCE_WORK_ORDER_CREATED,
-                MAINTENANCE_WORK_ORDER_CREATED,
-                "Maintenance work order created: " + event.getCycleKey(),
+                new NotificationContent(
+                        "Создан заказ-наряд на ТО", "Создан заказ-наряд на ТО: " + event.getCycleKey(),
+                        "Texnik xizmat ish buyurtmasi yaratildi", "Texnik xizmat ish buyurtmasi yaratildi: " + event.getCycleKey(),
+                        "Maintenance work order created", "Maintenance work order created: " + event.getCycleKey()
+                ),
                 NotificationSeverity.INFO
         );
     }
@@ -76,8 +82,7 @@ public class MaintenanceAutomationNotificationService {
                                  EquipmentMaintenanceEffectiveRule rule,
                                  Equipment equipment,
                                  NotificationEventType eventType,
-                                 String title,
-                                 String message,
+                                 NotificationContent content,
                                  NotificationSeverity severity) {
         if (event == null || event.getId() == null || rule == null || equipment == null) {
             return 0;
@@ -86,8 +91,7 @@ public class MaintenanceAutomationNotificationService {
         if (rule.defaultResponsibleId() != null) {
             return notificationService.notifyEmployee(
                     rule.defaultResponsibleId(),
-                    title,
-                    message,
+                    content,
                     severity,
                     eventType,
                     ENTITY_TYPE,
@@ -99,9 +103,8 @@ public class MaintenanceAutomationNotificationService {
         List<?> departmentNotifications = notificationService.notifyDepartmentByPermission(
                 departmentId,
                 PermissionConstants.MAINTENANCE_EVENT_READ,
-                title,
-                message,
-                severity,
+                    content,
+                    severity,
                 eventType,
                 ENTITY_TYPE,
                 entityId
@@ -115,9 +118,8 @@ public class MaintenanceAutomationNotificationService {
         }
         return notificationService.notifyEmployee(
                 equipment.getResponsibleId(),
-                title,
-                message,
-                severity,
+                    content,
+                    severity,
                 eventType,
                 ENTITY_TYPE,
                 entityId
@@ -142,23 +144,25 @@ public class MaintenanceAutomationNotificationService {
         };
     }
 
-    private String statusTitle(MaintenanceDueStatus status) {
-        return switch (status) {
-            case UPCOMING -> MAINTENANCE_UPCOMING;
-            case DUE -> MAINTENANCE_DUE;
-            case OVERDUE -> MAINTENANCE_OVERDUE;
-            case BLOCKED -> MAINTENANCE_BLOCKED;
-            case NOT_DUE -> MAINTENANCE_DUE;
-        };
-    }
-
-    private String statusMessage(MaintenanceDueStatus status, String cycleKey) {
+    private NotificationContent statusContent(MaintenanceDueStatus status, String cycleKey) {
         String cycle = cycleKey == null ? "" : cycleKey;
         return switch (status) {
-            case UPCOMING -> "Maintenance upcoming: " + cycle;
-            case DUE, NOT_DUE -> "Maintenance due: " + cycle;
-            case OVERDUE -> "Maintenance overdue: " + cycle;
-            case BLOCKED -> "Maintenance blocked: " + cycle;
+            case UPCOMING -> new NotificationContent(
+                    "Приближается ТО", "Приближается срок ТО: " + cycle,
+                    "Texnik xizmat yaqinlashmoqda", "Texnik xizmat muddati yaqinlashmoqda: " + cycle,
+                    "Maintenance upcoming", "Maintenance upcoming: " + cycle);
+            case DUE, NOT_DUE -> new NotificationContent(
+                    "Наступил срок ТО", "Наступил срок ТО: " + cycle,
+                    "Texnik xizmat muddati keldi", "Texnik xizmat muddati keldi: " + cycle,
+                    "Maintenance due", "Maintenance due: " + cycle);
+            case OVERDUE -> new NotificationContent(
+                    "ТО просрочено", "ТО просрочено: " + cycle,
+                    "Texnik xizmat kechikdi", "Texnik xizmat kechikdi: " + cycle,
+                    "Maintenance overdue", "Maintenance overdue: " + cycle);
+            case BLOCKED -> new NotificationContent(
+                    "ТО заблокировано", "ТО заблокировано: " + cycle,
+                    "Texnik xizmat bloklandi", "Texnik xizmat bloklandi: " + cycle,
+                    "Maintenance blocked", "Maintenance blocked: " + cycle);
         };
     }
 
