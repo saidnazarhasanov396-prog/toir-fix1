@@ -77,7 +77,7 @@ toir:
       enabled: ${TOIR_FEATURES_ANNUAL_MAINTENANCE_APPROVAL_FIRST_ENABLED:true}
   ppr-lifecycle:
     planning-sessions-enabled: ${TOIR_PPR_LIFECYCLE_PLANNING_SESSIONS_ENABLED:true}
-    due-work-order-generation-enabled: ${TOIR_PPR_LIFECYCLE_DUE_WORK_ORDER_GENERATION_ENABLED:true}
+    due-work-order-generation-enabled: ${TOIR_PPR_LIFECYCLE_DUE_WORK_ORDER_GENERATION_ENABLED:false}
     strict-closure-enabled: ${TOIR_PPR_LIFECYCLE_STRICT_CLOSURE_ENABLED:true}
     work-order-generation:
       cron: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_CRON:0 10 * * * *}
