@@ -64,9 +64,11 @@ class AtilInboundIntegrationControllerContractTest {
                 departmentId,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
+                UUID.randomUUID(),
                 "GPS-7",
                 45000.5,
                 1200.0,
+                UUID.randomUUID(),
                 LocalDate.parse("2024-01-15"),
                 "ACTIVE"
         ));

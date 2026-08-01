@@ -464,6 +464,9 @@ class EquipmentServiceTest {
         Equipment equipment = equipment("EQ-PASSPORT");
         equipment.setId(equipmentId);
         equipment.setEquipmentTypeId(typeId);
+        equipment.setCriticalityClassId(null);
+        equipment.setResponsibleId(null);
+        equipment.setCommissionedAt(null);
         EquipmentAttributeDefinition serialDefinition = requiredDefinition(
                 typeId,
                 "serial_plate",
@@ -2428,6 +2431,7 @@ class EquipmentServiceTest {
         Equipment existing = equipment("EQ-2026-0003");
         existing.setId(id);
         existing.setDepartmentId(null);
+        existing.setLocationId(UUID.randomUUID());
         when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(existing));
         when(repository.save(any(Equipment.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubEnrichment();
@@ -3490,6 +3494,9 @@ class EquipmentServiceTest {
         equipment.setInventoryNumber("INV-" + code);
         equipment.setEquipmentTypeId(UUID.randomUUID());
         equipment.setDepartmentId(UUID.randomUUID());
+        equipment.setCriticalityClassId(UUID.randomUUID());
+        equipment.setResponsibleId(UUID.randomUUID());
+        equipment.setCommissionedAt(LocalDate.of(2024, 1, 1));
         equipment.setStatus(EquipmentStatus.ACTIVE);
         equipment.setCategory(EquipmentCategory.PRODUCTION_EQUIPMENT);
         return equipment;
@@ -4302,6 +4309,9 @@ class EquipmentServiceTest {
         Equipment equipment = equipment("EQ-GLOBAL-PASSPORT");
         equipment.setId(equipmentId);
         equipment.setDepartmentId(null);
+        equipment.setCriticalityClassId(null);
+        equipment.setResponsibleId(null);
+        equipment.setCommissionedAt(null);
 
         stubEnrichment();
         when(repository.search(any(), any(), any(), any(), any(), any()))

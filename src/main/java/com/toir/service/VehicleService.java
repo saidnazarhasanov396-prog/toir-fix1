@@ -40,6 +40,9 @@ import com.toir.security.SecurityScope;
 import com.toir.service.equipment.EquipmentAttributeService;
 import com.toir.service.equipment.EquipmentManualAttributeService;
 import com.toir.service.equipment.EquipmentService;
+import com.toir.service.equipment.EquipmentLifetimeCalculator;
+import com.toir.service.equipment.EquipmentLifetimeValidator;
+import com.toir.service.equipment.EquipmentRequiredFields;
 import com.toir.service.attachment.AttachmentGroupService;
 import com.toir.service.file_management.FileService;
 import com.toir.service.sparepartlifecycle.VehicleMeterProjectionGuard;
@@ -244,6 +247,7 @@ public class VehicleService {
         Equipment equipment = new Equipment();
         equipment.setCode(nextEquipmentCode());
         applyEquipment(equipment, request);
+        EquipmentRequiredFields.validate(equipment);
         validateAssignedDriver(request.assignedDriverId(), request.assignedDriverUsageLimitMinutes(), request.departmentId(), null);
         Equipment savedEquipment = equipmentRepository.save(equipment);
         writeInitialLocationHistory(savedEquipment);
@@ -308,6 +312,7 @@ public class VehicleService {
         );
         VehicleLocationSnapshot fromLocation = vehicleLocationSnapshot(equipment);
         applyEquipment(equipment, request);
+        EquipmentRequiredFields.validate(equipment);
         applyDetails(details, request);
 
         Equipment newEquipment = equipmentRepository.save(equipment);
@@ -793,7 +798,9 @@ public class VehicleService {
         equipment.setStatus(request.status() != null ? request.status() : EquipmentStatus.ACTIVE);
         equipment.setCategory(EquipmentCategory.VEHICLE);
         equipment.setManufacturer(request.brand());
-        equipment.setResponsibleId(request.assignedDriverId());
+        equipment.setResponsibleId(request.responsibleId());
+        equipment.setCriticalityClassId(request.criticalityClassId());
+        equipment.setCommissionedAt(request.commissionedAt());
         equipment.setCurrentLocationType(EquipmentLocationType.DEPARTMENT);
         equipment.setCurrentWarehouseId(null);
         equipment.setResponsibleDepartmentId(request.departmentId());
@@ -808,11 +815,23 @@ public class VehicleService {
         equipment.setAverageDailyUsage(request.averageDailyUsage());
         applyVehicleLifetime(equipment, request);
         equipment.setDaysOfResourceRemaining(
-                equipmentService.calculateDaysOfResourceRemaining(
+                EquipmentLifetimeCalculator.remainingDays(
+                        equipment.getLifetimeBaselineValue() == null ? 0.0 : equipment.getLifetimeBaselineValue(),
                         equipment.getLifetimeLimitValue(),
+                        currentLifetimeValue(request, equipment.getLifetimeCounterType()),
                         equipment.getAverageDailyUsage()
                 )
         );
+    }
+
+    private Double currentLifetimeValue(VehicleRequest request, MeterType counterType) {
+        if (counterType == MeterType.MILEAGE_KM) {
+            return request.currentOdometerKm();
+        }
+        if (counterType == MeterType.ENGINE_HOURS) {
+            return request.currentEngineHours();
+        }
+        return null;
     }
 
     private void writeInitialLocationHistory(Equipment equipment) {
@@ -905,6 +924,13 @@ public class VehicleService {
             counterType = MeterType.MILEAGE_KM;
         }
         validateVehicleLifetimeConfig(counterType, request.lifetimeMeterId(), limitValue);
+        EquipmentLifetimeValidator.validate(
+                limitValue,
+                request.lifetimeBaselineValue(),
+                request.lifetimeWarningPercent(),
+                request.averageDailyUsage(),
+                currentLifetimeValue(request, counterType)
+        );
         equipment.setLifetimeCounterType(counterType);
         equipment.setLifetimeMeterId(request.lifetimeMeterId());
         equipment.setLifetimeLimitValue(limitValue);
