@@ -2,10 +2,13 @@ package com.toir.service.approval;
 
 import com.toir.dto.approval.ApprovalRuleDto;
 import com.toir.entity.ApprovalTemplate;
+import com.toir.entity.users.User;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRejectionPolicy;
+import com.toir.enums.ApprovalTieBreakPolicy;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.UserStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.repository.users.RoleRepository;
@@ -16,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,6 +31,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ApprovalRejectionPolicyRuleServiceTest {
+
+    private static final UUID USER_1 = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID USER_2 = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID USER_3 = UUID.fromString("00000000-0000-0000-0000-000000000003");
 
     private final ApprovalTemplateRepository templateRepository = mock(ApprovalTemplateRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
@@ -63,23 +71,67 @@ class ApprovalRejectionPolicyRuleServiceTest {
     }
 
     @Test
-    void majorityRequiresAtLeastOneAssignment() {
+    void majorityRequiresAtLeastTwoAssignments() {
         assertPolicyFailure(
                 policyRule(
                         ApprovalFlowType.PARALLEL_ALL,
                         ApprovalRejectionPolicy.MAJORITY,
                         List.of()),
-                "APPROVAL_MAJORITY_REQUIRES_ODD_ASSIGNMENTS");
+                "APPROVAL_MAJORITY_REQUIRES_AT_LEAST_TWO_ASSIGNMENTS");
     }
 
     @Test
-    void majorityRequiresAnOddNumberOfAssignments() {
+    void majorityRequiresTieBreakForEvenAssignments() {
         assertPolicyFailure(
                 policyRule(
                         ApprovalFlowType.PARALLEL_ALL,
                         ApprovalRejectionPolicy.MAJORITY,
                         List.of(roleStep(1, "MANAGER"), roleStep(2, "SYSTEM_ADMIN"))),
-                "APPROVAL_MAJORITY_REQUIRES_ODD_ASSIGNMENTS");
+                "APPROVAL_MAJORITY_TIE_BREAK_REQUIRED");
+    }
+
+    @Test
+    void majorityRequiresExplicitUsersBecauseRolesExpandAtRuntime() {
+        stubSave();
+
+        assertPolicyFailure(
+                policyRule(
+                        ApprovalFlowType.PARALLEL_ALL,
+                        ApprovalRejectionPolicy.MAJORITY,
+                        List.of(roleStep(1, "MANAGER"), roleStep(2, "SYSTEM_ADMIN")),
+                        ApprovalTieBreakPolicy.REJECT_ON_TIE),
+                "APPROVAL_MAJORITY_REQUIRES_EXPLICIT_USERS");
+    }
+
+    @Test
+    void majorityPersistsExplicitTieBreakForEvenAssignments() {
+        stubSave();
+
+        ApprovalRuleDto saved = service.saveRule(policyRule(
+                ApprovalFlowType.PARALLEL_ALL,
+                ApprovalRejectionPolicy.MAJORITY,
+                List.of(userStep(1, USER_1), userStep(2, USER_2)),
+                ApprovalTieBreakPolicy.REJECT_ON_TIE));
+
+        assertThat(saved.tieBreakPolicy()).isEqualTo(ApprovalTieBreakPolicy.REJECT_ON_TIE);
+        ArgumentCaptor<ApprovalTemplate> captor = ArgumentCaptor.forClass(ApprovalTemplate.class);
+        verify(templateRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getTieBreakPolicy())
+                .isEqualTo(ApprovalTieBreakPolicy.REJECT_ON_TIE);
+    }
+
+    @Test
+    void majorityRejectsTieBreakForOddAssignments() {
+        assertPolicyFailure(
+                policyRule(
+                        ApprovalFlowType.PARALLEL_ALL,
+                        ApprovalRejectionPolicy.MAJORITY,
+                        List.of(
+                                roleStep(1, "MANAGER"),
+                                roleStep(2, "SYSTEM_ADMIN"),
+                                roleStep(3, "DEPARTMENT_HEAD")),
+                        ApprovalTieBreakPolicy.APPROVE_ON_TIE),
+                "APPROVAL_MAJORITY_TIE_BREAK_NOT_APPLICABLE");
     }
 
     @Test
@@ -90,9 +142,9 @@ class ApprovalRejectionPolicyRuleServiceTest {
                 ApprovalFlowType.PARALLEL_ALL,
                 ApprovalRejectionPolicy.MAJORITY,
                 List.of(
-                        roleStep(1, "MANAGER"),
-                        roleStep(2, "SYSTEM_ADMIN"),
-                        roleStep(3, "DEPARTMENT_HEAD"))));
+                        userStep(1, USER_1),
+                        userStep(2, USER_2),
+                        userStep(3, USER_3))));
 
         assertThat(saved.rejectionPolicy()).isEqualTo(ApprovalRejectionPolicy.MAJORITY);
         ArgumentCaptor<ApprovalTemplate> captor = ArgumentCaptor.forClass(ApprovalTemplate.class);
@@ -125,6 +177,8 @@ class ApprovalRejectionPolicyRuleServiceTest {
         when(templateRepository.findAllByTargetTypeAndActionTypeAndActiveTrueAndIsDeletedFalse(
                 ApprovalTargetType.WORK_ORDER,
                 ApprovalActionType.APPROVE)).thenReturn(List.of());
+        when(userRepository.findAllByIdInAndIsDeletedFalse(any()))
+                .thenReturn(List.of(activeUser(USER_1), activeUser(USER_2), activeUser(USER_3)));
         when(templateRepository.saveAndFlush(any(ApprovalTemplate.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -140,6 +194,15 @@ class ApprovalRejectionPolicyRuleServiceTest {
             ApprovalRejectionPolicy rejectionPolicy,
             List<ApprovalRuleDto.Step> steps
     ) {
+        return policyRule(flowType, rejectionPolicy, steps, null);
+    }
+
+    private ApprovalRuleDto policyRule(
+            ApprovalFlowType flowType,
+            ApprovalRejectionPolicy rejectionPolicy,
+            List<ApprovalRuleDto.Step> steps,
+            ApprovalTieBreakPolicy tieBreakPolicy
+    ) {
         return new ApprovalRuleDto(
                 null,
                 ApprovalTargetType.WORK_ORDER,
@@ -150,6 +213,7 @@ class ApprovalRejectionPolicyRuleServiceTest {
                 true,
                 flowType,
                 rejectionPolicy,
+                tieBreakPolicy,
                 null);
     }
 
@@ -160,5 +224,22 @@ class ApprovalRejectionPolicyRuleServiceTest {
                 null,
                 role,
                 ApprovalRuleDto.ApproverType.ROLE);
+    }
+
+    private ApprovalRuleDto.Step userStep(int order, UUID userId) {
+        return new ApprovalRuleDto.Step(
+                order,
+                userId,
+                null,
+                null,
+                ApprovalRuleDto.ApproverType.USER);
+    }
+
+    private User activeUser(UUID userId) {
+        return User.builder()
+                .id(userId)
+                .status(UserStatus.ACTIVE)
+                .isDeleted(false)
+                .build();
     }
 }

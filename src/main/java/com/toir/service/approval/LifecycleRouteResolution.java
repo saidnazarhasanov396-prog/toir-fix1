@@ -6,12 +6,14 @@ import java.util.List;
 import java.util.UUID;
 import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRejectionPolicy;
+import com.toir.enums.ApprovalTieBreakPolicy;
 
 public record LifecycleRouteResolution(
         List<CreateApprovalRequest.StepInput> steps,
         LifecycleApprovalRoutePolicy.Reason reason,
         ApprovalFlowType flowType,
         ApprovalRejectionPolicy rejectionPolicy,
+        ApprovalTieBreakPolicy tieBreakPolicy,
         UUID templateId,
         Long templateVersion
 ) {
@@ -20,7 +22,7 @@ public record LifecycleRouteResolution(
             LifecycleApprovalRoutePolicy.Reason reason
     ) {
         this(steps, reason, ApprovalFlowType.SEQUENTIAL,
-                ApprovalRejectionPolicy.TERMINATE, null, null);
+                ApprovalRejectionPolicy.TERMINATE, null, null, null);
     }
 
     public LifecycleRouteResolution(
@@ -31,6 +33,17 @@ public record LifecycleRouteResolution(
             Long templateVersion
     ) {
         this(steps, reason, flowType, ApprovalRejectionPolicy.TERMINATE, templateId, templateVersion);
+    }
+
+    public LifecycleRouteResolution(
+            List<CreateApprovalRequest.StepInput> steps,
+            LifecycleApprovalRoutePolicy.Reason reason,
+            ApprovalFlowType flowType,
+            ApprovalRejectionPolicy rejectionPolicy,
+            UUID templateId,
+            Long templateVersion
+    ) {
+        this(steps, reason, flowType, rejectionPolicy, null, templateId, templateVersion);
     }
 
     public LifecycleRouteResolution {

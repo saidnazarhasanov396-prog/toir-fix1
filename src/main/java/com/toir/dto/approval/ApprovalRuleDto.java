@@ -4,6 +4,7 @@ import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalFlowType;
 import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalTargetType;
+import com.toir.enums.ApprovalTieBreakPolicy;
 
 import java.util.List;
 import java.util.UUID;
@@ -18,8 +19,25 @@ public record ApprovalRuleDto(
         boolean active,
         ApprovalFlowType flowType,
         ApprovalRejectionPolicy rejectionPolicy,
+        ApprovalTieBreakPolicy tieBreakPolicy,
         Long version
 ) {
+    public ApprovalRuleDto(
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType,
+            String documentName,
+            int stepsCount,
+            List<Step> steps,
+            boolean active,
+            ApprovalFlowType flowType,
+            ApprovalRejectionPolicy rejectionPolicy,
+            ApprovalTieBreakPolicy tieBreakPolicy,
+            Long version
+    ) {
+        this(null, targetType, actionType, documentName, stepsCount, steps, active,
+                flowType, rejectionPolicy, tieBreakPolicy, version);
+    }
+
     public ApprovalRuleDto(
             ApprovalTargetType targetType,
             ApprovalActionType actionType,
@@ -32,7 +50,23 @@ public record ApprovalRuleDto(
             Long version
     ) {
         this(null, targetType, actionType, documentName, stepsCount, steps, active,
-                flowType, rejectionPolicy, version);
+                flowType, rejectionPolicy, null, version);
+    }
+
+    public ApprovalRuleDto(
+            UUID id,
+            ApprovalTargetType targetType,
+            ApprovalActionType actionType,
+            String documentName,
+            int stepsCount,
+            List<Step> steps,
+            boolean active,
+            ApprovalFlowType flowType,
+            ApprovalRejectionPolicy rejectionPolicy,
+            Long version
+    ) {
+        this(id, targetType, actionType, documentName, stepsCount, steps, active,
+                flowType, rejectionPolicy, null, version);
     }
 
     public ApprovalRuleDto(
@@ -45,7 +79,7 @@ public record ApprovalRuleDto(
             boolean active
     ) {
         this(id, targetType, actionType, documentName, stepsCount, steps, active,
-                ApprovalFlowType.SEQUENTIAL, ApprovalRejectionPolicy.TERMINATE, null);
+                ApprovalFlowType.SEQUENTIAL, ApprovalRejectionPolicy.TERMINATE, null, null);
     }
 
     public ApprovalRuleDto(
@@ -57,7 +91,7 @@ public record ApprovalRuleDto(
             boolean active
     ) {
         this(null, targetType, actionType, documentName, stepsCount, steps, active,
-                ApprovalFlowType.SEQUENTIAL, ApprovalRejectionPolicy.TERMINATE, null);
+                ApprovalFlowType.SEQUENTIAL, ApprovalRejectionPolicy.TERMINATE, null, null);
     }
 
     public ApprovalRuleDto(
@@ -71,7 +105,7 @@ public record ApprovalRuleDto(
             Long version
     ) {
         this(null, targetType, actionType, documentName, stepsCount, steps, active,
-                flowType, ApprovalRejectionPolicy.TERMINATE, version);
+                flowType, ApprovalRejectionPolicy.TERMINATE, null, version);
     }
 
     public ApprovalRuleDto(
@@ -86,7 +120,7 @@ public record ApprovalRuleDto(
             Long version
     ) {
         this(id, targetType, actionType, documentName, stepsCount, steps, active,
-                flowType, ApprovalRejectionPolicy.TERMINATE, version);
+                flowType, ApprovalRejectionPolicy.TERMINATE, null, version);
     }
 
     public ApprovalRuleDto {
