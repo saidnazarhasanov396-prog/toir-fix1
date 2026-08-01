@@ -6,6 +6,7 @@ import com.toir.entity.ApprovalTemplate;
 import com.toir.entity.ApprovalTemplateStep;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalFlowType;
+import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.repository.ApprovalTemplateRepository;
 import com.toir.security.ApprovalDomainPermissions;
@@ -48,6 +49,7 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
             LifecycleRouteResolution resolution = resolveLifecycleRoute(request.getTargetType(), actionType);
             return new ApprovalRouteSnapshot(
                     resolution.flowType(),
+                    resolution.rejectionPolicy(),
                     resolution.templateId(),
                     resolution.templateVersion(),
                     resolution.steps());
@@ -68,6 +70,7 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
             }
             return new ApprovalRouteSnapshot(
                     effectiveFlowType(template),
+                    effectiveRejectionPolicy(template),
                     template.getId(),
                     template.getVersion(),
                     steps);
@@ -83,6 +86,7 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                         ))
                 .map(template -> new ApprovalRouteSnapshot(
                         effectiveFlowType(template),
+                        effectiveRejectionPolicy(template),
                         template.getId(),
                         template.getVersion(),
                         stepsFromTemplate(template)))
@@ -136,6 +140,7 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
                 frozenSteps,
                 validation.reason(),
                 effectiveFlowType(template),
+                effectiveRejectionPolicy(template),
                 template.getId(),
                 template.getVersion());
     }
@@ -180,6 +185,12 @@ public class DefaultApprovalRouteResolver implements ApprovalRouteResolver {
             return List.of();
         }
         return List.of(new CreateApprovalRequest.StepInput(null, template.getApproverRole().trim()));
+    }
+
+    private ApprovalRejectionPolicy effectiveRejectionPolicy(ApprovalTemplate template) {
+        return template.getRejectionPolicy() == null
+                ? ApprovalRejectionPolicy.TERMINATE
+                : template.getRejectionPolicy();
     }
 
     private ApprovalFlowType effectiveFlowType(ApprovalTemplate template) {

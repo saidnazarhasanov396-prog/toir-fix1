@@ -174,6 +174,12 @@ public class ApprovalController {
         return ResponseEntity.ok(service.returnToStep(id, principalOnlyReturnRequest(request)));
     }
 
+    @PostMapping("/{id}/resubmit")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApprovalRequestDto> resubmit(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.resubmit(id));
+    }
+
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('APPROVAL_CANCEL')")
     public ResponseEntity<ApprovalRequestDto> cancel(@PathVariable UUID id) {

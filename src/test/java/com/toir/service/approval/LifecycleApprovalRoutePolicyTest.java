@@ -7,6 +7,7 @@ import com.toir.entity.ApprovalTemplateStep;
 import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalDecision;
 import com.toir.enums.ApprovalFlowType;
+import com.toir.enums.ApprovalRejectionPolicy;
 import com.toir.enums.ApprovalStatus;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.service.approval.LifecycleApprovalRoutePolicy.Reason;
@@ -637,6 +638,70 @@ class LifecycleApprovalRoutePolicyTest {
         assertThat(policy.validateCompletion(request).reason()).isEqualTo(NONCONTIGUOUS_ORDER);
     }
 
+    @Test
+    void majorityParallelRuntimeAcceptsMixedVotesWhilePending() {
+        ApprovalRequest request = request(
+                ApprovalStatus.PENDING,
+                UUID.randomUUID(),
+                parallelStep(1, ApprovalDecision.APPROVED),
+                parallelStep(2, ApprovalDecision.REJECTED),
+                parallelStep(3, ApprovalDecision.PENDING));
+        request.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        request.setRejectionPolicy(ApprovalRejectionPolicy.MAJORITY);
+        request.setCurrentStep(0);
+
+        assertThat(policy.validateRuntime(request).reason()).isEqualTo(VALID);
+        assertThat(policy.validateDecision(
+                request,
+                request.getSteps().get(2),
+                UUID.randomUUID(),
+                ApprovalDecision.APPROVED,
+                true).reason()).isEqualTo(VALID);
+    }
+
+    @Test
+    void majorityParallelCompletionAcceptsStrictMixedMajority() {
+        ApprovalRequest request = request(
+                ApprovalStatus.PENDING,
+                UUID.randomUUID(),
+                parallelStep(1, ApprovalDecision.APPROVED),
+                parallelStep(2, ApprovalDecision.REJECTED),
+                parallelStep(3, ApprovalDecision.APPROVED));
+        request.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        request.setRejectionPolicy(ApprovalRejectionPolicy.MAJORITY);
+        request.setCurrentStep(0);
+
+        assertThat(policy.validateCompletion(request).reason()).isEqualTo(VALID);
+    }
+
+    @Test
+    void returnToInitiatorRuntimeAcceptsSequentialAndParallelReworkEvidence() {
+        ApprovalStep sequentialRejected = pendingRoleStep(2, "SECOND");
+        sequentialRejected.setDecision(ApprovalDecision.REJECTED);
+        sequentialRejected.setDecidedById(UUID.randomUUID());
+        ApprovalRequest sequential = request(
+                ApprovalStatus.REWORK,
+                UUID.randomUUID(),
+                approvedStep(1, UUID.randomUUID()),
+                sequentialRejected,
+                pendingRoleStep(3, "THIRD"));
+        sequential.setCurrentStep(2);
+        sequential.setRejectionPolicy(ApprovalRejectionPolicy.RETURN_TO_INITIATOR);
+
+        ApprovalRequest parallel = request(
+                ApprovalStatus.REWORK,
+                UUID.randomUUID(),
+                parallelStep(1, ApprovalDecision.APPROVED),
+                parallelStep(2, ApprovalDecision.REJECTED),
+                parallelStep(3, ApprovalDecision.PENDING));
+        parallel.setFlowType(ApprovalFlowType.PARALLEL_ALL);
+        parallel.setRejectionPolicy(ApprovalRejectionPolicy.RETURN_TO_INITIATOR);
+        parallel.setCurrentStep(0);
+
+        assertThat(policy.validateRuntime(sequential).reason()).isEqualTo(VALID);
+        assertThat(policy.validateRuntime(parallel).reason()).isEqualTo(VALID);
+    }
+
     private static ApprovalTemplate roleTemplate(int count, String role) {
         return template(IntStream.rangeClosed(1, count)
                 .mapToObj(order -> roleRoute(order, role))
@@ -707,6 +772,15 @@ class LifecycleApprovalRoutePolicyTest {
         ApprovalStep step = pendingRoleStep(order, "ROLE_" + order);
         step.setDecision(ApprovalDecision.APPROVED);
         step.setDecidedById(actor);
+        return step;
+    }
+
+    private static ApprovalStep parallelStep(int order, ApprovalDecision decision) {
+        ApprovalStep step = runtimeStep(explicitRoute(order, UUID.randomUUID()));
+        step.setDecision(decision);
+        if (decision == ApprovalDecision.APPROVED || decision == ApprovalDecision.REJECTED) {
+            step.setDecidedById(UUID.randomUUID());
+        }
         return step;
     }
 

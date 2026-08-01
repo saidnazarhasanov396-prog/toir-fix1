@@ -1,5 +1,6 @@
 package com.toir.service.approval;
 
+import com.toir.entity.ApprovalHistory;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
 import com.toir.entity.EscalationEvent;
@@ -109,6 +110,59 @@ class ApprovalGovernanceServiceTest {
         verify(escalationEventRepository).save(captor.capture());
         assertThat(captor.getValue().getEntityType()).isEqualTo("ApprovalRequest");
         verify(historyRepository).save(any());
+    }
+
+    @Test
+    void decisionHistorySnapshotsStepRoundAndDecision() {
+        ApprovalRequest approval = approval();
+        ApprovalStep step = approval.getSteps().getFirst();
+        step.setId(UUID.randomUUID());
+        step.setApprovalRound(3);
+        step.setDecision(ApprovalDecision.REJECTED);
+        step.setDecidedAt(Instant.now());
+
+        service.record(
+                approval,
+                ApprovalStatus.PENDING,
+                ApprovalStatus.REJECTED,
+                UUID.randomUUID(),
+                null,
+                "Needs correction",
+                com.toir.enums.ApprovalActionType.REJECT,
+                step);
+
+        ArgumentCaptor<ApprovalHistory> captor = ArgumentCaptor.forClass(ApprovalHistory.class);
+        verify(historyRepository).save(captor.capture());
+        ApprovalHistory history = captor.getValue();
+        assertThat(history.getStepId()).isEqualTo(step.getId());
+        assertThat(history.getStepNumber()).isEqualTo(step.getStepNumber());
+        assertThat(history.getApprovalRound()).isEqualTo(3);
+        assertThat(history.getDecision()).isEqualTo(ApprovalDecision.REJECTED);
+    }
+
+    @Test
+    void genericHistoryEventsDoNotInferDecisionEvidence() {
+        ApprovalRequest approval = approval();
+        ApprovalStep step = approval.getSteps().getFirst();
+        step.setId(UUID.randomUUID());
+        step.setApprovalRound(4);
+        step.setDecision(ApprovalDecision.APPROVED);
+        step.setDecidedAt(Instant.now());
+
+        service.record(
+                approval,
+                ApprovalStatus.PENDING,
+                ApprovalStatus.PENDING,
+                UUID.randomUUID(),
+                "SLA escalated");
+
+        ArgumentCaptor<ApprovalHistory> captor = ArgumentCaptor.forClass(ApprovalHistory.class);
+        verify(historyRepository).save(captor.capture());
+        ApprovalHistory history = captor.getValue();
+        assertThat(history.getStepId()).isNull();
+        assertThat(history.getStepNumber()).isNull();
+        assertThat(history.getApprovalRound()).isNull();
+        assertThat(history.getDecision()).isNull();
     }
 
     private ApprovalRequest approval() {
