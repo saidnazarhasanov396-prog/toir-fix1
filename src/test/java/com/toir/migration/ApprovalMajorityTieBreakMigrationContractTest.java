@@ -11,9 +11,18 @@ class ApprovalMajorityTieBreakMigrationContractTest {
 
     @Test
     void migrationAddsValidatedNullableTieBreakSnapshots() throws Exception {
-        String sql = Files.readString(Path.of(
-                "src/main/resources/db/migration/"
-                        + "V20260801_7__approval_majority_tie_break.sql"));
+        assertTieBreakMigration(Path.of(
+                "src/main/resources/db/migration/V20260801_7__approval_majority_tie_break.sql"));
+    }
+
+    @Test
+    void correctiveMigrationRestoresTieBreakColumnsWhenVersionSevenWasConsumedByBadArtifact() throws Exception {
+        assertTieBreakMigration(Path.of(
+                "src/main/resources/db/migration/V20260801_10__approval_majority_tie_break_corrective.sql"));
+    }
+
+    private void assertTieBreakMigration(Path migration) throws Exception {
+        String sql = Files.readString(migration);
 
         assertThat(sql).containsIgnoringCase("ALTER TABLE approval_templates");
         assertThat(sql).containsIgnoringCase("ALTER TABLE approval_requests");
