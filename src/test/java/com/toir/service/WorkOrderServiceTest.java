@@ -286,6 +286,9 @@ class WorkOrderServiceTest {
     com.toir.service.ppr.PprCompletionEvidenceService pprCompletionEvidenceService;
 
     @Mock
+    com.toir.config.PprLifecycleProperties pprLifecycleProperties;
+
+    @Mock
     FileAssetRepository fileAssetRepository;
 
     @Mock
@@ -372,6 +375,7 @@ class WorkOrderServiceTest {
                 .thenReturn(List.of());
         lenient().when(attachmentGroupService.getPhotoSummaries(any(), any()))
                 .thenReturn(java.util.Map.of());
+        lenient().when(pprLifecycleProperties.isStrictClosureEnabled()).thenReturn(true);
     }
 
     @Test
@@ -3327,8 +3331,8 @@ class WorkOrderServiceTest {
         workOrder.setRepairActRequired(true);
         workOrder.setStoppageActRequired(true);
         when(repository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
-        when(fileAssetRepository.findByIdAndIsDeletedFalse(repairFileId)).thenReturn(Optional.of(fileAsset(repairFileId)));
-        when(fileAssetRepository.findByIdAndIsDeletedFalse(stoppageFileId)).thenReturn(Optional.of(fileAsset(stoppageFileId)));
+        when(fileAssetRepository.findByIdAndIsDeletedFalse(repairFileId)).thenReturn(Optional.of(fileAsset(repairFileId, workOrderId)));
+        when(fileAssetRepository.findByIdAndIsDeletedFalse(stoppageFileId)).thenReturn(Optional.of(fileAsset(stoppageFileId, workOrderId)));
         when(repository.save(any(WorkOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
         stubLifecycleDtoLookups(workOrder);
 
@@ -4655,7 +4659,7 @@ class WorkOrderServiceTest {
         return task;
     }
 
-    private FileAsset fileAsset(UUID id) {
+    private FileAsset fileAsset(UUID id, UUID workOrderId) {
         FileAsset fileAsset = new FileAsset();
         fileAsset.setId(id);
         fileAsset.setFileName(id + ".pdf");
@@ -4663,6 +4667,8 @@ class WorkOrderServiceTest {
         fileAsset.setMimeType("application/pdf");
         fileAsset.setSizeBytes(128);
         fileAsset.setStoragePath("/tmp/" + id + ".pdf");
+        fileAsset.setEntityType("WORK_ORDER");
+        fileAsset.setEntityId(workOrderId.toString());
         return fileAsset;
     }
 

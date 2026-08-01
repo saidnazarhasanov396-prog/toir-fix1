@@ -113,6 +113,7 @@ public class PprPlanningVariantService {
         if (variantId.equals(session.getSelectedVariantId())) {
             session.setSelectedVariantId(null);
         }
+        clearStaleApprovalBinding(session);
         session.setStatus(PprPlanningSessionStatus.READY_FOR_SELECTION);
         sessionRepository.save(session);
         return variantRepository.saveAndFlush(variant);
@@ -220,12 +221,18 @@ public class PprPlanningVariantService {
     private static void requireMutable(PprPlanningSession session) {
         if (session.getStatus() == PprPlanningSessionStatus.PENDING_APPROVAL
                 || session.getStatus() == PprPlanningSessionStatus.APPROVED
-                || session.getStatus() == PprPlanningSessionStatus.REJECTED
                 || session.getStatus() == PprPlanningSessionStatus.CANCELLED) {
             throw conflict(
                     "PPR_PLANNING_SESSION_IMMUTABLE",
                     "PPR planning session cannot be changed in its current state");
         }
+    }
+
+    private static void clearStaleApprovalBinding(PprPlanningSession session) {
+        session.setSelectedVariantRevision(null);
+        session.setSelectedVariantHash(null);
+        session.setSelectedVariantHashVersion(null);
+        session.setApprovalRequestId(null);
     }
 
     private static void requireSessionBoundary(

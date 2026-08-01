@@ -57,16 +57,16 @@ class PprDueWorkOrderGenerationServiceTest {
         properties.getWorkOrderGeneration().setActorId(UUID.randomUUID());
         properties.getWorkOrderGeneration().setTimezone(ZoneId.of("Asia/Tashkent"));
         properties.getWorkOrderGeneration().setBatchSize(25);
-        service = new PprDueWorkOrderGenerationService(
-                tasks,
-                workOrders,
-                equipment,
-                regulations,
-                rules,
-                numbers,
-                workOrderService,
-                new PprWorkOrderEligibilityService(),
-                properties);
+        PprDueWorkOrderGenerationItemService itemService =
+                new PprDueWorkOrderGenerationItemService(
+                        workOrders,
+                        equipment,
+                        regulations,
+                        rules,
+                        numbers,
+                        workOrderService,
+                        new PprWorkOrderEligibilityService());
+        service = new PprDueWorkOrderGenerationService(tasks, itemService, properties);
     }
 
     @Test

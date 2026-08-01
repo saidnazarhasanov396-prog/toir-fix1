@@ -138,10 +138,15 @@ public class RepairAcceptanceService {
 
     @Transactional
     public RepairAcceptanceDto accept(UUID workOrderId, UUID id, RepairAcceptanceDecisionRequest request) {
-        getWorkOrderForAccess(workOrderId);
+        WorkOrder workOrder = getWorkOrderForAccess(workOrderId);
         RepairAcceptance acceptance = getAcceptanceForWorkOrder(workOrderId, id);
         ensureMutableForDecision(acceptance);
         RepairAcceptance before = snapshot(acceptance);
+        if (acceptance.getStage() == RepairAcceptanceStage.FINAL
+                && workOrder.getStatus() != WorkOrderStatus.COMPLETED) {
+            throw RestException.badRequest(
+                    "Final repair acceptance requires a COMPLETED work order");
+        }
         if (acceptance.isRunInRequired() && acceptance.getRunInCompletedAt() == null) {
             throw RestException.badRequest("Run-in must be completed before acceptance");
         }

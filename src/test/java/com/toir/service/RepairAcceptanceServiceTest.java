@@ -161,6 +161,7 @@ class RepairAcceptanceServiceTest {
         WorkOrder workOrder = new WorkOrder();
         workOrder.setId(workOrderId);
         workOrder.setDepartmentId(UUID.randomUUID());
+        workOrder.setStatus(com.toir.enums.WorkOrderStatus.COMPLETED);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(repository.findByIdAndIsDeletedFalse(acceptance.getId())).thenReturn(Optional.of(acceptance));

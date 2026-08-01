@@ -1,6 +1,7 @@
 package com.toir.service;
 
 import com.toir.service.ppr.PprCompletionEvidenceService;
+import com.toir.config.PprLifecycleProperties;
 
 import com.toir.dto.attachment.AttachmentGroupDto;
 import com.toir.dto.attachment.AttachmentPhotoSummary;
@@ -14,6 +15,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.entity.Counteragent;
 import com.toir.entity.Department;
+import com.toir.entity.FileAsset;
 import com.toir.entity.Location;
 import com.toir.entity.UploadedFile;
 import com.toir.entity.defects.Defect;
@@ -215,6 +217,7 @@ public class WorkOrderService {
     private final SafetyPermitRepository safetyPermitRepository;
     private final CompletionActRepository completionActRepository;
     private final PprCompletionEvidenceService pprCompletionEvidenceService;
+    private final PprLifecycleProperties pprLifecycleProperties;
     private final FileAssetRepository fileAssetRepository;
     private final FileService fileService;
     private final UploadedFileRepository uploadedFileRepository;
@@ -1120,8 +1123,10 @@ public class WorkOrderService {
                 entity.getEquipmentId(),
                 com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation.WORK_ORDER_COMPLETE);
         validateAndBindCompletionActFiles(entity, request);
-        pprCompletionEvidenceService.validateAndStore(
-                entity, request, scopeAccessService.currentUserIdOrNull());
+        if (pprLifecycleProperties.isStrictClosureEnabled()) {
+            pprCompletionEvidenceService.validateAndStore(
+                    entity, request, scopeAccessService.currentUserIdOrNull());
+        }
         assertDefectListGate(entity);
         MaintenanceDueEvent dueEvent = loadMaintenanceDueEvent(entity);
         entity.setResult(request.result());
@@ -1296,18 +1301,23 @@ public class WorkOrderService {
         }
 
         if (repairActFileId != null) {
-            assertFileAssetExists(repairActFileId);
+            assertFileAssetBelongsToWorkOrder(repairActFileId, entity.getId());
             entity.setRepairActFileAssetId(repairActFileId);
         }
         if (stoppageActFileId != null) {
-            assertFileAssetExists(stoppageActFileId);
+            assertFileAssetBelongsToWorkOrder(stoppageActFileId, entity.getId());
             entity.setStoppageActFileAssetId(stoppageActFileId);
         }
     }
 
-    private void assertFileAssetExists(UUID fileAssetId) {
-        fileAssetRepository.findByIdAndIsDeletedFalse(fileAssetId)
+    private void assertFileAssetBelongsToWorkOrder(UUID fileAssetId, UUID workOrderId) {
+        FileAsset file = fileAssetRepository.findByIdAndIsDeletedFalse(fileAssetId)
                 .orElseThrow(() -> RestException.notFound("File not found: " + fileAssetId));
+        if (!"WORK_ORDER".equalsIgnoreCase(file.getEntityType())
+                || !workOrderId.toString().equals(file.getEntityId())) {
+            throw RestException.badRequest(
+                    "Completion act file does not belong to work order " + workOrderId);
+        }
     }
 
     private MaintenanceDueEvent loadMaintenanceDueEvent(WorkOrder workOrder) {
@@ -1617,7 +1627,8 @@ public class WorkOrderService {
 
         Optional<com.toir.entity.CompletionAct> completionAct = completionActRepository
                 .findByWorkOrderIdAndIsDeletedFalse(entity.getId());
-        if (entity.getPprTaskId() != null && completionAct.isEmpty()) {
+        if (pprLifecycleProperties.isStrictClosureEnabled()
+                && entity.getPprTaskId() != null && completionAct.isEmpty()) {
             addBlocker(blockers, groups, "COMPLETION_ACT_MISSING",
                     "Completion act is required for a PPR work order.",
                     "acts", "create-completion-act", "closure");
@@ -1634,7 +1645,7 @@ public class WorkOrderService {
                     "Final repair acceptance must be ACCEPTED.", "acts", "review-acceptance", "closure");
         }
 
-        if (entity.getPprTaskId() != null) {
+        if (pprLifecycleProperties.isStrictClosureEnabled() && entity.getPprTaskId() != null) {
             Set<com.toir.enums.CompletionEvidenceType> missingEvidence =
                     pprCompletionEvidenceService.missingEvidence(entity);
             if (missingEvidence != null && !missingEvidence.isEmpty()) {

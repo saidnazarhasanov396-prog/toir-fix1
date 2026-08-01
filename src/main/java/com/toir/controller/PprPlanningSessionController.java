@@ -15,12 +15,14 @@ import com.toir.enums.ApprovalActionType;
 import com.toir.enums.ApprovalTargetType;
 import com.toir.service.ApprovalService;
 import com.toir.service.planning.PprPlanningSessionService;
+import com.toir.service.planning.PprPlanningIdempotencyService;
 import com.toir.service.planning.PprPlanningVariantService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -34,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@ConditionalOnProperty(prefix = "toir.ppr-lifecycle", name = "planning-sessions-enabled", havingValue = "true")
 @RequestMapping("/api/ppr-planning-sessions")
 @RequiredArgsConstructor
 public class PprPlanningSessionController {
@@ -47,6 +50,7 @@ public class PprPlanningSessionController {
 
     private final PprPlanningSessionService sessionService;
     private final PprPlanningVariantService variantService;
+    private final PprPlanningIdempotencyService idempotencyService;
     @Autowired
     private ApprovalService approvalService;
 
@@ -110,8 +114,14 @@ public class PprPlanningSessionController {
             @Valid @RequestBody MaintenanceScheduleCalculationRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         requireIdempotencyKey(idempotencyKey);
-        return PprPlanningSessionDto.Variant.from(
-                variantService.calculate(sessionId, variantId, request));
+        return idempotencyService.execute(
+                sessionId,
+                "CALCULATE:" + variantId,
+                idempotencyKey,
+                request,
+                PprPlanningSessionDto.Variant.class,
+                () -> PprPlanningSessionDto.Variant.from(
+                        variantService.calculate(sessionId, variantId, request)));
     }
 
     @GetMapping("/{sessionId}/variants/{variantId}/revisions/{revision}")
@@ -130,7 +140,14 @@ public class PprPlanningSessionController {
             @Valid @RequestBody PprPlanningSelectionRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         requireIdempotencyKey(idempotencyKey);
-        return dto(variantService.select(sessionId, request.variantId(), request));
+        return idempotencyService.execute(
+                sessionId,
+                "SELECT",
+                idempotencyKey,
+                request,
+                PprPlanningSessionDto.class,
+                () -> dto(variantService.select(
+                        sessionId, request.variantId(), request)));
     }
 
     @PostMapping("/{sessionId}/submit")
@@ -140,11 +157,17 @@ public class PprPlanningSessionController {
             @Valid @RequestBody(required = false) PprPlanningSubmitRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         requireIdempotencyKey(idempotencyKey);
-        return approvalService.requestApproval(new ApprovalStartRequest(
-                ApprovalTargetType.PPR_PLANNING_SESSION,
+        return idempotencyService.execute(
                 sessionId,
-                ApprovalActionType.APPROVE,
-                request == null ? null : request.comment()));
+                "SUBMIT",
+                idempotencyKey,
+                request,
+                ApprovalRequestDto.class,
+                () -> approvalService.requestApproval(new ApprovalStartRequest(
+                        ApprovalTargetType.PPR_PLANNING_SESSION,
+                        sessionId,
+                        ApprovalActionType.APPROVE,
+                        request == null ? null : request.comment())));
     }
 
     private PprPlanningSessionDto dto(PprPlanningSession session) {

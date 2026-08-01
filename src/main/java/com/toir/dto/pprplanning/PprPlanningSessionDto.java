@@ -57,12 +57,14 @@ public record PprPlanningSessionDto(
         LinkedHashSet<String> result = new LinkedHashSet<>();
         if (session.getStatus() == PprPlanningSessionStatus.DRAFT
                 || session.getStatus() == PprPlanningSessionStatus.READY_FOR_SELECTION
-                || session.getStatus() == PprPlanningSessionStatus.SELECTED) {
+                || session.getStatus() == PprPlanningSessionStatus.SELECTED
+                || session.getStatus() == PprPlanningSessionStatus.REJECTED) {
             result.add("CREATE_VARIANT");
             result.add("CALCULATE_VARIANT");
             result.add("SELECT_VARIANT");
         }
-        if (session.getStatus() == PprPlanningSessionStatus.SELECTED) {
+        if (session.getStatus() == PprPlanningSessionStatus.SELECTED
+                || session.getStatus() == PprPlanningSessionStatus.REJECTED) {
             result.add("SUBMIT_FOR_APPROVAL");
         }
         return Set.copyOf(result);

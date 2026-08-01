@@ -75,6 +75,12 @@ class PprPlanningVariantServiceTest {
         UUID sessionId = UUID.randomUUID();
         UUID variantId = UUID.randomUUID();
         PprPlanningSession session = session(sessionId);
+        session.setStatus(PprPlanningSessionStatus.REJECTED);
+        session.setSelectedVariantId(variantId);
+        session.setSelectedVariantRevision(1L);
+        session.setSelectedVariantHash("f".repeat(64));
+        session.setSelectedVariantHashVersion(1);
+        session.setApprovalRequestId(UUID.randomUUID());
         PprPlanningVariant variant = variant(variantId, session);
         MaintenanceScheduleCalculationRequest request = request(session);
         MaintenanceSchedulePreviewItem previewItem = previewItem();
@@ -100,6 +106,11 @@ class PprPlanningVariantServiceTest {
         assertThat(calculated.getStatus()).isEqualTo(PprPlanningVariantStatus.CALCULATED);
         assertThat(calculated.getContentHash()).matches("[0-9a-f]{64}");
         assertThat(calculated.getTaskCount()).isEqualTo(1);
+        assertThat(session.getStatus()).isEqualTo(PprPlanningSessionStatus.READY_FOR_SELECTION);
+        assertThat(session.getSelectedVariantId()).isNull();
+        assertThat(session.getSelectedVariantRevision()).isNull();
+        assertThat(session.getSelectedVariantHash()).isNull();
+        assertThat(session.getApprovalRequestId()).isNull();
         verify(itemRepository).saveAll(org.mockito.ArgumentMatchers.argThat(items -> {
             List<PprPlanningVariantItem> persisted = new java.util.ArrayList<>();
             items.forEach(persisted::add);
