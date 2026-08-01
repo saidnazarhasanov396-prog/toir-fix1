@@ -1304,8 +1304,10 @@ class WorkOrderServiceTest {
         assertThat(result.performerName()).isEqualTo("Ivan Petrov");
         verify(notificationService).notifyUser(
                 eq(userId),
-                contains(request.number()),
-                contains("rejalashtirilgan vaqtda bajarishingiz kerak"),
+                argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains(request.number())
+                                && content.messageUz().contains("rejalashtirilgan vaqtda bajarishingiz kerak")
+                                && content.titleRu().contains("Назначен")),
                 eq(NotificationSeverity.INFO),
                 eq(NotificationEventType.WORK_ORDER_ASSIGNED),
                 eq("WORK_ORDER"),
@@ -1337,8 +1339,10 @@ class WorkOrderServiceTest {
 
         verify(notificationService).notifyUser(
                 eq(userId),
-                contains(result.number()),
-                contains("bugun bajarishingiz kerak"),
+                argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains(result.number())
+                                && content.messageUz().contains("bugun bajarishingiz kerak")
+                                && content.titleRu().contains("Назначен")),
                 eq(NotificationSeverity.INFO),
                 eq(NotificationEventType.WORK_ORDER_ASSIGNED),
                 eq("WORK_ORDER"),
@@ -1370,8 +1374,10 @@ class WorkOrderServiceTest {
 
         verify(notificationService).notifyUser(
                 eq(userId),
-                contains(result.number()),
-                contains("bugun bajarishingiz kerak"),
+                argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains(result.number())
+                                && content.messageUz().contains("bugun bajarishingiz kerak")
+                                && content.titleRu().contains("Назначен")),
                 eq(NotificationSeverity.INFO),
                 eq(NotificationEventType.WORK_ORDER_ASSIGNED),
                 eq("WORK_ORDER"),
@@ -2397,8 +2403,10 @@ class WorkOrderServiceTest {
 
         verify(notificationService).notifyUser(
                 eq(userId),
-                contains(workOrder.getNumber()),
-                contains("ertaga bajarishingiz kerak"),
+                argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains(workOrder.getNumber())
+                                && content.messageUz().contains("ertaga bajarishingiz kerak")
+                                && content.titleRu().contains("Назначен")),
                 eq(NotificationSeverity.INFO),
                 eq(NotificationEventType.WORK_ORDER_ASSIGNED),
                 eq("WORK_ORDER"),

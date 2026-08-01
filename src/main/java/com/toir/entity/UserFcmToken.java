@@ -51,6 +51,9 @@ public class UserFcmToken extends BaseEntity {
     @Column(name = "device_id")
     private String deviceId;
 
+    @Column(name = "language_code", nullable = false, length = 2)
+    private String languageCode = "ru";
+
     @Column(nullable = false)
     private boolean active = true;
 

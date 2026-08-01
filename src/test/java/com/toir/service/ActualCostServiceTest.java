@@ -135,7 +135,10 @@ class ActualCostServiceTest {
                 .hasMessageContaining("technical source");
 
         verify(repository, never()).save(any());
-        verify(notificationService, never()).notifyDepartmentByPermission(any(), any(), any(), any(), any(), any(), any());
+        verify(notificationService, never()).notifyDepartmentByPermission(
+                any(), any(), any(com.toir.dto.notification.NotificationContent.class),
+                any(), any(), any(), any()
+        );
     }
 
     @Test
@@ -747,8 +750,11 @@ class ActualCostServiceTest {
         verify(notificationService).notifyDepartmentByPermission(
                 eq(departmentId),
                 eq(PermissionConstants.ACTUAL_COST_APPROVE),
-                contains("Actual cost pending review"),
-                contains(result.id().toString()),
+                org.mockito.ArgumentMatchers.argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains("Actual cost pending review")
+                                && content.messageEn().contains(result.id().toString())
+                                && content.titleRu().contains("Фактические затраты")
+                                && content.titleUz().contains("Haqiqiy xarajat")),
                 eq(com.toir.enums.NotificationSeverity.INFO),
                 eq(com.toir.enums.NotificationEventType.ACTUAL_COST_PENDING_REVIEW),
                 eq("ACTUAL_COST"),

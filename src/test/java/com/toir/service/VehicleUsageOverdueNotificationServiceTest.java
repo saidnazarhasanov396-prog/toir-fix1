@@ -49,18 +49,24 @@ class VehicleUsageOverdueNotificationServiceTest {
         assertThat(session.getOverdueNotifiedAt()).isNotNull();
         verify(notificationService).notifyEmployee(
                 eq(driverId),
-                eq("Vehicle return overdue"),
-                contains("kechikdingiz"),
+                org.mockito.ArgumentMatchers.argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().equals("Vehicle return overdue")
+                                && content.messageUz().contains("kech qaytaryapsiz")
+                                && content.titleRu().contains("Просрочен")),
                 eq(NotificationSeverity.WARNING),
-                eq("EquipmentUsageSession"),
+                eq(com.toir.enums.NotificationEventType.VEHICLE_RETURN_OVERDUE),
+                eq("EQUIPMENT_USAGE_SESSION"),
                 eq(sessionId.toString())
         );
         verify(notificationService).notifyUser(
                 eq(assignerId),
-                eq("Vehicle return overdue"),
-                contains("kechikdingiz"),
+                org.mockito.ArgumentMatchers.argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().equals("Vehicle return overdue")
+                                && content.messageUz().contains("kech qaytaryapsiz")
+                                && content.titleRu().contains("Просрочен")),
                 eq(NotificationSeverity.WARNING),
-                eq("EquipmentUsageSession"),
+                eq(com.toir.enums.NotificationEventType.VEHICLE_RETURN_OVERDUE),
+                eq("EQUIPMENT_USAGE_SESSION"),
                 eq(sessionId.toString())
         );
     }
@@ -79,13 +85,23 @@ class VehicleUsageOverdueNotificationServiceTest {
         assertThat(session.getOverdueNotifiedAt()).isNotNull();
         verify(notificationService).notifyEmployee(
                 eq(driverId),
-                eq("Vehicle return overdue"),
-                contains("kechikdingiz"),
+                org.mockito.ArgumentMatchers.argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().equals("Vehicle return overdue")
+                                && content.messageUz().contains("kech qaytaryapsiz")
+                                && content.titleRu().contains("Просрочен")),
                 eq(NotificationSeverity.WARNING),
-                eq("EquipmentUsageSession"),
+                eq(com.toir.enums.NotificationEventType.VEHICLE_RETURN_OVERDUE),
+                eq("EQUIPMENT_USAGE_SESSION"),
                 eq(sessionId.toString())
         );
-        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any());
+        verify(notificationService, never()).notifyUser(
+                any(UUID.class),
+                any(com.toir.dto.notification.NotificationContent.class),
+                any(NotificationSeverity.class),
+                any(com.toir.enums.NotificationEventType.class),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString()
+        );
     }
 
     private static EquipmentUsageSession overdueSession(UUID sessionId, UUID driverId) {

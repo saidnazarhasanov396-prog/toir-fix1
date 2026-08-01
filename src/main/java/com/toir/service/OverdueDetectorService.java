@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.notification.NotificationContent;
 import com.toir.entity.equipment.CalibrationRecord;
 import com.toir.repository.CalibrationRecordRepository;
 import com.toir.entity.users.UserCertification;
@@ -100,8 +101,14 @@ public class OverdueDetectorService {
                 if (adminId != null) {
                     notificationsCreated += createNotification(
                             adminId,
-                            "Просроченная задача ППР " + task.getCode(),
-                            "Срок " + task.getDueDate() + " прошёл, работы не закрыты",
+                            new NotificationContent(
+                                    "Просрочена задача ППР " + task.getCode(),
+                                    "Срок " + task.getDueDate() + " прошёл, работы не закрыты.",
+                                    "PPR vazifasi kechikdi " + task.getCode(),
+                                    task.getDueDate() + " muddati o‘tdi, ishlar yopilmagan.",
+                                    "PPR task overdue " + task.getCode(),
+                                    "The " + task.getDueDate() + " deadline passed and the work is not closed."
+                            ),
                             NotificationSeverity.WARNING,
                             navigationBuilder.forPprTask(
                                     NotificationEventType.PPR_TASK_OVERDUE,
@@ -123,8 +130,14 @@ public class OverdueDetectorService {
                 if (adminId != null) {
                     notificationsCreated += createNotification(
                             adminId,
-                            "Просроченная заявка " + r.getNumber(),
-                            "Плановая дата устранения " + r.getTargetCompletionAt() + " прошла",
+                            new NotificationContent(
+                                    "Просрочена заявка " + r.getNumber(),
+                                    "Плановая дата устранения " + r.getTargetCompletionAt() + " прошла.",
+                                    "Ariza kechikdi " + r.getNumber(),
+                                    r.getTargetCompletionAt() + " rejalashtirilgan yakunlash muddati o‘tdi.",
+                                    "Repair request overdue " + r.getNumber(),
+                                    "The planned completion date " + r.getTargetCompletionAt() + " has passed."
+                            ),
                             NotificationSeverity.CRITICAL,
                             navigationBuilder.forEntity(
                                     NotificationEventType.REPAIR_REQUEST_OVERDUE,
@@ -148,8 +161,14 @@ public class OverdueDetectorService {
                 if (adminId != null) {
                     notificationsCreated += createNotification(
                             adminId,
-                            "Просроченный наряд " + w.getNumber(),
-                            "Плановая дата завершения " + w.getEndPlannedAt() + " прошла",
+                            new NotificationContent(
+                                    "Просрочен заказ-наряд " + w.getNumber(),
+                                    "Плановая дата завершения " + w.getEndPlannedAt() + " прошла.",
+                                    "Ish buyurtmasi kechikdi " + w.getNumber(),
+                                    w.getEndPlannedAt() + " rejalashtirilgan yakunlash muddati o‘tdi.",
+                                    "Work order overdue " + w.getNumber(),
+                                    "The planned completion date " + w.getEndPlannedAt() + " has passed."
+                            ),
                             NotificationSeverity.WARNING,
                             navigationBuilder.forEntity(
                                     NotificationEventType.WORK_ORDER_OVERDUE,
@@ -174,8 +193,14 @@ public class OverdueDetectorService {
             if (adminId != null) {
                 notificationsCreated += createNotification(
                         adminId,
-                        "Просрочена поверка " + c.getCertificateNumber(),
-                        "Срок поверки оборудования " + c.getEquipmentId() + " истёк " + c.getNextDueAt(),
+                        new NotificationContent(
+                                "Просрочена поверка " + c.getCertificateNumber(),
+                                "Срок поверки оборудования " + c.getEquipmentId() + " истёк " + c.getNextDueAt() + ".",
+                                "Kalibrlash muddati o‘tdi " + c.getCertificateNumber(),
+                                c.getEquipmentId() + " uskunasining kalibrlash muddati " + c.getNextDueAt() + " da tugadi.",
+                                "Calibration overdue " + c.getCertificateNumber(),
+                                "Calibration for equipment " + c.getEquipmentId() + " expired on " + c.getNextDueAt() + "."
+                        ),
                         NotificationSeverity.WARNING,
                         navigationBuilder.forEntity(
                                 NotificationEventType.CALIBRATION_OVERDUE,
@@ -195,8 +220,14 @@ public class OverdueDetectorService {
             if (adminId != null) {
                 notificationsCreated += createNotification(
                         adminId,
-                        "Истёк сертификат " + uc.getTypeCode(),
-                        "Сертификат сотрудника " + uc.getUserId() + " истёк " + uc.getExpiresAt(),
+                        new NotificationContent(
+                                "Истёк сертификат " + uc.getTypeCode(),
+                                "Сертификат сотрудника " + uc.getUserId() + " истёк " + uc.getExpiresAt() + ".",
+                                "Sertifikat muddati tugadi " + uc.getTypeCode(),
+                                uc.getUserId() + " xodimining sertifikati " + uc.getExpiresAt() + " da tugadi.",
+                                "Certificate expired " + uc.getTypeCode(),
+                                "Employee " + uc.getUserId() + " certificate expired on " + uc.getExpiresAt() + "."
+                        ),
                         NotificationSeverity.CRITICAL,
                         navigationBuilder.forEntity(
                                 NotificationEventType.USER_CERTIFICATION_EXPIRED,
@@ -211,7 +242,7 @@ public class OverdueDetectorService {
                 notificationsCreated, escalationsCreated);
     }
 
-    private int createNotification(java.util.UUID recipientId, String title, String message,
+    private int createNotification(java.util.UUID recipientId, NotificationContent content,
                                    NotificationSeverity severity, NotificationNavigation navigation) {
         // idempotent: skip if we already have an open notification for the same entity
         boolean exists = notificationRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
@@ -219,7 +250,7 @@ public class OverdueDetectorService {
                         && java.util.Objects.equals(navigation.entityId(), n.getEntityId())
                         && (n.getStatus() == NotificationStatus.PENDING || n.getStatus() == NotificationStatus.SENT));
         if (exists) return 0;
-        return notificationService.notifyUser(recipientId, title, message, severity, navigation)
+        return notificationService.notifyUser(recipientId, content, severity, navigation)
                 .map(ignored -> 1)
                 .orElse(0);
     }

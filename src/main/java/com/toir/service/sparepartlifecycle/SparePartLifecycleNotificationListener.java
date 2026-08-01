@@ -1,5 +1,6 @@
 package com.toir.service.sparepartlifecycle;
 
+import com.toir.dto.notification.NotificationContent;
 import com.toir.enums.NotificationEventType;
 import com.toir.enums.NotificationSeverity;
 import com.toir.repository.equipment.EquipmentRepository;
@@ -30,8 +31,14 @@ public class SparePartLifecycleNotificationListener {
                                 ? equipment.getDepartmentId()
                                 : equipment.getResponsibleDepartmentId(),
                         PermissionConstants.SPARE_PART_DUE_READ,
-                        "Installed spare-part service life: " + event.state(),
-                        "Installation " + event.installationId() + " requires action " + event.action(),
+                        new NotificationContent(
+                                "Ресурс установленной запчасти: " + event.state(),
+                                "Установка " + event.installationId() + " требует действия " + event.action() + ".",
+                                "O‘rnatilgan ehtiyot qism resursi: " + event.state(),
+                                event.installationId() + " o‘rnatmasi " + event.action() + " amalini talab qiladi.",
+                                "Installed spare-part service life: " + event.state(),
+                                "Installation " + event.installationId() + " requires action " + event.action() + "."
+                        ),
                         severity(event),
                         navigationBuilder.forSparePartDue(
                                 NotificationEventType.SPARE_PART_DUE,

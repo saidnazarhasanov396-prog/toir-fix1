@@ -68,6 +68,10 @@ public class NotificationFacadeService {
                 .filter(n -> search == null || search.isBlank()
                         || containsIgnoreCase(n.title(), search)
                         || containsIgnoreCase(n.message(), search)
+                        || containsIgnoreCase(n.titleUz(), search)
+                        || containsIgnoreCase(n.messageUz(), search)
+                        || containsIgnoreCase(n.titleEn(), search)
+                        || containsIgnoreCase(n.messageEn(), search)
                         || containsIgnoreCase(n.entityType(), search)
                         || containsIgnoreCase(n.entityId(), search))
                 .toList();

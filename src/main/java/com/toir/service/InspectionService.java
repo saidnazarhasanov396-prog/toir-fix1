@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.notification.NotificationContent;
 import com.toir.dto.inspection.*;
 import com.toir.entity.defects.Defect;
 import com.toir.entity.equipment.Equipment;
@@ -489,8 +490,7 @@ public class InspectionService {
         List<?> recipients = notificationService.notifyDepartmentByPermission(
                 departmentId,
                 PermissionConstants.DEFECT_READ,
-                "Inspection FAIL triage created",
-                "Inspection failure " + defect.getCode() + " requires defect triage.",
+                inspectionFailureContent(defect.getCode(), false),
                 NotificationSeverity.WARNING,
                 NotificationEventType.DEFECT_CREATED_FROM_INSPECTION,
                 NotificationEntityTypes.DEFECT,
@@ -500,8 +500,7 @@ public class InspectionService {
             notificationService.notifyDepartmentByPermission(
                     departmentId,
                     PermissionConstants.INSPECTION_READ,
-                    "Inspection FAIL triage created",
-                    "Inspection failure " + defect.getCode() + " requires maintenance triage.",
+                    inspectionFailureContent(defect.getCode(), true),
                     NotificationSeverity.WARNING,
                     NotificationEventType.DEFECT_CREATED_FROM_INSPECTION,
                     NotificationEntityTypes.DEFECT,
@@ -565,6 +564,20 @@ public class InspectionService {
                 saved
         );
         return Optional.of(saved);
+    }
+
+    private NotificationContent inspectionFailureContent(String defectCode, boolean maintenanceTriage) {
+        String ruTarget = maintenanceTriage ? "разбора службой ТО" : "разбора дефекта";
+        String uzTarget = maintenanceTriage ? "texnik xizmat tahlilini" : "nuqson tahlilini";
+        String enTarget = maintenanceTriage ? "maintenance triage" : "defect triage";
+        return new NotificationContent(
+                "Создан разбор сбоя осмотра",
+                "Сбой осмотра " + defectCode + " требует " + ruTarget + ".",
+                "Ko‘rik xatosi tahlili yaratildi",
+                defectCode + " ko‘rik xatosi " + uzTarget + " talab qiladi.",
+                "Inspection failure triage created",
+                "Inspection failure " + defectCode + " requires " + enTarget + "."
+        );
     }
 
     private UUID inspectionDepartmentId(InspectionRound round, UUID equipmentId) {

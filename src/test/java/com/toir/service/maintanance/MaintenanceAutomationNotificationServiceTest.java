@@ -56,8 +56,7 @@ class MaintenanceAutomationNotificationServiceTest {
         EquipmentMaintenanceEffectiveRule rule = EquipmentMaintenanceEffectiveRule.fromRegulation(equipment.getId(), regulation);
         when(notificationService.notifyEmployee(
                 eq(responsibleEmployeeId),
-                eq(MaintenanceAutomationNotificationService.MAINTENANCE_DUE),
-                eq("Maintenance due: cycle-1"),
+                any(com.toir.dto.notification.NotificationContent.class),
                 eq(NotificationSeverity.WARNING),
                 any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
@@ -70,8 +69,7 @@ class MaintenanceAutomationNotificationServiceTest {
         verify(notificationService, never()).notifyDepartmentByPermission(
                 eq(equipment.getResponsibleDepartmentId()),
                 eq(PermissionConstants.MAINTENANCE_EVENT_READ),
-                eq(MaintenanceAutomationNotificationService.MAINTENANCE_DUE),
-                eq("Maintenance due: cycle-1"),
+                any(com.toir.dto.notification.NotificationContent.class),
                 eq(NotificationSeverity.WARNING),
                 any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
@@ -90,8 +88,7 @@ class MaintenanceAutomationNotificationServiceTest {
         when(notificationService.notifyDepartmentByPermission(
                 eq(departmentId),
                 eq(PermissionConstants.MAINTENANCE_EVENT_READ),
-                eq(MaintenanceAutomationNotificationService.MAINTENANCE_OVERDUE),
-                eq("Maintenance overdue: cycle-1"),
+                any(com.toir.dto.notification.NotificationContent.class),
                 eq(NotificationSeverity.CRITICAL),
                 any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
@@ -116,8 +113,7 @@ class MaintenanceAutomationNotificationServiceTest {
         when(notificationService.notifyDepartmentByPermission(
                 eq(departmentId),
                 eq(PermissionConstants.MAINTENANCE_EVENT_READ),
-                eq(MaintenanceAutomationNotificationService.MAINTENANCE_BLOCKED),
-                eq("Maintenance blocked: cycle-1"),
+                any(com.toir.dto.notification.NotificationContent.class),
                 eq(NotificationSeverity.CRITICAL),
                 any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
@@ -125,8 +121,7 @@ class MaintenanceAutomationNotificationServiceTest {
         )).thenReturn(List.of());
         when(notificationService.notifyEmployee(
                 eq(responsibleEmployeeId),
-                eq(MaintenanceAutomationNotificationService.MAINTENANCE_BLOCKED),
-                eq("Maintenance blocked: cycle-1"),
+                any(com.toir.dto.notification.NotificationContent.class),
                 eq(NotificationSeverity.CRITICAL),
                 any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
@@ -149,8 +144,7 @@ class MaintenanceAutomationNotificationServiceTest {
         EquipmentMaintenanceEffectiveRule rule = EquipmentMaintenanceEffectiveRule.fromRegulation(equipment.getId(), regulation);
         when(notificationService.notifyEmployee(
                 eq(responsibleEmployeeId),
-                eq(MaintenanceAutomationNotificationService.MAINTENANCE_UPCOMING),
-                eq("Maintenance upcoming: cycle-1"),
+                any(com.toir.dto.notification.NotificationContent.class),
                 eq(NotificationSeverity.INFO),
                 any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
@@ -173,8 +167,7 @@ class MaintenanceAutomationNotificationServiceTest {
         MaintenanceDueEvent event = event(eventId, equipment.getId(), MaintenanceDueStatus.DUE);
         when(notificationService.notifyEmployee(
                 eq(responsibleEmployeeId),
-                eq(MaintenanceAutomationNotificationService.MAINTENANCE_REQUIRES_APPROVAL),
-                eq("Maintenance requires approval: cycle-1"),
+                any(com.toir.dto.notification.NotificationContent.class),
                 eq(NotificationSeverity.WARNING),
                 any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),
@@ -182,8 +175,7 @@ class MaintenanceAutomationNotificationServiceTest {
         )).thenReturn(Optional.of(notification(UUID.randomUUID(), MaintenanceAutomationNotificationService.MAINTENANCE_REQUIRES_APPROVAL, eventId)));
         when(notificationService.notifyEmployee(
                 eq(responsibleEmployeeId),
-                eq(MaintenanceAutomationNotificationService.MAINTENANCE_WORK_ORDER_CREATED),
-                eq("Maintenance work order created: cycle-1"),
+                any(com.toir.dto.notification.NotificationContent.class),
                 eq(NotificationSeverity.INFO),
                 any(com.toir.enums.NotificationEventType.class),
                 eq(MaintenanceAutomationNotificationService.ENTITY_TYPE),

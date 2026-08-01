@@ -60,7 +60,6 @@ public class FirebasePushNotificationSender {
             return;
         }
 
-        Map<String, String> data = payload(notification);
         List<UserFcmToken> tokens = tokenRepository
                 .findAllByUserIdAndActiveTrueAndIsDeletedFalseOrderByLastSeenAtDesc(notification.recipientId());
         if (tokens.isEmpty()) {
@@ -71,14 +70,14 @@ public class FirebasePushNotificationSender {
 
         log.info("Firebase push sending notification {} to recipient {} using {} active FCM token(s)",
                 notification.id(), notification.recipientId(), tokens.size());
-        tokens.forEach(token -> sendToToken(firebaseMessaging, token, notification, data));
+        tokens.forEach(token -> sendToToken(firebaseMessaging, token, notification));
     }
 
     private void sendToToken(FirebaseMessaging firebaseMessaging,
                              UserFcmToken token,
-                             NotificationDto notification,
-                             Map<String, String> data) {
+                             NotificationDto notification) {
         try {
+            Map<String, String> data = payload(notification, token.getLanguageCode());
             Message message = buildMessage(token, notification, data);
             String messageId = firebaseMessaging.send(message);
             log.info("Firebase push sent notification {} to recipient {} token id {} messageId={}",
@@ -94,8 +93,8 @@ public class FirebasePushNotificationSender {
     private Message buildMessage(UserFcmToken token,
                                  NotificationDto notification,
                                  Map<String, String> data) {
-        String title = value(notification.title());
-        String body = value(notification.message());
+        String title = value(notification.localizedTitle(token.getLanguageCode()));
+        String body = value(notification.localizedMessage(token.getLanguageCode()));
 
         Message.Builder builder = Message.builder()
                 .setToken(token.getToken())
@@ -160,9 +159,19 @@ public class FirebasePushNotificationSender {
     }
 
     Map<String, String> payload(NotificationDto notification) {
+        return payload(notification, "ru");
+    }
+
+    Map<String, String> payload(NotificationDto notification, String language) {
         Map<String, String> data = new LinkedHashMap<>();
-        data.put("title", value(notification.title()));
-        data.put("body", value(notification.message()));
+        data.put("title", value(notification.localizedTitle(language)));
+        data.put("body", value(notification.localizedMessage(language)));
+        data.put("titleRu", value(notification.title()));
+        data.put("messageRu", value(notification.message()));
+        data.put("titleUz", value(notification.titleUz()));
+        data.put("messageUz", value(notification.messageUz()));
+        data.put("titleEn", value(notification.titleEn()));
+        data.put("messageEn", value(notification.messageEn()));
         data.put("notificationId", notification.id() != null ? notification.id().toString() : "");
         String severity = value(notification.severity() != null ? notification.severity().name() : null);
         data.put("type", severity);

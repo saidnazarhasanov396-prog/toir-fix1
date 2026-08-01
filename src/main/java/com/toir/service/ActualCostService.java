@@ -1,5 +1,6 @@
 package com.toir.service;
 
+import com.toir.dto.notification.NotificationContent;
 import com.toir.dto.actualcost.ActualCostDto;
 import com.toir.entity.StockMovement;
 import com.toir.entity.contractors.ContractorWork;
@@ -160,8 +161,14 @@ public class ActualCostService {
         notificationService.notifyDepartmentByPermission(
                 resolveActualCostDepartment(effectiveWorkOrder, repairRequest, budgetLine),
                 com.toir.security.PermissionConstants.ACTUAL_COST_APPROVE,
-                "Actual cost pending review",
-                "Actual cost " + saved.getId() + " requires finance review.",
+                new NotificationContent(
+                        "Фактические затраты ожидают проверки",
+                        "Фактические затраты " + saved.getId() + " требуют финансовой проверки.",
+                        "Haqiqiy xarajat tekshiruvni kutmoqda",
+                        saved.getId() + " haqiqiy xarajati moliyaviy tekshiruvni talab qiladi.",
+                        "Actual cost pending review",
+                        "Actual cost " + saved.getId() + " requires finance review."
+                ),
                 NotificationSeverity.INFO,
                 NotificationEventType.ACTUAL_COST_PENDING_REVIEW,
                 NotificationEntityTypes.ACTUAL_COST,

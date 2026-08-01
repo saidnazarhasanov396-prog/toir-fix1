@@ -352,8 +352,11 @@ class ApprovalPbacScopeTest {
                         && documentId.equals(effective.targetId())));
         verify(notificationService).notifyUser(
                 eq(approverId),
-                org.mockito.ArgumentMatchers.contains("Approval requested"),
-                org.mockito.ArgumentMatchers.contains("requires your decision"),
+                org.mockito.ArgumentMatchers.argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains("Approval requested")
+                                && content.messageEn().contains("requires your decision")
+                                && content.titleRu().contains("Согласование запрошено")
+                                && content.titleUz().contains("Tasdiqlash")),
                 eq(com.toir.enums.NotificationSeverity.INFO),
                 eq(com.toir.enums.NotificationEventType.APPROVAL_REQUESTED),
                 eq("APPROVAL_REQUEST"),
@@ -462,8 +465,11 @@ class ApprovalPbacScopeTest {
         assertThat(approval.getSteps().getFirst().getDecision()).isEqualTo(ApprovalDecision.APPROVED);
         verify(notificationService).notifyApprovalResult(
                 eq(approval.getRequesterId()),
-                org.mockito.ArgumentMatchers.contains("Approval approved"),
-                org.mockito.ArgumentMatchers.contains("approved"),
+                org.mockito.ArgumentMatchers.argThat((com.toir.dto.notification.NotificationContent content) ->
+                        content.titleEn().contains("Approval approved")
+                                && content.messageEn().contains("approved")
+                                && content.titleRu().contains("одобрено")
+                                && content.titleUz().contains("tasdiqlandi")),
                 eq(com.toir.enums.NotificationSeverity.INFO),
                 eq(com.toir.enums.NotificationEventType.APPROVAL_APPROVED),
                 eq("WORK_ORDER"),

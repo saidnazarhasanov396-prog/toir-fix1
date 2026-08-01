@@ -28,7 +28,11 @@ public record NotificationDto(
         Instant createdAt,
         Instant acknowledgedAt,
         UUID acknowledgedById,
-        String acknowledgementComment
+        String acknowledgementComment,
+        String titleUz,
+        String messageUz,
+        String titleEn,
+        String messageEn
 ) {
     public NotificationDto(
             UUID id,
@@ -47,7 +51,8 @@ public record NotificationDto(
             String acknowledgementComment
     ) {
         this(id, recipientId, title, message, channel, status, severity, entityType, entityId,
-                null, null, null, readAt, createdAt, acknowledgedAt, acknowledgedById, acknowledgementComment);
+                null, null, null, readAt, createdAt, acknowledgedAt, acknowledgedById, acknowledgementComment,
+                title, message, title, message);
     }
 
     public NotificationDto(
@@ -64,7 +69,7 @@ public record NotificationDto(
             Instant createdAt
     ) {
         this(id, recipientId, title, message, channel, status, severity, entityType, entityId,
-                null, null, null, readAt, createdAt, null, null, null);
+                null, null, null, readAt, createdAt, null, null, null, title, message, title, message);
     }
 
     public NotificationDto(
@@ -80,7 +85,7 @@ public record NotificationDto(
             Instant readAt
     ) {
         this(id, recipientId, title, message, channel, status, severity, entityType, entityId,
-                null, null, null, readAt, null, null, null, null);
+                null, null, null, readAt, null, null, null, null, title, message, title, message);
     }
 
     public NotificationDto(
@@ -99,7 +104,20 @@ public record NotificationDto(
             Instant readAt
     ) {
         this(id, recipientId, title, message, channel, status, severity, entityType, entityId,
-                eventType, actionUrl, metadata, readAt, null, null, null, null);
+                eventType, actionUrl, metadata, readAt, null, null, null, null,
+                title, message, title, message);
+    }
+
+    public NotificationDto(
+            UUID id, UUID recipientId, String title, String message,
+            NotificationChannel channel, NotificationStatus status, NotificationSeverity severity,
+            String entityType, String entityId, String eventType, String actionUrl,
+            Map<String, Object> metadata, Instant readAt, Instant createdAt,
+            Instant acknowledgedAt, UUID acknowledgedById, String acknowledgementComment
+    ) {
+        this(id, recipientId, title, message, channel, status, severity, entityType, entityId,
+                eventType, actionUrl, metadata, readAt, createdAt, acknowledgedAt, acknowledgedById,
+                acknowledgementComment, title, message, title, message);
     }
 
     public NotificationDto {
@@ -108,10 +126,35 @@ public record NotificationDto(
         severity = severity != null ? severity : NotificationSeverity.INFO;
     }
 
+    public String localizedTitle(String language) {
+        return localized(language, title, titleUz, titleEn);
+    }
+
+    public String localizedMessage(String language) {
+        return localized(language, message, messageUz, messageEn);
+    }
+
+    private static String localized(String language, String russian, String uzbek, String english) {
+        String normalized = language == null ? "ru" : language.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.startsWith("uz")) {
+            return fallback(uzbek, russian);
+        }
+        if (normalized.startsWith("en")) {
+            return fallback(english, russian);
+        }
+        return russian;
+    }
+
     public static NotificationDto from(Notification n) {
         return new NotificationDto(n.getId(), n.getRecipientId(), n.getTitle(), n.getMessage(),
                 n.getChannel(), n.getStatus(), n.getSeverity(), n.getEntityType(), n.getEntityId(),
                 n.getEventType(), n.getActionUrl(), n.getMetadata(), n.getReadAt(),
-                n.getCreatedAt(), n.getAcknowledgedAt(), n.getAcknowledgedById(), n.getAcknowledgementComment());
+                n.getCreatedAt(), n.getAcknowledgedAt(), n.getAcknowledgedById(), n.getAcknowledgementComment(),
+                fallback(n.getTitleUz(), n.getTitle()), fallback(n.getMessageUz(), n.getMessage()),
+                fallback(n.getTitleEn(), n.getTitle()), fallback(n.getMessageEn(), n.getMessage()));
+    }
+
+    private static String fallback(String localized, String fallback) {
+        return localized == null || localized.isBlank() ? fallback : localized;
     }
 }

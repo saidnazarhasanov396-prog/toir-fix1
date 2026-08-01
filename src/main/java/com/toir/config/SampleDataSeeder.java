@@ -44,6 +44,7 @@ import com.toir.enums.MaintenanceKind;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.enums.PeriodicityUnit;
+import com.toir.dto.notification.NotificationContent;
 import com.toir.entity.Notification;
 import com.toir.enums.NotificationChannel;
 import com.toir.repository.NotificationRepository;
@@ -677,13 +678,25 @@ public class SampleDataSeeder implements CommandLineRunner {
 
     private void seedNotifications(UUID admin) {
         if (admin == null) return;
-        seedNotification(admin, "Критическая заявка RR-2026-0002", "Вибрация компрессора К-1 — назначить исполнителя",
+        seedNotification(admin, new NotificationContent(
+                        "Критическая заявка RR-2026-0002", "Вибрация компрессора К-1 — назначить исполнителя",
+                        "Muhim ariza RR-2026-0002", "K-1 kompressor tebranishi — ijrochini tayinlang",
+                        "Critical request RR-2026-0002", "K-1 compressor vibration — assign a performer"),
                 NotificationSeverity.CRITICAL, "RepairRequest");
-        seedNotification(admin, "Заявка закрыта RR-2026-0001", "Течь Н-103 устранена",
+        seedNotification(admin, new NotificationContent(
+                        "Заявка закрыта RR-2026-0001", "Течь Н-103 устранена",
+                        "Ariza yopildi RR-2026-0001", "N-103 sizib chiqishi bartaraf etildi",
+                        "Request closed RR-2026-0001", "N-103 leak was fixed"),
                 NotificationSeverity.INFO, "RepairRequest");
-        seedNotification(admin, "Просроченный ППР-task", "Ревизия клапана К-201 просрочена на 3 дня",
+        seedNotification(admin, new NotificationContent(
+                        "Просроченная задача ППР", "Ревизия клапана К-201 просрочена на 3 дня",
+                        "PPR vazifasi kechikdi", "K-201 klapanini tekshirish 3 kunga kechikdi",
+                        "PPR task overdue", "K-201 valve inspection is 3 days overdue"),
                 NotificationSeverity.WARNING, "PprTask");
-        seedNotification(admin, "Низкий остаток запчастей", "SP-SEAL-AMM1: 8 шт (мин 10)",
+        seedNotification(admin, new NotificationContent(
+                        "Низкий остаток запчастей", "SP-SEAL-AMM1: 8 шт. (мин. 10)",
+                        "Ehtiyot qismlar qoldig‘i kam", "SP-SEAL-AMM1: 8 dona (min. 10)",
+                        "Low spare-part stock", "SP-SEAL-AMM1: 8 pcs (min. 10)"),
                 NotificationSeverity.WARNING, "WarehouseStock");
         List<ActualCost> pendingActualCosts = actualCostRepository
                 .findAllByStatusAndIsDeletedFalseOrderByUpdatedAtDesc(ActualCostStatus.PENDING).stream()
@@ -692,8 +705,14 @@ public class SampleDataSeeder implements CommandLineRunner {
         for (ActualCost actualCost : pendingActualCosts) {
             seedNotification(
                     admin,
-                    "ActualCost на согласовании",
-                    "Фактические затраты " + actualCost.getId() + " ждут финансового согласования",
+                    new NotificationContent(
+                            "Фактические затраты на согласовании",
+                            "Фактические затраты " + actualCost.getId() + " ждут финансового согласования",
+                            "Haqiqiy xarajat tasdiqlashda",
+                            actualCost.getId() + " haqiqiy xarajati moliyaviy tasdiqlashni kutmoqda",
+                            "Actual cost pending approval",
+                            "Actual cost " + actualCost.getId() + " is waiting for financial approval"
+                    ),
                     NotificationSeverity.WARNING,
                     "ActualCost",
                     actualCost.getId().toString()
@@ -701,17 +720,21 @@ public class SampleDataSeeder implements CommandLineRunner {
         }
     }
 
-    private void seedNotification(UUID recipient, String title, String message,
+    private void seedNotification(UUID recipient, NotificationContent content,
                                   NotificationSeverity severity, String entityType) {
-        seedNotification(recipient, title, message, severity, entityType, null);
+        seedNotification(recipient, content, severity, entityType, null);
     }
 
-    private void seedNotification(UUID recipient, String title, String message,
+    private void seedNotification(UUID recipient, NotificationContent content,
                                   NotificationSeverity severity, String entityType, String entityId) {
         Notification n = new Notification();
         n.setRecipientId(recipient);
-        n.setTitle(title);
-        n.setMessage(message);
+        n.setTitle(content.titleRu());
+        n.setMessage(content.messageRu());
+        n.setTitleUz(content.titleUz());
+        n.setMessageUz(content.messageUz());
+        n.setTitleEn(content.titleEn());
+        n.setMessageEn(content.messageEn());
         n.setChannel(NotificationChannel.WEB);
         n.setStatus(NotificationStatus.SENT);
         n.setSeverity(severity);

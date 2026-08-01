@@ -1,5 +1,6 @@
 package com.toir.service.approval;
 
+import com.toir.dto.notification.NotificationContent;
 import com.toir.entity.ApprovalHistory;
 import com.toir.entity.ApprovalRequest;
 import com.toir.entity.ApprovalStep;
@@ -61,8 +62,14 @@ public class ApprovalGovernanceService {
         record(saved, oldStatus, ApprovalStatus.EXPIRED, changedBy, comment);
         notificationService.notifyApprovalResult(
                 saved.getRequesterId(),
-                "Approval expired: " + saved.getTitle(),
-                "Approval request " + saved.getTitle() + " expired.",
+                new NotificationContent(
+                        "Срок согласования истёк: " + saved.getTitle(),
+                        "Срок запроса на согласование " + saved.getTitle() + " истёк.",
+                        "Tasdiqlash muddati tugadi: " + saved.getTitle(),
+                        saved.getTitle() + " tasdiqlash so‘rovining muddati tugadi.",
+                        "Approval expired: " + saved.getTitle(),
+                        "Approval request " + saved.getTitle() + " expired."
+                ),
                 NotificationSeverity.WARNING,
                 NotificationEventType.APPROVAL_EXPIRED,
                 saved.getTargetType() == null ? NotificationEntityTypes.APPROVAL_REQUEST : saved.getTargetType().name(),
@@ -171,8 +178,14 @@ public class ApprovalGovernanceService {
         NotificationSeverity severity = slaPolicyService.escalationSeverityFor(request);
         currentPendingStep(request).ifPresent(step -> notificationService.notifyUser(
                 step.getApproverId(),
-                "Approval SLA exceeded: " + request.getTitle(),
-                "Approval request " + request.getTitle() + " is overdue.",
+                new NotificationContent(
+                        "Превышен SLA согласования: " + request.getTitle(),
+                        "Запрос на согласование " + request.getTitle() + " просрочен.",
+                        "Tasdiqlash SLA muddati oshdi: " + request.getTitle(),
+                        request.getTitle() + " tasdiqlash so‘rovi kechikdi.",
+                        "Approval SLA exceeded: " + request.getTitle(),
+                        "Approval request " + request.getTitle() + " is overdue."
+                ),
                  severity,
                 NotificationEventType.APPROVAL_SLA_ESCALATED,
                 ENTITY_TYPE,
@@ -180,8 +193,14 @@ public class ApprovalGovernanceService {
         ));
         notificationService.notifyUser(
                 request.getRequesterId(),
-                "Approval escalated: " + request.getTitle(),
-                "Approval request " + request.getTitle() + " exceeded its SLA.",
+                new NotificationContent(
+                        "Согласование эскалировано: " + request.getTitle(),
+                        "Запрос на согласование " + request.getTitle() + " превысил SLA.",
+                        "Tasdiqlash eskalatsiya qilindi: " + request.getTitle(),
+                        request.getTitle() + " tasdiqlash so‘rovi SLA muddatidan oshdi.",
+                        "Approval escalated: " + request.getTitle(),
+                        "Approval request " + request.getTitle() + " exceeded its SLA."
+                ),
                  severity,
                 NotificationEventType.APPROVAL_SLA_ESCALATED,
                 ENTITY_TYPE,

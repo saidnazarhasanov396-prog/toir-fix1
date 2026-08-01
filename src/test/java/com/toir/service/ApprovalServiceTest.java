@@ -2558,12 +2558,12 @@ class ApprovalServiceTest {
                 eq(ApprovalActionType.RETURNED_TO_STEP)
         );
         verify(notificationService).notifyApprovalResult(
-                any(), any(), any(), any(NotificationSeverity.class),
+                any(), any(com.toir.dto.notification.NotificationContent.class), any(NotificationSeverity.class),
                 eq(com.toir.enums.NotificationEventType.APPROVAL_RETURNED_TO_REQUESTER),
                 any(), any(), eq(approvalId)
         );
         verify(notificationService).notifyUser(
-                any(), any(), any(), any(NotificationSeverity.class),
+                any(), any(com.toir.dto.notification.NotificationContent.class), any(NotificationSeverity.class),
                 eq(com.toir.enums.NotificationEventType.APPROVAL_RETURNED_TO_APPROVER),
                 eq("APPROVAL_REQUEST"), eq(approvalId.toString())
         );
