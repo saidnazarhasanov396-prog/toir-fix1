@@ -238,7 +238,7 @@ class PprPlanServiceListFilterTest {
 
     @Test
     void statsWithoutFiltersReturnsCountsByStatus() {
-        when(planRepository.getStats(null, null, null, null)).thenReturn(stats(6, 1, 2, 3, 17, 8, 4, 5, 2));
+        when(planRepository.getStats(null, null, null, null)).thenReturn(stats(6, 1, 2, 3, 8, 4, 5, 2));
 
         var result = service.getStats(null, null, null, null);
 
@@ -246,7 +246,6 @@ class PprPlanServiceListFilterTest {
         assertThat(result.draftPlans()).isEqualTo(1);
         assertThat(result.generatedPlans()).isEqualTo(2);
         assertThat(result.approvedPlans()).isEqualTo(3);
-        assertThat(result.totalTasks()).isEqualTo(17);
         assertThat(result.plannedTasks()).isEqualTo(8);
         assertThat(result.inProgressTasks()).isEqualTo(4);
         assertThat(result.completedTasks()).isEqualTo(5);
@@ -541,7 +540,7 @@ class PprPlanServiceListFilterTest {
     @Test
     void statsWithDepartmentUsesSameFilter() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.getStats(2026, 5, 12, departmentId)).thenReturn(stats(2, 0, 1, 1, 6, 3, 2, 1, 1));
+        when(planRepository.getStats(2026, 5, 12, departmentId)).thenReturn(stats(2, 0, 1, 1, 3, 2, 1, 1));
 
         var result = service.getStats(2026, 5, 12, departmentId);
 
@@ -554,7 +553,7 @@ class PprPlanServiceListFilterTest {
     @Test
     void statsForNonExistingDepartmentReturnsZeroCounts() {
         UUID departmentId = UUID.randomUUID();
-        when(planRepository.getStats(null, null, null, departmentId)).thenReturn(stats(0, 0, 0, 0, 0, 0, 0, 0, 0));
+        when(planRepository.getStats(null, null, null, departmentId)).thenReturn(stats(0, 0, 0, 0, 0, 0, 0, 0));
 
         var result = service.getStats(null, null, null, departmentId);
 
@@ -647,7 +646,6 @@ class PprPlanServiceListFilterTest {
             long draftPlans,
             long generatedPlans,
             long approvedPlans,
-            long totalTasks,
             long plannedTasks,
             long inProgressTasks,
             long completedTasks,
@@ -672,11 +670,6 @@ class PprPlanServiceListFilterTest {
             @Override
             public Long getApprovedPlans() {
                 return approvedPlans;
-            }
-
-            @Override
-            public Long getTotalTasks() {
-                return totalTasks;
             }
 
             @Override
