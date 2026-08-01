@@ -24,6 +24,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -111,10 +112,15 @@ class RepairAcceptanceServiceTest {
 
         stubAccess(workOrderId, acceptance);
 
+        UUID actorId = UUID.randomUUID();
+        UUID spoofedActorId = UUID.randomUUID();
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(actorId);
+
         service.accept(workOrderId, acceptanceId,
-                new RepairAcceptanceDecisionRequest(UUID.randomUUID(), RepairAcceptanceQualityGrade.GOOD, "ok"));
+                new RepairAcceptanceDecisionRequest(spoofedActorId, RepairAcceptanceQualityGrade.GOOD, "ok"));
 
         verify(repository).save(any(RepairAcceptance.class));
+        assertThat(acceptance.getAcceptedById()).isEqualTo(actorId);
         verify(completionActService).ensureForAcceptedFinal(workOrderId, acceptanceId, "ok");
     }
 
