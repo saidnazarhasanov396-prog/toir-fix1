@@ -33,7 +33,7 @@ public class CompletionActController {
 
     @PostMapping("/completion-acts/{id}/sign")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_CLOSE')")
-    public ResponseEntity<CompletionActDto> sign(@PathVariable UUID id, @RequestParam UUID signerId) {
-        return ResponseEntity.ok(service.sign(id, signerId));
+    public ResponseEntity<CompletionActDto> sign(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.sign(id));
     }
 }

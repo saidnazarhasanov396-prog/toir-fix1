@@ -145,6 +145,7 @@ class RepairAcceptanceServiceTest {
 
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(UUID.randomUUID());
         when(repository.findByIdAndIsDeletedFalse(acceptanceId)).thenReturn(Optional.of(acceptance));
         when(repository.save(any(RepairAcceptance.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(defectRepository.findAllByAcceptance_IdAndIsDeletedFalseOrderByUpdatedAtDesc(acceptanceId))
@@ -170,6 +171,7 @@ class RepairAcceptanceServiceTest {
         workOrder.setStatus(com.toir.enums.WorkOrderStatus.COMPLETED);
         when(workOrderRepository.findByIdAndIsDeletedFalse(workOrderId)).thenReturn(Optional.of(workOrder));
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
+        when(scopeAccessService.currentUserIdOrNull()).thenReturn(UUID.randomUUID());
         when(repository.findByIdAndIsDeletedFalse(acceptance.getId())).thenReturn(Optional.of(acceptance));
     }
 
