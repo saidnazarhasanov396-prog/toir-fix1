@@ -19,6 +19,7 @@ import com.toir.enums.PprPlanOrigin;
 import com.toir.enums.PprTaskStatus;
 import com.toir.enums.PriorityLevel;
 import com.toir.enums.TaskMaterializationStatus;
+import com.toir.enums.CompletionEvidenceType;
 import com.toir.exception.MaintenanceScheduleApprovalStaleException;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
@@ -99,7 +100,11 @@ class MaintenanceScheduleMaterializationServiceTest {
         verify(taskRepository).saveAll(org.mockito.ArgumentMatchers.argThat(tasks ->
                 ((List<PprTask>) tasks).stream().allMatch(task ->
                         task.getStatus() == PprTaskStatus.APPROVED
-                                && item.getId().equals(task.getSourceCalculationItemId()))));
+                                && item.getId().equals(task.getSourceCalculationItemId())
+                                && task.getWorkOrderLeadDays() == 14
+                                && task.getRequiredEvidenceTypes().containsAll(
+                                        List.of(CompletionEvidenceType.AFTER_PHOTO,
+                                                CompletionEvidenceType.DOCUMENT)))));
     }
 
     @Test
@@ -353,6 +358,10 @@ class MaintenanceScheduleMaterializationServiceTest {
                 .priority(PriorityLevel.MEDIUM)
                 .cycleOrdinal(1L)
                 .taskTitleSnapshot("Maintenance")
+                .workOrderLeadDays(14)
+                .requiredEvidenceTypes(java.util.Set.of(
+                        CompletionEvidenceType.AFTER_PHOTO,
+                        CompletionEvidenceType.DOCUMENT))
                 .build();
         item.setId(UUID.randomUUID());
         return item;
