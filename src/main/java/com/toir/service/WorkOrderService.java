@@ -129,6 +129,7 @@ import com.toir.service.maintanance.MaintenanceAutomationService;
 import com.toir.service.maintanance.MaintenanceDueEventService;
 import com.toir.service.maintanance.WorkOrderSparePartRequirementService;
 import com.toir.service.maintenance.WorkOrderCompletionService;
+import com.toir.service.ppr.PprWorkOrderEarlyCreationPolicy;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.service.integration.ToirErpWorkOrderSnapshotPublisher;
 import com.toir.util.AuditBuilderService;
@@ -2724,6 +2725,8 @@ public class WorkOrderService {
         if (task.getStatus() != PprTaskStatus.APPROVED) {
             throw RestException.badRequest("Only APPROVED PPR tasks can generate work orders");
         }
+        PprWorkOrderEarlyCreationPolicy.requireDue(
+                task, java.time.LocalDateTime.now(CALENDAR_ZONE));
         PprPlan plan = task.getPlan();
         if (plan == null || plan.getId() == null) {
             throw RestException.notFound("Parent PPR plan not found for task: " + pprTaskId);

@@ -39,6 +39,7 @@ import com.toir.util.PaginationUtils;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.service.pprcalendar.PprPlanEquipmentAccessPolicy;
 import com.toir.service.pprcalendar.PprOperationalCalendarPolicy;
+import com.toir.service.ppr.PprTaskExecutionPolicy;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -518,7 +519,8 @@ public class PprPlanService {
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(content);
         Map<UUID, String> equipmentNames = resolveEquipmentNames(List.of(), content);
         Map<UUID, String> regulationNames = resolveRegulationNames(List.of(), content);
-        return tasks.map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames));
+        Map<UUID, WorkOrder> workOrders = loadLatestWorkOrderByTaskId(content);
+        return tasks.map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames, workOrders));
     }
 
     @Transactional(readOnly = true)
@@ -539,7 +541,8 @@ public class PprPlanService {
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(content);
         Map<UUID, String> equipmentNames = resolveEquipmentNames(List.of(), content);
         Map<UUID, String> regulationNames = resolveRegulationNames(List.of(), content);
-        return tasks.map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames));
+        Map<UUID, WorkOrder> workOrders = loadLatestWorkOrderByTaskId(content);
+        return tasks.map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames, workOrders));
     }
 
     @Transactional(readOnly = true)
@@ -568,9 +571,10 @@ public class PprPlanService {
                 resolveEquipmentNames(List.of(), tasks);
         Map<UUID, String> regulationNames =
                 resolveRegulationNames(List.of(), tasks);
+        Map<UUID, WorkOrder> workOrders = loadLatestWorkOrderByTaskId(tasks);
         List<PprTaskDto> dtos = tasks.stream()
                 .map(task -> PprTaskDto.from(
-                        task, ruleById, equipmentNames, regulationNames))
+                        task, ruleById, equipmentNames, regulationNames, workOrders))
                 .toList();
         return PaginationUtils.page(dtos, page, size);
     }
@@ -968,6 +972,7 @@ public class PprPlanService {
 
     public PprTaskDto completeTask(UUID taskId, CompletePprTaskRequest request) {
         PprTask task = getTask(taskId);
+        PprTaskExecutionPolicy.requireDirectCompletionAllowed(task);
         if (task.getStatus() != PprTaskStatus.IN_PROGRESS) {
             throw RestException.badRequest("Only IN_PROGRESS PPR tasks can be completed");
         }
@@ -1042,8 +1047,9 @@ public class PprPlanService {
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
         Map<UUID, String> equipmentNames = resolveEquipmentNames(List.of(), tasks);
         Map<UUID, String> regulationNames = resolveRegulationNames(List.of(), tasks);
+        Map<UUID, WorkOrder> workOrders = loadLatestWorkOrderByTaskId(tasks);
         return taskPage.map(task -> PprTaskDto.from(
-                task, ruleById, equipmentNames, regulationNames));
+                task, ruleById, equipmentNames, regulationNames, workOrders));
     }
 
     @Transactional(readOnly = true)
@@ -1052,9 +1058,23 @@ public class PprPlanService {
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
         Map<UUID, String> equipmentNames = resolveEquipmentNames(List.of(), tasks);
         Map<UUID, String> regulationNames = resolveRegulationNames(List.of(), tasks);
+        Map<UUID, WorkOrder> workOrders = loadLatestWorkOrderByTaskId(tasks);
         return tasks.stream()
-                .map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames))
+                .map(task -> PprTaskDto.from(task, ruleById, equipmentNames, regulationNames, workOrders))
                 .toList();
+    }
+
+    private Map<UUID, WorkOrder> loadLatestWorkOrderByTaskId(List<PprTask> tasks) {
+        List<UUID> taskIds = tasks.stream().map(PprTask::getId).filter(Objects::nonNull).toList();
+        if (taskIds.isEmpty()) {
+            return Map.of();
+        }
+        return workOrderRepository.findAllByPprTaskIdInAndIsDeletedFalse(taskIds).stream()
+                .filter(order -> order.getPprTaskId() != null)
+                .collect(Collectors.toMap(
+                        WorkOrder::getPprTaskId,
+                        order -> order,
+                        (left, right) -> left.getUpdatedAt().isAfter(right.getUpdatedAt()) ? left : right));
     }
 
     private PprPlan getPlan(UUID id) {
