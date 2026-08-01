@@ -9,6 +9,7 @@ import com.toir.enums.RepairAcceptanceStatus;
 import com.toir.exception.RestException;
 import com.toir.repository.CompletionActRepository;
 import com.toir.repository.maintenance.RepairAcceptanceRepository;
+import com.toir.security.ScopeAccessService;
 import com.toir.util.AuditBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class CompletionActService {
     private final CompletionActRepository repository;
     private final RepairAcceptanceRepository repairAcceptanceRepository;
     private final AuditBuilderService auditBuilderService;
+    private final ScopeAccessService scopeAccessService;
 
 
     @Transactional(readOnly = true)
@@ -87,9 +89,19 @@ public class CompletionActService {
     }
 
     @Transactional
-    public CompletionActDto sign(UUID id, UUID signerId) {
+    public CompletionActDto sign(UUID id) {
         CompletionAct a = repository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> RestException.notFound("Completion act not found: " + id));
+        UUID signerId = scopeAccessService.currentUserIdOrNull();
+        if (signerId == null) {
+            throw RestException.conflict("Authenticated signer could not be resolved");
+        }
+        if (a.getSignedById() != null) {
+            if (signerId.equals(a.getSignedById())) {
+                return CompletionActDto.from(a);
+            }
+            throw RestException.conflict("Completion act is already signed by another user");
+        }
         assertFinalAcceptanceAccepted(a.getWorkOrderId());
         validateLinkedAcceptance(a.getWorkOrderId(), a.getRepairAcceptanceId());
         a.setSignedById(signerId);
@@ -107,7 +119,7 @@ public class CompletionActService {
                 saved
         );
 
-        return CompletionActDto.from(a);
+        return CompletionActDto.from(saved);
     }
 
     private void assertFinalAcceptanceAccepted(UUID workOrderId) {

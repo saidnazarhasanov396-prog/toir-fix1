@@ -239,6 +239,12 @@ public class MaintenanceScheduleMaterializationService {
         task.setPriority(item.getPriority() == null
                 ? PriorityLevel.MEDIUM
                 : item.getPriority());
+        task.setWorkOrderLeadDays(item.getWorkOrderLeadDays() == null
+                ? 7
+                : item.getWorkOrderLeadDays());
+        task.setRequiredEvidenceTypes(item.getRequiredEvidenceTypes() == null
+                ? new HashSet<>()
+                : new HashSet<>(item.getRequiredEvidenceTypes()));
         task.setStatus(PprTaskStatus.APPROVED);
         return task;
     }

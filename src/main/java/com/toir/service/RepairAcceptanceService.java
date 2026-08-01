@@ -140,6 +140,7 @@ public class RepairAcceptanceService {
     public RepairAcceptanceDto accept(UUID workOrderId, UUID id, RepairAcceptanceDecisionRequest request) {
         WorkOrder workOrder = getWorkOrderForAccess(workOrderId);
         RepairAcceptance acceptance = getAcceptanceForWorkOrder(workOrderId, id);
+        UUID actorId = requireCurrentActor();
         ensureMutableForDecision(acceptance);
         RepairAcceptance before = snapshot(acceptance);
         if (acceptance.getStage() == RepairAcceptanceStage.FINAL
@@ -162,8 +163,8 @@ public class RepairAcceptanceService {
                 ? Instant.now()
                 : acceptance.getAcceptanceStartedAt());
         acceptance.setAcceptedAt(Instant.now());
+        acceptance.setAcceptedById(actorId);
         if (request != null) {
-            acceptance.setAcceptedById(request.acceptedById());
             if (request.qualityGrade() != null) {
                 acceptance.setQualityGrade(request.qualityGrade());
             }
@@ -182,14 +183,15 @@ public class RepairAcceptanceService {
     public RepairAcceptanceDto reject(UUID workOrderId, UUID id, RepairAcceptanceDecisionRequest request) {
         WorkOrder workOrder = getWorkOrderForAccess(workOrderId);
         RepairAcceptance acceptance = getAcceptanceForWorkOrder(workOrderId, id);
+        UUID actorId = requireCurrentActor();
         ensureMutableForDecision(acceptance);
         RepairAcceptance before = snapshot(acceptance);
         acceptance.setStatus(RepairAcceptanceStatus.REJECTED);
         acceptance.setAcceptanceStartedAt(acceptance.getAcceptanceStartedAt() == null
                 ? Instant.now()
                 : acceptance.getAcceptanceStartedAt());
+        acceptance.setAcceptedById(actorId);
         if (request != null) {
-            acceptance.setAcceptedById(request.acceptedById());
             acceptance.setQualityGrade(request.qualityGrade() == null
                     ? RepairAcceptanceQualityGrade.NOT_ACCEPTED
                     : request.qualityGrade());
@@ -200,6 +202,14 @@ public class RepairAcceptanceService {
             reopenRejectedWork(workOrder);
         }
         return result;
+    }
+
+    private UUID requireCurrentActor() {
+        UUID actorId = scopeAccessService.currentUserIdOrNull();
+        if (actorId == null) {
+            throw RestException.conflict("Authenticated acceptance actor could not be resolved");
+        }
+        return actorId;
     }
 
     private void reopenRejectedWork(WorkOrder workOrder) {
