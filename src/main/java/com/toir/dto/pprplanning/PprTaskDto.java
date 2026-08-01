@@ -52,6 +52,38 @@ public record PprTaskDto(
             String code,
             UUID planId,
             UUID regulationId,
+            String regulationName,
+            UUID equipmentMaintenanceRuleId,
+            String equipmentMaintenanceRuleCode,
+            String equipmentMaintenanceRuleName,
+            UUID equipmentId,
+            String equipmentName,
+            String title,
+            LocalDateTime scheduledStart,
+            LocalDateTime scheduledEnd,
+            LocalDate startDate,
+            LocalDate endDate,
+            LocalDateTime dueDate,
+            PprTaskStatus status,
+            PriorityLevel priority,
+            double plannedLaborHours,
+            Double actualLaborHours,
+            String postponeReason
+    ) {
+        this(
+                id, code, planId, regulationId, regulationName,
+                equipmentMaintenanceRuleId, equipmentMaintenanceRuleCode, equipmentMaintenanceRuleName,
+                equipmentId, equipmentName, title, scheduledStart, scheduledEnd, startDate, endDate, dueDate,
+                status, priority, plannedLaborHours, actualLaborHours, postponeReason,
+                7, Set.of(), null, null, null, null, false
+        );
+    }
+
+    public PprTaskDto(
+            UUID id,
+            String code,
+            UUID planId,
+            UUID regulationId,
             UUID equipmentId,
             String title,
             LocalDateTime scheduledStart,
