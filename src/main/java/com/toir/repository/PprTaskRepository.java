@@ -363,6 +363,33 @@ public interface PprTaskRepository extends JpaRepository<PprTask, UUID> {
     @Query(value = "SELECT * FROM ppr_tasks WHERE plan_id = cast(:planId as uuid) AND is_deleted = false ORDER BY updated_at DESC", nativeQuery = true)
     List<PprTask> findAllByPlanIdAndIsDeletedFalseOrderByUpdatedAtDesc(@Param("planId") UUID planId);
 
+    long countByPlanIdAndIsDeletedFalse(UUID planId);
+
+    long countByPlanIdAndSourceCalculationItemIdIsNotNullAndIsDeletedFalse(UUID planId);
+
+    @Query(value = """
+            SELECT t.*
+            FROM ppr_tasks t
+            JOIN ppr_plans p ON p.id = t.plan_id
+            WHERE t.plan_id = cast(:planId as uuid)
+              AND t.is_deleted = false
+              AND p.is_deleted = false
+              AND (:operationalOnly = false OR t.source_calculation_item_id IS NOT NULL)
+            ORDER BY t.scheduled_start ASC NULLS LAST, t.id ASC
+            """, countQuery = """
+            SELECT count(*)
+            FROM ppr_tasks t
+            JOIN ppr_plans p ON p.id = t.plan_id
+            WHERE t.plan_id = cast(:planId as uuid)
+              AND t.is_deleted = false
+              AND p.is_deleted = false
+              AND (:operationalOnly = false OR t.source_calculation_item_id IS NOT NULL)
+            """, nativeQuery = true)
+    Page<PprTask> findPageByPlanId(
+            @Param("planId") UUID planId,
+            @Param("operationalOnly") boolean operationalOnly,
+            Pageable pageable);
+
     @Query("""
             select task
             from PprTask task

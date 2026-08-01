@@ -196,7 +196,7 @@ class PprPlanControllerContractTest {
         when(scopeAccessService.enforceDepartmentScope(departmentId))
                 .thenReturn(departmentId);
         when(service.getOperationalCalendarStats(2026, null, null, departmentId))
-                .thenReturn(new PprPlanStatsResponse(1, 0, 0, 1, 0, 0, 0, 0));
+                .thenReturn(new PprPlanStatsResponse(1, 0, 0, 1, 0, 0, 0, 0, 0));
         when(service.findOperationalCalendarTasks(
                         departmentId, null, Set.of(), false, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
@@ -300,7 +300,21 @@ class PprPlanControllerContractTest {
         when(service.findAll(null, null, null, null, 0, 20))
                 .thenReturn(new PageImpl<>(List.of(plan), PageRequest.of(0, 20), 1));
         when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan(planId, departmentId)));
-        when(service.findById(planId)).thenReturn(plan);
+        when(service.findById(planId, true)).thenReturn(plan);
+        when(service.findById(planId, false)).thenReturn(new PprPlanDto(
+                planId,
+                "PPR-2026-0099",
+                "June plan",
+                PlanStatus.DRAFT,
+                departmentId,
+                "Instrumentation",
+                plan.createdById(),
+                null,
+                null,
+                1,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30)
+        ));
 
         mockMvc.perform(get("/api/v1/ppr-plans")
                         .param("page", "0")
@@ -323,6 +337,37 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.tasks[0].equipmentName").value("Pump 17"))
                 .andExpect(jsonPath("$.tasks[0].regulationId").value(regulationId.toString()))
                 .andExpect(jsonPath("$.tasks[0].regulationName").value("Monthly inspection"));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/{id}", planId)
+                        .param("includeTasks", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskCount").value(1))
+                .andExpect(jsonPath("$.tasks").isEmpty());
+    }
+
+    @Test
+    void tasksEndpointUsesDatabasePageAndOperationalFilter() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        PprTaskDto task = taskDto(
+                planId, UUID.randomUUID(), "Pump 17", UUID.randomUUID(), "Monthly inspection");
+        PageRequest pageable = PageRequest.of(1, 20);
+
+        when(planRepository.findByIdAndIsDeletedFalse(planId))
+                .thenReturn(Optional.of(plan(planId, departmentId)));
+        when(service.findTasksByPlan(planId, 1, 20, true))
+                .thenReturn(new PageImpl<>(List.of(task), pageable, 522));
+
+        mockMvc.perform(get("/api/v1/ppr-plans/{id}/tasks", planId)
+                        .param("page", "1")
+                        .param("size", "20")
+                        .param("operationalCalendar", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(522))
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content[0].planId").value(planId.toString()));
+
+        verify(service).findTasksByPlan(planId, 1, 20, true);
     }
 
     @Test
@@ -357,7 +402,8 @@ class PprPlanControllerContractTest {
         mockMvc.perform(get("/api/v1/ppr-plans/{id}", planId))
                 .andExpect(status().isNotFound());
 
-        verify(service, never()).findById(planId);
+        verify(service, never()).findById(planId, true);
+        verify(service, never()).findById(planId, false);
     }
 
     @Test
@@ -473,6 +519,7 @@ class PprPlanControllerContractTest {
                 1,
                 2,
                 3,
+                17,
                 8,
                 4,
                 5,
@@ -491,6 +538,7 @@ class PprPlanControllerContractTest {
                 .andExpect(jsonPath("$.draftPlans").value(1))
                 .andExpect(jsonPath("$.generatedPlans").value(2))
                 .andExpect(jsonPath("$.approvedPlans").value(3))
+                .andExpect(jsonPath("$.totalTasks").value(17))
                 .andExpect(jsonPath("$.plannedTasks").value(8))
                 .andExpect(jsonPath("$.inProgressTasks").value(4))
                 .andExpect(jsonPath("$.completedTasks").value(5))
@@ -501,7 +549,7 @@ class PprPlanControllerContractTest {
 
     @Test
     void statsRouteIsNotSwallowedByIdRoute() throws Exception {
-        when(service.getStats(null, null, null, null)).thenReturn(new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0, 0));
+        when(service.getStats(null, null, null, null)).thenReturn(new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/v1/ppr-plans/stats"))
                 .andExpect(status().isOk())

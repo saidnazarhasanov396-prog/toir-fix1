@@ -114,6 +114,66 @@ public class RepairMaterialUsageService {
     }
 
     @Transactional(readOnly = true)
+    public Map<UUID, Long> countByPprTaskIds(List<UUID> taskIds) {
+        List<UUID> distinctTaskIds = taskIds == null
+                ? List.of()
+                : taskIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (distinctTaskIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, WorkOrder> latestWorkOrderByTaskId = safeList(
+                workOrderRepository.findAllByPprTaskIdInAndIsDeletedFalse(distinctTaskIds))
+                .stream()
+                .filter(workOrder -> workOrder.getPprTaskId() != null)
+                .collect(Collectors.toMap(
+                        WorkOrder::getPprTaskId,
+                        Function.identity(),
+                        this::newerWorkOrder));
+        latestWorkOrderByTaskId.values().forEach(this::assertCanAccessWorkOrder);
+
+        List<UUID> workOrderIds = latestWorkOrderByTaskId.values().stream()
+                .map(WorkOrder::getId)
+                .toList();
+        List<RepairMaterialUsage> usages = workOrderIds.isEmpty()
+                ? List.of()
+                : safeList(repository
+                        .findAllByWorkOrderIdInAndIsDeletedFalseOrderByUpdatedAtDesc(workOrderIds));
+        List<UUID> warehouseIds = usages.stream()
+                .map(RepairMaterialUsage::getWarehouseId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID, Warehouse> warehouseById = warehouseIds.isEmpty()
+                ? Map.of()
+                : safeList(warehouseRepository.findAllByIdInAndIsDeletedFalse(warehouseIds)).stream()
+                        .collect(Collectors.toMap(Warehouse::getId, Function.identity()));
+        Map<UUID, Long> countByWorkOrderId = usages.stream()
+                .filter(usage -> {
+                    Warehouse warehouse = warehouseById.get(usage.getWarehouseId());
+                    return warehouse != null && canAccessWarehouse(warehouse);
+                })
+                .collect(Collectors.groupingBy(
+                        RepairMaterialUsage::getWorkOrderId,
+                        Collectors.counting()));
+
+        return distinctTaskIds.stream().collect(Collectors.toMap(
+                Function.identity(),
+                taskId -> {
+                    WorkOrder workOrder = latestWorkOrderByTaskId.get(taskId);
+                    return workOrder == null ? 0L : countByWorkOrderId.getOrDefault(workOrder.getId(), 0L);
+                },
+                (left, right) -> left,
+                java.util.LinkedHashMap::new));
+    }
+
+    private WorkOrder newerWorkOrder(WorkOrder left, WorkOrder right) {
+        if (left.getUpdatedAt() == null) return right;
+        if (right.getUpdatedAt() == null) return left;
+        return left.getUpdatedAt().isAfter(right.getUpdatedAt()) ? left : right;
+    }
+
+    @Transactional(readOnly = true)
     public List<RepairMaterialUsageDto> findByPprTask(UUID taskId) {
         return workOrderRepository.findFirstByPprTaskIdAndIsDeletedFalseOrderByUpdatedAtDesc(taskId)
                 .map(workOrder -> {

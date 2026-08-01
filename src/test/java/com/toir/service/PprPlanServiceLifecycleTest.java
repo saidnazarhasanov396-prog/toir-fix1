@@ -35,6 +35,7 @@ import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.service.pprcalendar.PprPlanEquipmentAccessPolicy;
+import com.toir.service.pprcalendar.PprOperationalCalendarPolicy;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import jakarta.persistence.EntityManager;
@@ -44,6 +45,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDate;
@@ -109,6 +112,9 @@ class PprPlanServiceLifecycleTest {
 
     @Mock
     PprPlanEquipmentAccessPolicy equipmentAccessPolicy;
+
+    @Mock
+    PprOperationalCalendarPolicy operationalCalendarPolicy;
 
     @Mock
     AnnualMaintenanceApprovalFirstFeature approvalFirstFeature;
@@ -875,6 +881,45 @@ class PprPlanServiceLifecycleTest {
         assertThat(result.actualLaborHours()).isEqualTo(4.5);
         verify(repairMaterialUsageService).register(workOrderId, usage);
         verify(taskRepository).save(task);
+    }
+
+    @Test
+    void findTasksByPlanPagesInDatabaseInsteadOfLoadingAllTasks() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.APPROVED);
+        PprTask task = task(UUID.randomUUID(), plan, PprTaskStatus.APPROVED);
+        task.setEquipmentId(null);
+        task.setRegulationId(null);
+        PageRequest pageable = PageRequest.of(2, 20);
+
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(operationalCalendarPolicy.includes(plan)).thenReturn(true);
+        when(taskRepository.findPageByPlanId(planId, true, pageable))
+                .thenReturn(new PageImpl<>(List.of(task), pageable, 522));
+
+        var result = service.findTasksByPlan(planId, 2, 20, true);
+
+        assertThat(result.getTotalElements()).isEqualTo(522);
+        assertThat(result.getContent()).hasSize(1);
+        verify(taskRepository).findPageByPlanId(planId, true, pageable);
+        verify(taskRepository, never())
+                .findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(planId);
+    }
+
+    @Test
+    void findTasksByPlanRejectsPlanOutsideOperationalCalendarPolicy() {
+        UUID planId = UUID.randomUUID();
+        PprPlan plan = plan(planId, PlanStatus.DRAFT);
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.of(plan));
+        when(operationalCalendarPolicy.includes(plan)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.findTasksByPlan(planId, 0, 20, true))
+                .isInstanceOfSatisfying(RestException.class, ex -> {
+                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(ex.getMessage()).contains(planId.toString());
+                });
+
+        verify(taskRepository, never()).findPageByPlanId(eq(planId), eq(true), any());
     }
 
     @Test

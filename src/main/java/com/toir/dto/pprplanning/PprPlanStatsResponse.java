@@ -5,6 +5,7 @@ public record PprPlanStatsResponse(
         long draftPlans,
         long generatedPlans,
         long approvedPlans,
+        long totalTasks,
         long plannedTasks,
         long inProgressTasks,
         long completedTasks,

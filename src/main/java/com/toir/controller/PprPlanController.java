@@ -20,7 +20,6 @@ import com.toir.security.ScopeAccessService;
 import com.toir.service.PprGeneratorService;
 import com.toir.service.PprPlanService;
 
-import com.toir.util.PaginationUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -252,11 +251,12 @@ public class PprPlanController {
     @PreAuthorize(PPR_CALENDAR_DETAIL_AUTH)
     public ResponseEntity<PprPlanDto> get(
             @PathVariable UUID id,
-            @RequestParam(defaultValue = "false") boolean operationalCalendar) {
+            @RequestParam(defaultValue = "false") boolean operationalCalendar,
+            @RequestParam(defaultValue = "true") boolean includeTasks) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(operationalCalendar
-                ? service.findOperationalCalendarPlanById(id)
-                : service.findById(id));
+                ? service.findOperationalCalendarPlanById(id, includeTasks)
+                : service.findById(id, includeTasks));
     }
 
     @PostMapping
@@ -302,10 +302,13 @@ public class PprPlanController {
 
     @GetMapping("/{id}/tasks")
     @PreAuthorize(PPR_TASK_READ_AUTH)
-    public ResponseEntity<Page<PprTaskDto>> tasks(@PathVariable UUID id, @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+    public ResponseEntity<Page<PprTaskDto>> tasks(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean operationalCalendar) {
         assertCanAccessPlan(planOrThrow(id));
-        return ResponseEntity.ok(PaginationUtils.page(service.findTasksByPlan(id), page, size));
+        return ResponseEntity.ok(service.findTasksByPlan(id, page, size, operationalCalendar));
     }
 
     @PostMapping("/{id}/tasks")

@@ -364,6 +364,7 @@ public class PprPlanService {
                     plans.stream().filter(plan -> plan.getStatus() == PlanStatus.DRAFT).count(),
                     plans.stream().filter(plan -> plan.getStatus() == PlanStatus.GENERATED).count(),
                     plans.stream().filter(plan -> plan.getStatus() == PlanStatus.APPROVED).count(),
+                    tasks.size(),
                     tasks.stream().filter(task -> task.getStatus() == PprTaskStatus.PLANNED).count(),
                     tasks.stream().filter(task -> task.getStatus() == PprTaskStatus.IN_PROGRESS).count(),
                     tasks.stream().filter(task -> task.getStatus() == PprTaskStatus.COMPLETED).count(),
@@ -372,13 +373,14 @@ public class PprPlanService {
         }
         PprPlanStatsProjection stats = planRepository.getStats(year, month, day, departmentId);
         if (stats == null) {
-            return new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0, 0);
+            return new PprPlanStatsResponse(0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
         return new PprPlanStatsResponse(
                 safe(stats.getTotalPlans()),
                 safe(stats.getDraftPlans()),
                 safe(stats.getGeneratedPlans()),
                 safe(stats.getApprovedPlans()),
+                safe(stats.getTotalTasks()),
                 safe(stats.getPlannedTasks()),
                 safe(stats.getInProgressTasks()),
                 safe(stats.getCompletedTasks()),
@@ -432,6 +434,7 @@ public class PprPlanService {
                 plans.stream()
                         .filter(plan -> plan.getStatus() == PlanStatus.APPROVED)
                         .count(),
+                tasks.size(),
                 tasks.stream()
                         .filter(task -> task.getStatus() == PprTaskStatus.PLANNED)
                         .count(),
@@ -620,16 +623,29 @@ public class PprPlanService {
 
     @Transactional(readOnly = true)
     public PprPlanDto findById(UUID id) {
-        return toDto(getPlan(id));
+        return findById(id, true);
+    }
+
+    @Transactional(readOnly = true)
+    public PprPlanDto findById(UUID id, boolean includeTasks) {
+        PprPlan plan = getPlan(id);
+        return includeTasks ? toDto(plan) : toSummaryDto(plan, false);
     }
 
     @Transactional(readOnly = true)
     public PprPlanDto findOperationalCalendarPlanById(UUID id) {
+        return findOperationalCalendarPlanById(id, true);
+    }
+
+    @Transactional(readOnly = true)
+    public PprPlanDto findOperationalCalendarPlanById(UUID id, boolean includeTasks) {
         PprPlan plan = getPlan(id);
         if (!operationalCalendarPolicy.includes(plan)) {
             throw RestException.notFound("PPR plan not found: " + id);
         }
-        return toOperationalCalendarDtos(List.of(plan), null).getFirst();
+        return includeTasks
+                ? toOperationalCalendarDtos(List.of(plan), null).getFirst()
+                : toSummaryDto(plan, true);
     }
 
     @Transactional(readOnly = true)
@@ -1012,6 +1028,25 @@ public class PprPlanService {
     }
 
     @Transactional(readOnly = true)
+    public Page<PprTaskDto> findTasksByPlan(
+            UUID planId, int page, int size, boolean operationalOnly) {
+        if (operationalOnly) {
+            PprPlan plan = getPlan(planId);
+            if (!operationalCalendarPolicy.includes(plan)) {
+                throw RestException.notFound("PPR plan not found: " + planId);
+            }
+        }
+        Page<PprTask> taskPage = taskRepository.findPageByPlanId(
+                planId, operationalOnly, PaginationUtils.pageRequest(page, size));
+        List<PprTask> tasks = taskPage.getContent();
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
+        Map<UUID, String> equipmentNames = resolveEquipmentNames(List.of(), tasks);
+        Map<UUID, String> regulationNames = resolveRegulationNames(List.of(), tasks);
+        return taskPage.map(task -> PprTaskDto.from(
+                task, ruleById, equipmentNames, regulationNames));
+    }
+
+    @Transactional(readOnly = true)
     public List<PprTaskDto> findTasksByPlan(UUID planId) {
         List<PprTask> tasks = taskRepository.findAllByPlanIdAndIsDeletedFalseOrderByScheduledStartAscIdAsc(planId);
         Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
@@ -1035,6 +1070,20 @@ public class PprPlanService {
 
     public PprPlanDto toSummaryDto(PprPlan plan) {
         return toDto(plan);
+    }
+
+    private PprPlanDto toSummaryDto(PprPlan plan, boolean operationalOnly) {
+        long taskCount = operationalOnly
+                ? taskRepository.countByPlanIdAndSourceCalculationItemIdIsNotNullAndIsDeletedFalse(plan.getId())
+                : taskRepository.countByPlanIdAndIsDeletedFalse(plan.getId());
+        Map<UUID, String> departmentNames = resolveDepartmentNames(List.of(plan));
+        return PprPlanDto.summaryFrom(
+                plan,
+                departmentName(departmentNames, plan),
+                resolveEquipmentNames(List.of(plan), List.of()),
+                resolveEquipmentTypeNames(List.of(plan)),
+                resolveRegulationNames(List.of(plan), List.of()),
+                taskCount);
     }
 
     private PprPlanDto toDto(PprPlan plan) {
