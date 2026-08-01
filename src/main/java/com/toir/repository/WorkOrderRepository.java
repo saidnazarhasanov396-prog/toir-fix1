@@ -21,6 +21,22 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, JpaSpecificationExecutor<WorkOrder> {
+    @Query(value = """
+            SELECT *
+            FROM work_orders
+            WHERE equipment_id = :equipmentId
+              AND COALESCE(completed_at, started_at, start_planned_at, created_at) >= :historyStart
+              AND COALESCE(completed_at, started_at, start_planned_at, created_at) <= :asOf
+              AND is_deleted = false
+            ORDER BY COALESCE(completed_at, started_at, start_planned_at, created_at) ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<WorkOrder> findLifecycleWorkOrders(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("historyStart") Instant historyStart,
+            @Param("asOf") Instant asOf,
+            @Param("limitPlusOne") int limitPlusOne);
+
     @Query(value = "SELECT * FROM work_orders WHERE id = cast(:id as uuid) AND is_deleted = false LIMIT 1", nativeQuery = true)
     Optional<WorkOrder> findByIdAndIsDeletedFalse(@Param("id") UUID id);
 
@@ -213,6 +229,7 @@ public interface WorkOrderRepository extends JpaRepository<WorkOrder, UUID>, Jpa
                     nullif(to_jsonb(w)->>'contractor_id', '')::uuid
                 ) as counteragent_id,
                 nullif(to_jsonb(w)->>'brigade_member_id', '')::uuid as brigade_member_id,
+                nullif(to_jsonb(w)->>'performer_employee_id', '')::uuid as performer_employee_id,
                 nullif(to_jsonb(w)->>'warehouse_id', '')::uuid as warehouse_id,
                 nullif(to_jsonb(w)->>'replacement_equipment_id', '')::uuid as replacement_equipment_id,
                 w.status,

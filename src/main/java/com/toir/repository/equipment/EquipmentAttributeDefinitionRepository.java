@@ -32,6 +32,15 @@ public interface EquipmentAttributeDefinitionRepository extends JpaRepository<Eq
     List<EquipmentAttributeDefinition> findAllByEquipmentTypeIdInAndIsDeletedFalse(@Param("equipmentTypeIds") Collection<UUID> equipmentTypeIds);
 
     @Query(value = """
+            SELECT *
+            FROM equipment_attribute_definitions
+            WHERE id IN (:ids)
+              AND is_deleted = false
+            """, nativeQuery = true)
+    List<EquipmentAttributeDefinition> findAllByIdInAndIsDeletedFalse(
+            @Param("ids") Collection<UUID> ids);
+
+    @Query(value = """
             SELECT EXISTS(
                 SELECT 1 FROM equipment_attribute_definitions
                 WHERE equipment_type_id = :equipmentTypeId

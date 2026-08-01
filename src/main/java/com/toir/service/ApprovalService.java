@@ -2119,8 +2119,8 @@ public class ApprovalService implements ApprovalOrchestrator {
         if (effectiveSteps.isEmpty()) {
             if (calculationBinding != null) {
                 throw new RestException(
-                        "Active PPR_PLAN_APPROVAL template with a configured "
-                                + "Chief Engineer approver step is required",
+                        "Active PPR_PLAN_APPROVAL template with at least one "
+                                + "configured approver step is required",
                         org.springframework.http.HttpStatus.CONFLICT,
                         "PPR_APPROVAL_TEMPLATE_ROUTE_NOT_CONFIGURED");
             }

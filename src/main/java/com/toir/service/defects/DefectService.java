@@ -555,6 +555,8 @@ public class DefectService {
         userIdByBrigadeMemberId.values().stream()
                 .filter(Objects::nonNull)
                 .forEach(userIds::add);
+        allWorkOrders.stream().map(WorkOrder::getPerformerEmployee).filter(Objects::nonNull)
+                .map(com.toir.entity.users.Employee::getUserId).filter(Objects::nonNull).forEach(userIds::add);
         Map<UUID, String> userNameById = userIds.isEmpty()
                 ? Map.of()
                 : userRepository.findAllByIdInAndIsDeletedFalse(userIds)
@@ -824,7 +826,9 @@ public class DefectService {
                 .stream()
                 .map(workOrder -> {
                     UUID brigadeMemberId = workOrder.getPerformer() == null ? null : workOrder.getPerformer().getId();
-                    UUID userId = brigadeMemberId == null ? null : userIdByBrigadeMemberId.get(brigadeMemberId);
+                    UUID userId = workOrder.getPerformerEmployee() != null
+                            ? workOrder.getPerformerEmployee().getUserId()
+                            : brigadeMemberId == null ? null : userIdByBrigadeMemberId.get(brigadeMemberId);
                     String assigneeName = userId == null ? null : userNameById.get(userId);
                     return TriadLinkMapper.toWorkOrderBrief(workOrder, assigneeName);
                 })

@@ -1,6 +1,7 @@
 package com.toir.repository.maintenance;
 
 import com.toir.entity.maintenance.MaintenanceCompletionAnchor;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,4 +36,34 @@ public interface MaintenanceCompletionAnchorRepository extends JpaRepository<Mai
             @Param("regulationId") UUID regulationId,
             @Param("ruleId") UUID ruleId
     );
+
+    @Query(value = """
+            SELECT *
+            FROM maintenance_completion_anchors
+            WHERE equipment_id = :equipmentId
+              AND performed_at >= :historyStart
+              AND performed_at <= :asOf
+              AND is_deleted = false
+            ORDER BY performed_at ASC, id ASC
+            LIMIT :limitPlusOne
+            """, nativeQuery = true)
+    List<MaintenanceCompletionAnchor> findLifecycleAnchors(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("historyStart") java.time.Instant historyStart,
+            @Param("asOf") java.time.Instant asOf,
+            @Param("limitPlusOne") int limitPlusOne);
+
+    @Query(value = """
+            SELECT DISTINCT work_order_id
+            FROM maintenance_completion_anchors
+            WHERE equipment_id = :equipmentId
+              AND work_order_id IN (:workOrderIds)
+              AND performed_at <= :asOf
+              AND is_deleted = false
+            ORDER BY work_order_id ASC
+            """, nativeQuery = true)
+    List<UUID> findAnchoredWorkOrderIds(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("workOrderIds") Collection<UUID> workOrderIds,
+            @Param("asOf") java.time.Instant asOf);
 }

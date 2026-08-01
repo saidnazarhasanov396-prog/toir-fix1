@@ -81,8 +81,8 @@ class PprPlanEndpointSecurityTest {
     }
 
     @Test
-    @WithMockUser(authorities = "PPR_PLAN_READ")
-    void pprPlanReadAuthorityCanReadDetail() throws Exception {
+    @WithMockUser(authorities = "PPR_CALENDAR_READ")
+    void pprCalendarReadAuthorityCanReadDetail() throws Exception {
         UUID id = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         PprPlan approvedPlan = planEntity(id, departmentId);
@@ -96,7 +96,7 @@ class PprPlanEndpointSecurityTest {
 
     @Test
     @WithMockUser(authorities = "PPR_TASK_READ")
-    void pprTaskReadAuthorityCanReadDetailButCannotMutatePlan() throws Exception {
+    void pprTaskReadAuthorityCannotReadDetailOrMutatePlan() throws Exception {
         UUID id = UUID.randomUUID();
         UUID departmentId = UUID.randomUUID();
         when(pprPlanRepository.findByIdAndIsDeletedFalse(id))
@@ -104,7 +104,7 @@ class PprPlanEndpointSecurityTest {
         when(pprPlanService.findById(id)).thenReturn(planDto(id));
 
         mockMvc.perform(get("/api/v1/ppr-plans/{id}", id))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/ppr-plans")
                         .contentType("application/json")
                         .content("""

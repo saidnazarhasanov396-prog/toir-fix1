@@ -47,16 +47,21 @@ public class PprPlanController {
 
     private static final String PPR_CALENDAR_READ_AUTH =
             "hasAnyAuthority('PPR_CALENDAR_READ','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_CREATE_AUTH = "hasAnyAuthority('PPR_PLAN_CREATE','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_UPDATE_AUTH = "hasAnyAuthority('PPR_PLAN_UPDATE','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_DELETE_AUTH = "hasAnyAuthority('PPR_PLAN_DELETE','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_GENERATE_AUTH = "hasAnyAuthority('PPR_PLAN_GENERATE','SYSTEM_ADMIN','*')";
-    private static final String PPR_WORK_ORDER_GENERATE_AUTH = "(" + PPR_PLAN_GENERATE_AUTH + ")"
+    private static final String PPR_CALENDAR_DETAIL_AUTH =
+            "hasAnyAuthority('PPR_CALENDAR_READ','PPR_CALENDAR_CREATE','PPR_CALENDAR_UPDATE',"
+                    + "'PPR_CALENDAR_DELETE','PPR_CALENDAR_APPROVE','PPR_CALENDAR_GENERATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_CALENDAR_CREATE_AUTH =
+            "hasAnyAuthority('PPR_CALENDAR_CREATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_CALENDAR_UPDATE_AUTH =
+            "hasAnyAuthority('PPR_CALENDAR_UPDATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_CALENDAR_DELETE_AUTH =
+            "hasAnyAuthority('PPR_CALENDAR_DELETE','SYSTEM_ADMIN','*')";
+    private static final String PPR_CALENDAR_GENERATE_AUTH =
+            "hasAnyAuthority('PPR_CALENDAR_GENERATE','SYSTEM_ADMIN','*')";
+    private static final String PPR_WORK_ORDER_GENERATE_AUTH = "(" + PPR_CALENDAR_GENERATE_AUTH + ")"
             + " and hasAnyAuthority('WORK_ORDER_CREATE','SYSTEM_ADMIN','*')"
             + " and (hasAuthority('SYSTEM_ADMIN') or (!hasAuthority('VIEWER') and !hasAuthority('CONTRACTOR')))";
     private static final String PPR_TASK_READ_AUTH = "hasAnyAuthority('PPR_TASK_READ','SYSTEM_ADMIN','*')";
-    private static final String PPR_PLAN_DETAIL_READ_AUTH =
-            "hasAnyAuthority('PPR_PLAN_READ','PPR_CALENDAR_READ','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_CREATE_AUTH = "hasAnyAuthority('PPR_TASK_CREATE','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_POSTPONE_AUTH = "hasAnyAuthority('PPR_TASK_POSTPONE','SYSTEM_ADMIN','*')";
     private static final String PPR_TASK_APPROVE_AUTH = "hasAnyAuthority('PPR_TASK_APPROVE','SYSTEM_ADMIN','*')";
@@ -244,7 +249,7 @@ public class PprPlanController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize(PPR_PLAN_DETAIL_READ_AUTH)
+    @PreAuthorize(PPR_CALENDAR_DETAIL_AUTH)
     public ResponseEntity<PprPlanDto> get(
             @PathVariable UUID id,
             @RequestParam(defaultValue = "false") boolean operationalCalendar) {
@@ -255,7 +260,7 @@ public class PprPlanController {
     }
 
     @PostMapping
-    @PreAuthorize(PPR_PLAN_CREATE_AUTH)
+    @PreAuthorize(PPR_CALENDAR_CREATE_AUTH)
     public ResponseEntity<PprPlanDto> create(@Valid @RequestBody PprPlanRequest request) {
         PprPlanRequest scopedRequest = requestWithScopedDepartment(request);
         assertCanAccessRequestedDepartment(scopedRequest.departmentId());
@@ -263,7 +268,7 @@ public class PprPlanController {
     }
 
     @PatchMapping("/{id}")
-    @PreAuthorize(PPR_PLAN_UPDATE_AUTH)
+    @PreAuthorize(PPR_CALENDAR_UPDATE_AUTH)
     public ResponseEntity<PprPlanDto> update(@PathVariable UUID id, @Valid @RequestBody PprPlanRequest request) {
         assertCanAccessPlan(planOrThrow(id));
         assertCanAccessRequestedDepartment(request.departmentId());
@@ -271,7 +276,7 @@ public class PprPlanController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize(PPR_PLAN_DELETE_AUTH)
+    @PreAuthorize(PPR_CALENDAR_DELETE_AUTH)
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         assertCanAccessPlan(planOrThrow(id));
         service.delete(id);
@@ -279,7 +284,7 @@ public class PprPlanController {
     }
 
     @PostMapping("/{id}/generate")
-    @PreAuthorize(PPR_PLAN_GENERATE_AUTH)
+    @PreAuthorize(PPR_CALENDAR_GENERATE_AUTH)
     public ResponseEntity<PprGeneratorService.GenerationResult> generate(@PathVariable UUID id) {
         assertCanAccessPlan(planOrThrow(id));
         return ResponseEntity.ok(generatorService.generateForPlan(id));
@@ -394,8 +399,11 @@ public class PprPlanController {
 
     private boolean canViewUnapprovedPlans() {
         return scopeAccessService.isScopeAdmin()
-                || scopeAccessService.hasAuthority("PPR_PLAN_GENERATE")
-                || scopeAccessService.hasAuthority("PPR_PLAN_APPROVE");
+                || scopeAccessService.hasAuthority("PPR_CALENDAR_CREATE")
+                || scopeAccessService.hasAuthority("PPR_CALENDAR_UPDATE")
+                || scopeAccessService.hasAuthority("PPR_CALENDAR_DELETE")
+                || scopeAccessService.hasAuthority("PPR_CALENDAR_GENERATE")
+                || scopeAccessService.hasAuthority("PPR_CALENDAR_APPROVE");
     }
 
     private void assertCanAccessRequestedDepartment(UUID departmentId) {

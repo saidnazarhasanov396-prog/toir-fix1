@@ -6,6 +6,8 @@ import com.toir.dto.workorder.WorkOrderCalendarSummaryResponse;
 import com.toir.dto.workorder.WorkOrderDocumentDto;
 import com.toir.dto.workorder.WorkOrderDto;
 import com.toir.dto.workorder.WorkOrderPerformerOptionDto;
+import com.toir.dto.workorder.WorkOrderEmployeePerformerOptionDto;
+import com.toir.dto.workorder.WorkOrderPerformerAssignmentRequest;
 import com.toir.dto.workorder.WorkOrderRequest;
 import com.toir.dto.workorder.WorkOrderStatsResponse;
 import com.toir.dto.workorder.WorkOrderTaskDto;
@@ -421,6 +423,30 @@ public class WorkOrderController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/performer-options")
+    @Operation(summary = "Employee-centric work-order performer options",
+            description = "Returns active department Employees, including Employees without brigade memberships. Membership context is optional and batch-loaded.")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_READ')")
+    public ResponseEntity<Page<WorkOrderEmployeePerformerOptionDto>> employeePerformerOptions(
+            @Parameter(required = true, description = "Department scope") @RequestParam UUID departmentId,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(service.employeePerformerOptions(departmentId, search, page, size));
+    }
+
+    @PatchMapping("/{id}/performer")
+    @Operation(summary = "Assign or reassign a work-order performer")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_UPDATE')")
+    public ResponseEntity<WorkOrderDto> reassignPerformer(
+            @PathVariable UUID id,
+            @RequestBody WorkOrderPerformerAssignmentRequest request
+    ) {
+        assertCanAccessWorkOrder(workOrderOrThrow(id));
+        return ResponseEntity.ok(service.reassignPerformer(id, request));
+    }
+
     @PostMapping
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('WORK_ORDER_CREATE')")
     public ResponseEntity<WorkOrderDto> create(@Valid @RequestBody WorkOrderRequest request) {
@@ -485,8 +511,10 @@ public class WorkOrderController {
         if (scopeAccessService.canAccessDepartment(workOrder.getDepartmentId())) {
             return;
         }
-        if (workOrder.getPerformer() != null
-                && scopeAccessService.canAccessAssignedUser(workOrder.getPerformer().getUserId())) {
+        UUID performerUserId = workOrder.getPerformerEmployee() != null
+                ? workOrder.getPerformerEmployee().getUserId()
+                : workOrder.getPerformer() == null ? null : workOrder.getPerformer().getUserId();
+        if (performerUserId != null && scopeAccessService.canAccessAssignedUser(performerUserId)) {
             return;
         }
         throw new AccessDeniedException("Access denied by work order department or performer scope");

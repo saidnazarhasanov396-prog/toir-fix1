@@ -99,6 +99,7 @@ import java.time.Year;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Locale;
@@ -1404,9 +1405,9 @@ public class RepairRequestService {
                 : brigadeMemberRepository.findAllByIdInAndIsDeletedFalse(brigadeMemberIds)
                 .stream()
                 .collect(Collectors.toMap(BrigadeMember::getId, BrigadeMember::getUserId));
-        Set<UUID> userIds = userIdByBrigadeMemberId.values().stream()
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+        Set<UUID> userIds = new HashSet<>(userIdByBrigadeMemberId.values());
+        workOrders.stream().map(WorkOrder::getPerformerEmployee).filter(Objects::nonNull)
+                .map(com.toir.entity.users.Employee::getUserId).filter(Objects::nonNull).forEach(userIds::add);
         Map<UUID, String> userNameById = userIds.isEmpty()
                 ? Map.of()
                 : userRepository.findAllByIdInAndIsDeletedFalse(userIds)
@@ -1415,7 +1416,9 @@ public class RepairRequestService {
         return workOrders.stream()
                 .collect(Collectors.toMap(WorkOrder::getId, workOrder -> {
                     UUID brigadeMemberId = workOrder.getPerformer() == null ? null : workOrder.getPerformer().getId();
-                    UUID userId = brigadeMemberId == null ? null : userIdByBrigadeMemberId.get(brigadeMemberId);
+                    UUID userId = workOrder.getPerformerEmployee() != null
+                            ? workOrder.getPerformerEmployee().getUserId()
+                            : brigadeMemberId == null ? null : userIdByBrigadeMemberId.get(brigadeMemberId);
                     String assigneeName = userId == null ? null : userNameById.get(userId);
                     return TriadLinkMapper.toWorkOrderBrief(workOrder, assigneeName);
                 }));

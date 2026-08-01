@@ -2,12 +2,13 @@ package com.toir.service.maintanance;
 
 import com.toir.repository.equipment.EquipmentTypeRepository;
 
-import com.toir.dto.maintenanceregulation.EquipmentTypeWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationAttributeConditionRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationFilter;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationSparePartRequirementRequest;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationStatsDto;
 import com.toir.entity.SparePart;
 import com.toir.entity.equipment.Equipment;
 import com.toir.entity.equipment.EquipmentType;
@@ -29,10 +30,10 @@ import com.toir.exception.RestException;
 import com.toir.repository.SparePartRepository;
 import com.toir.repository.equipment.EquipmentAttributeDefinitionRepository;
 import com.toir.repository.equipment.EquipmentRepository;
-import com.toir.repository.equipment.EquipmentTypeEquipmentCountProjection;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceOperationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationAttributeConditionRepository;
+import com.toir.repository.maintenance.MaintenanceRegulationReadRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationSparePartRequirementRepository;
 import com.toir.repository.maintenance.MaintenanceTemplateRepository;
@@ -47,7 +48,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -55,6 +59,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.Year;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -70,6 +75,9 @@ class MaintenanceRegulationServiceTest {
 
     @Mock
     MaintenanceRegulationRepository repository;
+
+    @Mock
+    MaintenanceRegulationReadRepository readRepository;
 
     @Mock
     EquipmentRepository equipmentRepository;
@@ -116,22 +124,43 @@ class MaintenanceRegulationServiceTest {
     }
 
     @Test
-    void searchWithEquipmentTypeValidatesAndFilters() {
+    void searchUsesCanonicalDatabasePageAndPreservesItsOrderAndMetadata() {
         UUID equipmentTypeId = UUID.randomUUID();
-        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), equipmentTypeId, "MR-2026-0001", true);
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        MaintenanceRegulation first = regulation(firstId, equipmentTypeId, "MR-2026-0001", true);
+        MaintenanceRegulation second = regulation(secondId, equipmentTypeId, "MR-2026-0002", false);
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(
+                "pump", MaintenanceKind.PREVENTIVE, equipmentTypeId, null);
+        PageRequest pageable = PageRequest.of(2, 20);
         when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(equipmentTypeId)).thenReturn(true);
-        when(repository.searchPaginated(eq(equipmentTypeId), eq(true), eq("PREVENTIVE"), eq("pump"), any()))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(regulation)));
+        when(readRepository.findGeneral(filter, pageable)).thenReturn(new PageImpl<>(
+                List.of(
+                        new MaintenanceRegulationReadRepository.GeneralKey(
+                                MaintenanceRegulationReadRepository.DisplaySource.REGULATION, secondId),
+                        new MaintenanceRegulationReadRepository.GeneralKey(
+                                MaintenanceRegulationReadRepository.DisplaySource.REGULATION, firstId)
+                ),
+                pageable,
+                43
+        ));
+        when(repository.findAllByIdInAndIsDeletedFalse(Set.of(firstId, secondId)))
+                .thenReturn(List.of(first, second));
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(equipmentTypeId)))
+                .thenReturn(List.of(equipmentType(equipmentTypeId, "Pump")));
 
-        var page = service.search(0, 20, "pump", equipmentTypeId, true, "PREVENTIVE");
+        var page = service.search(2, 20, filter);
 
-        assertThat(page.getContent()).hasSize(1);
-        assertThat(page.getContent().getFirst().equipmentTypeId()).isEqualTo(equipmentTypeId);
-        verify(repository).searchPaginated(eq(equipmentTypeId), eq(true), eq("PREVENTIVE"), eq("pump"), any());
+        assertThat(page.getContent()).extracting(MaintenanceRegulationDto::id)
+                .containsExactly(secondId, firstId);
+        assertThat(page.getNumber()).isEqualTo(2);
+        assertThat(page.getSize()).isEqualTo(20);
+        assertThat(page.getTotalElements()).isEqualTo(43);
+        verify(readRepository).findGeneral(filter, pageable);
     }
 
     @Test
-    void searchIncludesStandaloneEquipmentRulesAsEquipmentScopedRegulations() {
+    void searchMapsStandaloneRuleFromBoundedGeneralPage() {
         UUID equipmentId = UUID.randomUUID();
         UUID equipmentTypeId = UUID.randomUUID();
         UUID ruleId = UUID.randomUUID();
@@ -145,16 +174,22 @@ class MaintenanceRegulationServiceTest {
         rule.setAutomationAction(AutomationAction.CREATE_WORK_ORDER);
         rule.setDuplicatePolicy(DuplicatePolicy.ONE_ITEM_PER_CYCLE);
         rule.setDefaultPriority(PriorityLevel.HIGH);
-
-        when(repository.searchPaginated(eq(null), eq(true), eq("PREVENTIVE"), eq("pump"), any()))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
-        when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
-        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), true))
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(
+                "pump", MaintenanceKind.PREVENTIVE, null, true);
+        when(readRepository.findGeneral(filter, PageRequest.of(0, 20))).thenReturn(new PageImpl<>(
+                List.of(new MaintenanceRegulationReadRepository.GeneralKey(
+                        MaintenanceRegulationReadRepository.DisplaySource.EQUIPMENT_RULE, ruleId)),
+                PageRequest.of(0, 20),
+                1
+        ));
+        when(equipmentMaintenanceRuleRepository.findAllByIdInAndIsDeletedFalse(Set.of(ruleId)))
                 .thenReturn(List.of(rule));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(Set.of(equipmentId)))
+                .thenReturn(List.of(equipment));
         when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(equipmentTypeId)))
                 .thenReturn(List.of(equipmentType));
 
-        var page = service.search(0, 20, "pump", null, true, "PREVENTIVE");
+        var page = service.search(0, 20, filter);
 
         assertThat(page.getContent()).singleElement().satisfies(dto -> {
             assertThat(dto.id()).isEqualTo(ruleId);
@@ -174,16 +209,18 @@ class MaintenanceRegulationServiceTest {
     void searchWithUnknownEquipmentTypeReturns404() {
         UUID equipmentTypeId = UUID.randomUUID();
         when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(equipmentTypeId)).thenReturn(false);
+        MaintenanceRegulationFilter filter =
+                new MaintenanceRegulationFilter(null, null, equipmentTypeId, null);
 
-        assertThatThrownBy(() -> service.search(0, 20, null, equipmentTypeId, null, null))
+        assertThatThrownBy(() -> service.search(0, 20, filter))
                 .isInstanceOfSatisfying(RestException.class, ex ->
                         assertThat(ex.getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
 
-        verify(repository, never()).searchPaginated(any(), any(), any(), any(), any());
+        verifyNoInteractions(readRepository);
     }
 
     @Test
-    void equipmentWithRegulationsGroupsRulesByEquipment() {
+    void equipmentWithRegulationsUsesPagedIdsAndEffectiveLinkedStatus() {
         UUID equipmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
         UUID templateId = UUID.randomUUID();
@@ -202,16 +239,27 @@ class MaintenanceRegulationServiceTest {
         operation.setToolsRequired("Wrench");
         operation.setSparePartsRequired("Seal kit");
         operation.setConsumablesRequired("Grease");
-
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(
+                null, MaintenanceKind.PREVENTIVE, typeId, false);
+        PageRequest pageable = PageRequest.of(0, 10);
         when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(typeId)).thenReturn(true);
-        when(equipmentRepository.findAllForMaintenanceRegulations(typeId)).thenReturn(List.of(equipment));
+        when(readRepository.findEquipmentIds(filter, pageable)).thenReturn(
+                new PageImpl<>(List.of(equipmentId), pageable, 1));
+        when(readRepository.findEquipmentMatches(filter, List.of(equipmentId))).thenReturn(List.of(
+                new MaintenanceRegulationReadRepository.EquipmentMatch(
+                        equipmentId,
+                        MaintenanceRegulationReadRepository.DisplaySource.REGULATION,
+                        regulation.getId(),
+                        false
+                )
+        ));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(Set.of(equipmentId)))
+                .thenReturn(List.of(equipment));
         when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
-        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), true))
-                .thenReturn(List.of(rule));
         when(repository.findAllByIdInAndIsDeletedFalse(Set.of(regulation.getId()))).thenReturn(List.of(regulation));
         when(operationRepository.findAllByTemplateIdInAndIsDeletedFalse(Set.of(templateId))).thenReturn(List.of(operation));
 
-        var page = service.equipmentWithRegulations(typeId, true, null, null);
+        var page = service.equipmentWithRegulations(0, 10, filter);
 
         assertThat(page.getContent()).hasSize(1);
         EquipmentWithRegulationsDto dto = page.getContent().getFirst();
@@ -219,182 +267,144 @@ class MaintenanceRegulationServiceTest {
         assertThat(dto.equipmentTypeName()).isEqualTo("Pump");
         assertThat(dto.regulations()).hasSize(1);
         assertThat(dto.regulations().getFirst().id()).isEqualTo(regulation.getId());
+        assertThat(dto.regulations().getFirst().active()).isFalse();
         assertThat(dto.regulations().getFirst().requiredSkill()).isEqualTo("Mechanic");
         assertThat(dto.regulations().getFirst().sparePartsRequired()).isEqualTo("Seal kit");
+        assertThat(page.getTotalElements()).isEqualTo(1);
     }
 
     @Test
-    void equipmentWithRegulationsReturnsEquipmentWithoutTypeAndEmptyRegulations() {
+    void equipmentWithRegulationsDropsParentIfBulkMatchIsUnexpectedlyEmpty() {
         UUID equipmentId = UUID.randomUUID();
-        Equipment equipment = equipment(equipmentId, null);
-        when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
-        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null))
-                .thenReturn(List.of());
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(null, null, null, null);
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(readRepository.findEquipmentIds(filter, pageable))
+                .thenReturn(new PageImpl<>(List.of(equipmentId), pageable, 1));
+        when(readRepository.findEquipmentMatches(filter, List.of(equipmentId))).thenReturn(List.of());
 
-        var page = service.equipmentWithRegulations(null, null, null, null);
-
-        assertThat(page.getContent()).hasSize(1);
-        EquipmentWithRegulationsDto dto = page.getContent().getFirst();
-        assertThat(dto.equipmentId()).isEqualTo(equipmentId);
-        assertThat(dto.equipmentTypeId()).isNull();
-        assertThat(dto.equipmentTypeName()).isNull();
-        assertThat(dto.regulations()).isEmpty();
-        verify(equipmentTypeRepository, never()).findAllByIdInAndIsDeletedFalse(any());
-        verify(equipmentMaintenanceRuleRepository).findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null);
-    }
-
-    @Test
-    void equipmentWithRegulationsHandlesTypedEquipmentWithoutRegulations() {
-        UUID equipmentId = UUID.randomUUID();
-        UUID typeId = UUID.randomUUID();
-        Equipment equipment = equipment(equipmentId, typeId);
-        EquipmentType type = new EquipmentType();
-        type.setId(typeId);
-        type.setName("Pump");
-
-        when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
-        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
-        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null))
-                .thenReturn(List.of());
-
-        var page = service.equipmentWithRegulations(null, null, null, null);
+        var page = service.equipmentWithRegulations(0, 10, filter);
 
         assertThat(page.getContent()).isEmpty();
-        verify(equipmentMaintenanceRuleRepository).findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null);
+        assertThat(page.getTotalElements()).isEqualTo(1);
+        verify(equipmentRepository, never()).findAllByIdInAndIsDeletedFalse(any());
     }
 
     @Test
-    void equipmentWithRegulationsHandlesRegulationWithoutTemplate() {
+    void equipmentWithRegulationsDeduplicatesDisplayIdentityInDatabaseOrder() {
         UUID equipmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
         Equipment equipment = equipment(equipmentId, typeId);
-        EquipmentType type = new EquipmentType();
-        type.setId(typeId);
-        type.setName("Pump");
-        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, "MR-2026-0001", true);
-        regulation.setTemplateId(null);
-        EquipmentMaintenanceRule rule = rule(UUID.randomUUID(), equipmentId, regulation.getId(), null, true);
-
-        when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
-        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
-        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null))
-                .thenReturn(List.of(rule));
-        when(repository.findAllByIdInAndIsDeletedFalse(Set.of(regulation.getId()))).thenReturn(List.of(regulation));
-
-        var page = service.equipmentWithRegulations(null, null, null, null);
-
-        assertThat(page.getContent()).hasSize(1);
-        EquipmentWithRegulationsDto dto = page.getContent().getFirst();
-        assertThat(dto.equipmentId()).isEqualTo(equipmentId);
-        assertThat(dto.equipmentTypeId()).isEqualTo(typeId);
-        assertThat(dto.equipmentTypeName()).isEqualTo("Pump");
-        assertThat(dto.regulations()).hasSize(1);
-        assertThat(dto.regulations().getFirst().id()).isEqualTo(regulation.getId());
-        assertThat(dto.regulations().getFirst().requiredSkill()).isNull();
-        verify(operationRepository, never()).findAllByTemplateIdInAndIsDeletedFalse(any());
-    }
-
-    @Test
-    void equipmentWithRegulationsIncludesStandaloneEquipmentRules() {
-        UUID equipmentId = UUID.randomUUID();
-        UUID typeId = UUID.randomUUID();
         UUID ruleId = UUID.randomUUID();
-        Equipment equipment = equipment(equipmentId, typeId);
-        EquipmentType type = new EquipmentType();
-        type.setId(typeId);
-        type.setName("Pump");
         EquipmentMaintenanceRule rule = rule(ruleId, equipmentId, null, null, true);
         rule.setName("Pump A individual PM");
         rule.setNormativeLaborHours(2.4);
-
-        when(equipmentRepository.findAllForMaintenanceRegulations(null)).thenReturn(List.of(equipment));
-        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
-        when(equipmentMaintenanceRuleRepository.findAllByEquipmentIdInAndOptionalActive(Set.of(equipmentId), null))
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(null, null, null, null);
+        PageRequest pageable = PageRequest.of(0, 10);
+        when(readRepository.findEquipmentIds(filter, pageable))
+                .thenReturn(new PageImpl<>(List.of(equipmentId), pageable, 1));
+        when(readRepository.findEquipmentMatches(filter, List.of(equipmentId))).thenReturn(List.of(
+                new MaintenanceRegulationReadRepository.EquipmentMatch(
+                        equipmentId,
+                        MaintenanceRegulationReadRepository.DisplaySource.EQUIPMENT_RULE,
+                        ruleId,
+                        true
+                ),
+                new MaintenanceRegulationReadRepository.EquipmentMatch(
+                        equipmentId,
+                        MaintenanceRegulationReadRepository.DisplaySource.EQUIPMENT_RULE,
+                        ruleId,
+                        true
+                )
+        ));
+        when(equipmentRepository.findAllByIdInAndIsDeletedFalse(Set.of(equipmentId)))
+                .thenReturn(List.of(equipment));
+        when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId)))
+                .thenReturn(List.of(equipmentType(typeId, "Pump")));
+        when(equipmentMaintenanceRuleRepository.findAllByIdInAndIsDeletedFalse(Set.of(ruleId)))
                 .thenReturn(List.of(rule));
 
-        var page = service.equipmentWithRegulations(null, null, null, null);
+        var page = service.equipmentWithRegulations(0, 10, filter);
 
-        assertThat(page.getContent()).hasSize(1);
-        EquipmentWithRegulationsDto dto = page.getContent().getFirst();
-        assertThat(dto.equipmentId()).isEqualTo(equipmentId);
-        assertThat(dto.equipmentTypeName()).isEqualTo("Pump");
-        assertThat(dto.regulations()).singleElement().satisfies(summary -> {
-            assertThat(summary.id()).isEqualTo(ruleId);
-            assertThat(summary.code()).isEqualTo("EMR-2026-0001");
-            assertThat(summary.name()).isEqualTo("Pump A individual PM");
-            assertThat(summary.category()).isEqualTo("PREVENTIVE");
-            assertThat(summary.defaultDurationHours()).isEqualTo(3);
-            assertThat(summary.active()).isTrue();
-        });
-        verify(repository, never()).findAllByIdInAndIsDeletedFalse(any());
-        verify(operationRepository, never()).findAllByTemplateIdInAndIsDeletedFalse(any());
+        assertThat(page.getContent()).singleElement().satisfies(dto ->
+                assertThat(dto.regulations()).singleElement().satisfies(summary -> {
+                    assertThat(summary.id()).isEqualTo(ruleId);
+                    assertThat(summary.defaultDurationHours()).isEqualTo(3);
+                }));
     }
 
     @Test
-    void equipmentWithRegulationsRejectsPartialPagination() {
-        assertThatThrownBy(() -> service.equipmentWithRegulations(null, null, 0, null))
-                .isInstanceOfSatisfying(RestException.class, ex -> {
-                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("Both page and size");
-                });
-    }
-
-    @Test
-    void equipmentTypeWithRegulationsGroupsRegulationsByEquipmentType() {
+    void equipmentTypeWithRegulationsReturnsFilteredNestedCountAndEquipmentCount() {
         UUID typeId = UUID.randomUUID();
-        UUID templateId = UUID.randomUUID();
-        EquipmentType type = new EquipmentType();
-        type.setId(typeId);
+        UUID regulationId = UUID.randomUUID();
+        UUID ruleId = UUID.randomUUID();
+        EquipmentType type = equipmentType(typeId, "Pump");
         type.setCode("ET-2026-0001");
-        type.setName("Pump");
         type.setCategory("PUMP");
-        MaintenanceRegulation regulation = regulation(UUID.randomUUID(), typeId, "MR-2026-0001", true);
-        regulation.setTemplateId(templateId);
-        MaintenanceTemplate template = template(templateId, typeId, MaintenanceKind.PREVENTIVE, true);
-        MaintenanceOperation operation = new MaintenanceOperation();
-        operation.setTemplate(template);
-        operation.setRequiredSkill("Mechanic");
-        operation.setToolsRequired("Wrench");
-        EquipmentTypeEquipmentCountProjection count = new EquipmentTypeEquipmentCountProjection() {
-            @Override
-            public UUID getEquipmentTypeId() {
-                return typeId;
-            }
-
-            @Override
-            public Long getEquipmentCount() {
-                return 4L;
-            }
-        };
-
+        MaintenanceRegulation regulation = regulation(regulationId, typeId, "MR-2026-0001", true);
+        EquipmentMaintenanceRule rule = rule(ruleId, UUID.randomUUID(), null, null, false);
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(
+                "pump", null, typeId, null);
+        PageRequest pageable = PageRequest.of(0, 10);
         when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(typeId)).thenReturn(true);
-        when(repository.findAllByOptionalEquipmentTypeIdAndOptionalActive(typeId, true))
-                .thenReturn(List.of(regulation));
+        when(readRepository.findEquipmentTypeIds(filter, pageable))
+                .thenReturn(new PageImpl<>(List.of(typeId), pageable, 1));
+        when(readRepository.findEquipmentTypeMatches(filter, List.of(typeId))).thenReturn(List.of(
+                new MaintenanceRegulationReadRepository.EquipmentTypeMatch(
+                        typeId,
+                        MaintenanceRegulationReadRepository.DisplaySource.REGULATION,
+                        regulationId,
+                        true
+                ),
+                new MaintenanceRegulationReadRepository.EquipmentTypeMatch(
+                        typeId,
+                        MaintenanceRegulationReadRepository.DisplaySource.EQUIPMENT_RULE,
+                        ruleId,
+                        false
+                )
+        ));
+        when(readRepository.countMatchingEquipmentByType(filter, List.of(typeId)))
+                .thenReturn(Map.of(typeId, 4));
         when(equipmentTypeRepository.findAllByIdInAndIsDeletedFalse(Set.of(typeId))).thenReturn(List.of(type));
-        when(equipmentRepository.countByEquipmentTypeIds(Set.of(typeId))).thenReturn(List.of(count));
-        when(operationRepository.findAllByTemplateIdInAndIsDeletedFalse(Set.of(templateId))).thenReturn(List.of(operation));
+        when(repository.findAllByIdInAndIsDeletedFalse(Set.of(regulationId))).thenReturn(List.of(regulation));
+        when(equipmentMaintenanceRuleRepository.findAllByIdInAndIsDeletedFalse(Set.of(ruleId)))
+                .thenReturn(List.of(rule));
 
-        var page = service.equipmentTypeWithRegulations(typeId, true, 0, 10);
+        var page = service.equipmentTypeWithRegulations(0, 10, filter);
 
-        assertThat(page.getContent()).hasSize(1);
-        EquipmentTypeWithRegulationsDto dto = page.getContent().getFirst();
-        assertThat(dto.equipmentTypeId()).isEqualTo(typeId);
-        assertThat(dto.equipmentTypeCode()).isEqualTo("ET-2026-0001");
-        assertThat(dto.equipmentTypeName()).isEqualTo("Pump");
-        assertThat(dto.equipmentTypeCategory()).isEqualTo("PUMP");
-        assertThat(dto.equipmentCount()).isEqualTo(4);
-        assertThat(dto.regulations()).hasSize(1);
-        assertThat(dto.regulations().getFirst().id()).isEqualTo(regulation.getId());
-        assertThat(dto.regulations().getFirst().requiredSkill()).isEqualTo("Mechanic");
-        assertThat(dto.regulations().getFirst().toolsRequired()).isEqualTo("Wrench");
+        assertThat(page.getContent()).singleElement().satisfies(dto -> {
+            assertThat(dto.equipmentTypeId()).isEqualTo(typeId);
+            assertThat(dto.equipmentCount()).isEqualTo(4);
+            assertThat(dto.regulations()).extracting(summary -> summary.id())
+                    .containsExactly(regulationId, ruleId);
+        });
+        assertThat(page.getTotalElements()).isEqualTo(1);
     }
 
     @Test
-    void equipmentTypeWithRegulationsRejectsPartialPagination() {
-        assertThatThrownBy(() -> service.equipmentTypeWithRegulations(null, null, 0, null))
-                .isInstanceOfSatisfying(RestException.class, ex -> {
-                    assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(ex.getMessage()).contains("Both page and size");
+    void statsValidatesEquipmentTypeAndReturnsDatabaseAggregate() {
+        UUID typeId = UUID.randomUUID();
+        MaintenanceRegulationFilter filter =
+                new MaintenanceRegulationFilter("pump", null, typeId, false);
+        MaintenanceRegulationStatsDto expected = new MaintenanceRegulationStatsDto(7, 0, 3, 2);
+        when(equipmentTypeRepository.existsByIdAndIsDeletedFalse(typeId)).thenReturn(true);
+        when(readRepository.stats(filter)).thenReturn(expected);
+
+        assertThat(service.stats(filter)).isEqualTo(expected);
+        verify(readRepository).stats(filter);
+    }
+
+    @Test
+    void readFailureDoesNotExposeSqlOrStorageDetails() {
+        MaintenanceRegulationFilter filter = new MaintenanceRegulationFilter(null, null, null, null);
+        when(readRepository.findGeneral(filter, PageRequest.of(0, 20)))
+                .thenThrow(new DataAccessResourceFailureException(
+                        "relation maintenance_regulations does not exist at SQL position 418"));
+
+        assertThatThrownBy(() -> service.search(0, 20, filter))
+                .isInstanceOfSatisfying(RestException.class, exception -> {
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+                    assertThat(exception.getMessage())
+                            .isEqualTo("Unable to load maintenance regulations");
                 });
     }
 
@@ -1162,6 +1172,14 @@ class MaintenanceRegulationServiceTest {
         equipment.setInventoryNumber("INV-1");
         equipment.setEquipmentTypeId(typeId);
         return equipment;
+    }
+
+    private EquipmentType equipmentType(UUID id, String name) {
+        EquipmentType type = new EquipmentType();
+        type.setId(id);
+        type.setCode("ET-2026-0001");
+        type.setName(name);
+        return type;
     }
 
     private EquipmentMaintenanceRule rule(UUID id,

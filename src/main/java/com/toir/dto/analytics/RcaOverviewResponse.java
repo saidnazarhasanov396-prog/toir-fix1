@@ -8,8 +8,17 @@ public record RcaOverviewResponse(
         List<FailureChain> failureChains,
         List<PredictiveCandidate> predictiveCandidates,
         List<EquipmentRanking> equipmentRanking,
-        List<CountRow> categoryBreakdown
+        List<CountRow> categoryBreakdown,
+        AnalyticsContextDto analyticsContext
 ) {
+    public RcaOverviewResponse(List<CountRow> topRootCauses, List<CountRow> topCauses,
+                               List<FailureChain> failureChains,
+                               List<PredictiveCandidate> predictiveCandidates,
+                               List<EquipmentRanking> equipmentRanking,
+                               List<CountRow> categoryBreakdown) {
+        this(topRootCauses, topCauses, failureChains, predictiveCandidates,
+                equipmentRanking, categoryBreakdown, null);
+    }
     public record CountRow(String code, long count) {
     }
 

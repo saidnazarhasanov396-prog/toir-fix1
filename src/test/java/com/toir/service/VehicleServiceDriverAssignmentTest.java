@@ -291,7 +291,17 @@ class VehicleServiceDriverAssignmentTest {
                 null,
                 null,
                 null,
-                null
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                driverId,
+                UUID.randomUUID(),
+                LocalDate.of(2024, 1, 1)
         );
     }
 

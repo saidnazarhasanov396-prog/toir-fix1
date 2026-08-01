@@ -3,6 +3,8 @@ package com.toir.service;
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.dto.analytics.AnalyticsDowntimeEventRow;
 import com.toir.dto.analytics.AnalyticsOverview;
+import com.toir.dto.analytics.AnalyticsPeriod;
+import com.toir.dto.analytics.AnalyticsRange;
 import com.toir.entity.Department;
 import com.toir.entity.DowntimeEvent;
 import com.toir.entity.ReliabilityMetric;
@@ -38,6 +40,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -82,6 +85,9 @@ class AnalyticsServiceTest {
 
     @Mock
     ScopeAccessService scopeAccessService;
+
+    @Mock
+    AnalyticsContextService analyticsContextService;
 
     @InjectMocks
     AnalyticsService service;
@@ -354,6 +360,56 @@ class AnalyticsServiceTest {
             assertThat(row.mtbfHours()).isCloseTo(95.0, offset(0.05));
             assertThat(row.mttrHours()).isCloseTo(5.0, offset(0.02));
         });
+    }
+
+    @Test
+    void overviewForPeriodFiltersOccurrencesAndClipsDowntimeAtBoundary() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+        Instant from = Instant.parse("2026-07-24T10:00:00Z");
+        Instant to = Instant.parse("2026-07-31T10:00:00Z");
+        AnalyticsRange range = new AnalyticsRange(from, to, ZoneId.of("Asia/Tashkent"));
+        Equipment equipment = equipment(equipmentId, departmentId);
+        equipment.setCreatedAt(from.minus(Duration.ofDays(30)));
+
+        RepairRequest oldRequest = RepairRequest.builder()
+                .equipmentId(equipmentId).departmentId(departmentId).status(RequestStatus.DRAFT)
+                .detectedAt(from.minusSeconds(1)).build();
+        RepairRequest recentRequest = RepairRequest.builder()
+                .equipmentId(equipmentId).departmentId(departmentId).status(RequestStatus.DRAFT)
+                .detectedAt(from.plusSeconds(1)).build();
+        DowntimeEvent crossingBoundary = DowntimeEvent.builder()
+                .equipmentId(equipmentId).departmentId(departmentId)
+                .startAt(from.minus(Duration.ofHours(2))).endAt(from.plus(Duration.ofHours(3)))
+                .durationMinutes(300).type(DowntimeType.UNPLANNED).build();
+
+        when(analyticsContextService.resolveRange(AnalyticsPeriod.LAST_7_DAYS)).thenReturn(range);
+        when(equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of(equipment));
+        when(repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(oldRequest, recentRequest));
+        WorkOrder oldWorkOrder = new WorkOrder();
+        oldWorkOrder.setEquipmentId(equipmentId);
+        oldWorkOrder.setDepartmentId(departmentId);
+        oldWorkOrder.setStatus(WorkOrderStatus.CLOSED);
+        oldWorkOrder.setCreatedAt(from.minusSeconds(1));
+        WorkOrder recentWorkOrder = new WorkOrder();
+        recentWorkOrder.setEquipmentId(equipmentId);
+        recentWorkOrder.setDepartmentId(departmentId);
+        recentWorkOrder.setStatus(WorkOrderStatus.CLOSED);
+        recentWorkOrder.setCreatedAt(from.plusSeconds(1));
+        when(workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(oldWorkOrder, recentWorkOrder));
+        when(downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc())
+                .thenReturn(List.of(crossingBoundary));
+        when(defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+        when(departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc()).thenReturn(List.of());
+
+        AnalyticsOverview overview = service.overview(AnalyticsPeriod.LAST_7_DAYS);
+
+        assertThat(overview.totals().closedWorkOrders()).isEqualTo(1);
+        assertThat(overview.kpis().downtimeHoursTotal()).isEqualTo(3.0);
     }
 
     @Test

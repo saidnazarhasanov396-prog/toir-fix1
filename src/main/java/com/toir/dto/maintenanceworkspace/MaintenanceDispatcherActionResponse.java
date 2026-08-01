@@ -10,5 +10,11 @@ public record MaintenanceDispatcherActionResponse(
         UUID ownerId,
         String status,
         String comment,
-        Instant acceptedAt
-) {}
+        Instant acceptedAt,
+        UUID performerEmployeeId,
+        UUID performerBrigadeMemberId
+) {
+    public MaintenanceDispatcherActionResponse(String action, String objectType, UUID objectId, UUID ownerId, String status, String comment, Instant acceptedAt) {
+        this(action, objectType, objectId, ownerId, status, comment, acceptedAt, null, null);
+    }
+}

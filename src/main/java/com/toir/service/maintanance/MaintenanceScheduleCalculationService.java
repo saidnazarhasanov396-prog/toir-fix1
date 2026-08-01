@@ -1,6 +1,7 @@
 package com.toir.service.maintanance;
 
 import com.toir.dto.maintenanceschedule.MaintenanceScheduleCalculationDto;
+import com.toir.dto.maintenanceschedule.MaintenanceScheduleCalculationItemDto;
 import com.toir.dto.maintenanceschedule.MaintenanceScheduleCalculationRequest;
 import com.toir.dto.maintenanceschedule.MaintenanceSchedulePreviewResponse;
 import com.toir.config.AnnualMaintenanceApprovalFirstFeature;
@@ -16,6 +17,7 @@ import com.toir.exception.RestException;
 import com.toir.repository.ApprovalRequestRepository;
 import com.toir.repository.PprPlanRepository;
 import com.toir.repository.MaintenanceScheduleCalculationRepository;
+import com.toir.repository.maintenance.MaintenanceScheduleCalculationItemRepository;
 import com.toir.service.PprPlanService;
 import com.toir.security.ScopeAccessService;
 import java.util.List;
@@ -40,6 +42,7 @@ public class MaintenanceScheduleCalculationService {
     private final PprPlanService pprPlanService;
     private final PprPlanRepository planRepository;
     private final MaintenanceScheduleCalculationRepository calculationRepository;
+    private final MaintenanceScheduleCalculationItemRepository calculationItemRepository;
     private final ApprovalRequestRepository approvalRequestRepository;
     private final AnnualMaintenanceApprovalFirstFeature approvalFirstFeature;
     private final MaintenanceScheduleSnapshotDraftFactory snapshotDraftFactory;
@@ -76,8 +79,22 @@ public class MaintenanceScheduleCalculationService {
                 latestApprovalStatus(plan.getId()),
                 plan.isShiftFromExcludedWeekdays(),
                 Set.copyOf(plan.getExcludedWeekdays()),
-                plan.getRecurrenceAnchor()
+                plan.getRecurrenceAnchor(),
+                currentRevisionItems(plan)
         );
+    }
+
+    private List<MaintenanceScheduleCalculationItemDto> currentRevisionItems(PprPlan plan) {
+        Long revision = plan.getCalculationRevision();
+        if (revision == null || revision < 1L) {
+            return List.of();
+        }
+        return calculationItemRepository
+                .findAllByPlanIdAndCalculationRevisionOrderBySourceItemKey(
+                        plan.getId(), revision)
+                .stream()
+                .map(MaintenanceScheduleCalculationItemDto::from)
+                .toList();
     }
 
     @Transactional

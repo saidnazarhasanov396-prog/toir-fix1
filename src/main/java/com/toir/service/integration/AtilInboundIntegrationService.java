@@ -226,6 +226,7 @@ public class AtilInboundIntegrationService {
                 null,
                 null,
                 item.assignedDriverId(),
+                null,
                 item.currentOdometerKm(),
                 item.currentEngineHours(),
                 null,
@@ -234,7 +235,17 @@ public class AtilInboundIntegrationService {
                 null,
                 item.gpsDeviceId(),
                 null,
-                null
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                item.responsibleId(),
+                item.criticalityClassId(),
+                item.commissionedAt()
         );
     }
 

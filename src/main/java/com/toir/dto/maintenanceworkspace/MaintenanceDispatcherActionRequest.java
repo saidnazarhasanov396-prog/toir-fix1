@@ -6,5 +6,11 @@ public record MaintenanceDispatcherActionRequest(
         String objectType,
         UUID objectId,
         UUID ownerId,
-        String comment
-) {}
+        String comment,
+        UUID performerEmployeeId,
+        UUID performerBrigadeMemberId
+) {
+    public MaintenanceDispatcherActionRequest(String objectType, UUID objectId, UUID ownerId, String comment) {
+        this(objectType, objectId, ownerId, comment, null, null);
+    }
+}

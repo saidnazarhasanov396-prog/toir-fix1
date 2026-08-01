@@ -47,6 +47,11 @@ public class PprTask extends BaseEntity {
 
     @Column(name = "source_variant_item_id", updatable = false)
     private UUID sourceVariantItemId;
+    @Column(name = "source_type", length = 32)
+    private String sourceType;
+
+    @Column(name = "source_key", length = 160)
+    private String sourceKey;
 
     @Column(nullable = false)
     private String title;

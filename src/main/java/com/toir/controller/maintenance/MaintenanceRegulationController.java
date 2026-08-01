@@ -3,12 +3,17 @@ import com.toir.dto.maintenanceregulation.EquipmentWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.EquipmentTypeWithRegulationsDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationImpactDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationDto;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationFilter;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationPreviewDto;
 import com.toir.dto.maintenanceregulation.MaintenanceRegulationRequest;
+import com.toir.dto.maintenanceregulation.MaintenanceRegulationStatsDto;
+import com.toir.enums.MaintenanceKind;
+import com.toir.exception.RestException;
 import com.toir.service.maintanance.MaintenanceImpactService;
 import com.toir.service.maintanance.MaintenanceRegulationService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.Locale;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -35,37 +40,64 @@ public class MaintenanceRegulationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) MaintenanceKind maintenanceType,
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) String category
     ) {
-        return ResponseEntity.ok(service.search(page, size, search, equipmentTypeId, active, category));
+        MaintenanceKind resolvedType = resolveMaintenanceType(maintenanceType, category);
+        return ResponseEntity.ok(service.search(
+                page,
+                size,
+                new MaintenanceRegulationFilter(search, resolvedType, equipmentTypeId, active)
+        ));
     }
 
     @GetMapping("/equipment")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_REGULATION_READ')")
     public ResponseEntity<Page<EquipmentWithRegulationsDto>> equipmentWithRegulations(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) MaintenanceKind maintenanceType,
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) Boolean active,
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
-        log.info("Entering GET /api/v1/maintenance-regulations/equipment equipmentTypeId={}, active={}, page={}, size={}",
-                equipmentTypeId, active, page, size);
-        return ResponseEntity.ok(service.equipmentWithRegulations(equipmentTypeId, active, page, size));
+        MaintenanceRegulationFilter filter =
+                new MaintenanceRegulationFilter(search, maintenanceType, equipmentTypeId, active);
+        log.info("Entering GET /api/v1/maintenance-regulations/equipment filter={}, page={}, size={}",
+                filter, page, size);
+        return ResponseEntity.ok(service.equipmentWithRegulations(page, size, filter));
     }
 
     @GetMapping("/equipment-types")
     @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_REGULATION_READ')")
     public ResponseEntity<Page<EquipmentTypeWithRegulationsDto>> equipmentTypeWithRegulations(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) MaintenanceKind maintenanceType,
             @RequestParam(required = false) UUID equipmentTypeId,
             @RequestParam(required = false) Boolean active,
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
-        log.info("Entering GET /api/v1/maintenance-regulations/equipment-types equipmentTypeId={}, active={}, page={}, size={}",
-                equipmentTypeId, active, page, size);
-        return ResponseEntity.ok(service.equipmentTypeWithRegulations(equipmentTypeId, active, page, size));
+        MaintenanceRegulationFilter filter =
+                new MaintenanceRegulationFilter(search, maintenanceType, equipmentTypeId, active);
+        log.info("Entering GET /api/v1/maintenance-regulations/equipment-types filter={}, page={}, size={}",
+                filter, page, size);
+        return ResponseEntity.ok(service.equipmentTypeWithRegulations(page, size, filter));
+    }
+
+    @GetMapping("/stats")
+    @PreAuthorize("hasAuthority('SYSTEM_ADMIN') or hasAuthority('*') or hasAuthority('MAINTENANCE_REGULATION_READ')")
+    public ResponseEntity<MaintenanceRegulationStatsDto> stats(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) MaintenanceKind maintenanceType,
+            @RequestParam(required = false) UUID equipmentTypeId,
+            @RequestParam(required = false) Boolean active
+    ) {
+        return ResponseEntity.ok(service.stats(
+                new MaintenanceRegulationFilter(search, maintenanceType, equipmentTypeId, active)
+        ));
     }
 
     @GetMapping("/{id:[0-9a-fA-F-]{36}}")
@@ -108,5 +140,28 @@ public class MaintenanceRegulationController {
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private MaintenanceKind resolveMaintenanceType(
+            MaintenanceKind maintenanceType,
+            String category
+    ) {
+        MaintenanceKind legacyType = parseLegacyCategory(category);
+        if (maintenanceType != null && legacyType != null && maintenanceType != legacyType) {
+            throw RestException.badRequest(
+                    "maintenanceType and category must represent the same maintenance kind");
+        }
+        return maintenanceType != null ? maintenanceType : legacyType;
+    }
+
+    private MaintenanceKind parseLegacyCategory(String category) {
+        if (category == null || category.isBlank()) {
+            return null;
+        }
+        try {
+            return MaintenanceKind.valueOf(category.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw RestException.badRequest("Invalid maintenance category: " + category);
+        }
     }
 }

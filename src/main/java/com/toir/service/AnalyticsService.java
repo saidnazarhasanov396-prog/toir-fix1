@@ -1,6 +1,9 @@
 package com.toir.service;
 
+import com.toir.dto.analytics.AnalyticsContextDto;
 import com.toir.dto.analytics.AnalyticsOverview;
+import com.toir.dto.analytics.AnalyticsPeriod;
+import com.toir.dto.analytics.AnalyticsRange;
 import com.toir.dto.analytics.AnalyticsDowntimeEventRow;
 import com.toir.dto.analytics.EquipmentAnalyticsResponse;
 import com.toir.dto.analytics.FailureParetoResponse;
@@ -42,7 +45,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -66,10 +71,20 @@ public class AnalyticsService {
     private final DepartmentRepository departmentRepository;
     private final ActualCostRepository actualCostRepository;
     private final ScopeAccessService scopeAccessService;
+    private final AnalyticsContextService analyticsContextService;
 
 
     @Transactional
     public AnalyticsOverview overview() {
+        return overviewInternal(null, null);
+    }
+
+    @Transactional
+    public AnalyticsOverview overview(AnalyticsPeriod period) {
+        return overviewInternal(analyticsContextService.resolveRange(period), period);
+    }
+
+    private AnalyticsOverview overviewInternal(AnalyticsRange range, AnalyticsPeriod period) {
         UUID departmentId = analyticsDepartmentScope();
         List<Equipment> allEquipment = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc();
         Map<UUID, Equipment> equipById = allEquipment.stream()
@@ -80,22 +95,29 @@ public class AnalyticsService {
 
         List<RepairRequest> allRequests = repairRequestRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(r -> departmentId == null || departmentId.equals(r.getDepartmentId()))
+                .filter(r -> range == null || range.contains(repairRequestOccurredAt(r)))
                 .toList();
         List<WorkOrder> allWorkOrders = workOrderRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(w -> departmentId == null || departmentId.equals(w.getDepartmentId()))
+                .filter(w -> range == null || range.contains(workOrderOccurredAt(w)))
                 .toList();
         List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> departmentId == null || departmentId.equals(d.getDepartmentId()))
+                .filter(d -> range == null || !range.overlap(d.getStartAt(), d.getEndAt()).isZero())
+                .map(d -> range == null ? d : clipDowntime(d, range))
                 .toList();
         List<Defect> allDefects = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> departmentId == null || isEquipmentInDepartment(equipById, d.getEquipmentId(), departmentId))
+                .filter(d -> range == null || range.contains(defectOccurredAt(d)))
                 .toList();
         List<ReliabilityMetric> allMetrics = reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(m -> m.getEquipmentId() != null)
                 .filter(m -> departmentId == null || isEquipmentInDepartment(equipById, m.getEquipmentId(), departmentId))
+                .filter(m -> range == null || reliabilityMetricInRange(m, range))
                 .toList();
         List<com.toir.entity.PprTask> allPprTasks = pprTaskRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(t -> departmentId == null || isEquipmentInDepartment(equipById, t.getEquipmentId(), departmentId))
+                .filter(t -> range == null || pprTaskInRange(t, range))
                 .toList();
 
         Map<UUID, List<RepairRequest>> requestsByEquipment = allRequests.stream()
@@ -107,7 +129,7 @@ public class AnalyticsService {
         Map<UUID, List<DowntimeEvent>> downtimesByEquipment = allDowntimes.stream()
                 .filter(d -> d.getEquipmentId() != null)
                 .collect(Collectors.groupingBy(DowntimeEvent::getEquipmentId));
-        Instant now = Instant.now();
+        Instant now = range == null ? Instant.now() : range.to();
         Map<UUID, ReliabilityDowntimeCalculator.EquipmentReliability> calculatedReliabilityByEquipment =
                 scopedEquipment.stream()
                         .collect(Collectors.toMap(
@@ -277,11 +299,25 @@ public class AnalyticsService {
 
         return new AnalyticsOverview(
                 totals, kpis, topFailureReasons, downtimeByDept,
-                reliabilitySnapshot, repeatedDefects, maintenanceKpis);
+                reliabilitySnapshot, repeatedDefects, maintenanceKpis,
+                period == null ? null : analyticsContext(period, range, departmentId, deptById,
+                        List.of("REPAIR_REQUESTS", "DEFECTS", "WORK_ORDERS", "DOWNTIME_EVENTS",
+                                "RELIABILITY_METRICS", "PPR_TASKS")));
     }
 
     @Transactional
     public Page<AnalyticsDowntimeEventRow> downtimeEvents(UUID requestedDepartmentId, int page, int size) {
+        return downtimeEventsInternal(requestedDepartmentId, page, size, null);
+    }
+
+    @Transactional
+    public Page<AnalyticsDowntimeEventRow> downtimeEvents(UUID requestedDepartmentId, int page, int size,
+                                                          AnalyticsPeriod period) {
+        return downtimeEventsInternal(requestedDepartmentId, page, size, analyticsContextService.resolveRange(period));
+    }
+
+    private Page<AnalyticsDowntimeEventRow> downtimeEventsInternal(UUID requestedDepartmentId, int page, int size,
+                                                                   AnalyticsRange range) {
         UUID departmentId = analyticsDepartmentScope(requestedDepartmentId);
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
@@ -302,6 +338,8 @@ public class AnalyticsService {
                 .toList();
         List<DowntimeEvent> allDowntimes = downtimeEventRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(downtime -> departmentId == null || departmentId.equals(downtime.getDepartmentId()))
+                .filter(downtime -> range == null || !range.overlap(downtime.getStartAt(), downtime.getEndAt()).isZero())
+                .map(downtime -> range == null ? downtime : clipDowntime(downtime, range))
                 .toList();
         Map<UUID, Department> deptById = departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Department::getId, department -> department));
@@ -325,7 +363,7 @@ public class AnalyticsService {
                 .filter(downtime -> downtime.getEquipmentId() != null)
                 .collect(Collectors.groupingBy(DowntimeEvent::getEquipmentId));
 
-        Instant now = Instant.now();
+        Instant now = range == null ? Instant.now() : range.to();
         List<AnalyticsDowntimeEventRow> rows = scopedEquipment.stream()
                 .flatMap(equipment -> ReliabilityDowntimeCalculator.calculate(
                                 equipment,
@@ -353,27 +391,48 @@ public class AnalyticsService {
 
     @Transactional
     public FailureParetoResponse failurePareto() {
+        return failureParetoInternal(null, null);
+    }
+
+    @Transactional
+    public FailureParetoResponse failurePareto(AnalyticsPeriod period) {
+        return failureParetoInternal(analyticsContextService.resolveRange(period), period);
+    }
+
+    private FailureParetoResponse failureParetoInternal(AnalyticsRange range, AnalyticsPeriod period) {
         UUID departmentId = analyticsDepartmentScope();
         Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Equipment::getId, e -> e));
         List<FailureReasonRow> items = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> departmentId == null || isEquipmentInDepartment(equipById, d.getEquipmentId(), departmentId))
+                .filter(d -> range == null || range.contains(defectOccurredAt(d)))
                 .filter(d -> d.getFailureReason() != null && !d.getFailureReason().isBlank())
                 .collect(Collectors.groupingBy(Defect::getFailureReason, Collectors.counting()))
                 .entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                 .map(e -> new FailureReasonRow(e.getKey(), e.getValue()))
                 .toList();
-        return new FailureParetoResponse(items);
+        return new FailureParetoResponse(items, period == null ? null
+                : analyticsContext(period, range, departmentId, departmentMap(), List.of("DEFECTS")));
     }
 
     @Transactional
     public RcaOverviewResponse rcaOverview() {
+        return rcaOverviewInternal(null, null);
+    }
+
+    @Transactional
+    public RcaOverviewResponse rcaOverview(AnalyticsPeriod period) {
+        return rcaOverviewInternal(analyticsContextService.resolveRange(period), period);
+    }
+
+    private RcaOverviewResponse rcaOverviewInternal(AnalyticsRange range, AnalyticsPeriod period) {
         UUID departmentId = analyticsDepartmentScope();
         Map<UUID, Equipment> equipById = equipmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .collect(Collectors.toMap(Equipment::getId, e -> e));
         List<Defect> all = defectRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(d -> departmentId == null || isEquipmentInDepartment(equipById, d.getEquipmentId(), departmentId))
+                .filter(d -> range == null || range.contains(defectOccurredAt(d)))
                 .toList();
         List<RcaOverviewResponse.CountRow> topRoot = all.stream()
                 .filter(d -> d.getRootCause() != null && !d.getRootCause().isBlank())
@@ -391,7 +450,9 @@ public class AnalyticsService {
                 .map(e -> new RcaOverviewResponse.CountRow(e.getKey(), e.getValue()))
                 .toList();
 
-        return new RcaOverviewResponse(topRoot, topRoot, List.of(), List.of(), List.of(), categoryBreakdown);
+        return new RcaOverviewResponse(topRoot, topRoot, List.of(), List.of(), List.of(), categoryBreakdown,
+                period == null ? null
+                        : analyticsContext(period, range, departmentId, departmentMap(), List.of("DEFECTS")));
     }
 
     @Transactional
@@ -550,6 +611,76 @@ public class AnalyticsService {
         return reliabilityMetricRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
                 .filter(m -> isEquipmentInDepartment(equipById, m.getEquipmentId(), departmentId))
                 .toList();
+    }
+
+    public AnalyticsContextDto analyticsContext(AnalyticsPeriod period, List<String> sources) {
+        AnalyticsRange range = analyticsContextService.resolveRange(period);
+        UUID departmentId = analyticsDepartmentScope();
+        Map<UUID, Department> departments = departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(Collectors.toMap(Department::getId, department -> department));
+        return analyticsContext(period, range, departmentId, departments, sources);
+    }
+
+    private Map<UUID, Department> departmentMap() {
+        return departmentRepository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .collect(Collectors.toMap(Department::getId, department -> department));
+    }
+
+    private AnalyticsContextDto analyticsContext(AnalyticsPeriod period,
+                                                 AnalyticsRange range,
+                                                 UUID departmentId,
+                                                 Map<UUID, Department> departments,
+                                                 List<String> sources) {
+        Department department = departmentId == null ? null : departments.get(departmentId);
+        AnalyticsContextDto.Scope scope = departmentId == null
+                ? new AnalyticsContextDto.Scope("ALL_AUTHORIZED", null, null)
+                : new AnalyticsContextDto.Scope(
+                        "DEPARTMENT", departmentId, department != null ? department.getName() : null);
+        return new AnalyticsContextDto(period, range.from(), range.to(),
+                range.timezone().getId(), scope, range.to(), sources);
+    }
+
+    private Instant repairRequestOccurredAt(RepairRequest request) {
+        return request.getDetectedAt() != null ? request.getDetectedAt() : request.getCreatedAt();
+    }
+
+    private Instant defectOccurredAt(Defect defect) {
+        return defect.getDetectedAt() != null ? defect.getDetectedAt() : defect.getCreatedAt();
+    }
+
+    private Instant workOrderOccurredAt(WorkOrder workOrder) {
+        if (workOrder.getCreatedAt() != null) return workOrder.getCreatedAt();
+        if (workOrder.getStartedAt() != null) return workOrder.getStartedAt();
+        return workOrder.getCompletedAt();
+    }
+
+    private boolean reliabilityMetricInRange(ReliabilityMetric metric, AnalyticsRange range) {
+        return metric.getMetricDate() != null
+                && range.contains(metric.getMetricDate().atStartOfDay(range.timezone()).toInstant());
+    }
+
+    private boolean pprTaskInRange(com.toir.entity.PprTask task, AnalyticsRange range) {
+        LocalDateTime dateTime = task.getDueDate() != null ? task.getDueDate() : task.getScheduledStart();
+        return dateTime != null && range.contains(dateTime.atZone(range.timezone()).toInstant());
+    }
+
+    private DowntimeEvent clipDowntime(DowntimeEvent source, AnalyticsRange range) {
+        Instant start = range.from() == null || source.getStartAt().isAfter(range.from())
+                ? source.getStartAt() : range.from();
+        Instant sourceEnd = source.getEndAt() == null ? range.to() : source.getEndAt();
+        Instant end = sourceEnd.isAfter(range.to()) ? range.to() : sourceEnd;
+        DowntimeEvent clipped = DowntimeEvent.builder()
+                .equipmentId(source.getEquipmentId())
+                .departmentId(source.getDepartmentId())
+                .workOrderId(source.getWorkOrderId())
+                .startAt(start)
+                .endAt(end)
+                .durationMinutes(Math.toIntExact(Duration.between(start, end).toMinutes()))
+                .type(source.getType())
+                .description(source.getDescription())
+                .build();
+        clipped.setId(source.getId());
+        return clipped;
     }
 
     private ReliabilityMetric latestReliabilityMetric(ReliabilityMetric first, ReliabilityMetric second) {

@@ -5,6 +5,7 @@ import com.toir.dto.equipmentmanualattribute.EquipmentManualAttributeRequest;
 import com.toir.enums.EquipmentCategory;
 import com.toir.enums.EquipmentStatus;
 import com.toir.enums.MeterType;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -29,12 +30,12 @@ public record EquipmentCreateRequest(
         UUID warehouseId,
         UUID locationId,
         UUID parentId,
-        UUID criticalityClassId,
-        UUID responsibleId,
+        @NotNull UUID criticalityClassId,
+        @NotNull UUID responsibleId,
         String manufacturer,
         EquipmentStatus status,
         EquipmentCategory category,
-        LocalDate commissionedAt,
+        @NotNull LocalDate commissionedAt,
         LocalDate arrivalDate,
         LocalDate warrantyUntil,
         Boolean hasWarranty,
@@ -53,7 +54,7 @@ public record EquipmentCreateRequest(
         UUID lifetimeMeterId,
         @Positive Double lifetimeLimitValue,
         @PositiveOrZero Double lifetimeBaselineValue,
-        @Positive Double lifetimeWarningPercent,
+        @Positive @DecimalMax("100.0") Double lifetimeWarningPercent,
         @Positive Double averageDailyUsage,
         UUID counteragentId,
         UUID warrantyCounteragentId,
@@ -96,7 +97,7 @@ public record EquipmentCreateRequest(
                 UUID lifetimeMeterId,
                 @Positive Double lifetimeLimitValue,
                 @PositiveOrZero Double lifetimeBaselineValue,
-                @Positive Double lifetimeWarningPercent,
+                @Positive @DecimalMax("100.0") Double lifetimeWarningPercent,
                 @Positive Double averageDailyUsage,
                 UUID counteragentId,
                 UUID warrantyCounteragentId
@@ -148,7 +149,7 @@ public record EquipmentCreateRequest(
                 UUID lifetimeMeterId,
                 @Positive Double lifetimeLimitValue,
                 @PositiveOrZero Double lifetimeBaselineValue,
-                @Positive Double lifetimeWarningPercent,
+                @Positive @DecimalMax("100.0") Double lifetimeWarningPercent,
                 @Positive Double averageDailyUsage
         ) {
                 this(code, name, inventoryNumber, technicalNumber, serialNumber, model, producedYear, equipmentTypeId,
