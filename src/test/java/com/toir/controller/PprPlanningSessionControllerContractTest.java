@@ -14,7 +14,7 @@ class PprPlanningSessionControllerContractTest {
     @Test
     void exposesPlanningWorkspaceUnderStableRouteAndUsesPermissions() throws Exception {
         RequestMapping mapping = PprPlanningSessionController.class.getAnnotation(RequestMapping.class);
-        assertThat(mapping.value()).containsExactly("/api/ppr-planning-sessions");
+        assertThat(mapping.value()).containsExactly("/api/v1/ppr-planning-sessions");
 
         Method select = PprPlanningSessionController.class.getMethod(
                 "select", UUID.class, PprPlanningSelectionRequest.class, String.class);
