@@ -9,6 +9,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -61,6 +63,22 @@ class AuditLogWriteSchedulerTest {
                 .forEach(sync -> sync.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
 
         verifyNoInteractions(writer);
+    }
+
+    @Test
+    void postCommitAuditFailureDoesNotEscapeToCommittedBusinessRequest() {
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        AuditLogWriteCommand command = command();
+        doThrow(new IllegalStateException("audit storage unavailable"))
+                .when(writer).persist(command);
+
+        scheduler.schedule(command);
+
+        assertThatCode(() -> TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit))
+                .doesNotThrowAnyException();
+        verify(writer).persist(command);
     }
 
     private AuditLogWriteCommand command() {
