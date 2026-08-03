@@ -2,19 +2,22 @@ package com.toir.repository.equipmentfleetlifecycle;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers(disabledWithoutDocker = true)
 class EquipmentFleetLifecycleQueryRepositoryPostgresTest {
 
     private static final UUID SCOPE = UUID.fromString("00000000-0000-0000-0000-000000000010");
@@ -26,6 +29,10 @@ class EquipmentFleetLifecycleQueryRepositoryPostgresTest {
     private static final UUID INACTIVE_METER = UUID.fromString("40000000-0000-0000-0000-000000000002");
     private static final UUID TIED_READING_LOW = UUID.fromString("50000000-0000-0000-0000-000000000001");
     private static final UUID TIED_READING_HIGH = UUID.fromString("50000000-0000-0000-0000-000000000002");
+    private static final UUID MICROSECOND_READING =
+            UUID.fromString("50000000-0000-0000-0000-000000000006");
+    private static final UUID NEXT_MICROSECOND_READING =
+            UUID.fromString("50000000-0000-0000-0000-000000000007");
     private static final UUID COMPLETED_REPAIR = UUID.fromString("60000000-0000-0000-0000-000000000001");
     private static final UUID CLOSED_REPAIR = UUID.fromString("60000000-0000-0000-0000-000000000002");
     private static final UUID VALID_DEFECT = UUID.fromString("70000000-0000-0000-0000-000000000001");
@@ -34,16 +41,55 @@ class EquipmentFleetLifecycleQueryRepositoryPostgresTest {
     private static final UUID CROSS_REQUEST = UUID.fromString("80000000-0000-0000-0000-000000000002");
     private static final Instant AS_OF = Instant.parse("2026-08-03T12:00:00Z");
 
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+    private static PostgreSQLContainer<?> postgres;
+    private static String jdbcUrl;
+    private static String username;
+    private static String password;
+    private static boolean databaseAvailable;
+
+    @BeforeAll
+    static void configureDatabase() {
+        String externalUrl = System.getenv("TOIR_TEST_PG_URL");
+        if (externalUrl != null && !externalUrl.isBlank()) {
+            jdbcUrl = externalUrl;
+            username = environmentOrDefault("TOIR_TEST_PG_USER", "postgres");
+            password = environmentOrDefault("TOIR_TEST_PG_PASSWORD", "postgres");
+            databaseAvailable = true;
+            return;
+        }
+        String dockerHost = System.getenv("DOCKER_HOST");
+        if (!Files.exists(Path.of("/var/run/docker.sock"))
+                && (dockerHost == null || dockerHost.isBlank())) {
+            return;
+        }
+        if (!DockerClientFactory.instance().isDockerAvailable()) {
+            return;
+        }
+        postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+        postgres.start();
+        jdbcUrl = postgres.getJdbcUrl();
+        username = postgres.getUsername();
+        password = postgres.getPassword();
+        databaseAvailable = true;
+    }
+
+    @AfterAll
+    static void stopDatabase() {
+        if (postgres != null) {
+            postgres.stop();
+        }
+    }
 
     private JdbcTemplate jdbc;
     private EquipmentFleetLifecycleQueryRepository repository;
 
     @BeforeEach
     void setUp() {
+        Assumptions.assumeTrue(
+                databaseAvailable,
+                "Docker is unavailable and TOIR_TEST_PG_URL is not configured");
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                jdbcUrl, username, password);
         jdbc = new JdbcTemplate(dataSource);
         repository = new EquipmentFleetLifecycleQueryRepository(new NamedParameterJdbcTemplate(dataSource));
         recreateSchema();
@@ -68,8 +114,8 @@ class EquipmentFleetLifecycleQueryRepositoryPostgresTest {
                         EquipmentFleetLifecycleQueryRepository.MeterRow::meterId,
                         EquipmentFleetLifecycleQueryRepository.MeterRow::active)
                 .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple(ACTIVE_METER, true),
-                        org.assertj.core.groups.Tuple.tuple(INACTIVE_METER, false));
+                        org.assertj.core.groups.Tuple.tuple(INACTIVE_METER, false),
+                        org.assertj.core.groups.Tuple.tuple(ACTIVE_METER, true));
     }
 
     @Test
@@ -80,6 +126,25 @@ class EquipmentFleetLifecycleQueryRepositoryPostgresTest {
                     assertThat(row.meterId()).isEqualTo(ACTIVE_METER);
                     assertThat(row.readingId()).isEqualTo(TIED_READING_HIGH);
                     assertThat(row.value()).isEqualTo(20.0);
+                });
+    }
+
+    @Test
+    void typedUtcWatermarkKeepsTheExactPostgresMicrosecondUpperBound() {
+        insertReading(MICROSECOND_READING, ACTIVE_METER, EQUIPMENT_ONE, 60,
+                "2026-08-03T11:59:59.123456Z", false);
+        insertReading(NEXT_MICROSECOND_READING, ACTIVE_METER, EQUIPMENT_ONE, 70,
+                "2026-08-03T11:59:59.123457Z", false);
+
+        assertThat(repository.findLatestReadings(
+                        List.of(EQUIPMENT_ONE),
+                        Instant.parse("2026-08-03T11:59:59.123456Z")))
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.readingId()).isEqualTo(MICROSECOND_READING);
+                    assertThat(row.readAt()).isEqualTo(
+                            Instant.parse("2026-08-03T11:59:59.123456Z"));
+                    assertThat(row.value()).isEqualTo(60.0);
                 });
     }
 
@@ -123,6 +188,11 @@ class EquipmentFleetLifecycleQueryRepositoryPostgresTest {
                     assertThat(row.value()).isNull();
                     assertThat(row.readAt()).isNull();
                 });
+    }
+
+    private static String environmentOrDefault(String name, String fallback) {
+        String value = System.getenv(name);
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private void recreateSchema() {

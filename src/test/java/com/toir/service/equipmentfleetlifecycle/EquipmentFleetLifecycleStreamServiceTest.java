@@ -33,6 +33,11 @@ class EquipmentFleetLifecycleStreamServiceTest {
     private static final UUID SECOND_ID = UUID.fromString("30000000-0000-0000-0000-000000000001");
     private static final UUID THIRD_ID = UUID.fromString("40000000-0000-0000-0000-000000000001");
     private static final Instant AS_OF = Instant.parse("2026-08-03T08:15:30Z");
+    private static final String CORRELATION_ID = "fleet-request-42";
+    private static final Instant NANOSECOND_AS_OF =
+            Instant.parse("2026-08-03T08:15:30.123456999Z");
+    private static final Instant MICROSECOND_AS_OF =
+            Instant.parse("2026-08-03T08:15:30.123456Z");
 
     @Mock
     private ScopeAccessService scopeAccessService;
@@ -58,12 +63,13 @@ class EquipmentFleetLifecycleStreamServiceTest {
             return firstBatch;
         });
 
-        EquipmentFleetLifecycleStreamService.PreparedFleetStream prepared = service.prepare(AS_OF);
+        EquipmentFleetLifecycleStreamService.PreparedFleetStream prepared = service.prepare(AS_OF, CORRELATION_ID);
 
         assertThat(loadingThread.get()).isSameAs(Thread.currentThread());
         assertThat(prepared.scopeDepartmentId()).isEqualTo(DEPARTMENT_ID);
         assertThat(prepared.denyAll()).isFalse();
         assertThat(prepared.generatedAt()).isEqualTo(AS_OF);
+        assertThat(prepared.correlationId()).isEqualTo(CORRELATION_ID);
         assertThat(prepared.firstBatch()).isSameAs(firstBatch);
         verify(loader).load(DEPARTMENT_ID, false, null, AS_OF, 100);
     }
@@ -74,7 +80,7 @@ class EquipmentFleetLifecycleStreamServiceTest {
         when(scopeAccessService.isScopeAdmin()).thenReturn(true);
         when(loader.load(null, false, null, AS_OF, 100)).thenReturn(empty);
 
-        EquipmentFleetLifecycleStreamService.PreparedFleetStream prepared = service.prepare(AS_OF);
+        EquipmentFleetLifecycleStreamService.PreparedFleetStream prepared = service.prepare(AS_OF, CORRELATION_ID);
 
         assertThat(prepared.scopeDepartmentId()).isNull();
         assertThat(prepared.denyAll()).isFalse();
@@ -89,11 +95,35 @@ class EquipmentFleetLifecycleStreamServiceTest {
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(null);
         when(loader.load(null, true, null, AS_OF, 100)).thenReturn(empty);
 
-        EquipmentFleetLifecycleStreamService.PreparedFleetStream prepared = service.prepare(AS_OF);
+        EquipmentFleetLifecycleStreamService.PreparedFleetStream prepared = service.prepare(AS_OF, CORRELATION_ID);
 
         assertThat(prepared.scopeDepartmentId()).isNull();
         assertThat(prepared.denyAll()).isTrue();
         verify(loader).load(null, true, null, AS_OF, 100);
+    }
+
+    @Test
+    void prepareTruncatesTheResponseWatermarkToMicrosecondsBeforeEveryBatchAndDto() throws IOException {
+        when(scopeAccessService.isScopeAdmin()).thenReturn(false);
+        when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(DEPARTMENT_ID);
+        when(loader.load(DEPARTMENT_ID, false, null, MICROSECOND_AS_OF, 100))
+                .thenReturn(new Batch(
+                        List.of(line(FIRST_ID, MICROSECOND_AS_OF)), FIRST_ID, true));
+        when(loader.load(DEPARTMENT_ID, false, FIRST_ID, MICROSECOND_AS_OF, 100))
+                .thenReturn(new Batch(
+                        List.of(line(SECOND_ID, MICROSECOND_AS_OF)), SECOND_ID, false));
+
+        EquipmentFleetLifecycleStreamService.PreparedFleetStream prepared =
+                service.prepare(NANOSECOND_AS_OF, CORRELATION_ID);
+        List<EquipmentFleetLifecycleV1.Line> emitted = new ArrayList<>();
+        service.stream(prepared, emitted::add);
+
+        assertThat(prepared.generatedAt()).isEqualTo(MICROSECOND_AS_OF);
+        assertThat(emitted)
+                .extracting(EquipmentFleetLifecycleV1.Line::generatedAt)
+                .containsExactly(MICROSECOND_AS_OF, MICROSECOND_AS_OF);
+        verify(loader).load(DEPARTMENT_ID, false, null, MICROSECOND_AS_OF, 100);
+        verify(loader).load(DEPARTMENT_ID, false, FIRST_ID, MICROSECOND_AS_OF, 100);
     }
 
     @Test
@@ -108,7 +138,7 @@ class EquipmentFleetLifecycleStreamServiceTest {
         when(scopeAccessService.currentDepartmentIdOrNull()).thenReturn(DEPARTMENT_ID);
         when(loader.load(DEPARTMENT_ID, false, null, AS_OF, 100)).thenReturn(firstBatch);
         when(loader.load(DEPARTMENT_ID, false, SECOND_ID, AS_OF, 100)).thenReturn(secondBatch);
-        EquipmentFleetLifecycleStreamService.PreparedFleetStream prepared = service.prepare(AS_OF);
+        EquipmentFleetLifecycleStreamService.PreparedFleetStream prepared = service.prepare(AS_OF, CORRELATION_ID);
         clearInvocations(scopeAccessService);
         List<EquipmentFleetLifecycleV1.Line> accepted = new ArrayList<>();
 
@@ -127,7 +157,7 @@ class EquipmentFleetLifecycleStreamServiceTest {
         Batch firstBatch = new Batch(List.of(first, second), SECOND_ID, true);
         EquipmentFleetLifecycleStreamService.PreparedFleetStream prepared =
                 new EquipmentFleetLifecycleStreamService.PreparedFleetStream(
-                        DEPARTMENT_ID, false, AS_OF, firstBatch);
+                        DEPARTMENT_ID, false, AS_OF, CORRELATION_ID, firstBatch);
         AtomicInteger attempts = new AtomicInteger();
 
         assertThatThrownBy(() -> service.stream(prepared, line -> {
@@ -143,9 +173,13 @@ class EquipmentFleetLifecycleStreamServiceTest {
     }
 
     private static EquipmentFleetLifecycleV1.Line line(UUID equipmentId) {
+        return line(equipmentId, AS_OF);
+    }
+
+    private static EquipmentFleetLifecycleV1.Line line(UUID equipmentId, Instant generatedAt) {
         return new EquipmentFleetLifecycleV1.Line(
                 EquipmentFleetLifecycleV1.SCHEMA_VERSION,
-                AS_OF,
+                generatedAt,
                 EquipmentFleetLifecycleV1.CONSISTENCY,
                 new EquipmentFleetLifecycleV1.EquipmentCore(
                         equipmentId,

@@ -5,6 +5,7 @@ import com.toir.security.ScopeAccessService;
 import com.toir.service.equipmentfleetlifecycle.EquipmentFleetLifecycleBatchLoader.Batch;
 import java.io.IOException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -24,16 +25,22 @@ public class EquipmentFleetLifecycleStreamService {
         this.loader = loader;
     }
 
-    public PreparedFleetStream prepare(Instant generatedAt) {
+    public PreparedFleetStream prepare(Instant generatedAt, String correlationId) {
+        Instant normalizedGeneratedAt = Objects.requireNonNull(generatedAt, "generatedAt")
+                .truncatedTo(ChronoUnit.MICROS);
+        Objects.requireNonNull(correlationId, "correlationId");
+        if (correlationId.isBlank()) {
+            throw new IllegalArgumentException("correlationId must not be blank");
+        }
         boolean scopeAdmin = scopeAccessService.isScopeAdmin();
         UUID scopeDepartmentId = scopeAdmin
                 ? null
                 : scopeAccessService.currentDepartmentIdOrNull();
         boolean denyAll = !scopeAdmin && scopeDepartmentId == null;
         Batch firstBatch = loader.load(
-                scopeDepartmentId, denyAll, null, generatedAt, BATCH_SIZE);
+                scopeDepartmentId, denyAll, null, normalizedGeneratedAt, BATCH_SIZE);
         return new PreparedFleetStream(
-                scopeDepartmentId, denyAll, generatedAt, firstBatch);
+                scopeDepartmentId, denyAll, normalizedGeneratedAt, correlationId, firstBatch);
     }
 
     public long stream(PreparedFleetStream prepared, ItemSink sink) throws IOException {
@@ -62,9 +69,11 @@ public class EquipmentFleetLifecycleStreamService {
             UUID scopeDepartmentId,
             boolean denyAll,
             Instant generatedAt,
+            String correlationId,
             Batch firstBatch) {
         public PreparedFleetStream {
             Objects.requireNonNull(generatedAt, "generatedAt");
+            Objects.requireNonNull(correlationId, "correlationId");
             Objects.requireNonNull(firstBatch, "firstBatch");
         }
     }

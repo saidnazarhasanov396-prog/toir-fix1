@@ -5,7 +5,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.sql.Types;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,7 +87,10 @@ class EquipmentFleetLifecycleQueryRepositoryContractTest {
                 "partition by reading.meter_id",
                 "order by reading.read_at desc, reading.id desc");
         assertThat(readingQuery.parameters().getValue("equipmentIds")).isEqualTo(equipmentIds);
-        assertThat(readingQuery.parameters().getValue("asOf")).isEqualTo(AS_OF);
+        assertThat(readingQuery.parameters().getValue("asOf"))
+                .isEqualTo(AS_OF.atOffset(ZoneOffset.UTC));
+        assertThat(readingQuery.parameters().getSqlType("asOf"))
+                .isEqualTo(Types.TIMESTAMP_WITH_TIMEZONE);
         assertThat(readingQuery.sql()).doesNotContain(EQUIPMENT_ID.toString(), AS_OF.toString());
     }
 
@@ -111,7 +116,10 @@ class EquipmentFleetLifecycleQueryRepositoryContractTest {
                 "d.id is not null as defect_link_valid",
                 "rr.id is not null as repair_request_link_valid");
         assertThat(query.parameters().getValue("equipmentIds")).isEqualTo(equipmentIds);
-        assertThat(query.parameters().getValue("asOf")).isEqualTo(AS_OF);
+        assertThat(query.parameters().getValue("asOf"))
+                .isEqualTo(AS_OF.atOffset(ZoneOffset.UTC));
+        assertThat(query.parameters().getSqlType("asOf"))
+                .isEqualTo(Types.TIMESTAMP_WITH_TIMEZONE);
         assertThat(query.sql()).doesNotContain(EQUIPMENT_ID.toString(), AS_OF.toString());
     }
 
@@ -135,7 +143,10 @@ class EquipmentFleetLifecycleQueryRepositoryContractTest {
                 "order by reading.read_at desc, reading.id desc",
                 "limit 1");
         assertThat(query.parameters().getValue("equipmentIds")).isEqualTo(equipmentIds);
-        assertThat(query.parameters().getValue("asOf")).isEqualTo(AS_OF);
+        assertThat(query.parameters().getValue("asOf"))
+                .isEqualTo(AS_OF.atOffset(ZoneOffset.UTC));
+        assertThat(query.parameters().getSqlType("asOf"))
+                .isEqualTo(Types.TIMESTAMP_WITH_TIMEZONE);
         assertThat(query.sql()).doesNotContain(EQUIPMENT_ID.toString(), AS_OF.toString());
     }
 

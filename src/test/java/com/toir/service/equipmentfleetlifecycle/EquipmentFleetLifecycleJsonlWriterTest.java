@@ -8,6 +8,10 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
@@ -17,15 +21,20 @@ import com.toir.dto.equipmentfleetlifecycle.EquipmentFleetLifecycleV1;
 import com.toir.service.equipmentfleetlifecycle.EquipmentFleetLifecycleBatchLoader.Batch;
 import com.toir.service.equipmentfleetlifecycle.EquipmentFleetLifecycleStreamService.PreparedFleetStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 class EquipmentFleetLifecycleJsonlWriterTest {
 
     private static final Instant GENERATED_AT = Instant.parse("2026-08-03T08:15:30Z");
+    private static final String CORRELATION_ID = "fleet-request-42";
 
     @Test
     void writesEachFleetLineAsAnIndependentlyParseableLfTerminatedJsonRecord() throws Exception {
@@ -99,7 +108,7 @@ class EquipmentFleetLifecycleJsonlWriterTest {
     }
 
     @Test
-    void serializationFailureLeavesOnlyPriorCompleteRecordsInOutput() throws Exception {
+    void serializationFailureLogsCorrelationAndLeavesOnlyPriorCompleteRecords() throws Exception {
         EquipmentFleetLifecycleStreamService streamService = mock(EquipmentFleetLifecycleStreamService.class);
         PreparedFleetStream prepared = prepared();
         EquipmentFleetLifecycleV1.Line first = line("10000000-0000-0000-0000-000000000001", "EQ-1");
@@ -116,25 +125,148 @@ class EquipmentFleetLifecycleJsonlWriterTest {
         when(failingMapper.writer()).thenReturn(failingWriter);
         when(failingWriter.without(SerializationFeature.INDENT_OUTPUT)).thenReturn(failingWriter);
         when(failingWriter.writeValueAsBytes(first)).thenReturn(firstRecord);
-        when(failingWriter.writeValueAsBytes(second)).thenThrow(new JsonProcessingException("second record cannot serialize") { });
+        when(failingWriter.writeValueAsBytes(second))
+                .thenThrow(new JsonProcessingException("secret serialization detail") { });
         EquipmentFleetLifecycleJsonlWriter writer = new EquipmentFleetLifecycleJsonlWriter(failingMapper, streamService);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
-        assertThatThrownBy(() -> writer.write(output, prepared))
-                .isInstanceOf(JsonProcessingException.class)
-                .hasMessage("second record cannot serialize");
+        try (LogCapture logs = captureLogs()) {
+            assertThatThrownBy(() -> writer.write(output, prepared))
+                    .isInstanceOf(JsonProcessingException.class)
+                    .hasMessage("secret serialization detail");
 
+            assertSingleAbortLog(logs, "SERIALIZATION");
+        }
+
+        assertOnlyFirstRecord(output);
+    }
+
+    @Test
+    void databaseFailureAfterACompleteRecordLogsOnceAndPropagatesWithoutAnErrorRecord() throws Exception {
+        EquipmentFleetLifecycleStreamService streamService = mock(EquipmentFleetLifecycleStreamService.class);
+        PreparedFleetStream prepared = prepared();
+        EquipmentFleetLifecycleV1.Line first = line("10000000-0000-0000-0000-000000000001", "EQ-1");
+        doAnswer(invocation -> {
+            EquipmentFleetLifecycleStreamService.ItemSink sink = invocation.getArgument(1);
+            sink.accept(first);
+            throw new DataAccessResourceFailureException("secret database detail");
+        }).when(streamService).stream(eq(prepared), any());
+        EquipmentFleetLifecycleJsonlWriter writer = new EquipmentFleetLifecycleJsonlWriter(mapper(), streamService);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        try (LogCapture logs = captureLogs()) {
+            assertThatThrownBy(() -> writer.write(output, prepared))
+                    .isInstanceOf(DataAccessResourceFailureException.class)
+                    .hasMessage("secret database detail");
+
+            assertSingleAbortLog(logs, "DATABASE");
+        }
+
+        assertOnlyFirstRecord(output);
+    }
+
+    @Test
+    void clientIoFailureAfterACompleteRecordLogsOnceAndPropagatesWithoutAnErrorRecord() throws Exception {
+        EquipmentFleetLifecycleStreamService streamService = mock(EquipmentFleetLifecycleStreamService.class);
+        PreparedFleetStream prepared = prepared();
+        EquipmentFleetLifecycleV1.Line first = line("10000000-0000-0000-0000-000000000001", "EQ-1");
+        EquipmentFleetLifecycleV1.Line second = line("20000000-0000-0000-0000-000000000002", "EQ-2");
+        doAnswer(invocation -> {
+            EquipmentFleetLifecycleStreamService.ItemSink sink = invocation.getArgument(1);
+            sink.accept(first);
+            sink.accept(second);
+            return 2L;
+        }).when(streamService).stream(eq(prepared), any());
+        EquipmentFleetLifecycleJsonlWriter writer = new EquipmentFleetLifecycleJsonlWriter(mapper(), streamService);
+        FailAfterFirstLineOutputStream output = new FailAfterFirstLineOutputStream();
+
+        try (LogCapture logs = captureLogs()) {
+            assertThatThrownBy(() -> writer.write(output, prepared))
+                    .isInstanceOf(IOException.class)
+                    .hasMessage("secret client detail");
+
+            assertSingleAbortLog(logs, "CLIENT_IO");
+        }
+
+        assertOnlyFirstRecord(output.delegate());
+    }
+
+    private static void assertOnlyFirstRecord(ByteArrayOutputStream output) throws Exception {
         String text = output.toString(StandardCharsets.UTF_8);
         String[] records = text.split("\\n", -1);
         assertThat(records).hasSize(2);
         assertThat(records[0]).isNotBlank();
         assertThat(records[1]).isEmpty();
         assertThat(mapper().readTree(records[0]).path("equipment").path("code").asText()).isEqualTo("EQ-1");
-        assertThat(text).doesNotContain("EQ-2", "error", "summary");
+        assertThat(text).doesNotContain("EQ-2", "error", "summary", "secret");
+    }
+
+    private static void assertSingleAbortLog(LogCapture logs, String failureType) {
+        assertThat(logs.events()).hasSize(1);
+        ILoggingEvent event = logs.events().get(0);
+        assertThat(event.getLevel()).isEqualTo(Level.ERROR);
+        assertThat(event.getFormattedMessage()).isEqualTo(
+                "Equipment fleet lifecycle JSONL stream aborted correlationId=" + CORRELATION_ID
+                        + " emittedLines=1 failureType=" + failureType);
+        assertThat(event.getFormattedMessage()).doesNotContain("secret");
+    }
+
+    private static LogCapture captureLogs() {
+        Logger logger = (Logger) LoggerFactory.getLogger(EquipmentFleetLifecycleJsonlWriter.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        return new LogCapture(logger, appender);
+    }
+
+    private static final class LogCapture implements AutoCloseable {
+        private final Logger logger;
+        private final ListAppender<ILoggingEvent> appender;
+
+        private LogCapture(Logger logger, ListAppender<ILoggingEvent> appender) {
+            this.logger = logger;
+            this.appender = appender;
+        }
+
+        private List<ILoggingEvent> events() {
+            return appender.list;
+        }
+
+        @Override
+        public void close() {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    private static final class FailAfterFirstLineOutputStream extends OutputStream {
+        private final ByteArrayOutputStream delegate = new ByteArrayOutputStream();
+        private int completeLines;
+
+        @Override
+        public void write(int value) throws IOException {
+            delegate.write(value);
+            if (value == (byte) 0x0A) {
+                completeLines++;
+            }
+        }
+
+        @Override
+        public void write(byte[] bytes, int offset, int length) throws IOException {
+            if (completeLines > 0) {
+                throw new IOException("secret client detail");
+            }
+            delegate.write(bytes, offset, length);
+        }
+
+        private ByteArrayOutputStream delegate() {
+            return delegate;
+        }
     }
 
     private static PreparedFleetStream prepared() {
-        return new PreparedFleetStream(null, false, GENERATED_AT, new Batch(List.of(), null, false));
+        return new PreparedFleetStream(
+                null, false, GENERATED_AT, CORRELATION_ID, new Batch(List.of(), null, false));
     }
 
     private static EquipmentFleetLifecycleV1.Line line(String id, String code) {

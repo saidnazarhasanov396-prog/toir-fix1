@@ -2,8 +2,11 @@ package com.toir.controller.equipment;
 
 import com.toir.service.equipmentfleetlifecycle.EquipmentFleetLifecycleJsonlWriter;
 import com.toir.service.equipmentfleetlifecycle.EquipmentFleetLifecycleStreamService;
+import com.toir.util.RequestContext;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
@@ -23,23 +26,29 @@ public class EquipmentFleetLifecycleController {
 
     private static final MediaType NDJSON = MediaType.parseMediaType("application/x-ndjson");
     private static final String FILENAME = "equipment-fleet-lifecycle-v1.jsonl";
+    private static final Pattern SAFE_CORRELATION_ID =
+            Pattern.compile("[A-Za-z0-9._:-]{1,128}");
 
     private final EquipmentFleetLifecycleStreamService streamService;
     private final EquipmentFleetLifecycleJsonlWriter writer;
     private final Clock clock;
+    private final RequestContext requestContext;
 
     public EquipmentFleetLifecycleController(
             EquipmentFleetLifecycleStreamService streamService,
             EquipmentFleetLifecycleJsonlWriter writer,
-            @Qualifier("equipmentLifecycleClock") Clock clock) {
+            @Qualifier("equipmentLifecycleClock") Clock clock,
+            RequestContext requestContext) {
         this.streamService = streamService;
         this.writer = writer;
         this.clock = clock;
+        this.requestContext = requestContext;
     }
 
     @GetMapping
     public ResponseEntity<StreamingResponseBody> get() {
-        var prepared = streamService.prepare(clock.instant());
+        String correlationId = resolveCorrelationId(requestContext.getCorrelationId());
+        var prepared = streamService.prepare(clock.instant(), correlationId);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(NDJSON);
         headers.setContentDisposition(ContentDisposition.inline().filename(FILENAME, StandardCharsets.UTF_8).build());
@@ -48,5 +57,15 @@ public class EquipmentFleetLifecycleController {
         return ResponseEntity.ok()
                 .headers(headers)
                 .body(output -> writer.write(output, prepared));
+    }
+
+    private static String resolveCorrelationId(String supplied) {
+        if (supplied != null) {
+            String candidate = supplied.trim();
+            if (SAFE_CORRELATION_ID.matcher(candidate).matches()) {
+                return candidate;
+            }
+        }
+        return UUID.randomUUID().toString();
     }
 }

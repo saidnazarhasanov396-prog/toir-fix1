@@ -3,8 +3,10 @@ package com.toir.repository.equipmentfleetlifecycle;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
@@ -339,7 +341,7 @@ public class EquipmentFleetLifecycleQueryRepository {
         }
         return jdbc.query(
                 LATEST_READINGS_SQL,
-                batchParameters(equipmentIds).addValue("asOf", asOf),
+                batchParameters(equipmentIds, asOf),
                 LATEST_READING_ROW_MAPPER);
     }
 
@@ -349,7 +351,7 @@ public class EquipmentFleetLifecycleQueryRepository {
         }
         return jdbc.query(
                 REPAIRS_SQL,
-                batchParameters(equipmentIds).addValue("asOf", asOf),
+                batchParameters(equipmentIds, asOf),
                 REPAIR_ROW_MAPPER);
     }
 
@@ -360,12 +362,17 @@ public class EquipmentFleetLifecycleQueryRepository {
         }
         return jdbc.query(
                 REPAIR_METER_SNAPSHOTS_SQL,
-                batchParameters(equipmentIds).addValue("asOf", asOf),
+                batchParameters(equipmentIds, asOf),
                 REPAIR_METER_SNAPSHOT_ROW_MAPPER);
     }
 
     private static MapSqlParameterSource batchParameters(List<UUID> equipmentIds) {
         return new MapSqlParameterSource("equipmentIds", List.copyOf(equipmentIds));
+    }
+
+    private static MapSqlParameterSource batchParameters(List<UUID> equipmentIds, Instant asOf) {
+        return batchParameters(equipmentIds)
+                .addValue("asOf", asOf.atOffset(ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE);
     }
 
     private static UUID uuid(ResultSet rs, String column) throws SQLException {
