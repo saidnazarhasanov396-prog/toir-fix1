@@ -106,10 +106,11 @@ Invalid, unmapped, ambiguous, and unit-mismatched metrics are not persisted.
 
    The second query must show `source = 'IOT'` and
    `device_id = 'equipment-telemetry-simulator'`.
-3. Verify the same meter through the normal meters API, then open `/meters` as
-   a user with `METER_READ`, `SYSTEM_ADMIN`, or `*`. Send another increasing
-   snapshot and confirm that the table's value and timestamp change without a
-   manual refresh. The page's realtime badge should show a live connection.
+3. Request `GET /api/v1/meters/<meter-uuid>` as a user with `METER_READ`,
+   `SYSTEM_ADMIN`, or `*`; confirm its `currentValue` and `lastReadAt` match
+   the accepted reading. Then open `/meters`, send another increasing snapshot,
+   and confirm that the table's value and timestamp change without a manual
+   refresh. The page's realtime badge should show a live connection.
 4. Close all browser tabs, send one more increasing snapshot, and repeat the
    database check. This confirms ingestion is independent of browser sessions.
 
@@ -151,4 +152,4 @@ restricted. Browser clients cannot write meter readings through this socket.
 | Snapshot is ignored | Check that the equipment exists and is not deleted, the meter is active, key resolution is unique, and unit matches exactly (ignoring case/outer whitespace). |
 | Reading is not created | Use a finite non-negative value greater than the current value and a non-stale `sentAt`; inspect existing rollover configuration for lower counter values. |
 | Database updates but `/meters` does not | Confirm the user has `METER_READ`, `SYSTEM_ADMIN`, or `*`; check the browser WebSocket handshake, allowed origins, and proxy redaction/forwarding configuration. A page reconnect will reconcile from the regular REST data. |
-| UI shows reconnecting/offline | Inspect the browser's `/api/v1/ws/meters` WebSocket handshake and token validity; authentication failures stop reconnecting until the page receives a valid authenticated session. |
+| UI shows reconnecting/offline | Inspect the browser's `/api/v1/ws/meters` WebSocket handshake and token validity. A missing or invalid query JWT is rejected before upgrade, which browsers commonly surface as close code `1006`; the client retries with bounded backoff. Only a post-upgrade policy/authentication close (`1008`, `4401`, or `4403`) stops retries until a valid authenticated session is available. |
