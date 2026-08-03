@@ -3,7 +3,7 @@
 ## Objective and boundary
 
 Add one synchronous read endpoint that returns the lifecycle data requested for
-the complete Equipment fleet as a single JSON document:
+the complete Equipment fleet as a streamed JSONL/NDJSON response:
 
 `GET /api/v1/equipment/lifecycle-context`
 
@@ -30,15 +30,17 @@ read-only endpoint and does not create audit-domain or Equipment-domain records.
 
 ## Response contract
 
-The top-level `EquipmentFleetLifecycleResponseV1` has:
+The media type is `application/x-ndjson`. Every non-empty UTF-8 line is one
+complete `EquipmentFleetLifecycleLineV1` JSON object and ends with LF. There is
+no array wrapper, manifest line, summary line, or `equipmentCount`. An empty
+visible fleet produces a successful empty response body.
 
-- `schemaVersion`: fixed value `1.0`;
-- `generatedAt`: one server-clock `Instant` used as the response watermark;
-- `consistency`: fixed value `FIXED_AS_OF_READ_COMMITTED_BATCHES`;
-- `equipmentCount`: number of Equipment records emitted;
-- `items`: Equipment records ordered by Equipment UUID ascending.
+Every line has `schemaVersion` fixed to `1.0`, the response-wide `generatedAt`,
+`consistency` fixed to `FIXED_AS_OF_READ_COMMITTED_BATCHES`, plus `equipment`,
+`meters`, `lastRepair`, `repairs`, and `dataQuality`. Repeating the metadata
+makes every line independently parseable and traceable. Equipment lines are
+ordered by Equipment UUID ascending.
 
-Each item has `equipment`, `meters`, `lastRepair`, `repairs`, and `dataQuality`.
 Lists are always JSON arrays and are never `null`. `lastRepair` is `null` when
 there is no qualifying repair; otherwise it equals the last element of
 `repairs`. Repairs are ordered by `(completedAt ASC, workOrderId ASC)`. Meters
@@ -115,12 +117,12 @@ SQL, personal data, or raw payloads.
 
 ## Query and streaming design
 
-The controller returns `application/json` through a Jackson `JsonGenerator` and
-writes the top-level object and `items` array incrementally. Equipment selection
-uses UUID keyset batches in ascending order; the batch size is an internal,
-bounded server constant and is not a request filter. `equipmentCount` is written
-after the streamed `items` array and equals the number actually emitted; JSON
-object field order is not part of the contract.
+The controller returns `application/x-ndjson`. Each immutable Equipment line is
+serialized to one compact byte array before any bytes for that line are written,
+then the service writes the bytes and exactly one LF. It never pretty-prints,
+writes blank lines, or wraps records in a JSON array. Equipment selection uses
+UUID keyset batches in ascending order; the batch size is an internal, bounded
+server constant and is not a request filter.
 
 For each Equipment batch, dedicated read queries bulk-load meters, qualifying
 repairs, their linked Defects and Repair Requests, current latest meter readings,
@@ -142,20 +144,24 @@ response as `FIXED_AS_OF_READ_COMMITTED_BATCHES`.
 Authorization failures return the existing 403 error contract before streaming.
 Preflight/query setup failures return the existing 5xx error contract.
 Once response bytes have been sent, HTTP status cannot be changed safely; a
-mid-stream database, mapping, or client-I/O failure aborts the connection and is
-logged with a correlation ID. The endpoint never appends an error object inside
-`items`, because that could make a partial dataset appear complete.
+mid-stream database, mapping, serialization, or client-I/O failure aborts the
+connection and is logged with a correlation ID. Because a line is serialized
+before it is written, serialization failures do not emit a partial line. The
+endpoint never appends an error or summary line because a consumer could mistake
+it for Equipment data.
 
 The response uses `Cache-Control: no-store, private`, `X-Content-Type-Options:
-nosniff`, and UTF-8 JSON. Compression remains controlled by the existing server
-configuration. The endpoint has no response cache and no write transaction.
+nosniff`, UTF-8 `application/x-ndjson`, and inline filename
+`equipment-fleet-lifecycle-v1.jsonl`. Compression remains controlled by the
+existing server configuration. The endpoint has no response cache and no write
+transaction.
 
 ## Test strategy and acceptance criteria
 
 Implementation follows test-first development. Unit/contract tests prove:
 
-- endpoint path, authority, media type, security headers, and absence of request
-  filters;
+- endpoint path, authority, NDJSON media type, inline JSONL filename, security
+  headers, and absence of request filters;
 - all and only scope-visible non-deleted Equipment are emitted in stable order;
 - inactive and active meters are returned and latest-reading tie-breaking is
   deterministic;
@@ -165,15 +171,17 @@ Implementation follows test-first development. Unit/contract tests prove:
   missing-reason diagnostics;
 - readings at repair never come from after completion and missing readings stay
   explicit;
-- empty fleet, no meters, and no repairs serialize with the specified null/array
-  semantics;
+- every non-empty line is independently valid compact JSON, has response
+  metadata, and ends with one LF; there are no blank or non-Equipment lines;
+- empty fleet, no meters, and no repairs serialize with the specified empty-body
+  and null/array semantics;
 - batch boundaries do not duplicate or skip Equipment and repository calls are
   batch-oriented;
-- a simulated mid-stream failure terminates output rather than writing a
-  misleading successful item.
+- a simulated serialization or mid-stream failure terminates output without a
+  partial or misleading error/summary line.
 
 Repository integration tests validate the PostgreSQL latest-reading and repair
 snapshot queries, including equal timestamps, soft deletion, cross-Equipment
 links, and scope predicates. The feature is complete when focused tests and the
-existing lifecycle-context/export regression tests pass and a representative
-multi-batch response is valid JSON matching schema version `1.0`.
+existing lifecycle-context/export regression tests pass and every line of a
+representative multi-batch response is valid JSON matching schema version `1.0`.
