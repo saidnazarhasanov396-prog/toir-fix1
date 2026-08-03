@@ -25,6 +25,9 @@ public final class EquipmentFleetLifecycleV1 {
             DataQuality dataQuality
     ) {
         public Line {
+            if (generatedAt == null) {
+                throw new IllegalArgumentException("generatedAt is required");
+            }
             if (!SCHEMA_VERSION.equals(schemaVersion)) {
                 throw new IllegalArgumentException("schemaVersion must be " + SCHEMA_VERSION);
             }

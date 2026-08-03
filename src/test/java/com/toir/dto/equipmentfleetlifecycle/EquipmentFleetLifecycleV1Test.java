@@ -1,6 +1,7 @@
 package com.toir.dto.equipmentfleetlifecycle;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -67,6 +68,29 @@ class EquipmentFleetLifecycleV1Test {
         assertThat(json.at("/repairs").size()).isZero();
         assertThat(json.at("/lastRepair").isNull()).isTrue();
         assertThat(json.toString()).doesNotContain("reporterId", "recordedByUserId", "deviceId", "note");
+    }
+
+    @Test
+    void rejectsNullGeneratedAt() {
+        assertThatThrownBy(() -> line(null, EquipmentFleetLifecycleV1.SCHEMA_VERSION,
+                EquipmentFleetLifecycleV1.CONSISTENCY))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("generatedAt is required");
+    }
+
+    @Test
+    void rejectsInvalidMetadataConstants() {
+        assertThatThrownBy(() -> line(GENERATED_AT, "2.0", EquipmentFleetLifecycleV1.CONSISTENCY))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("schemaVersion must be 1.0");
+        assertThatThrownBy(() -> line(GENERATED_AT, EquipmentFleetLifecycleV1.SCHEMA_VERSION, "READ_COMMITTED"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("consistency must be FIXED_AS_OF_READ_COMMITTED_BATCHES");
+    }
+
+    private EquipmentFleetLifecycleV1.Line line(Instant generatedAt, String schemaVersion, String consistency) {
+        return new EquipmentFleetLifecycleV1.Line(
+                schemaVersion, generatedAt, consistency, equipment(), null, null, null, null);
     }
 
     private EquipmentFleetLifecycleV1.EquipmentCore equipment() {
