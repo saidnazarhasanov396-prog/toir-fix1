@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.toir.dto.equipmentfleetlifecycle.EquipmentFleetLifecycleV1;
@@ -74,6 +75,30 @@ class EquipmentFleetLifecycleJsonlWriterTest {
     }
 
     @Test
+    void writesOnePhysicalJsonLineWhenTheSharedMapperHasIndentOutputEnabled() throws Exception {
+        EquipmentFleetLifecycleStreamService streamService = mock(EquipmentFleetLifecycleStreamService.class);
+        PreparedFleetStream prepared = prepared();
+        EquipmentFleetLifecycleV1.Line line = line("10000000-0000-0000-0000-000000000001", "EQ-1");
+        doAnswer(invocation -> {
+            EquipmentFleetLifecycleStreamService.ItemSink sink = invocation.getArgument(1);
+            sink.accept(line);
+            return 1L;
+        }).when(streamService).stream(eq(prepared), any());
+        ObjectMapper indentingMapper = mapper().enable(SerializationFeature.INDENT_OUTPUT);
+        EquipmentFleetLifecycleJsonlWriter writer = new EquipmentFleetLifecycleJsonlWriter(indentingMapper, streamService);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        writer.write(output, prepared);
+
+        String text = output.toString(StandardCharsets.UTF_8);
+        String[] records = text.split("\\n", -1);
+        assertThat(records).hasSize(2);
+        assertThat(records[0]).startsWith("{").endsWith("}");
+        assertThat(records[1]).isEmpty();
+        assertThat(mapper().readTree(records[0]).path("equipment").path("code").asText()).isEqualTo("EQ-1");
+    }
+
+    @Test
     void serializationFailureLeavesOnlyPriorCompleteRecordsInOutput() throws Exception {
         EquipmentFleetLifecycleStreamService streamService = mock(EquipmentFleetLifecycleStreamService.class);
         PreparedFleetStream prepared = prepared();
@@ -86,9 +111,12 @@ class EquipmentFleetLifecycleJsonlWriterTest {
             return 2L;
         }).when(streamService).stream(eq(prepared), any());
         ObjectMapper failingMapper = mock(ObjectMapper.class);
+        ObjectWriter failingWriter = mock(ObjectWriter.class);
         byte[] firstRecord = mapper().writeValueAsBytes(first);
-        when(failingMapper.writeValueAsBytes(first)).thenReturn(firstRecord);
-        when(failingMapper.writeValueAsBytes(second)).thenThrow(new JsonProcessingException("second record cannot serialize") { });
+        when(failingMapper.writer()).thenReturn(failingWriter);
+        when(failingWriter.without(SerializationFeature.INDENT_OUTPUT)).thenReturn(failingWriter);
+        when(failingWriter.writeValueAsBytes(first)).thenReturn(firstRecord);
+        when(failingWriter.writeValueAsBytes(second)).thenThrow(new JsonProcessingException("second record cannot serialize") { });
         EquipmentFleetLifecycleJsonlWriter writer = new EquipmentFleetLifecycleJsonlWriter(failingMapper, streamService);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 

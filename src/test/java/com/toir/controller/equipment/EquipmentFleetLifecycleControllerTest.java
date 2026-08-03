@@ -18,6 +18,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
@@ -56,10 +57,13 @@ class EquipmentFleetLifecycleControllerTest {
     void publishesTheExactParameterlessFleetRouteWithReadAuthorities() throws Exception {
         RequestMapping requestMapping = EquipmentFleetLifecycleController.class.getAnnotation(RequestMapping.class);
         Method get = EquipmentFleetLifecycleController.class.getMethod("get");
+        GetMapping getMapping = get.getAnnotation(GetMapping.class);
         PreAuthorize authorization = EquipmentFleetLifecycleController.class.getAnnotation(PreAuthorize.class);
 
         assertThat(requestMapping.value()).containsExactly("/api/v1/equipment/lifecycle-context");
         assertThat(get.getParameterCount()).isZero();
+        assertThat(getMapping.value()).isEmpty();
+        assertThat(getMapping.path()).isEmpty();
         assertThat(authorization.value())
                 .contains("hasAuthority('SYSTEM_ADMIN')", "hasAuthority('*')", "hasAuthority('EQUIPMENT_READ')");
     }
