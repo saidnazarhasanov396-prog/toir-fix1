@@ -93,6 +93,57 @@ class TelemetrySimulatorClientTest {
         assertThat(scheduler.pending()).isZero();
     }
 
+    @Test
+    void ignoresLateCloseAndErrorFromSupersededConnection() {
+        FakeConnector connector = new FakeConnector();
+        FakeScheduler scheduler = new FakeScheduler();
+        TelemetrySimulatorClient client = client(properties(true), connector, scheduler);
+
+        client.start();
+        FakeConnection firstConnection = connector.completeConnection();
+        firstConnection.closeFromServer();
+        scheduler.runNext();
+        FakeConnection replacementConnection = connector.completeConnection();
+        firstConnection.errorFromTransport();
+
+        assertThat(connector.attempts()).isEqualTo(2);
+        assertThat(replacementConnection.closed()).isFalse();
+        assertThat(scheduler.pending()).isZero();
+    }
+
+    @Test
+    void closesSubscriptionFailureBeforeSchedulingReconnect() {
+        List<String> events = new ArrayList<>();
+        FakeConnector connector = new FakeConnector(events);
+        FakeScheduler scheduler = new FakeScheduler(events);
+        TelemetrySimulatorClient client = client(properties(true), connector, scheduler);
+
+        client.start();
+        FakeConnection connection = connector.completeConnectionWithSubscriptionFailure();
+
+        assertThat(connection.closed()).isTrue();
+        assertThat(events).containsExactly("close", "schedule");
+        assertThat(scheduler.pending()).isEqualTo(1);
+    }
+
+    @Test
+    void resetsReconnectBackoffAfterSuccessfulConnection() {
+        TelemetrySimulatorProperties properties = properties(true);
+        properties.setReconnectInitial(Duration.ofSeconds(1));
+        properties.setReconnectMax(Duration.ofSeconds(8));
+        FakeConnector connector = new FakeConnector();
+        FakeScheduler scheduler = new FakeScheduler();
+        TelemetrySimulatorClient client = client(properties, connector, scheduler);
+
+        client.start();
+        connector.failConnection();
+        scheduler.runNext();
+        FakeConnection connection = connector.completeConnection();
+        connection.closeFromServer();
+
+        assertThat(scheduler.nextDelayMillis()).isEqualTo(1_000L);
+    }
+
     private static TelemetrySimulatorClient client(
             TelemetrySimulatorProperties properties,
             FakeConnector connector,
@@ -114,9 +165,18 @@ class TelemetrySimulatorClientTest {
     }
 
     private static final class FakeConnector implements TelemetryWebSocketConnector {
+        private final List<String> events;
         private int attempts;
         private CompletableFuture<TelemetryWebSocketConnection> pending;
         private Listener listener;
+
+        private FakeConnector() {
+            this(new ArrayList<>());
+        }
+
+        private FakeConnector(List<String> events) {
+            this.events = events;
+        }
 
         @Override
         public CompletableFuture<TelemetryWebSocketConnection> connect(URI uri, Listener listener) {
@@ -131,7 +191,13 @@ class TelemetrySimulatorClientTest {
         }
 
         FakeConnection completeConnection() {
-            FakeConnection connection = new FakeConnection(listener);
+            FakeConnection connection = new FakeConnection(listener, events, false);
+            pending.complete(connection);
+            return connection;
+        }
+
+        FakeConnection completeConnectionWithSubscriptionFailure() {
+            FakeConnection connection = new FakeConnection(listener, events, true);
             pending.complete(connection);
             return connection;
         }
@@ -143,21 +209,29 @@ class TelemetrySimulatorClientTest {
 
     private static final class FakeConnection implements TelemetryWebSocketConnection {
         private final TelemetryWebSocketConnector.Listener listener;
+        private final List<String> events;
+        private final boolean failOnSubscription;
         private final List<String> sentTexts = new ArrayList<>();
         private boolean closed;
 
-        private FakeConnection(TelemetryWebSocketConnector.Listener listener) {
+        private FakeConnection(TelemetryWebSocketConnector.Listener listener, List<String> events, boolean failOnSubscription) {
             this.listener = listener;
+            this.events = events;
+            this.failOnSubscription = failOnSubscription;
         }
 
         @Override
         public void sendText(String payload) {
             sentTexts.add(payload);
+            if (failOnSubscription) {
+                throw new IllegalStateException("send failed");
+            }
         }
 
         @Override
         public void close() {
             closed = true;
+            events.add("close");
         }
 
         void receive(String payload) {
@@ -167,6 +241,10 @@ class TelemetrySimulatorClientTest {
         void closeFromServer() {
             closed = true;
             listener.onClose();
+        }
+
+        void errorFromTransport() {
+            listener.onError(new IllegalStateException("late transport error"));
         }
 
         List<String> sentTexts() {
@@ -179,10 +257,20 @@ class TelemetrySimulatorClientTest {
     }
 
     private static final class FakeScheduler implements TelemetryReconnectScheduler {
+        private final List<String> events;
         private final List<ScheduledTask> tasks = new ArrayList<>();
+
+        private FakeScheduler() {
+            this(new ArrayList<>());
+        }
+
+        private FakeScheduler(List<String> events) {
+            this.events = events;
+        }
 
         @Override
         public ScheduledFuture<?> schedule(Runnable command, Duration delay) {
+            events.add("schedule");
             ScheduledTask task = new ScheduledTask(command, delay.toMillis());
             tasks.add(task);
             return task;

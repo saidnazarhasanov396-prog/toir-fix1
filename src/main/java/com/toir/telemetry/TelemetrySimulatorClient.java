@@ -20,7 +20,9 @@ public class TelemetrySimulatorClient implements SmartLifecycle {
     private final TelemetryReconnectScheduler scheduler;
 
     private boolean running;
-    private boolean connecting;
+    private long attemptSequence;
+    private long connectingAttempt;
+    private long activeAttempt;
     private TelemetryWebSocketConnection activeConnection;
     private CompletableFuture<TelemetryWebSocketConnection> connectionFuture;
     private ScheduledFuture<?> reconnectFuture;
@@ -57,7 +59,8 @@ public class TelemetrySimulatorClient implements SmartLifecycle {
         CompletableFuture<TelemetryWebSocketConnection> futureToCancel;
         synchronized (this) {
             running = false;
-            connecting = false;
+            connectingAttempt = 0;
+            activeAttempt = 0;
             cancelReconnect();
             connectionToClose = activeConnection;
             activeConnection = null;
@@ -67,9 +70,7 @@ public class TelemetrySimulatorClient implements SmartLifecycle {
         if (futureToCancel != null) {
             futureToCancel.cancel(true);
         }
-        if (connectionToClose != null) {
-            connectionToClose.close();
-        }
+        closeQuietly(connectionToClose, "telemetry_socket_close_failed");
     }
 
     @Override
@@ -88,33 +89,47 @@ public class TelemetrySimulatorClient implements SmartLifecycle {
     }
 
     private synchronized void connect() {
-        if (!running || connecting || activeConnection != null) {
+        if (!running || connectingAttempt != 0 || activeConnection != null) {
             return;
         }
-        connecting = true;
+        long attempt = ++attemptSequence;
+        connectingAttempt = attempt;
         try {
             connectionFuture = connector.connect(properties.getWsUrl(), new TelemetryWebSocketConnector.Listener() {
                 @Override
                 public void onText(String payload) {
-                    parser.parse(payload).ifPresent(TelemetrySimulatorClient.this::ingest);
+                    receivedText(attempt, payload);
                 }
 
                 @Override
                 public void onClose() {
-                    disconnected();
+                    disconnected(attempt);
                 }
 
                 @Override
                 public void onError(Throwable error) {
-                    log.warn("telemetry_simulator_socket_error", error);
-                    disconnected();
+                    if (disconnected(attempt)) {
+                        log.warn("telemetry_simulator_socket_error", error);
+                    }
                 }
             });
-            connectionFuture.whenComplete(this::connected);
+            connectionFuture.whenComplete((connection, error) -> connected(attempt, connection, error));
         } catch (RuntimeException exception) {
-            connecting = false;
-            scheduleReconnect();
+            if (connectingAttempt == attempt) {
+                connectingAttempt = 0;
+                connectionFuture = null;
+                scheduleReconnect();
+            }
         }
+    }
+
+    private void receivedText(long attempt, String payload) {
+        synchronized (this) {
+            if (!running || activeAttempt != attempt) {
+                return;
+            }
+        }
+        parser.parse(payload).ifPresent(this::ingest);
     }
 
     private void ingest(SimulatorSnapshot snapshot) {
@@ -125,42 +140,71 @@ public class TelemetrySimulatorClient implements SmartLifecycle {
         }
     }
 
-    private void connected(TelemetryWebSocketConnection connection, Throwable error) {
+    private void connected(long attempt, TelemetryWebSocketConnection connection, Throwable error) {
         boolean closeConnection = false;
+        boolean subscribe = false;
         synchronized (this) {
-            connecting = false;
-            connectionFuture = null;
-            if (!running) {
+            if (attempt != connectingAttempt) {
                 closeConnection = connection != null;
-            } else if (error != null || connection == null) {
-                scheduleReconnect();
             } else {
-                activeConnection = connection;
-                reconnectDelay = properties.getReconnectInitial();
+                connectingAttempt = 0;
+                connectionFuture = null;
+                if (!running) {
+                    closeConnection = connection != null;
+                } else if (error != null || connection == null) {
+                    scheduleReconnect();
+                } else {
+                    activeConnection = connection;
+                    activeAttempt = attempt;
+                    reconnectDelay = properties.getReconnectInitial();
+                    subscribe = true;
+                }
             }
         }
         if (closeConnection) {
-            connection.close();
-            return;
-        }
-        if (error == null && connection != null && isRunning()) {
+            closeQuietly(connection, "telemetry_stale_socket_close_failed");
+        } else if (subscribe) {
             try {
                 connection.sendText(SUBSCRIPTION_MESSAGE);
             } catch (RuntimeException exception) {
                 log.warn("telemetry_subscription_failed", exception);
-                disconnected();
+                subscriptionFailed(attempt, connection);
             }
         }
     }
 
-    private synchronized void disconnected() {
-        activeConnection = null;
-        connecting = false;
-        scheduleReconnect();
+    private boolean disconnected(long attempt) {
+        synchronized (this) {
+            if (attempt == activeAttempt) {
+                activeAttempt = 0;
+                activeConnection = null;
+            } else if (attempt == connectingAttempt) {
+                connectingAttempt = 0;
+                connectionFuture = null;
+            } else {
+                return false;
+            }
+            scheduleReconnect();
+            return true;
+        }
+    }
+
+    private void subscriptionFailed(long attempt, TelemetryWebSocketConnection connection) {
+        synchronized (this) {
+            if (attempt != activeAttempt || connection != activeConnection) {
+                return;
+            }
+            activeAttempt = 0;
+            activeConnection = null;
+        }
+        closeQuietly(connection, "telemetry_subscription_socket_close_failed");
+        synchronized (this) {
+            scheduleReconnect();
+        }
     }
 
     private void scheduleReconnect() {
-        if (!running || reconnectFuture != null || connecting || activeConnection != null) {
+        if (!running || reconnectFuture != null || connectingAttempt != 0 || activeConnection != null) {
             return;
         }
         Duration delay = reconnectDelay;
@@ -189,6 +233,17 @@ public class TelemetrySimulatorClient implements SmartLifecycle {
         if (reconnectFuture != null) {
             reconnectFuture.cancel(false);
             reconnectFuture = null;
+        }
+    }
+
+    private void closeQuietly(TelemetryWebSocketConnection connection, String message) {
+        if (connection == null) {
+            return;
+        }
+        try {
+            connection.close();
+        } catch (RuntimeException exception) {
+            log.warn(message, exception);
         }
     }
 }
