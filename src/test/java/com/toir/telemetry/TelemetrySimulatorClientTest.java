@@ -112,6 +112,30 @@ class TelemetrySimulatorClientTest {
     }
 
     @Test
+    void activeTransportErrorClosesFailedConnectionBeforeStartingOneReplacement() {
+        FakeConnector connector = new FakeConnector();
+        FakeScheduler scheduler = new FakeScheduler();
+        TelemetrySimulatorClient client = client(properties(true), connector, scheduler);
+
+        client.start();
+        FakeConnection failedConnection = connector.completeConnection();
+        failedConnection.errorFromTransport();
+
+        assertThat(failedConnection.closed()).isTrue();
+        assertThat(scheduler.pending()).isEqualTo(1);
+
+        failedConnection.closeFromServer();
+        assertThat(scheduler.pending()).isEqualTo(1);
+
+        scheduler.runNext();
+        FakeConnection replacementConnection = connector.completeConnection();
+
+        assertThat(connector.attempts()).isEqualTo(2);
+        assertThat(replacementConnection.closed()).isFalse();
+        assertThat(scheduler.pending()).isZero();
+    }
+
+    @Test
     void closesSubscriptionFailureBeforeSchedulingReconnect() {
         List<String> events = new ArrayList<>();
         FakeConnector connector = new FakeConnector(events);

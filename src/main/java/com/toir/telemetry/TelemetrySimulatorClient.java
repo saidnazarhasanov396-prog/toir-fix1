@@ -108,7 +108,7 @@ public class TelemetrySimulatorClient implements SmartLifecycle {
 
                 @Override
                 public void onError(Throwable error) {
-                    if (disconnected(attempt)) {
+                    if (transportFailed(attempt)) {
                         log.warn("telemetry_simulator_socket_error", error);
                     }
                 }
@@ -187,6 +187,27 @@ public class TelemetrySimulatorClient implements SmartLifecycle {
             scheduleReconnect();
             return true;
         }
+    }
+
+    private boolean transportFailed(long attempt) {
+        TelemetryWebSocketConnection connectionToClose = null;
+        synchronized (this) {
+            if (attempt == activeAttempt) {
+                activeAttempt = 0;
+                connectionToClose = activeConnection;
+                activeConnection = null;
+            } else if (attempt == connectingAttempt) {
+                connectingAttempt = 0;
+                connectionFuture = null;
+            } else {
+                return false;
+            }
+        }
+        closeQuietly(connectionToClose, "telemetry_failed_socket_close_failed");
+        synchronized (this) {
+            scheduleReconnect();
+        }
+        return true;
     }
 
     private void subscriptionFailed(long attempt, TelemetryWebSocketConnection connection) {
