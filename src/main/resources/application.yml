@@ -48,6 +48,12 @@ app:
     service-account-base64: ${APP_FIREBASE_SERVICE_ACCOUNT_BASE64:}
 
 toir:
+  telemetry:
+    simulator:
+      enabled: ${TOIR_TELEMETRY_ENABLED:false}
+      ws-url: ${TOIR_TELEMETRY_WS_URL:}
+      reconnect-initial: ${TOIR_TELEMETRY_RECONNECT_INITIAL:PT1S}
+      reconnect-max: ${TOIR_TELEMETRY_RECONNECT_MAX:PT30S}
   features:
     annual-maintenance-approval-first:
       enabled: ${TOIR_FEATURES_ANNUAL_MAINTENANCE_APPROVAL_FIRST_ENABLED:false}
