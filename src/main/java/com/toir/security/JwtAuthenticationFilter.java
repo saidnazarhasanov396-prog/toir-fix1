@@ -27,6 +27,8 @@ import java.util.Set;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
+    private static final String METER_WEBSOCKET_PATH = "/api/v1/ws/meters";
+    private static final String WEBSOCKET_UPGRADE = "websocket";
 
     private final JwtService jwtService;
 
@@ -104,6 +106,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(header) && header.startsWith(BEARER_PREFIX)) {
             return header.substring(BEARER_PREFIX.length());
         }
+        if (isMeterWebSocketHandshake(request)) {
+            return request.getParameter("access_token");
+        }
         return null;
+    }
+
+    private boolean isMeterWebSocketHandshake(HttpServletRequest request) {
+        return "GET".equalsIgnoreCase(request.getMethod())
+                && METER_WEBSOCKET_PATH.equals(request.getRequestURI())
+                && WEBSOCKET_UPGRADE.equalsIgnoreCase(request.getHeader("Upgrade"));
     }
 }
