@@ -67,6 +67,49 @@ toir:
       batch-size: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_BATCH_SIZE:100}
       actor-id: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_ACTOR_ID:}
   ai:
+    maintenance-action-semantic-search:
+      # External gates are intentionally closed. No live adapter/vector schema is present in this checkout.
+      enabled: ${TOIR_MAINTENANCE_ACTION_SEMANTIC_SEARCH_ENABLED:false}
+      generation-worker-enabled: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_WORKER_ENABLED:false}
+      semantic-search-enabled: ${TOIR_MAINTENANCE_ACTION_SEMANTIC_SEARCH_API_ENABLED:false}
+      backfill-enabled: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BACKFILL_ENABLED:false}
+      ai-service-contract-confirmed: ${TOIR_MAINTENANCE_ACTION_AI_CONTRACT_CONFIRMED:false}
+      pgvector-prerequisite-confirmed: ${TOIR_MAINTENANCE_ACTION_PGVECTOR_CONFIRMED:false}
+      service-base-url: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BASE_URL:}
+      endpoint-path: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_ENDPOINT_PATH:}
+      authentication-header: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_AUTH_HEADER:}
+      authentication-secret: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_AUTH_SECRET:}
+      model-name: ibm-granite/granite-embedding-311m-multilingual-r2
+      model-revision: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_MODEL_REVISION:}
+      dimension: 768
+      document-mode: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_DOCUMENT_MODE:}
+      query-mode: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_QUERY_MODE:}
+      connect-timeout: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_CONNECT_TIMEOUT:}
+      read-timeout: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_READ_TIMEOUT:}
+      client-concurrency: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_CLIENT_CONCURRENCY:0}
+      batch-size: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BATCH_SIZE:0}
+      polling-interval: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_POLLING_INTERVAL:}
+      lease-duration: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_LEASE_DURATION:}
+      retry-count: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_RETRY_COUNT:0}
+      retry-base-backoff: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_RETRY_BASE_BACKOFF:}
+      retry-max-backoff: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_RETRY_MAX_BACKOFF:}
+      retry-jitter: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_RETRY_JITTER:0}
+      stale-retention: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_STALE_RETENTION:}
+      failed-retention: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_FAILED_RETENTION:}
+      input-limits:
+        name-characters: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_NAME_CHARACTERS:0}
+        category-characters: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_CATEGORY_CHARACTERS:0}
+        required-skill-characters: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_REQUIRED_SKILL_CHARACTERS:0}
+        safety-notes-characters: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_SAFETY_NOTES_CHARACTERS:0}
+        tools-required-characters: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_TOOLS_REQUIRED_CHARACTERS:0}
+        spare-parts-required-characters: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_SPARE_PARTS_REQUIRED_CHARACTERS:0}
+        consumables-required-characters: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_CONSUMABLES_REQUIRED_CHARACTERS:0}
+        composed-characters: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_COMPOSED_CHARACTERS:0}
+        composed-utf8-bytes: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_COMPOSED_UTF8_BYTES:0}
+      backfill:
+        minimum-batch-size: ${TOIR_MAINTENANCE_ACTION_BACKFILL_MIN_BATCH_SIZE:0}
+        default-batch-size: ${TOIR_MAINTENANCE_ACTION_BACKFILL_DEFAULT_BATCH_SIZE:0}
+        maximum-batch-size: ${TOIR_MAINTENANCE_ACTION_BACKFILL_MAX_BATCH_SIZE:0}
     equipment-lifecycle:
       export:
         enabled: ${TOIR_EQUIPMENT_LIFECYCLE_EXPORT_ENABLED:true}
