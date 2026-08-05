@@ -23,8 +23,18 @@ public class FinancialApprovalRuleController {
 
     private final FinancialApprovalRuleService service;
 
+
     @GetMapping
-    public ResponseEntity<Page<FinancialApprovalRuleDto>> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) { return ResponseEntity.ok(PaginationUtils.page(service.findAll(), page, size)); }
+    public ResponseEntity<Page<FinancialApprovalRuleDto>> list(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) Boolean status,
+            @RequestParam(required = false) String search
+    ) {
+        return ResponseEntity.ok(PaginationUtils.page(service.findAll(departmentId, role, status, search), page, size));
+    }
 
     @PostMapping
     public ResponseEntity<FinancialApprovalRuleDto> create(@Valid @RequestBody FinancialApprovalRuleDto r) {
@@ -47,4 +57,5 @@ public class FinancialApprovalRuleController {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }
+
 }

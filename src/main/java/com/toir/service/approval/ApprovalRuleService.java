@@ -17,6 +17,9 @@ import com.toir.repository.users.RoleRepository;
 import com.toir.repository.users.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -279,7 +282,7 @@ public class ApprovalRuleService {
                 assignments.size());
         if (rejectionPolicy == ApprovalRejectionPolicy.MAJORITY
                 && assignments.stream().anyMatch(
-                        assignment -> assignment.approverType() != ApprovalRuleDto.ApproverType.USER)) {
+                assignment -> assignment.approverType() != ApprovalRuleDto.ApproverType.USER)) {
             throw RestException.conflict("APPROVAL_MAJORITY_REQUIRES_EXPLICIT_USERS");
         }
         if (flowType == ApprovalFlowType.PARALLEL_ALL) {
@@ -562,4 +565,6 @@ public class ApprovalRuleService {
             String approverRole,
             ApprovalRuleDto.ApproverType approverType) {
     }
-}
+
+    }
+
