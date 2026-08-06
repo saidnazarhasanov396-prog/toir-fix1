@@ -25,7 +25,35 @@ public class FinancialApprovalRuleService {
 
     @Transactional(readOnly = true)
     public List<FinancialApprovalRuleDto> findAll() {
-        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream().map(FinancialApprovalRuleDto::from).toList();
+        return findAll(null, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<FinancialApprovalRuleDto> findAll(UUID departmentId, String role, Boolean status, String search) {
+        String normalizedSearch = (search == null || search.isBlank()) ? null : search.trim().toLowerCase();
+        String normalizedRole = (role == null || role.isBlank()) ? null : role.trim();
+
+        return repository.findAllByIsDeletedFalseOrderByUpdatedAtDesc().stream()
+                .filter(r -> departmentId == null || departmentId.equals(r.getDepartmentId()))
+                .filter(r -> normalizedRole == null
+                        || normalizedRole.equalsIgnoreCase(r.getRequiredRoleCode())
+                        || normalizedRole.equalsIgnoreCase(r.getEscalateToRoleCode()))
+                .filter(r -> status == null || status == r.isActive())
+                .filter(r -> normalizedSearch == null || matchesSearch(r, normalizedSearch))
+                .map(FinancialApprovalRuleDto::from)
+                .toList();
+    }
+
+    private boolean matchesSearch(FinancialApprovalRule r, String normalizedSearch) {
+        return containsIgnoreCase(r.getName(), normalizedSearch)
+                || containsIgnoreCase(r.getCode(), normalizedSearch)
+                || containsIgnoreCase(r.getNotes(), normalizedSearch)
+                || containsIgnoreCase(r.getRequiredRoleCode(), normalizedSearch)
+                || containsIgnoreCase(r.getEscalateToRoleCode(), normalizedSearch);
+    }
+
+    private boolean containsIgnoreCase(String value, String normalizedSearch) {
+        return value != null && value.toLowerCase().contains(normalizedSearch);
     }
 
     @Transactional
