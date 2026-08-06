@@ -61,6 +61,19 @@ class JwtAuthenticationFilterWebSocketTest {
         org.mockito.Mockito.verify(jwtService, org.mockito.Mockito.never()).parse("query-token");
     }
 
+    @Test
+    void acceptsAccessTokenForExactMeterSocketWhenProxyDoesNotExposeUpgradeHeader() throws Exception {
+        Claims validClaims = claims();
+        when(jwtService.parse("valid-token")).thenReturn(validClaims);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/ws/meters");
+        request.setParameter("access_token", "valid-token");
+
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        org.mockito.Mockito.verify(jwtService).parse("valid-token");
+    }
+
     private Claims claims() {
         Claims claims = mock(Claims.class);
         when(claims.getSubject()).thenReturn("user-id");
