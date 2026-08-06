@@ -134,14 +134,8 @@ The browser receives only committed events in this form:
 
 The read-only notification endpoint is `GET /api/v1/ws/meters`. Browsers pass
 the JWT as `?access_token=<JWT>` because the native browser WebSocket API cannot
-set an `Authorization` header. The query value is the raw JWT without a `Bearer `
-prefix. The backend accepts it only for `GET` requests to that exact path, even
-when a reverse proxy does not expose the `Upgrade` header to the authentication
-filter; an `Authorization: Bearer <JWT>` header still has precedence.
-
-This is a native WebSocket endpoint, not STOMP or SockJS. The reverse proxy must
-still forward `Upgrade` and `Connection` correctly for the server to return a
-successful `101 Switching Protocols` response.
+set an `Authorization` header. The backend accepts this query token only for an
+actual WebSocket upgrade to that exact path; a Bearer header has precedence.
 
 Query tokens can still be exposed by reverse-proxy request logging, browser
 history tooling, or telemetry that records full URLs. Configure proxies and
