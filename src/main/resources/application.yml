@@ -73,9 +73,9 @@ toir:
       generation-worker-enabled: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_WORKER_ENABLED:false}
       semantic-search-enabled: ${TOIR_MAINTENANCE_ACTION_SEMANTIC_SEARCH_API_ENABLED:false}
       backfill-enabled: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BACKFILL_ENABLED:false}
-      ai-service-contract-confirmed: ${TOIR_MAINTENANCE_ACTION_AI_CONTRACT_CONFIRMED:false}
-      model-dimension-contract-confirmed: ${TOIR_MAINTENANCE_ACTION_MODEL_DIMENSION_CONFIRMED:false}
-      pgvector-prerequisite-confirmed: ${TOIR_MAINTENANCE_ACTION_PGVECTOR_CONFIRMED:false}
+      ai-service-contract-confirmed: ${TOIR_MAINTENANCE_ACTION_AI_CONTRACT_CONFIRMED:true}
+      model-dimension-contract-confirmed: ${TOIR_MAINTENANCE_ACTION_MODEL_DIMENSION_CONFIRMED:true}
+      pgvector-prerequisite-confirmed: ${TOIR_MAINTENANCE_ACTION_PGVECTOR_CONFIRMED:true}
       service-base-url: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BASE_URL:}
       endpoint-path: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_ENDPOINT_PATH:}
       authentication-header: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_AUTH_HEADER:}
