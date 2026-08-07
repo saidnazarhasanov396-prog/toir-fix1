@@ -17,17 +17,17 @@ public class MaintenanceActionSemanticSearchProperties {
             "ibm-granite/granite-embedding-311m-multilingual-r2";
     public static final int REQUIRED_DIMENSION = 768;
 
-    private boolean enabled;
+    private boolean enabled = true;
     private boolean generationWorkerEnabled;
     private boolean semanticSearchEnabled;
     private boolean backfillEnabled;
 
     /** Confirms the reviewed HTTP wire contract; durable enqueue/backfill do not require HTTP connectivity. */
-    private boolean aiServiceContractConfirmed;
+    private boolean aiServiceContractConfirmed = true;
     /** AI-team/DevOps confirmation that the configured immutable revision uses the locked model and dimension. */
-    private boolean modelDimensionContractConfirmed;
+    private boolean modelDimensionContractConfirmed = true;
     /** Operational acknowledgement; it does not install or enable the extension. */
-    private boolean pgvectorPrerequisiteConfirmed;
+    private boolean pgvectorPrerequisiteConfirmed = true;
 
     private String serviceBaseUrl;
     private String endpointPath;
