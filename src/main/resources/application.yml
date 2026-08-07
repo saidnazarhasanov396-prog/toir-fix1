@@ -69,7 +69,7 @@ toir:
   ai:
     maintenance-action-semantic-search:
       # Durable enqueue/backfill can be enabled independently; worker/search remain blocked by the vector schema.
-      enabled: ${TOIR_MAINTENANCE_ACTION_SEMANTIC_SEARCH_ENABLED:false}
+      enabled: ${TOIR_MAINTENANCE_ACTION_SEMANTIC_SEARCH_ENABLED:true}
       generation-worker-enabled: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_WORKER_ENABLED:false}
       semantic-search-enabled: ${TOIR_MAINTENANCE_ACTION_SEMANTIC_SEARCH_API_ENABLED:false}
       backfill-enabled: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BACKFILL_ENABLED:false}
@@ -87,7 +87,7 @@ toir:
       query-mode: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_QUERY_MODE:}
       connect-timeout: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_CONNECT_TIMEOUT:}
       read-timeout: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_READ_TIMEOUT:}
-      client-concurrency: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_CLIENT_CONCURRENCY:0}
+      client-concurrency: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_CLIENT_CONCURRENCY:1}
       # Keep at one until the AI team explicitly confirms response ordering for batches.
       batch-size: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BATCH_SIZE:1}
       polling-interval: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_POLLING_INTERVAL:}
