@@ -14,6 +14,13 @@ class MaintenanceActionSemanticSearchPropertiesTest {
         MaintenanceActionSemanticSearchProperties properties = new MaintenanceActionSemanticSearchProperties();
 
         assertThat(properties.anyRuntimeFeatureEnabled()).isFalse();
+        assertThat(properties.isEnabled()).isFalse();
+        assertThat(properties.isGenerationWorkerEnabled()).isFalse();
+        assertThat(properties.isSemanticSearchEnabled()).isFalse();
+        assertThat(properties.isBackfillEnabled()).isFalse();
+        assertThat(properties.isAiServiceContractConfirmed()).isFalse();
+        assertThat(properties.isModelDimensionContractConfirmed()).isFalse();
+        assertThat(properties.isPgvectorPrerequisiteConfirmed()).isFalse();
         assertThat(properties.getModelName())
                 .isEqualTo("ibm-granite/granite-embedding-311m-multilingual-r2");
         assertThat(properties.getDimension()).isEqualTo(768);
@@ -83,6 +90,56 @@ class MaintenanceActionSemanticSearchPropertiesTest {
         properties.setAuthenticationSecret("safe\r\nInjected: value");
         assertThatThrownBy(properties::validateHttpAdapterConfiguration)
                 .hasMessage("Embedding authentication configuration is invalid");
+    }
+
+    @Test
+    void enqueueOnlyRejectsMissingOrInvalidImmutableIdentityAndInputLimits() {
+        MaintenanceActionSemanticSearchProperties properties = new MaintenanceActionSemanticSearchProperties();
+        properties.setEnabled(true);
+        properties.setModelDimensionContractConfirmed(true);
+
+        assertThatThrownBy(properties::validateExternalGates)
+                .hasMessage("BLOCKED_BY_MODEL_DIMENSION_CONTRACT");
+
+        properties.setModelRevision("immutable-test-revision");
+        properties.setModelName("wrong-model");
+        assertThatThrownBy(properties::validateExternalGates)
+                .hasMessage("BLOCKED_BY_MODEL_DIMENSION_CONTRACT");
+
+        properties.setModelName(MaintenanceActionSemanticSearchProperties.REQUIRED_MODEL_NAME);
+        properties.setDimension(384);
+        assertThatThrownBy(properties::validateExternalGates)
+                .hasMessage("BLOCKED_BY_MODEL_DIMENSION_CONTRACT");
+
+        properties.setDimension(MaintenanceActionSemanticSearchProperties.REQUIRED_DIMENSION);
+        assertThatThrownBy(properties::validateExternalGates)
+                .hasMessage("AI-team input limits are not configured");
+    }
+
+    @Test
+    void searchStillRequiresAiHttpAndPgvectorGates() {
+        MaintenanceActionSemanticSearchProperties properties = new MaintenanceActionSemanticSearchProperties();
+        properties.setEnabled(true);
+        properties.setSemanticSearchEnabled(true);
+        configureOrchestrationContract(properties);
+
+        assertThatThrownBy(properties::validateExternalGates)
+                .hasMessage("BLOCKED_BY_AI_SERVICE_CONTRACT");
+
+        properties.setAiServiceContractConfirmed(true);
+        assertThatThrownBy(properties::validateExternalGates)
+                .hasMessage("Embedding service base URL and endpoint path are required");
+
+        configureHttpContract(properties);
+        assertThatThrownBy(properties::validateExternalGates)
+                .hasMessage("BLOCKED_BY_PGVECTOR_PREREQUISITE");
+
+        properties.setPgvectorPrerequisiteConfirmed(true);
+        properties.validateExternalGates();
+
+        properties.setBatchSize(2);
+        assertThatThrownBy(properties::validateExternalGates)
+                .hasMessageContaining("batch size must remain 1");
     }
 
     private static void configureHttpContract(MaintenanceActionSemanticSearchProperties properties) {
