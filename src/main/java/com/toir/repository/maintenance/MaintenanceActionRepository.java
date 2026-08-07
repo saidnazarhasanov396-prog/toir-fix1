@@ -49,4 +49,17 @@ public interface MaintenanceActionRepository extends JpaRepository<MaintenanceAc
               AND SUBSTRING(code FROM LENGTH(:prefix) + 1) ~ '^[0-9]+$'
             """, nativeQuery = true)
     long maxSequenceByCodePrefix(@Param("prefix") String prefix);
+
+    @Query(value = """
+            SELECT *
+            FROM maintenance_actions
+            WHERE is_deleted = false
+              AND is_active = true
+              AND (cast(:afterId as uuid) IS NULL OR id > cast(:afterId as uuid))
+            ORDER BY id
+            LIMIT :maximumRows
+            """, nativeQuery = true)
+    List<MaintenanceAction> findEmbeddingBackfillBatch(
+            @Param("afterId") UUID afterId,
+            @Param("maximumRows") int maximumRows);
 }

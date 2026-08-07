@@ -5,6 +5,8 @@ import com.toir.dto.maintenanceaction.MaintenanceActionRequest;
 import com.toir.entity.maintenance.MaintenanceAction;
 import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.service.SparePartService;
+import com.toir.service.maintenanceembedding.MaintenanceActionEmbeddingLifecyclePort;
+import com.toir.service.maintenanceembedding.MaintenanceActionEmbeddingClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -14,10 +16,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Year;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,6 +35,9 @@ class MaintenanceActionServiceTest {
     @Mock
     SparePartService sparePartService;
 
+    @Mock
+    MaintenanceActionEmbeddingLifecyclePort embeddingLifecycle;
+
     @InjectMocks
     MaintenanceActionService service;
 
@@ -41,7 +48,7 @@ class MaintenanceActionServiceTest {
         String expectedCode = "MA-" + year + "-0001";
 
         when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
-        when(repository.save(any(MaintenanceAction.class))).thenAnswer(invocation -> {
+        when(repository.saveAndFlush(any(MaintenanceAction.class))).thenAnswer(invocation -> {
             MaintenanceAction action = invocation.getArgument(0);
             action.setId(UUID.randomUUID());
             return action;
@@ -53,7 +60,8 @@ class MaintenanceActionServiceTest {
         assertThat(created.category()).isEqualTo("Inspection");
 
         ArgumentCaptor<MaintenanceAction> captor = ArgumentCaptor.forClass(MaintenanceAction.class);
-        verify(repository).save(captor.capture());
+        verify(repository).saveAndFlush(captor.capture());
+        verify(embeddingLifecycle).actionCreated(captor.getValue());
         assertThat(captor.getValue().getCode()).isEqualTo(expectedCode);
         assertThat(captor.getValue().getCategory()).isEqualTo("Inspection");
     }
@@ -66,7 +74,7 @@ class MaintenanceActionServiceTest {
         String secondCandidate = "MA-" + year + "-0002";
 
         when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
-        when(repository.save(any(MaintenanceAction.class)))
+        when(repository.saveAndFlush(any(MaintenanceAction.class)))
                 .thenThrow(new DataIntegrityViolationException(
                         "duplicate key value violates unique constraint \"uq_maintenance_actions_code_active\""))
                 .thenAnswer(invocation -> {
@@ -80,7 +88,45 @@ class MaintenanceActionServiceTest {
 
         assertThat(created.code()).isEqualTo(secondCandidate);
         verify(repository).existsByCodeIgnoreCaseAndIsDeletedFalse(firstCandidate);
-        verify(repository, times(2)).save(any(MaintenanceAction.class));
+        verify(repository, times(2)).saveAndFlush(any(MaintenanceAction.class));
+        verify(embeddingLifecycle).actionCreated(any(MaintenanceAction.class));
+    }
+
+    @Test
+    void failedActionSaveNeverEnqueuesEmbeddingWork() {
+        int year = Year.now().getValue();
+        String codePrefix = "MA-" + year + "-";
+        when(repository.maxSequenceByCodePrefix(codePrefix)).thenReturn(0L);
+        when(repository.saveAndFlush(any(MaintenanceAction.class)))
+                .thenThrow(new DataIntegrityViolationException("unrelated constraint"));
+        when(repository.existsByCodeIgnoreCaseAndIsDeletedFalse(any())).thenReturn(false);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.create(request("Mechanical")))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        verify(embeddingLifecycle, never()).actionCreated(any());
+    }
+
+    @Test
+    void updateFlushesActionThenDelegatesIdempotentLifecycleEnqueue() {
+        UUID id = UUID.randomUUID();
+        MaintenanceAction action = new MaintenanceAction();
+        action.setId(id);
+        action.setName("Old name");
+        when(repository.findByIdAndIsDeletedFalse(id)).thenReturn(Optional.of(action));
+        when(repository.saveAndFlush(action)).thenReturn(action);
+
+        service.update(id, request("Mechanical"));
+
+        verify(repository).saveAndFlush(action);
+        verify(embeddingLifecycle).actionUpdated(action);
+    }
+
+    @Test
+    void businessTransactionHasNoExternalAiClientDependency() {
+        assertThat(MaintenanceActionService.class.getDeclaredFields())
+                .extracting(java.lang.reflect.Field::getType)
+                .doesNotContain(MaintenanceActionEmbeddingClient.class);
     }
 
     private MaintenanceActionRequest request(String category) {

@@ -68,12 +68,13 @@ toir:
       actor-id: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_ACTOR_ID:}
   ai:
     maintenance-action-semantic-search:
-      # External gates are intentionally closed. No live adapter/vector schema is present in this checkout.
+      # Durable enqueue/backfill can be enabled independently; worker/search remain blocked by the vector schema.
       enabled: ${TOIR_MAINTENANCE_ACTION_SEMANTIC_SEARCH_ENABLED:false}
       generation-worker-enabled: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_WORKER_ENABLED:false}
       semantic-search-enabled: ${TOIR_MAINTENANCE_ACTION_SEMANTIC_SEARCH_API_ENABLED:false}
       backfill-enabled: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BACKFILL_ENABLED:false}
       ai-service-contract-confirmed: ${TOIR_MAINTENANCE_ACTION_AI_CONTRACT_CONFIRMED:false}
+      model-dimension-contract-confirmed: ${TOIR_MAINTENANCE_ACTION_MODEL_DIMENSION_CONFIRMED:false}
       pgvector-prerequisite-confirmed: ${TOIR_MAINTENANCE_ACTION_PGVECTOR_CONFIRMED:false}
       service-base-url: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BASE_URL:}
       endpoint-path: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_ENDPOINT_PATH:}
@@ -87,7 +88,8 @@ toir:
       connect-timeout: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_CONNECT_TIMEOUT:}
       read-timeout: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_READ_TIMEOUT:}
       client-concurrency: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_CLIENT_CONCURRENCY:0}
-      batch-size: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BATCH_SIZE:0}
+      # Keep at one until the AI team explicitly confirms response ordering for batches.
+      batch-size: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_BATCH_SIZE:1}
       polling-interval: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_POLLING_INTERVAL:}
       lease-duration: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_LEASE_DURATION:}
       retry-count: ${TOIR_MAINTENANCE_ACTION_EMBEDDING_RETRY_COUNT:0}

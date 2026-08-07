@@ -1,6 +1,6 @@
 package com.toir.service.maintenanceembedding;
 
-/** Contract-independent state model; persistence is blocked until the pgvector prerequisite is confirmed. */
+/** Durable lifecycle state; READY is published only by atomic pgvector persistence. */
 public enum MaintenanceActionEmbeddingStatus {
     PENDING,
     PROCESSING,

@@ -3,7 +3,7 @@ package com.toir.service.maintenanceembedding;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Durable-run persistence boundary; no implementation is supplied before the vector/schema gate is cleared. */
+/** Durable keyset-run persistence boundary, independent of vector storage. */
 public interface MaintenanceActionEmbeddingBackfillStore {
 
     BackfillRun start(StartCommand command);
@@ -11,6 +11,10 @@ public interface MaintenanceActionEmbeddingBackfillStore {
     BackfillRun find(UUID runId);
 
     BackfillRun transition(UUID runId, MaintenanceActionBackfillStatus requestedStatus);
+
+    BackfillRun lockForBatch(UUID runId);
+
+    BackfillRun recordBatch(UUID runId, BatchProgress progress);
 
     record StartCommand(
             String idempotencyKey,
@@ -31,11 +35,19 @@ public interface MaintenanceActionEmbeddingBackfillStore {
             long alreadyPresent,
             long enqueued,
             long skipped,
-            long ready,
-            long retrying,
-            long terminalFailed,
+            int batchSize,
             Instant createdAt,
             Instant updatedAt
+    ) {
+    }
+
+    record BatchProgress(
+            UUID cursor,
+            long scanned,
+            long alreadyPresent,
+            long enqueued,
+            long skipped,
+            boolean scanCompleted
     ) {
     }
 }
