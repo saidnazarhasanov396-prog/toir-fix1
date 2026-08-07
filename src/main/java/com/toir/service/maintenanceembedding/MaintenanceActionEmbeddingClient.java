@@ -3,7 +3,7 @@ package com.toir.service.maintenanceembedding;
 import java.util.List;
 
 /**
- * Internal contract boundary only. No HTTP adapter exists until the AI team freezes its wire contract.
+ * Internal contract boundary. The HTTP adapter maps the frozen texts/embeddings wire contract to this model.
  */
 public interface MaintenanceActionEmbeddingClient {
 

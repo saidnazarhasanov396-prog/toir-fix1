@@ -6,6 +6,7 @@ import com.toir.entity.maintenance.MaintenanceAction;
 import com.toir.exception.RestException;
 import com.toir.repository.maintenance.MaintenanceActionRepository;
 import com.toir.service.SparePartService;
+import com.toir.service.maintenanceembedding.MaintenanceActionEmbeddingLifecyclePort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,7 @@ public class MaintenanceActionService {
 
     private final MaintenanceActionRepository repository;
     private final SparePartService sparePartService;
+    private final MaintenanceActionEmbeddingLifecyclePort embeddingLifecycle;
     private static final int MAX_CODE_GENERATION_ATTEMPTS = 50;
 
     @Transactional(readOnly = true)
@@ -49,7 +51,9 @@ public class MaintenanceActionService {
             String code = codePrefix + String.format("%04d", sequence + attempt);
             action.setCode(code);
             try {
-                return MaintenanceActionDto.from(repository.save(action));
+                MaintenanceAction saved = repository.saveAndFlush(action);
+                embeddingLifecycle.actionCreated(saved);
+                return MaintenanceActionDto.from(saved);
             } catch (DataIntegrityViolationException ex) {
                 if (!repository.existsByCodeIgnoreCaseAndIsDeletedFalse(code)) {
                     throw ex;
@@ -64,14 +68,17 @@ public class MaintenanceActionService {
     public MaintenanceActionDto update(UUID id, MaintenanceActionRequest request) {
         MaintenanceAction action = getOrThrow(id);
         apply(action, request);
-        return MaintenanceActionDto.from(repository.save(action));
+        MaintenanceAction saved = repository.saveAndFlush(action);
+        embeddingLifecycle.actionUpdated(saved);
+        return MaintenanceActionDto.from(saved);
     }
 
     @Transactional
     public void delete(UUID id) {
         MaintenanceAction action = getOrThrow(id);
         action.setDeleted(true);
-        repository.save(action);
+        MaintenanceAction saved = repository.saveAndFlush(action);
+        embeddingLifecycle.actionDeleted(saved);
     }
 
     private MaintenanceAction getOrThrow(UUID id) {
