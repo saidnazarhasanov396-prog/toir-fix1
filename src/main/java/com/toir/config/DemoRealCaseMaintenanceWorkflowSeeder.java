@@ -23,5 +23,7 @@ public class DemoRealCaseMaintenanceWorkflowSeeder implements CommandLineRunner 
         log.info("Demo real-case seed phase-3 started: {}", SCRIPT);
         sqlExecutor.executeScript(SCRIPT);
         log.info("Demo real-case seed phase-3 finished");
+        // Safety templates/checklists are seeded by Flyway:
+        // V20260810_1__seed_safety_rules_for_work_orders.sql
     }
 }
