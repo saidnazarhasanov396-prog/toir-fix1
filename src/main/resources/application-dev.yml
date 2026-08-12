@@ -30,11 +30,6 @@ springdoc:
     path: /api/v1/v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
-    app:
-      debug-errors:
-        enabled: true
-      dashboard-detail:
-        canonical-site-id: ...
 
 app:
   dashboard-detail:
