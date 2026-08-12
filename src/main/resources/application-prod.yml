@@ -84,7 +84,6 @@ toir:
       timezone: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_TIMEZONE:Asia/Tashkent}
       batch-size: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_BATCH_SIZE:100}
       actor-id: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_ACTOR_ID:}
-toir:
   ai:
     gateway:
       enabled: true
