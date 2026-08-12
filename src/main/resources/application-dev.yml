@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-      url: jdbc:postgresql://localhost:5433/toir_demo
-      username: postgres
-      password: root123
+    url: jdbc:postgresql://localhost:5433/toir_demo
+    username: postgres
+    password: root123
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -30,6 +30,11 @@ springdoc:
     path: /api/v1/v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+    app:
+      debug-errors:
+        enabled: true
+      dashboard-detail:
+        canonical-site-id: ...
 
 app:
   dashboard-detail:
@@ -69,3 +74,7 @@ logging:
   level:
     root: INFO
     com.toir: INFO
+toir:
+  ai:
+    gateway:
+      enabled: true
