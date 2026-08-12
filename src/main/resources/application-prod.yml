@@ -87,3 +87,5 @@ toir:
   ai:
     gateway:
       enabled: true
+      auth-username: admin
+      auth-password: uy4P1Ed7JaGJAeP3g7kK
