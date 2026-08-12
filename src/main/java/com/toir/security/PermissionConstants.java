@@ -202,6 +202,8 @@ public final class PermissionConstants {
     public static final String EQUIPMENT_LIFECYCLE_DATASET_EXPORT = "EQUIPMENT_LIFECYCLE_DATASET_EXPORT";
     public static final String MAINTENANCE_TEMPLATE_SEMANTIC_SEARCH = "MAINTENANCE_TEMPLATE_SEMANTIC_SEARCH";
     public static final String MAINTENANCE_ACTION_EMBEDDING_BACKFILL = "MAINTENANCE_ACTION_EMBEDDING_BACKFILL";
+    /** Execute AI gateway proxy endpoints (work-order draft, visual inspection, recurrent failure). */
+    public static final String AI_GATEWAY_EXECUTE = "AI_GATEWAY_EXECUTE";
     public static final String EQUIPMENT_CREATE = "EQUIPMENT_CREATE";
     public static final String EQUIPMENT_UPDATE = "EQUIPMENT_UPDATE";
     public static final String EQUIPMENT_DELETE = "EQUIPMENT_DELETE";

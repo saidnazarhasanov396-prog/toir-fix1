@@ -67,6 +67,14 @@ toir:
       batch-size: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_BATCH_SIZE:100}
       actor-id: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_ACTOR_ID:}
   ai:
+    gateway:
+      enabled: ${TOIR_AI_GATEWAY_ENABLED:false}
+      base-url: ${TOIR_AI_GATEWAY_BASE_URL:https://toir-ai.tenzorsoft.uz}
+      authentication-header: ${TOIR_AI_GATEWAY_AUTH_HEADER:}
+      authentication-secret: ${TOIR_AI_GATEWAY_AUTH_SECRET:}
+      connect-timeout: ${TOIR_AI_GATEWAY_CONNECT_TIMEOUT:5s}
+      read-timeout: ${TOIR_AI_GATEWAY_READ_TIMEOUT:120s}
+      max-upload-bytes: ${TOIR_AI_GATEWAY_MAX_UPLOAD_BYTES:52428800}
     maintenance-action-semantic-search:
       # Durable enqueue/backfill can be enabled independently; worker/search remain blocked by the vector schema.
       enabled: ${TOIR_MAINTENANCE_ACTION_SEMANTIC_SEARCH_ENABLED:false}
