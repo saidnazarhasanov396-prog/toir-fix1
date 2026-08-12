@@ -181,6 +181,9 @@ public class ToirAiGatewayService {
         if (status == 422 || status == 400) {
             return new RestException(message, HttpStatus.BAD_REQUEST, "AI_GATEWAY_VALIDATION_ERROR");
         }
+        if (status == 401 || status == 403) {
+            return new RestException(message, HttpStatus.BAD_GATEWAY, "AI_GATEWAY_AUTH_FAILED");
+        }
         if (status == 503 || status == 504) {
             return new RestException(message, HttpStatus.SERVICE_UNAVAILABLE, "AI_GATEWAY_UNAVAILABLE");
         }

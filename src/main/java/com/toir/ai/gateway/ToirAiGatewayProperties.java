@@ -9,6 +9,10 @@ public class ToirAiGatewayProperties {
 
     private boolean enabled = false;
     private String baseUrl = "https://toir-ai.tenzorsoft.uz";
+    private String authUsername = "";
+    private String authPassword = "";
+    private String tokenPath = ToirAiGatewayTokenProvider.DEFAULT_TOKEN_PATH;
+    private Duration tokenRefreshSkew = Duration.ofSeconds(30);
     private String authenticationHeader = "";
     private String authenticationSecret = "";
     private Duration connectTimeout = Duration.ofSeconds(5);
@@ -19,6 +23,14 @@ public class ToirAiGatewayProperties {
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public String getBaseUrl() { return baseUrl; }
     public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+    public String getAuthUsername() { return authUsername; }
+    public void setAuthUsername(String authUsername) { this.authUsername = authUsername; }
+    public String getAuthPassword() { return authPassword; }
+    public void setAuthPassword(String authPassword) { this.authPassword = authPassword; }
+    public String getTokenPath() { return tokenPath; }
+    public void setTokenPath(String tokenPath) { this.tokenPath = tokenPath; }
+    public Duration getTokenRefreshSkew() { return tokenRefreshSkew; }
+    public void setTokenRefreshSkew(Duration tokenRefreshSkew) { this.tokenRefreshSkew = tokenRefreshSkew; }
     public String getAuthenticationHeader() { return authenticationHeader; }
     public void setAuthenticationHeader(String authenticationHeader) { this.authenticationHeader = authenticationHeader; }
     public String getAuthenticationSecret() { return authenticationSecret; }
@@ -35,6 +47,18 @@ public class ToirAiGatewayProperties {
             throw new IllegalStateException("toir.ai.gateway.base-url is required when gateway is enabled");
         }
         return baseUrl.replaceAll("/+$", "");
+    }
+
+    public String normalizedTokenPath() {
+        if (tokenPath == null || tokenPath.isBlank()) {
+            return ToirAiGatewayTokenProvider.DEFAULT_TOKEN_PATH;
+        }
+        return tokenPath.startsWith("/") ? tokenPath : "/" + tokenPath;
+    }
+
+    public boolean hasJwtAuthentication() {
+        return authUsername != null && !authUsername.isBlank()
+                && authPassword != null && !authPassword.isBlank();
     }
 
     public boolean hasAuthentication() {

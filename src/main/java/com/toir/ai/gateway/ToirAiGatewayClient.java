@@ -9,6 +9,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
@@ -18,32 +19,38 @@ public class ToirAiGatewayClient {
 
     private final ToirAiGatewayProperties properties;
     private final RestClient restClient;
+    private final ToirAiGatewayTokenProvider tokenProvider;
 
-    public ToirAiGatewayClient(ToirAiGatewayProperties properties, RestClient restClient) {
+    public ToirAiGatewayClient(
+            ToirAiGatewayProperties properties,
+            RestClient restClient,
+            ToirAiGatewayTokenProvider tokenProvider
+    ) {
         this.properties = properties;
         this.restClient = restClient;
+        this.tokenProvider = tokenProvider;
     }
 
     public JsonNode postJson(String path, Object body) {
-        return restClient.post()
+        return withAuthRetry(() -> restClient.post()
                 .uri(path)
                 .headers(authHeaders())
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(body)
                 .retrieve()
-                .body(JsonNode.class);
+                .body(JsonNode.class));
     }
 
     public JsonNode postMultipart(String path, MultiValueMap<String, Object> multipart) {
-        return restClient.post()
+        return withAuthRetry(() -> restClient.post()
                 .uri(path)
                 .headers(authHeaders())
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(multipart)
                 .retrieve()
-                .body(JsonNode.class);
+                .body(JsonNode.class));
     }
 
     public JsonNode getJson(String path, Map<String, ?> query) {
@@ -51,12 +58,12 @@ public class ToirAiGatewayClient {
                 .queryParams(toMultiValue(query))
                 .build(true)
                 .toUriString();
-        return restClient.get()
+        return withAuthRetry(() -> restClient.get()
                 .uri(uri)
                 .headers(authHeaders())
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
-                .body(JsonNode.class);
+                .body(JsonNode.class));
     }
 
     public ResponseEntity<byte[]> getRaw(String path, Map<String, ?> query) {
@@ -64,11 +71,11 @@ public class ToirAiGatewayClient {
                 .queryParams(toMultiValue(query))
                 .build(true)
                 .toUriString();
-        return restClient.get()
+        return withAuthRetry(() -> restClient.get()
                 .uri(uri)
                 .headers(authHeaders())
                 .retrieve()
-                .toEntity(byte[].class);
+                .toEntity(byte[].class));
     }
 
     public static MultiValueMap<String, Object> multipartFile(
@@ -92,10 +99,25 @@ public class ToirAiGatewayClient {
 
     private Consumer<HttpHeaders> authHeaders() {
         return headers -> {
-            if (properties.hasAuthentication()) {
+            if (properties.hasJwtAuthentication()) {
+                headers.setBearerAuth(tokenProvider.getAccessToken());
+            } else if (properties.hasAuthentication()) {
                 headers.set(properties.getAuthenticationHeader(), properties.getAuthenticationSecret());
             }
         };
+    }
+
+    private <T> T withAuthRetry(RestCall<T> call) {
+        try {
+            return call.run();
+        } catch (RestClientResponseException exception) {
+            if (properties.hasJwtAuthentication()
+                    && exception.getStatusCode().value() == 401) {
+                tokenProvider.invalidate();
+                return call.run();
+            }
+            throw exception;
+        }
     }
 
     private static MultiValueMap<String, String> toMultiValue(Map<String, ?> query) {
@@ -109,5 +131,10 @@ public class ToirAiGatewayClient {
             }
         });
         return params;
+    }
+
+    @FunctionalInterface
+    private interface RestCall<T> {
+        T run();
     }
 }

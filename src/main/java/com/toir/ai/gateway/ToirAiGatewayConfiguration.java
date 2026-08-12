@@ -30,11 +30,21 @@ public class ToirAiGatewayConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "toir.ai.gateway", name = "enabled", havingValue = "true")
-    ToirAiGatewayClient toirAiGatewayClient(
+    ToirAiGatewayTokenProvider toirAiGatewayTokenProvider(
             ToirAiGatewayProperties properties,
             @Qualifier("toirAiGatewayRestClient") RestClient restClient
     ) {
-        return new ToirAiGatewayClient(properties, restClient);
+        return new ToirAiGatewayTokenProvider(properties, restClient);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "toir.ai.gateway", name = "enabled", havingValue = "true")
+    ToirAiGatewayClient toirAiGatewayClient(
+            ToirAiGatewayProperties properties,
+            @Qualifier("toirAiGatewayRestClient") RestClient restClient,
+            ToirAiGatewayTokenProvider tokenProvider
+    ) {
+        return new ToirAiGatewayClient(properties, restClient, tokenProvider);
     }
 
     @Bean

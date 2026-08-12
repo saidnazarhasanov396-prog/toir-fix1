@@ -70,6 +70,10 @@ toir:
     gateway:
       enabled: ${TOIR_AI_GATEWAY_ENABLED:false}
       base-url: ${TOIR_AI_GATEWAY_BASE_URL:https://toir-ai.tenzorsoft.uz}
+      auth-username: ${TOIR_AI_GATEWAY_AUTH_USERNAME:}
+      auth-password: ${TOIR_AI_GATEWAY_AUTH_PASSWORD:}
+      token-path: ${TOIR_AI_GATEWAY_TOKEN_PATH:/auth/token}
+      token-refresh-skew: ${TOIR_AI_GATEWAY_TOKEN_REFRESH_SKEW:30s}
       authentication-header: ${TOIR_AI_GATEWAY_AUTH_HEADER:}
       authentication-secret: ${TOIR_AI_GATEWAY_AUTH_SECRET:}
       connect-timeout: ${TOIR_AI_GATEWAY_CONNECT_TIMEOUT:5s}
