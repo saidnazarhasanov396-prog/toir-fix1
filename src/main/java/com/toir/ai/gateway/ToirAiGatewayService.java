@@ -1,7 +1,10 @@
 package com.toir.ai.gateway;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.toir.ai.gateway.dto.WorkOrderDraftTextRequest;
+import com.toir.ai.gateway.dto.WorkOrderTextJobRequest;
 import com.toir.exception.RestException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -31,12 +34,35 @@ public class ToirAiGatewayService {
             "/ai/recurrent_failure_analysis/equipment/{equipment_id}/cause-repair-analysis";
     public static final String PATH_HEALTH = "/health";
 
+    public static final String PATH_JOB_DRAFT_TEXT = "/ai/jobs/work-order/generate-draft/text";
+    public static final String PATH_JOB_DRAFT_AUDIO = "/ai/jobs/work-order/generate-draft/audio";
+    public static final String PATH_JOB_VISUAL_VIDEO = "/ai/jobs/visual-inspection/video";
+    public static final String PATH_JOB_VISUAL_IMAGE = "/ai/jobs/visual-inspection/image";
+    public static final String PATH_JOB_FAILURE_CATEGORIES = "/ai/jobs/recurrent-failure/equipment-categories";
+    public static final String PATH_JOB_FAILURE_EVIDENCE =
+            "/ai/jobs/recurrent-failure/equipment/{equipment_id}/failure-evidence";
+    public static final String PATH_JOB_CAUSE_REPAIR =
+            "/ai/jobs/recurrent-failure/equipment/{equipment_id}/cause-repair-analysis";
+    public static final String PATH_JOB_STATUS = "/ai/jobs/{job_id}";
+
     private final ToirAiGatewayProperties properties;
     private final ToirAiGatewayClient client;
+    private final ObjectMapper objectMapper;
+    private final ToirAiWebhookSignatureVerifier signatureVerifier;
+    private final ToirAiJobCallbackStore callbackStore;
 
-    public ToirAiGatewayService(ToirAiGatewayProperties properties, ToirAiGatewayClient client) {
+    public ToirAiGatewayService(
+            ToirAiGatewayProperties properties,
+            ToirAiGatewayClient client,
+            ObjectMapper objectMapper,
+            ToirAiWebhookSignatureVerifier signatureVerifier,
+            ToirAiJobCallbackStore callbackStore
+    ) {
         this.properties = properties;
         this.client = client;
+        this.objectMapper = objectMapper;
+        this.signatureVerifier = signatureVerifier;
+        this.callbackStore = callbackStore;
     }
 
     public JsonNode generateDraftFromText(WorkOrderDraftTextRequest request) {
@@ -115,6 +141,181 @@ public class ToirAiGatewayService {
     public JsonNode health() {
         requireEnabled();
         return execute(() -> client.getJson(PATH_HEALTH, Map.of()));
+    }
+
+    public ResponseEntity<JsonNode> enqueueWorkOrderText(WorkOrderTextJobRequest request) {
+        requireEnabled();
+        ObjectNode body = objectMapper.valueToTree(request);
+        ensureWebhookUrl(body);
+        return execute(() -> rewriteAccepted(client.postJsonEntity(PATH_JOB_DRAFT_TEXT, body)));
+    }
+
+    public ResponseEntity<JsonNode> enqueueWorkOrderText(JsonNode request) {
+        requireEnabled();
+        ObjectNode body = request != null && request.isObject()
+                ? ((ObjectNode) request).deepCopy()
+                : objectMapper.createObjectNode();
+        ensureWebhookUrl(body);
+        return execute(() -> rewriteAccepted(client.postJsonEntity(PATH_JOB_DRAFT_TEXT, body)));
+    }
+
+    public ResponseEntity<JsonNode> enqueueWorkOrderAudio(UUID equipmentId, MultipartFile audio, String webhookUrl) {
+        requireEnabled();
+        byte[] bytes = readUpload(audio, "audio");
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("equipment_id", equipmentId.toString());
+        fields.put("webhook_url", resolveWebhookUrl(webhookUrl));
+        return execute(() -> rewriteAccepted(client.postMultipartEntity(
+                PATH_JOB_DRAFT_AUDIO,
+                ToirAiGatewayClient.multipartFile("audio", bytes, audio.getOriginalFilename(), fields)
+        )));
+    }
+
+    public ResponseEntity<JsonNode> enqueueVisualInspectionVideo(MultipartFile video, String webhookUrl) {
+        requireEnabled();
+        byte[] bytes = readUpload(video, "video");
+        Map<String, String> fields = Map.of("webhook_url", resolveWebhookUrl(webhookUrl));
+        return execute(() -> rewriteAccepted(client.postMultipartEntity(
+                PATH_JOB_VISUAL_VIDEO,
+                ToirAiGatewayClient.multipartFile("video", bytes, video.getOriginalFilename(), fields)
+        )));
+    }
+
+    public ResponseEntity<JsonNode> enqueueVisualInspectionImage(MultipartFile image, String webhookUrl) {
+        requireEnabled();
+        byte[] bytes = readUpload(image, "image");
+        Map<String, String> fields = Map.of("webhook_url", resolveWebhookUrl(webhookUrl));
+        return execute(() -> rewriteAccepted(client.postMultipartEntity(
+                PATH_JOB_VISUAL_IMAGE,
+                ToirAiGatewayClient.multipartFile("image", bytes, image.getOriginalFilename(), fields)
+        )));
+    }
+
+    public ResponseEntity<JsonNode> enqueueRecurrentFailureCategories(JsonNode request) {
+        requireEnabled();
+        ObjectNode body = request != null && request.isObject()
+                ? ((ObjectNode) request).deepCopy()
+                : objectMapper.createObjectNode();
+        ensureWebhookUrl(body);
+        return execute(() -> rewriteAccepted(client.postJsonEntity(PATH_JOB_FAILURE_CATEGORIES, body)));
+    }
+
+    public ResponseEntity<JsonNode> enqueueRecurrentFailureEvidence(UUID equipmentId, JsonNode request) {
+        requireEnabled();
+        String path = PATH_JOB_FAILURE_EVIDENCE.replace("{equipment_id}", equipmentId.toString());
+        ObjectNode body = request != null && request.isObject()
+                ? ((ObjectNode) request).deepCopy()
+                : objectMapper.createObjectNode();
+        ensureWebhookUrl(body);
+        return execute(() -> rewriteAccepted(client.postJsonEntity(path, body)));
+    }
+
+    public ResponseEntity<JsonNode> enqueueRecurrentFailureCauseRepair(UUID equipmentId, JsonNode request) {
+        requireEnabled();
+        String path = PATH_JOB_CAUSE_REPAIR.replace("{equipment_id}", equipmentId.toString());
+        ObjectNode body = request != null && request.isObject()
+                ? ((ObjectNode) request).deepCopy()
+                : objectMapper.createObjectNode();
+        ensureWebhookUrl(body);
+        return execute(() -> rewriteAccepted(client.postJsonEntity(path, body)));
+    }
+
+    public ResponseEntity<JsonNode> getJobStatus(UUID jobId) {
+        requireEnabled();
+        String path = PATH_JOB_STATUS.replace("{job_id}", jobId.toString());
+        return execute(() -> {
+            JsonNode body = client.getJson(path, Map.of());
+            JsonNode callback = callbackStore.get(jobId).orElse(null);
+            if (callback != null && body != null && body.isObject()) {
+                ObjectNode merged = ((ObjectNode) body).deepCopy();
+                merged.set("callback", callback);
+                return ResponseEntity.ok(merged);
+            }
+            return ResponseEntity.ok(body);
+        });
+    }
+
+    public ResponseEntity<Void> handleCallback(byte[] body, String... signatureHeaders) {
+        if (!properties.hasWebhookSigningSecret()) {
+            throw new RestException(
+                    "AI job webhook signing secret is not configured",
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "AI_GATEWAY_WEBHOOK_SECRET_MISSING"
+            );
+        }
+        if (!signatureVerifier.verify(body, signatureHeaders)) {
+            throw new RestException(
+                    "Invalid AI job webhook signature",
+                    HttpStatus.UNAUTHORIZED,
+                    "AI_GATEWAY_WEBHOOK_SIGNATURE_INVALID"
+            );
+        }
+        try {
+            JsonNode payload = objectMapper.readTree(body == null ? new byte[0] : body);
+            UUID jobId = extractJobId(payload);
+            if (jobId == null) {
+                throw RestException.badRequest("Callback payload missing job_id", "AI_GATEWAY_WEBHOOK_JOB_ID_MISSING");
+            }
+            callbackStore.put(jobId, payload);
+            return ResponseEntity.ok().build();
+        } catch (RestException exception) {
+            throw exception;
+        } catch (IOException exception) {
+            throw RestException.badRequest("Invalid callback JSON", "AI_GATEWAY_WEBHOOK_JSON_INVALID");
+        }
+    }
+
+    private void ensureWebhookUrl(ObjectNode body) {
+        JsonNode existing = body.get("webhook_url");
+        if (existing == null || existing.isNull() || !StringUtils.hasText(existing.asText())) {
+            body.put("webhook_url", resolveWebhookUrl(null));
+        }
+    }
+
+    private String resolveWebhookUrl(String webhookUrl) {
+        if (StringUtils.hasText(webhookUrl)) {
+            return webhookUrl;
+        }
+        String configured = properties.getWebhookCallbackUrl();
+        if (!StringUtils.hasText(configured)) {
+            throw new RestException(
+                    "AI job webhook callback URL is not configured",
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "AI_GATEWAY_WEBHOOK_CALLBACK_MISSING"
+            );
+        }
+        return configured;
+    }
+
+    private ResponseEntity<JsonNode> rewriteAccepted(ResponseEntity<JsonNode> upstream) {
+        JsonNode body = upstream.getBody();
+        if (body != null && body.isObject()) {
+            ObjectNode rewritten = ((ObjectNode) body).deepCopy();
+            JsonNode jobIdNode = rewritten.get("job_id");
+            if (jobIdNode != null && !jobIdNode.isNull() && StringUtils.hasText(jobIdNode.asText())) {
+                rewritten.put("status_url", "/api/v1/ai/jobs/" + jobIdNode.asText());
+            }
+            return ResponseEntity.status(upstream.getStatusCode()).body(rewritten);
+        }
+        return ResponseEntity.status(upstream.getStatusCode()).body(body);
+    }
+
+    private static UUID extractJobId(JsonNode payload) {
+        if (payload == null || !payload.isObject()) {
+            return null;
+        }
+        JsonNode jobIdNode = payload.get("job_id");
+        if (jobIdNode == null || jobIdNode.isNull()) {
+            jobIdNode = payload.get("jobId");
+        }
+        if (jobIdNode == null || jobIdNode.isNull() || !StringUtils.hasText(jobIdNode.asText())) {
+            return null;
+        }
+        try {
+            return UUID.fromString(jobIdNode.asText());
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 
     private void requireEnabled() {

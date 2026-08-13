@@ -18,6 +18,8 @@ public class ToirAiGatewayProperties {
     private Duration connectTimeout = Duration.ofSeconds(5);
     private Duration readTimeout = Duration.ofSeconds(120);
     private long maxUploadBytes = 52_428_800L;
+    private String webhookSigningSecret = "";
+    private String webhookCallbackUrl = "https://api-toir.tenzorsoft.uz/api/ai-job/callback";
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -41,6 +43,10 @@ public class ToirAiGatewayProperties {
     public void setReadTimeout(Duration readTimeout) { this.readTimeout = readTimeout; }
     public long getMaxUploadBytes() { return maxUploadBytes; }
     public void setMaxUploadBytes(long maxUploadBytes) { this.maxUploadBytes = maxUploadBytes; }
+    public String getWebhookSigningSecret() { return webhookSigningSecret; }
+    public void setWebhookSigningSecret(String webhookSigningSecret) { this.webhookSigningSecret = webhookSigningSecret; }
+    public String getWebhookCallbackUrl() { return webhookCallbackUrl; }
+    public void setWebhookCallbackUrl(String webhookCallbackUrl) { this.webhookCallbackUrl = webhookCallbackUrl; }
 
     public String normalizedBaseUrl() {
         if (baseUrl == null || baseUrl.isBlank()) {
@@ -64,5 +70,9 @@ public class ToirAiGatewayProperties {
     public boolean hasAuthentication() {
         return authenticationHeader != null && !authenticationHeader.isBlank()
                 && authenticationSecret != null && !authenticationSecret.isBlank();
+    }
+
+    public boolean hasWebhookSigningSecret() {
+        return webhookSigningSecret != null && !webhookSigningSecret.isBlank();
     }
 }
