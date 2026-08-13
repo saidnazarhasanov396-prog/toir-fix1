@@ -89,3 +89,5 @@ toir:
       enabled: true
       auth-username: admin
       auth-password: uy4P1Ed7JaGJAeP3g7kK
+      webhook-signing-secret: ${TOIR_AI_JOB_WEBHOOK_SECRET:Rtp6Zr7Be6YnDgtJaCZPvsV7QMN3QhCG8H6wmRLhTCp9y39i1oQvDkBTfVWZKX8n}
+      webhook-callback-url: ${TOIR_AI_JOB_WEBHOOK_CALLBACK_URL:https://api-toir.tenzorsoft.uz/api/ai-job/callback}

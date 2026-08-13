@@ -42,6 +42,17 @@ public class ToirAiGatewayClient {
                 .body(JsonNode.class));
     }
 
+    public ResponseEntity<JsonNode> postJsonEntity(String path, Object body) {
+        return withAuthRetry(() -> restClient.post()
+                .uri(path)
+                .headers(authHeaders())
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .toEntity(JsonNode.class));
+    }
+
     public JsonNode postMultipart(String path, MultiValueMap<String, Object> multipart) {
         return withAuthRetry(() -> restClient.post()
                 .uri(path)
@@ -51,6 +62,17 @@ public class ToirAiGatewayClient {
                 .body(multipart)
                 .retrieve()
                 .body(JsonNode.class));
+    }
+
+    public ResponseEntity<JsonNode> postMultipartEntity(String path, MultiValueMap<String, Object> multipart) {
+        return withAuthRetry(() -> restClient.post()
+                .uri(path)
+                .headers(authHeaders())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(multipart)
+                .retrieve()
+                .toEntity(JsonNode.class));
     }
 
     public JsonNode getJson(String path, Map<String, ?> query) {

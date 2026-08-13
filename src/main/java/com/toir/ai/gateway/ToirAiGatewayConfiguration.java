@@ -1,5 +1,6 @@
 package com.toir.ai.gateway;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -49,10 +50,25 @@ public class ToirAiGatewayConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "toir.ai.gateway", name = "enabled", havingValue = "true")
+    ToirAiWebhookSignatureVerifier toirAiWebhookSignatureVerifier(ToirAiGatewayProperties properties) {
+        return new ToirAiWebhookSignatureVerifier(properties);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "toir.ai.gateway", name = "enabled", havingValue = "true")
+    ToirAiJobCallbackStore toirAiJobCallbackStore() {
+        return new ToirAiJobCallbackStore();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "toir.ai.gateway", name = "enabled", havingValue = "true")
     ToirAiGatewayService toirAiGatewayService(
             ToirAiGatewayProperties properties,
-            ToirAiGatewayClient client
+            ToirAiGatewayClient client,
+            ObjectMapper objectMapper,
+            ToirAiWebhookSignatureVerifier signatureVerifier,
+            ToirAiJobCallbackStore callbackStore
     ) {
-        return new ToirAiGatewayService(properties, client);
+        return new ToirAiGatewayService(properties, client, objectMapper, signatureVerifier, callbackStore);
     }
 }
