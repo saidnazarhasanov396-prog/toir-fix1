@@ -1,16 +1,28 @@
 package com.toir.service;
 
+import com.toir.entity.PprPlan;
 import com.toir.enums.NotificationEventType;
+import com.toir.repository.PprPlanRepository;
+import com.toir.service.pprcalendar.PprOperationalCalendarPolicy;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
+@RequiredArgsConstructor
 public class NotificationNavigationBuilder {
+
+    static final String METADATA_ROUTE_CONTEXT = "routeContext";
+    static final String ROUTE_CONTEXT_OPERATIONAL = "operational";
+    static final String ROUTE_CONTEXT_BUILDER = "builder";
+
+    private final PprPlanRepository planRepository;
+    private final PprOperationalCalendarPolicy operationalCalendarPolicy;
 
     public NotificationNavigation forEntity(
             NotificationEventType eventType,
@@ -27,12 +39,14 @@ public class NotificationNavigationBuilder {
     ) {
         String canonicalType = NotificationEntityTypes.normalize(entityType);
         String normalizedId = StringUtils.hasText(entityId) ? entityId.trim() : null;
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        String actionUrl = route(canonicalType, normalizedId, metadata);
         return new NotificationNavigation(
                 eventType == null ? null : eventType.name(),
                 canonicalType,
                 normalizedId,
-                route(canonicalType, normalizedId),
-                Map.of()
+                actionUrl,
+                Map.copyOf(metadata)
         );
     }
 
@@ -45,6 +59,7 @@ public class NotificationNavigationBuilder {
         Map<String, Object> metadata = new LinkedHashMap<>();
         if (planId != null) {
             metadata.put("planId", planId.toString());
+            metadata.put(METADATA_ROUTE_CONTEXT, routeContextForPlan(planId));
         }
         if (taskId != null) {
             metadata.put("taskId", taskId.toString());
@@ -58,11 +73,11 @@ public class NotificationNavigationBuilder {
                     "notifications.actions.openWorkOrder",
                     NotificationEntityTypes.WORK_ORDER,
                     workOrderId.toString(),
-                    route(NotificationEntityTypes.WORK_ORDER, workOrderId.toString())
+                    route(NotificationEntityTypes.WORK_ORDER, workOrderId.toString(), new LinkedHashMap<>())
             )));
         }
         String actionUrl = taskId != null && planId != null
-                ? "/ppr-calendar/" + planId + "?taskId=" + taskId
+                ? pprPlanDetailRoute(planId, taskId)
                 : null;
         return new NotificationNavigation(
                 eventType == null ? null : eventType.name(),
@@ -80,14 +95,14 @@ public class NotificationNavigationBuilder {
             UUID approvalRequestId
     ) {
         NotificationNavigation owner = forEntity(eventType, ownerEntityType, ownerEntityId);
-        Map<String, Object> metadata = new LinkedHashMap<>();
+        Map<String, Object> metadata = new LinkedHashMap<>(owner.metadata());
         if (approvalRequestId != null) {
             metadata.put("approvalRequestId", approvalRequestId.toString());
             metadata.put("secondaryActions", List.of(secondaryAction(
                     "notifications.actions.openApprovalHistory",
                     NotificationEntityTypes.APPROVAL_REQUEST,
                     approvalRequestId.toString(),
-                    route(NotificationEntityTypes.APPROVAL_REQUEST, approvalRequestId.toString())
+                    route(NotificationEntityTypes.APPROVAL_REQUEST, approvalRequestId.toString(), new LinkedHashMap<>())
             )));
         }
         return new NotificationNavigation(
@@ -135,14 +150,16 @@ public class NotificationNavigationBuilder {
         return Map.copyOf(action);
     }
 
-    private String route(String entityType, String entityId) {
+    private String route(String entityType, String entityId, Map<String, Object> metadata) {
         if (!StringUtils.hasText(entityType) || !StringUtils.hasText(entityId)) {
             return null;
         }
         return switch (entityType) {
             case NotificationEntityTypes.WORK_ORDER -> "/work-orders/" + entityId;
             case NotificationEntityTypes.REPAIR_REQUEST -> "/repair-requests/" + entityId;
-            case NotificationEntityTypes.PPR_PLAN -> "/ppr-calendar/" + entityId;
+            case NotificationEntityTypes.PPR_PLAN -> pprPlanRoute(entityId, metadata);
+            case NotificationEntityTypes.PPR_PLANNING_SESSION ->
+                    "/maintenance-schedule-builder/sessions/" + entityId;
             case NotificationEntityTypes.APPROVAL_REQUEST -> "/approvals/" + entityId;
             case NotificationEntityTypes.DEFECT -> "/defects/" + entityId;
             case NotificationEntityTypes.ACTUAL_COST ->
@@ -155,5 +172,51 @@ public class NotificationNavigationBuilder {
             case NotificationEntityTypes.EQUIPMENT -> "/equipment/" + entityId;
             default -> null;
         };
+    }
+
+    private String pprPlanRoute(String entityId, Map<String, Object> metadata) {
+        UUID planId = parseUuid(entityId);
+        if (planId == null) {
+            return null;
+        }
+        metadata.put(METADATA_ROUTE_CONTEXT, routeContextForPlan(planId));
+        return pprPlanDetailRoute(planId, null);
+    }
+
+    private String pprPlanDetailRoute(UUID planId, UUID taskId) {
+        if (planId == null) {
+            return "/ppr-calendar?view=table";
+        }
+        boolean operational = isOperationalPlan(planId);
+        String base = operational
+                ? "/ppr-calendar/" + planId
+                : "/maintenance-schedule-builder/" + planId;
+        if (taskId == null) {
+            return operational ? base : base + "?draft=1";
+        }
+        return operational
+                ? base + "?taskId=" + taskId
+                : base + "?taskId=" + taskId + "&draft=1";
+    }
+
+    private String routeContextForPlan(UUID planId) {
+        return isOperationalPlan(planId) ? ROUTE_CONTEXT_OPERATIONAL : ROUTE_CONTEXT_BUILDER;
+    }
+
+    private boolean isOperationalPlan(UUID planId) {
+        return planRepository.findByIdAndIsDeletedFalse(planId)
+                .map(operationalCalendarPolicy::includes)
+                .orElse(false);
+    }
+
+    private static UUID parseUuid(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value.trim());
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 }

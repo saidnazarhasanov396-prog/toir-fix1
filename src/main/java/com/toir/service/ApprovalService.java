@@ -2604,7 +2604,8 @@ public class ApprovalService implements ApprovalOrchestrator {
         }
         return switch (targetType) {
             case WORK_ORDER -> NotificationEntityTypes.WORK_ORDER;
-            case PPR_PLAN, PPR_PLANNING_SESSION -> NotificationEntityTypes.PPR_PLAN;
+            case PPR_PLAN -> NotificationEntityTypes.PPR_PLAN;
+            case PPR_PLANNING_SESSION -> NotificationEntityTypes.PPR_PLANNING_SESSION;
             case PROCUREMENT_REQUEST, PROCUREMENT -> "PROCUREMENT_REQUEST";
             case MAINTENANCE_BUDGET, BUDGET -> NotificationEntityTypes.MAINTENANCE_BUDGET;
             case MAINTENANCE_DUE_EVENT -> NotificationEntityTypes.MAINTENANCE_DUE_EVENT;
