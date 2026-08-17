@@ -9,6 +9,7 @@ public final class NotificationEntityTypes {
     public static final String REPAIR_REQUEST = "REPAIR_REQUEST";
     public static final String PPR_TASK = "PPR_TASK";
     public static final String PPR_PLAN = "PPR_PLAN";
+    public static final String PPR_PLANNING_SESSION = "PPR_PLANNING_SESSION";
     public static final String APPROVAL_REQUEST = "APPROVAL_REQUEST";
     public static final String DEFECT = "DEFECT";
     public static final String ACTUAL_COST = "ACTUAL_COST";
@@ -29,6 +30,8 @@ public final class NotificationEntityTypes {
             Map.entry(PPR_TASK, PPR_TASK),
             Map.entry("PPRPLAN", PPR_PLAN),
             Map.entry(PPR_PLAN, PPR_PLAN),
+            Map.entry("PPRPLANNINGSESSION", PPR_PLANNING_SESSION),
+            Map.entry(PPR_PLANNING_SESSION, PPR_PLANNING_SESSION),
             Map.entry("APPROVALREQUEST", APPROVAL_REQUEST),
             Map.entry(APPROVAL_REQUEST, APPROVAL_REQUEST),
             Map.entry(DEFECT, DEFECT),

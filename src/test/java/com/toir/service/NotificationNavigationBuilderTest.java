@@ -1,15 +1,41 @@
 package com.toir.service;
 
+import com.toir.entity.PprPlan;
+import com.toir.enums.MaterializationMode;
 import com.toir.enums.NotificationEventType;
+import com.toir.enums.PlanStatus;
+import com.toir.enums.PprPlanOrigin;
+import com.toir.enums.TaskMaterializationStatus;
+import com.toir.repository.PprPlanRepository;
+import com.toir.service.pprcalendar.PprOperationalCalendarPolicy;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class NotificationNavigationBuilderTest {
 
-    private final NotificationNavigationBuilder builder = new NotificationNavigationBuilder();
+    @Mock
+    private PprPlanRepository planRepository;
+
+    private final PprOperationalCalendarPolicy operationalCalendarPolicy =
+            new PprOperationalCalendarPolicy();
+
+    private NotificationNavigationBuilder builder;
+
+    @BeforeEach
+    void setUp() {
+        builder = new NotificationNavigationBuilder(planRepository, operationalCalendarPolicy);
+    }
 
     @Test
     void buildsCanonicalApprovalAndDefectRoutesFromLegacyAliases() {
@@ -32,10 +58,11 @@ class NotificationNavigationBuilderTest {
     }
 
     @Test
-    void pprTaskIncludesPlanAndExactlyOneWorkOrderSecondaryAction() {
+    void pprTaskOnOperationalPlanUsesCalendarRoute() {
         UUID taskId = UUID.randomUUID();
         UUID planId = UUID.randomUUID();
         UUID workOrderId = UUID.randomUUID();
+        stubOperationalPlan(planId);
 
         NotificationNavigation target = builder.forPprTask(
                 NotificationEventType.PPR_TASK_OVERDUE,
@@ -51,21 +78,84 @@ class NotificationNavigationBuilderTest {
         );
         assertThat(target.metadata())
                 .containsEntry("planId", planId.toString())
-                .containsEntry("taskId", taskId.toString());
+                .containsEntry("taskId", taskId.toString())
+                .containsEntry(
+                        NotificationNavigationBuilder.METADATA_ROUTE_CONTEXT,
+                        NotificationNavigationBuilder.ROUTE_CONTEXT_OPERATIONAL);
         assertThat((List<?>) target.metadata().get("secondaryActions")).hasSize(1);
     }
 
     @Test
-    void pprTaskDoesNotChooseAnArbitraryWorkOrderWhenMultipleExist() {
+    void pprTaskOnNonOperationalPlanUsesBuilderRoute() {
+        UUID taskId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        when(planRepository.findByIdAndIsDeletedFalse(planId))
+                .thenReturn(Optional.of(draftSchedule(planId)));
+
         NotificationNavigation target = builder.forPprTask(
                 NotificationEventType.PPR_TASK_OVERDUE,
-                UUID.randomUUID(),
-                UUID.randomUUID(),
+                taskId,
+                planId,
+                List.of()
+        );
+
+        assertThat(target.actionUrl()).isEqualTo(
+                "/maintenance-schedule-builder/" + planId + "?taskId=" + taskId + "&draft=1"
+        );
+        assertThat(target.metadata()).containsEntry(
+                NotificationNavigationBuilder.METADATA_ROUTE_CONTEXT,
+                NotificationNavigationBuilder.ROUTE_CONTEXT_BUILDER);
+    }
+
+    @Test
+    void pprTaskDefaultsToBuilderWhenPlanIsMissing() {
+        UUID taskId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        when(planRepository.findByIdAndIsDeletedFalse(planId)).thenReturn(Optional.empty());
+
+        NotificationNavigation target = builder.forPprTask(
+                NotificationEventType.PPR_TASK_OVERDUE,
+                taskId,
+                planId,
                 List.of(UUID.randomUUID(), UUID.randomUUID())
         );
 
         assertThat(target.metadata()).doesNotContainKey("secondaryActions");
-        assertThat(target.actionUrl()).startsWith("/ppr-calendar/");
+        assertThat(target.actionUrl()).isEqualTo(
+                "/maintenance-schedule-builder/" + planId + "?taskId=" + taskId + "&draft=1"
+        );
+    }
+
+    @Test
+    void pprPlanEntityUsesOperationalCalendarWhenEligible() {
+        UUID planId = UUID.randomUUID();
+        stubOperationalPlan(planId);
+
+        NotificationNavigation target = builder.forEntity(
+                NotificationEventType.APPROVAL_APPROVED,
+                NotificationEntityTypes.PPR_PLAN,
+                planId
+        );
+
+        assertThat(target.actionUrl()).isEqualTo("/ppr-calendar/" + planId);
+        assertThat(target.metadata()).containsEntry(
+                NotificationNavigationBuilder.METADATA_ROUTE_CONTEXT,
+                NotificationNavigationBuilder.ROUTE_CONTEXT_OPERATIONAL);
+    }
+
+    @Test
+    void pprPlanningSessionUsesBuilderSessionRoute() {
+        UUID sessionId = UUID.randomUUID();
+
+        NotificationNavigation target = builder.forEntity(
+                NotificationEventType.APPROVAL_APPROVED,
+                NotificationEntityTypes.PPR_PLANNING_SESSION,
+                sessionId
+        );
+
+        assertThat(target.actionUrl()).isEqualTo(
+                "/maintenance-schedule-builder/sessions/" + sessionId
+        );
     }
 
     @Test
@@ -114,5 +204,31 @@ class NotificationNavigationBuilderTest {
                 .containsEntry("equipmentId", equipmentId.toString())
                 .containsEntry("eventId", eventId.toString())
                 .containsEntry("installationId", installationId.toString());
+    }
+
+    private void stubOperationalPlan(UUID planId) {
+        when(planRepository.findByIdAndIsDeletedFalse(planId))
+                .thenReturn(Optional.of(materializedSchedule(planId)));
+    }
+
+    private static PprPlan materializedSchedule(UUID planId) {
+        PprPlan plan = new PprPlan();
+        plan.setId(planId);
+        plan.setOrigin(PprPlanOrigin.MAINTENANCE_SCHEDULE);
+        plan.setMaterializationMode(MaterializationMode.APPROVAL_FIRST);
+        plan.setTaskMaterializationStatus(TaskMaterializationStatus.MATERIALIZED);
+        plan.setStatus(PlanStatus.APPROVED);
+        plan.setCalculationRevision(1L);
+        plan.setApprovedRevision(1L);
+        plan.setMaterializedRevision(1L);
+        plan.setMaterializedTaskCount(1);
+        return plan;
+    }
+
+    private static PprPlan draftSchedule(UUID planId) {
+        PprPlan plan = materializedSchedule(planId);
+        plan.setStatus(PlanStatus.CALCULATED);
+        plan.setTaskMaterializationStatus(TaskMaterializationStatus.NOT_MATERIALIZED);
+        return plan;
     }
 }
