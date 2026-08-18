@@ -1129,7 +1129,9 @@ public class WorkOrderService {
     public WorkOrderDto start(UUID id) {
         WorkOrder entity = getOrThrow(id);
         if (entity.getStatus() != WorkOrderStatus.APPROVED) {
-            throw RestException.badRequest("Only approved work orders can be started");
+            throw RestException.badRequest(
+                    "Only approved work orders can be started",
+                    "WORK_ORDER_START_REQUIRES_APPROVED_STATUS");
         }
         assertDefectListGate(entity);
         validatePerformerSkillsForWorkOrder(entity);
@@ -2480,23 +2482,33 @@ public class WorkOrderService {
         boolean required = enforceTypeRequirement && requiresApprovedDefectList(type);
         if (defectListId == null) {
             if (required) {
-                throw RestException.badRequest(approvedDefectListRequiredMessage(type));
+                throw RestException.badRequest(
+                        approvedDefectListRequiredMessage(type),
+                        "WORK_ORDER_START_DEFECT_LIST_REQUIRED");
             }
             return null;
         }
 
         DefectList defectList = defectListRepository.findByIdAndIsDeletedFalse(defectListId)
                 .orElseThrow(() -> required
-                        ? RestException.badRequest(approvedDefectListRequiredMessage(type))
+                        ? RestException.badRequest(
+                                approvedDefectListRequiredMessage(type),
+                                "WORK_ORDER_START_DEFECT_LIST_REQUIRED")
                         : RestException.notFound("DefectList not found: " + defectListId));
         if (equipmentId != null && defectList.getEquipmentId() != null && !equipmentId.equals(defectList.getEquipmentId())) {
-            throw RestException.badRequest("DefectList belongs to a different equipment");
+            throw RestException.badRequest(
+                    "DefectList belongs to a different equipment",
+                    "WORK_ORDER_START_DEFECT_LIST_EQUIPMENT_MISMATCH");
         }
         if (defectList.getStatus() != DefectListStatus.APPROVED) {
             if (required) {
-                throw RestException.badRequest(approvedDefectListRequiredMessage(type));
+                throw RestException.badRequest(
+                        approvedDefectListRequiredMessage(type),
+                        "WORK_ORDER_START_DEFECT_LIST_REQUIRED");
             }
-            throw RestException.badRequest("DefectList must be APPROVED");
+            throw RestException.badRequest(
+                    "DefectList must be APPROVED",
+                    "WORK_ORDER_START_DEFECT_LIST_NOT_APPROVED");
         }
         return defectList;
     }
@@ -2521,10 +2533,14 @@ public class WorkOrderService {
         for (String requiredSkill : requiredSkills) {
             SkillMatchResult result = performerHasRequiredSkill(performer, requiredSkill);
             if (result == SkillMatchResult.EXPIRED) {
-                throw RestException.badRequest("Assigned performer certification is expired: " + requiredSkill);
+                throw RestException.badRequest(
+                        "Assigned performer certification is expired: " + requiredSkill,
+                        "WORK_ORDER_START_PERFORMER_CERTIFICATION_EXPIRED");
             }
             if (result == SkillMatchResult.MISSING) {
-                throw RestException.badRequest("Assigned performer does not have required skill: " + requiredSkill);
+                throw RestException.badRequest(
+                        "Assigned performer does not have required skill: " + requiredSkill,
+                        "WORK_ORDER_START_PERFORMER_SKILL_MISSING");
             }
         }
     }
@@ -2761,7 +2777,9 @@ public class WorkOrderService {
         if (currentStatus == WarehouseEquipmentStatus.RESERVED) {
             return;
         }
-        throw RestException.badRequest("Replacement equipment must be AVAILABLE or RESERVED to start work order");
+        throw RestException.badRequest(
+                "Replacement equipment must be AVAILABLE or RESERVED to start work order",
+                "WORK_ORDER_START_REPLACEMENT_EQUIPMENT_NOT_READY");
     }
 
     private boolean isReplacementWorkOrder(WorkOrder workOrder) {
@@ -2783,13 +2801,17 @@ public class WorkOrderService {
     private WarehouseEquipmentItem getReplacementWarehouseEquipmentItemOrThrow(WorkOrder workOrder) {
         if (workOrder.getWarehouseId() == null || workOrder.getReplacementEquipmentId() == null) {
             throw RestException
-                    .badRequest("warehouseId and replacementEquipmentId are required for replacement work orders");
+                    .badRequest(
+                            "warehouseId and replacementEquipmentId are required for replacement work orders",
+                            "WORK_ORDER_START_REPLACEMENT_FIELDS_REQUIRED");
         }
         return warehouseEquipmentItemRepository.findByWarehouseIdAndEquipmentIdAndActiveTrueAndIsDeletedFalse(
                         workOrder.getWarehouseId(),
                         workOrder.getReplacementEquipmentId())
                 .orElseThrow(
-                        () -> RestException.badRequest("Replacement equipment item not found in selected warehouse"));
+                        () -> RestException.badRequest(
+                                "Replacement equipment item not found in selected warehouse",
+                                "WORK_ORDER_START_REPLACEMENT_ITEM_NOT_FOUND"));
     }
 
     private void completeReplacementPlacement(WorkOrder workOrder, CompleteWorkOrderRequest request) {

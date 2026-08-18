@@ -164,20 +164,26 @@ public class SafetyChecklistService {
         Optional<WorkOrderSafetyChecklist> checklist = activeChecklist(workOrder.getId());
         if (checklist.isEmpty()) {
             if (workOrder.isRequiresShutdown() || workOrder.isRequiresIsolation()) {
-                throw RestException.badRequest("Safety checklist is required for shutdown/isolation work");
+                throw RestException.badRequest(
+                        "Safety checklist is required for shutdown/isolation work",
+                        "WORK_ORDER_START_SAFETY_CHECKLIST_REQUIRED");
             }
             return;
         }
         WorkOrderSafetyChecklist value = checklist.get();
         if (value.getStatus() == SafetyChecklistStatus.FAILED) {
-            throw RestException.badRequest("Cannot start work order; critical safety checklist items are not passed");
+            throw RestException.badRequest(
+                    "Cannot start work order; critical safety checklist items are not passed",
+                    "WORK_ORDER_START_SAFETY_CHECKLIST_BLOCKED");
         }
         boolean blocked = checklistItems(value.getId()).stream()
                 .anyMatch(item -> item.isCritical()
                         && item.getStatus() != SafetyChecklistItemStatus.PASSED
                         && item.getStatus() != SafetyChecklistItemStatus.NOT_APPLICABLE);
         if (blocked) {
-            throw RestException.badRequest("Cannot start work order; critical safety checklist items are not passed");
+            throw RestException.badRequest(
+                    "Cannot start work order; critical safety checklist items are not passed",
+                    "WORK_ORDER_START_SAFETY_CHECKLIST_BLOCKED");
         }
     }
 
