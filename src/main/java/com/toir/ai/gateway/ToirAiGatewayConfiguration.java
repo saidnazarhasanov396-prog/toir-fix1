@@ -67,8 +67,16 @@ public class ToirAiGatewayConfiguration {
             ToirAiGatewayClient client,
             ObjectMapper objectMapper,
             ToirAiWebhookSignatureVerifier signatureVerifier,
-            ToirAiJobCallbackStore callbackStore
+            ToirAiJobCallbackStore callbackStore,
+            com.toir.ai.repair.AiRepairGatewayHook repairGatewayHook
     ) {
-        return new ToirAiGatewayService(properties, client, objectMapper, signatureVerifier, callbackStore);
+        return new ToirAiGatewayService(
+                properties,
+                client,
+                objectMapper,
+                signatureVerifier,
+                callbackStore,
+                repairGatewayHook
+        );
     }
 }

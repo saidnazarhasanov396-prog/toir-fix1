@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -56,18 +57,22 @@ public class ToirAiJobController {
     @Operation(summary = "Enqueue AI job: visual inspection from video")
     public ResponseEntity<JsonNode> enqueueVisualVideo(
             @RequestPart("video") MultipartFile video,
-            @RequestPart(value = "webhook_url", required = false) String webhookUrl
+            @RequestPart(value = "webhook_url", required = false) String webhookUrl,
+            @RequestParam(value = "equipment_id", required = false) UUID equipmentId,
+            @RequestParam(value = "work_order_id", required = false) UUID workOrderId
     ) {
-        return service.enqueueVisualInspectionVideo(video, webhookUrl);
+        return service.enqueueVisualInspectionVideo(video, webhookUrl, equipmentId, workOrderId);
     }
 
     @PostMapping(value = "/visual-inspection/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Enqueue AI job: visual inspection from image")
     public ResponseEntity<JsonNode> enqueueVisualImage(
             @RequestPart("image") MultipartFile image,
-            @RequestPart(value = "webhook_url", required = false) String webhookUrl
+            @RequestPart(value = "webhook_url", required = false) String webhookUrl,
+            @RequestParam(value = "equipment_id", required = false) UUID equipmentId,
+            @RequestParam(value = "work_order_id", required = false) UUID workOrderId
     ) {
-        return service.enqueueVisualInspectionImage(image, webhookUrl);
+        return service.enqueueVisualInspectionImage(image, webhookUrl, equipmentId, workOrderId);
     }
 
     @PostMapping("/recurrent-failure/equipment-categories")
