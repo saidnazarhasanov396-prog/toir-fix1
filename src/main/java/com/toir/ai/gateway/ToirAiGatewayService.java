@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.toir.ai.gateway.dto.WorkOrderDraftTextRequest;
 import com.toir.ai.gateway.dto.WorkOrderTextJobRequest;
+import com.toir.ai.repair.AiRepairGatewayHook;
+import com.toir.ai.repair.AiRepairKind;
 import com.toir.exception.RestException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -50,52 +52,83 @@ public class ToirAiGatewayService {
     private final ObjectMapper objectMapper;
     private final ToirAiWebhookSignatureVerifier signatureVerifier;
     private final ToirAiJobCallbackStore callbackStore;
+    private final AiRepairGatewayHook repairGatewayHook;
 
     public ToirAiGatewayService(
             ToirAiGatewayProperties properties,
             ToirAiGatewayClient client,
             ObjectMapper objectMapper,
             ToirAiWebhookSignatureVerifier signatureVerifier,
-            ToirAiJobCallbackStore callbackStore
+            ToirAiJobCallbackStore callbackStore,
+            AiRepairGatewayHook repairGatewayHook
     ) {
         this.properties = properties;
         this.client = client;
         this.objectMapper = objectMapper;
         this.signatureVerifier = signatureVerifier;
         this.callbackStore = callbackStore;
+        this.repairGatewayHook = repairGatewayHook;
     }
 
     public JsonNode generateDraftFromText(WorkOrderDraftTextRequest request) {
         requireEnabled();
-        return execute(() -> client.postJson(PATH_DRAFT_TEXT, request));
+        JsonNode payload = execute(() -> client.postJson(PATH_DRAFT_TEXT, request));
+        return repairGatewayHook.afterForward(
+                AiRepairKind.WORK_ORDER_DRAFT,
+                request.equipmentId(),
+                null,
+                payload,
+                null
+        );
     }
 
     public JsonNode generateDraftFromAudio(UUID equipmentId, MultipartFile audio) {
         requireEnabled();
         byte[] bytes = readUpload(audio, "audio");
         Map<String, String> fields = Map.of("equipment_id", equipmentId.toString());
-        return execute(() -> client.postMultipart(
+        JsonNode payload = execute(() -> client.postMultipart(
                 PATH_DRAFT_AUDIO,
                 ToirAiGatewayClient.multipartFile("audio", bytes, audio.getOriginalFilename(), fields)
         ));
+        return repairGatewayHook.afterForward(
+                AiRepairKind.WORK_ORDER_DRAFT,
+                equipmentId,
+                null,
+                payload,
+                bytes
+        );
     }
 
-    public JsonNode visualInspectionVideo(MultipartFile video) {
+    public JsonNode visualInspectionVideo(MultipartFile video, UUID equipmentId, UUID workOrderId) {
         requireEnabled();
         byte[] bytes = readUpload(video, "video");
-        return execute(() -> client.postMultipart(
+        JsonNode payload = execute(() -> client.postMultipart(
                 PATH_VISUAL_VIDEO,
                 ToirAiGatewayClient.multipartFile("video", bytes, video.getOriginalFilename(), Map.of())
         ));
+        return repairGatewayHook.afterForward(
+                AiRepairKind.VISUAL_INSPECTION,
+                equipmentId,
+                workOrderId,
+                payload,
+                bytes
+        );
     }
 
-    public JsonNode visualInspectionImage(MultipartFile image) {
+    public JsonNode visualInspectionImage(MultipartFile image, UUID equipmentId, UUID workOrderId) {
         requireEnabled();
         byte[] bytes = readUpload(image, "image");
-        return execute(() -> client.postMultipart(
+        JsonNode payload = execute(() -> client.postMultipart(
                 PATH_VISUAL_IMAGE,
                 ToirAiGatewayClient.multipartFile("image", bytes, image.getOriginalFilename(), Map.of())
         ));
+        return repairGatewayHook.afterForward(
+                AiRepairKind.VISUAL_INSPECTION,
+                equipmentId,
+                workOrderId,
+                payload,
+                bytes
+        );
     }
 
     public JsonNode equipmentFailureCategories(UUID equipmentId) {
@@ -125,7 +158,14 @@ public class ToirAiGatewayService {
     public JsonNode equipmentFailureEvidence(UUID equipmentId) {
         requireEnabled();
         String path = PATH_FAILURE_EVIDENCE.replace("{equipment_id}", equipmentId.toString());
-        return execute(() -> client.getJson(path, Map.of()));
+        JsonNode payload = execute(() -> client.getJson(path, Map.of()));
+        return repairGatewayHook.afterForward(
+                AiRepairKind.FAILURE_EVIDENCE,
+                equipmentId,
+                null,
+                payload,
+                null
+        );
     }
 
     public JsonNode equipmentCauseRepairAnalysis(UUID equipmentId, UUID workOrderId) {
@@ -135,7 +175,14 @@ public class ToirAiGatewayService {
         if (workOrderId != null) {
             query.put("work_order_id", workOrderId);
         }
-        return execute(() -> client.getJson(path, query));
+        JsonNode payload = execute(() -> client.getJson(path, query));
+        return repairGatewayHook.afterForward(
+                AiRepairKind.CAUSE_REPAIR,
+                equipmentId,
+                workOrderId,
+                payload,
+                null
+        );
     }
 
     public JsonNode health() {
@@ -147,7 +194,13 @@ public class ToirAiGatewayService {
         requireEnabled();
         ObjectNode body = objectMapper.valueToTree(request);
         ensureWebhookUrl(body);
-        return execute(() -> rewriteAccepted(client.postJsonEntity(PATH_JOB_DRAFT_TEXT, body)));
+        return rememberJob(
+                execute(() -> rewriteAccepted(client.postJsonEntity(PATH_JOB_DRAFT_TEXT, body))),
+                AiRepairKind.WORK_ORDER_DRAFT,
+                request.equipmentId(),
+                null,
+                null
+        );
     }
 
     public ResponseEntity<JsonNode> enqueueWorkOrderText(JsonNode request) {
@@ -156,7 +209,17 @@ public class ToirAiGatewayService {
                 ? ((ObjectNode) request).deepCopy()
                 : objectMapper.createObjectNode();
         ensureWebhookUrl(body);
-        return execute(() -> rewriteAccepted(client.postJsonEntity(PATH_JOB_DRAFT_TEXT, body)));
+        UUID equipmentId = parseUuid(body.get("equipment_id"));
+        if (equipmentId == null) {
+            equipmentId = parseUuid(body.get("equipmentId"));
+        }
+        return rememberJob(
+                execute(() -> rewriteAccepted(client.postJsonEntity(PATH_JOB_DRAFT_TEXT, body))),
+                AiRepairKind.WORK_ORDER_DRAFT,
+                equipmentId,
+                null,
+                null
+        );
     }
 
     public ResponseEntity<JsonNode> enqueueWorkOrderAudio(UUID equipmentId, MultipartFile audio, String webhookUrl) {
@@ -165,30 +228,58 @@ public class ToirAiGatewayService {
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("equipment_id", equipmentId.toString());
         fields.put("webhook_url", resolveWebhookUrl(webhookUrl));
-        return execute(() -> rewriteAccepted(client.postMultipartEntity(
-                PATH_JOB_DRAFT_AUDIO,
-                ToirAiGatewayClient.multipartFile("audio", bytes, audio.getOriginalFilename(), fields)
-        )));
+        return rememberJob(
+                execute(() -> rewriteAccepted(client.postMultipartEntity(
+                        PATH_JOB_DRAFT_AUDIO,
+                        ToirAiGatewayClient.multipartFile("audio", bytes, audio.getOriginalFilename(), fields)
+                ))),
+                AiRepairKind.WORK_ORDER_DRAFT,
+                equipmentId,
+                null,
+                bytes
+        );
     }
 
-    public ResponseEntity<JsonNode> enqueueVisualInspectionVideo(MultipartFile video, String webhookUrl) {
+    public ResponseEntity<JsonNode> enqueueVisualInspectionVideo(
+            MultipartFile video,
+            String webhookUrl,
+            UUID equipmentId,
+            UUID workOrderId
+    ) {
         requireEnabled();
         byte[] bytes = readUpload(video, "video");
         Map<String, String> fields = Map.of("webhook_url", resolveWebhookUrl(webhookUrl));
-        return execute(() -> rewriteAccepted(client.postMultipartEntity(
-                PATH_JOB_VISUAL_VIDEO,
-                ToirAiGatewayClient.multipartFile("video", bytes, video.getOriginalFilename(), fields)
-        )));
+        return rememberJob(
+                execute(() -> rewriteAccepted(client.postMultipartEntity(
+                        PATH_JOB_VISUAL_VIDEO,
+                        ToirAiGatewayClient.multipartFile("video", bytes, video.getOriginalFilename(), fields)
+                ))),
+                AiRepairKind.VISUAL_INSPECTION,
+                equipmentId,
+                workOrderId,
+                bytes
+        );
     }
 
-    public ResponseEntity<JsonNode> enqueueVisualInspectionImage(MultipartFile image, String webhookUrl) {
+    public ResponseEntity<JsonNode> enqueueVisualInspectionImage(
+            MultipartFile image,
+            String webhookUrl,
+            UUID equipmentId,
+            UUID workOrderId
+    ) {
         requireEnabled();
         byte[] bytes = readUpload(image, "image");
         Map<String, String> fields = Map.of("webhook_url", resolveWebhookUrl(webhookUrl));
-        return execute(() -> rewriteAccepted(client.postMultipartEntity(
-                PATH_JOB_VISUAL_IMAGE,
-                ToirAiGatewayClient.multipartFile("image", bytes, image.getOriginalFilename(), fields)
-        )));
+        return rememberJob(
+                execute(() -> rewriteAccepted(client.postMultipartEntity(
+                        PATH_JOB_VISUAL_IMAGE,
+                        ToirAiGatewayClient.multipartFile("image", bytes, image.getOriginalFilename(), fields)
+                ))),
+                AiRepairKind.VISUAL_INSPECTION,
+                equipmentId,
+                workOrderId,
+                bytes
+        );
     }
 
     public ResponseEntity<JsonNode> enqueueRecurrentFailureCategories(JsonNode request) {
@@ -207,7 +298,13 @@ public class ToirAiGatewayService {
                 ? ((ObjectNode) request).deepCopy()
                 : objectMapper.createObjectNode();
         ensureWebhookUrl(body);
-        return execute(() -> rewriteAccepted(client.postJsonEntity(path, body)));
+        return rememberJob(
+                execute(() -> rewriteAccepted(client.postJsonEntity(path, body))),
+                AiRepairKind.FAILURE_EVIDENCE,
+                equipmentId,
+                parseUuid(body.get("work_order_id")),
+                null
+        );
     }
 
     public ResponseEntity<JsonNode> enqueueRecurrentFailureCauseRepair(UUID equipmentId, JsonNode request) {
@@ -217,7 +314,17 @@ public class ToirAiGatewayService {
                 ? ((ObjectNode) request).deepCopy()
                 : objectMapper.createObjectNode();
         ensureWebhookUrl(body);
-        return execute(() -> rewriteAccepted(client.postJsonEntity(path, body)));
+        UUID workOrderId = parseUuid(body.get("work_order_id"));
+        if (workOrderId == null) {
+            workOrderId = parseUuid(body.get("workOrderId"));
+        }
+        return rememberJob(
+                execute(() -> rewriteAccepted(client.postJsonEntity(path, body))),
+                AiRepairKind.CAUSE_REPAIR,
+                equipmentId,
+                workOrderId,
+                null
+        );
     }
 
     public ResponseEntity<JsonNode> getJobStatus(UUID jobId) {
@@ -226,12 +333,13 @@ public class ToirAiGatewayService {
         return execute(() -> {
             JsonNode body = client.getJson(path, Map.of());
             JsonNode callback = callbackStore.get(jobId).orElse(null);
+            JsonNode merged = body;
             if (callback != null && body != null && body.isObject()) {
-                ObjectNode merged = ((ObjectNode) body).deepCopy();
-                merged.set("callback", callback);
-                return ResponseEntity.ok(merged);
+                ObjectNode copy = ((ObjectNode) body).deepCopy();
+                copy.set("callback", callback);
+                merged = copy;
             }
-            return ResponseEntity.ok(body);
+            return ResponseEntity.ok(repairGatewayHook.afterJobPayload(jobId, merged));
         });
     }
 
@@ -257,6 +365,12 @@ public class ToirAiGatewayService {
                 throw RestException.badRequest("Callback payload missing job_id", "AI_GATEWAY_WEBHOOK_JOB_ID_MISSING");
             }
             callbackStore.put(jobId, payload);
+            try {
+                JsonNode enriched = repairGatewayHook.afterJobPayload(jobId, payload);
+                callbackStore.put(jobId, enriched);
+            } catch (RuntimeException exception) {
+                // Keep the original callback even if repair-request side-effects fail.
+            }
             return ResponseEntity.ok().build();
         } catch (RestException exception) {
             throw exception;
@@ -298,6 +412,31 @@ public class ToirAiGatewayService {
             return ResponseEntity.status(upstream.getStatusCode()).body(rewritten);
         }
         return ResponseEntity.status(upstream.getStatusCode()).body(body);
+    }
+
+    private ResponseEntity<JsonNode> rememberJob(
+            ResponseEntity<JsonNode> upstream,
+            AiRepairKind kind,
+            UUID equipmentId,
+            UUID workOrderId,
+            byte[] mediaBytes
+    ) {
+        UUID jobId = extractJobId(upstream.getBody());
+        if (jobId != null) {
+            repairGatewayHook.rememberJob(jobId, kind, equipmentId, workOrderId, mediaBytes);
+        }
+        return upstream;
+    }
+
+    private static UUID parseUuid(JsonNode node) {
+        if (node == null || node.isNull() || !StringUtils.hasText(node.asText())) {
+            return null;
+        }
+        try {
+            return UUID.fromString(node.asText());
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 
     private static UUID extractJobId(JsonNode payload) {

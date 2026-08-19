@@ -65,6 +65,9 @@ public class RepairRequest extends BaseEntity {
     @Column(nullable = false)
     private RequestSource source = RequestSource.MANUAL;
 
+    @Column(name = "ai_problem_key")
+    private String aiProblemKey;
+
     @Column(name = "detected_at", nullable = false)
     private Instant detectedAt = Instant.now();
 

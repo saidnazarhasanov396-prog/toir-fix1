@@ -12,8 +12,11 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/ai/visual-inspection")
@@ -31,13 +34,21 @@ public class ToirAiVisualInspectionController {
 
     @PostMapping(value = "/video", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Proxy: visual inspection from video via AI")
-    public ResponseEntity<JsonNode> inspectVideo(@RequestPart("video") MultipartFile video) {
-        return ResponseEntity.ok(service.visualInspectionVideo(video));
+    public ResponseEntity<JsonNode> inspectVideo(
+            @RequestPart("video") MultipartFile video,
+            @RequestParam(value = "equipment_id", required = false) UUID equipmentId,
+            @RequestParam(value = "work_order_id", required = false) UUID workOrderId
+    ) {
+        return ResponseEntity.ok(service.visualInspectionVideo(video, equipmentId, workOrderId));
     }
 
     @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Proxy: visual inspection from image via AI")
-    public ResponseEntity<JsonNode> inspectImage(@RequestPart("image") MultipartFile image) {
-        return ResponseEntity.ok(service.visualInspectionImage(image));
+    public ResponseEntity<JsonNode> inspectImage(
+            @RequestPart("image") MultipartFile image,
+            @RequestParam(value = "equipment_id", required = false) UUID equipmentId,
+            @RequestParam(value = "work_order_id", required = false) UUID workOrderId
+    ) {
+        return ResponseEntity.ok(service.visualInspectionImage(image, equipmentId, workOrderId));
     }
 }

@@ -1,5 +1,6 @@
 package com.toir.service.repair;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.toir.ai.repair.AiRepairConclusion;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toir.dto.attachment.AttachmentPhotoSummary;
 import com.toir.dto.meter.MeterReadingDto;
@@ -307,6 +308,116 @@ public class RepairRequestService {
         );
 
         return toDtoWithLinks(saved);
+    }
+
+    @Transactional
+    public void assignAiProblemKey(UUID id, String problemKey) {
+        if (id == null || problemKey == null || problemKey.isBlank()) {
+            return;
+        }
+        RepairRequest entity = getOrThrow(id);
+        if (entity.getAiProblemKey() == null || entity.getAiProblemKey().isBlank()) {
+            entity.setAiProblemKey(problemKey);
+            repository.save(entity);
+        }
+    }
+
+    @Transactional
+    public RepairRequestDto applyAiConclusion(
+            UUID id,
+            AiRepairConclusion conclusion,
+            boolean appendOnly
+    ) {
+        RepairRequest entity = getOrThrow(id);
+        if (conclusion == null) {
+            return toDtoWithLinks(entity);
+        }
+        if (entity.getAiProblemKey() == null || entity.getAiProblemKey().isBlank()) {
+            entity.setAiProblemKey(conclusion.problemKey());
+        }
+        if (!appendOnly) {
+            if (hasText(conclusion.title()) && !conclusion.title().equals(entity.getTitle())) {
+                entity.setTitle(truncate(conclusion.title(), 255));
+            }
+            if (conclusion.priority() != null
+                    && conclusion.priority().ordinal() > entity.getPriority().ordinal()) {
+                entity.setPriority(conclusion.priority());
+            }
+            if (conclusion.criticality() != null
+                    && conclusion.criticality().ordinal() > entity.getCriticality().ordinal()) {
+                entity.setCriticality(conclusion.criticality());
+            }
+        }
+        entity.setDescription(mergeAiDescription(entity.getDescription(), conclusion.description()));
+        RepairRequest saved = repository.save(entity);
+        createInlineDefects(saved, newAiDefects(saved.getId(), conclusion));
+        auditBuilderService.log(
+                "repair_request",
+                String.valueOf(saved.getId()),
+                AuditAction.UPDATE,
+                AuditModule.REPAIR_REQUEST,
+                appendOnly ? "AI conclusion appended" : "AI conclusion updated repair request",
+                null,
+                saved
+        );
+        return toDtoWithLinks(saved);
+    }
+
+    private List<RepairRequestRequest.InlineDefectRequest> newAiDefects(
+            UUID repairRequestId,
+            AiRepairConclusion conclusion
+    ) {
+        if (conclusion.defects() == null || conclusion.defects().isEmpty()) {
+            return List.of();
+        }
+        Set<String> existing = defectRepository
+                .findAllByRepairRequestIdAndIsDeletedFalseOrderByUpdatedAtDesc(repairRequestId)
+                .stream()
+                .map(defect -> normalizeDefectKey(defect.getCategory(), defect.getTitle()))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<RepairRequestRequest.InlineDefectRequest> created = new ArrayList<>();
+        for (var defect : conclusion.defects()) {
+            String key = normalizeDefectKey(defect.category() != null ? defect.category() : defect.type(), defect.title());
+            if (key != null && !existing.add(key)) {
+                continue;
+            }
+            created.add(new RepairRequestRequest.InlineDefectRequest(
+                    defect.title(),
+                    defect.description(),
+                    defect.category(),
+                    defect.severity(),
+                    defect.failureReason(),
+                    defect.rootCause()
+            ));
+        }
+        return created;
+    }
+
+    private String mergeAiDescription(String current, String incoming) {
+        if (!hasText(incoming)) {
+            return current;
+        }
+        if (!hasText(current)) {
+            return incoming;
+        }
+        if (current.contains(incoming.trim())) {
+            return current;
+        }
+        return current.trim() + "\n\n---\nAI update " + Instant.now() + "\n" + incoming.trim();
+    }
+
+    private static String normalizeDefectKey(String category, String title) {
+        String raw = (category != null && !category.isBlank() ? category : "") + "|" + (title != null ? title : "");
+        String normalized = raw.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9а-яўқғҳ|]+", "_");
+        return normalized.isBlank() || "|".equals(normalized) ? null : normalized;
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.length() <= max ? trimmed : trimmed.substring(0, max);
     }
 
     @Transactional
