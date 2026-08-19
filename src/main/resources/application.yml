@@ -67,6 +67,8 @@ toir:
       batch-size: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_BATCH_SIZE:100}
       actor-id: ${TOIR_PPR_LIFECYCLE_WORK_ORDER_GENERATION_ACTOR_ID:}
   ai:
+    auto-repair-request:
+      enabled: ${TOIR_AI_AUTO_REPAIR_REQUEST_ENABLED:true}
     gateway:
       enabled: ${TOIR_AI_GATEWAY_ENABLED:false}
       base-url: ${TOIR_AI_GATEWAY_BASE_URL:https://toir-ai.tenzorsoft.uz}
