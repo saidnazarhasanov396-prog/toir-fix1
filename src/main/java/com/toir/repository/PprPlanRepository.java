@@ -322,4 +322,46 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             @Param("day") Integer day,
             @Param("departmentId") UUID departmentId
     );
+
+    /**
+     * Plans linked to equipment via direct target, equipment-type target, or materialized task.
+     */
+    @Query(value = """
+            SELECT DISTINCT p.*
+            FROM ppr_plans p
+            WHERE p.is_deleted = false
+              AND (COALESCE(p.origin, 'MANUAL') = 'MANUAL'
+                   OR p.status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
+              AND (
+                    EXISTS (
+                        SELECT 1
+                        FROM ppr_plan_targets t
+                        WHERE t.plan_id = p.id
+                          AND t.is_deleted = false
+                          AND t.equipment_id = cast(:equipmentId as uuid)
+                    )
+                    OR (
+                        cast(:equipmentTypeId as uuid) IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1
+                            FROM ppr_plan_targets t
+                            WHERE t.plan_id = p.id
+                              AND t.is_deleted = false
+                              AND t.equipment_type_id = cast(:equipmentTypeId as uuid)
+                        )
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM ppr_tasks tk
+                        WHERE tk.plan_id = p.id
+                          AND tk.is_deleted = false
+                          AND tk.equipment_id = cast(:equipmentId as uuid)
+                    )
+              )
+            ORDER BY p.start_date DESC, p.updated_at DESC, p.id ASC
+            """, nativeQuery = true)
+    List<PprPlan> findLinkedToEquipment(
+            @Param("equipmentId") UUID equipmentId,
+            @Param("equipmentTypeId") UUID equipmentTypeId
+    );
 }

@@ -136,6 +136,61 @@ public class PprPlanService {
         return toDtos(planRepository.searchPlans(year, month, day, departmentId, equipmentId), equipmentId);
     }
 
+    /**
+     * Returns PPR plans linked to the given equipment for AI / integrations.
+     * Link = direct equipment target, matching equipment-type target, or existing task on that equipment.
+     *
+     * @param includeTasks when true, each plan includes tasks for this equipment only; otherwise summary only
+     */
+    @Transactional(readOnly = true)
+    public EquipmentPprPlansResponse findLinkedToEquipment(UUID equipmentId, boolean includeTasks) {
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
+        UUID equipmentTypeId = equipment.getEquipmentTypeId();
+        List<PprPlan> plans = planRepository.findLinkedToEquipment(equipmentId, equipmentTypeId);
+        List<EquipmentLinkedPprPlanDto> linked = plans.stream()
+                .map(plan -> toLinkedDto(plan, equipmentId, equipmentTypeId, includeTasks))
+                .toList();
+        return new EquipmentPprPlansResponse(equipmentId, equipmentTypeId, linked.size(), linked);
+    }
+
+    private EquipmentLinkedPprPlanDto toLinkedDto(
+            PprPlan plan,
+            UUID equipmentId,
+            UUID equipmentTypeId,
+            boolean includeTasks
+    ) {
+        PprPlanDto dto = includeTasks
+                ? toDtos(List.of(plan), equipmentId).getFirst()
+                : toSummaryDto(plan, false);
+        List<String> reasons = resolveLinkReasons(plan, equipmentId, equipmentTypeId);
+        return new EquipmentLinkedPprPlanDto(dto, reasons);
+    }
+
+    private List<String> resolveLinkReasons(PprPlan plan, UUID equipmentId, UUID equipmentTypeId) {
+        LinkedHashSet<String> reasons = new LinkedHashSet<>();
+        for (PprPlanTarget target : plan.getTargets()) {
+            if (target.isDeleted()) {
+                continue;
+            }
+            if (target.getTargetType() == PprTargetType.EQUIPMENT
+                    && equipmentId.equals(target.getEquipmentId())) {
+                reasons.add(EquipmentLinkedPprPlanDto.REASON_EQUIPMENT_TARGET);
+            }
+            if (target.getTargetType() == PprTargetType.EQUIPMENT_TYPE
+                    && equipmentTypeId != null
+                    && equipmentTypeId.equals(target.getEquipmentTypeId())) {
+                reasons.add(EquipmentLinkedPprPlanDto.REASON_EQUIPMENT_TYPE_TARGET);
+            }
+        }
+        boolean hasTask = plan.getTasks().stream()
+                .anyMatch(task -> !task.isDeleted() && equipmentId.equals(task.getEquipmentId()));
+        if (hasTask) {
+            reasons.add(EquipmentLinkedPprPlanDto.REASON_TASK);
+        }
+        return List.copyOf(reasons);
+    }
+
     @Transactional(readOnly = true)
     public Page<PprPlanDto> findAllUnpaged(Integer year, Integer month, Integer day, UUID departmentId) {
         return findAllUnpaged(year, month, day, departmentId, null, "asc");
