@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Equipment-scoped PPR plans - primary read APIs for AI context loading.
+ * Equipment-scoped PPR plans for AI / integrations.
  */
 @RestController
 @RequestMapping("/api/v1/equipment/{equipmentId}/ppr-plans")
@@ -32,14 +32,13 @@ public class EquipmentPprPlanController {
     @PreAuthorize(READ_AUTH)
     @Operation(
             summary = "List PPR plans linked to equipment (includes type-level)",
-            description = "Returns plans attached via equipment target, equipment-type target, "
-                    + "or existing PPR tasks for this equipment. Intended for AI / integrations. "
-                    + "By default returns plan summaries (tasks empty, taskCount set). "
-                    + "Pass includeTasks=true to include this equipment's tasks only."
+            description = "Returns all non-deleted plans attached via equipment target, equipment-type "
+                    + "target, or PPR tasks for this equipment. Tasks for this equipment are included "
+                    + "by default (includeTasks=true)."
     )
     public ResponseEntity<EquipmentPprPlansResponse> list(
             @PathVariable UUID equipmentId,
-            @RequestParam(defaultValue = "false") boolean includeTasks
+            @RequestParam(defaultValue = "true") boolean includeTasks
     ) {
         return ResponseEntity.ok(pprPlanService.findLinkedToEquipment(equipmentId, includeTasks));
     }
@@ -48,13 +47,13 @@ public class EquipmentPprPlanController {
     @PreAuthorize(READ_AUTH)
     @Operation(
             summary = "List PPR plans assigned to this equipment only",
-            description = "Returns plans linked to this concrete equipment only: direct EQUIPMENT "
-                    + "target or existing PPR tasks. Does NOT include plans that match only by "
-                    + "equipment type. Same response shape as the type-inclusive list endpoint."
+            description = "Returns all non-deleted plans linked to this concrete equipment only "
+                    + "(direct EQUIPMENT target or tasks). Does not include type-only plans. "
+                    + "Tasks included by default."
     )
     public ResponseEntity<EquipmentPprPlansResponse> listDirect(
             @PathVariable UUID equipmentId,
-            @RequestParam(defaultValue = "false") boolean includeTasks
+            @RequestParam(defaultValue = "true") boolean includeTasks
     ) {
         return ResponseEntity.ok(pprPlanService.findDirectlyLinkedToEquipment(equipmentId, includeTasks));
     }
