@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Equipment-scoped PPR plans — primary read API for AI context loading.
+ * Equipment-scoped PPR plans - primary read APIs for AI context loading.
  */
 @RestController
 @RequestMapping("/api/v1/equipment/{equipmentId}/ppr-plans")
@@ -31,7 +31,7 @@ public class EquipmentPprPlanController {
     @GetMapping
     @PreAuthorize(READ_AUTH)
     @Operation(
-            summary = "List PPR plans linked to equipment",
+            summary = "List PPR plans linked to equipment (includes type-level)",
             description = "Returns plans attached via equipment target, equipment-type target, "
                     + "or existing PPR tasks for this equipment. Intended for AI / integrations. "
                     + "By default returns plan summaries (tasks empty, taskCount set). "
@@ -42,5 +42,20 @@ public class EquipmentPprPlanController {
             @RequestParam(defaultValue = "false") boolean includeTasks
     ) {
         return ResponseEntity.ok(pprPlanService.findLinkedToEquipment(equipmentId, includeTasks));
+    }
+
+    @GetMapping("/direct")
+    @PreAuthorize(READ_AUTH)
+    @Operation(
+            summary = "List PPR plans assigned to this equipment only",
+            description = "Returns plans linked to this concrete equipment only: direct EQUIPMENT "
+                    + "target or existing PPR tasks. Does NOT include plans that match only by "
+                    + "equipment type. Same response shape as the type-inclusive list endpoint."
+    )
+    public ResponseEntity<EquipmentPprPlansResponse> listDirect(
+            @PathVariable UUID equipmentId,
+            @RequestParam(defaultValue = "false") boolean includeTasks
+    ) {
+        return ResponseEntity.ok(pprPlanService.findDirectlyLinkedToEquipment(equipmentId, includeTasks));
     }
 }

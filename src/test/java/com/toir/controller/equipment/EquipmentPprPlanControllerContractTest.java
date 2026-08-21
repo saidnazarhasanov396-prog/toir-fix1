@@ -102,4 +102,54 @@ class EquipmentPprPlanControllerContractTest {
 
         verify(pprPlanService).findLinkedToEquipment(equipmentId, true);
     }
+
+    @Test
+    void listDirectReturnsOnlyEquipmentScopedPlans() throws Exception {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID planId = UUID.randomUUID();
+        PprPlanDto plan = new PprPlanDto(
+                planId,
+                "PPR-2026-002",
+                "Equipment-only plan",
+                PlanStatus.APPROVED,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                1L,
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31),
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                null
+        );
+        when(pprPlanService.findDirectlyLinkedToEquipment(equipmentId, false))
+                .thenReturn(new EquipmentPprPlansResponse(
+                        equipmentId,
+                        typeId,
+                        1,
+                        List.of(new EquipmentLinkedPprPlanDto(
+                                plan,
+                                List.of(EquipmentLinkedPprPlanDto.REASON_EQUIPMENT_TARGET)
+                        ))
+                ));
+
+        mockMvc.perform(get("/api/v1/equipment/{equipmentId}/ppr-plans/direct", equipmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.equipmentId").value(equipmentId.toString()))
+                .andExpect(jsonPath("$.planCount").value(1))
+                .andExpect(jsonPath("$.plans[0].plan.code").value("PPR-2026-002"))
+                .andExpect(jsonPath("$.plans[0].linkReasons[0]").value("EQUIPMENT_TARGET"));
+
+        verify(pprPlanService).findDirectlyLinkedToEquipment(equipmentId, false);
+    }
 }

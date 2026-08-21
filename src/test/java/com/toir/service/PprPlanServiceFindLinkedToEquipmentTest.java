@@ -100,6 +100,31 @@ class PprPlanServiceFindLinkedToEquipmentTest {
         assertThat(response.plans().getFirst().plan().taskCount()).isEqualTo(1L);
     }
 
+
+    @Test
+    void findDirectlyLinkedToEquipmentExcludesTypeOnlyPlans() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setEquipmentTypeId(typeId);
+
+        PprPlan direct = plan(equipmentId, typeId);
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(planRepository.findDirectlyLinkedToEquipment(equipmentId)).thenReturn(List.of(direct));
+        when(taskRepository.countByPlanIdAndIsDeletedFalse(direct.getId())).thenReturn(1L);
+
+        var response = service.findDirectlyLinkedToEquipment(equipmentId, false);
+
+        assertThat(response.planCount()).isEqualTo(1);
+        assertThat(response.plans().getFirst().linkReasons()).containsExactly(
+                EquipmentLinkedPprPlanDto.REASON_EQUIPMENT_TARGET,
+                EquipmentLinkedPprPlanDto.REASON_TASK
+        );
+        assertThat(response.plans().getFirst().linkReasons())
+                .doesNotContain(EquipmentLinkedPprPlanDto.REASON_EQUIPMENT_TYPE_TARGET);
+    }
+
     private PprPlan plan(UUID equipmentId, UUID typeId) {
         PprPlan plan = new PprPlan();
         plan.setId(UUID.randomUUID());

@@ -154,6 +154,52 @@ public class PprPlanService {
         return new EquipmentPprPlansResponse(equipmentId, equipmentTypeId, linked.size(), linked);
     }
 
+    /**
+     * Returns PPR plans assigned to this concrete equipment only (not via equipment-type targets).
+     * Link = direct EQUIPMENT target or existing task on that equipment.
+     */
+    @Transactional(readOnly = true)
+    public EquipmentPprPlansResponse findDirectlyLinkedToEquipment(UUID equipmentId, boolean includeTasks) {
+        Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
+                .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
+        UUID equipmentTypeId = equipment.getEquipmentTypeId();
+        List<PprPlan> plans = planRepository.findDirectlyLinkedToEquipment(equipmentId);
+        List<EquipmentLinkedPprPlanDto> linked = plans.stream()
+                .map(plan -> toDirectLinkedDto(plan, equipmentId, includeTasks))
+                .toList();
+        return new EquipmentPprPlansResponse(equipmentId, equipmentTypeId, linked.size(), linked);
+    }
+
+    private EquipmentLinkedPprPlanDto toDirectLinkedDto(
+            PprPlan plan,
+            UUID equipmentId,
+            boolean includeTasks
+    ) {
+        PprPlanDto dto = includeTasks
+                ? toDtos(List.of(plan), equipmentId).getFirst()
+                : toSummaryDto(plan, false);
+        return new EquipmentLinkedPprPlanDto(dto, resolveDirectLinkReasons(plan, equipmentId));
+    }
+
+    private List<String> resolveDirectLinkReasons(PprPlan plan, UUID equipmentId) {
+        LinkedHashSet<String> reasons = new LinkedHashSet<>();
+        for (PprPlanTarget target : plan.getTargets()) {
+            if (target.isDeleted()) {
+                continue;
+            }
+            if (target.getTargetType() == PprTargetType.EQUIPMENT
+                    && equipmentId.equals(target.getEquipmentId())) {
+                reasons.add(EquipmentLinkedPprPlanDto.REASON_EQUIPMENT_TARGET);
+            }
+        }
+        boolean hasTask = plan.getTasks().stream()
+                .anyMatch(task -> !task.isDeleted() && equipmentId.equals(task.getEquipmentId()));
+        if (hasTask) {
+            reasons.add(EquipmentLinkedPprPlanDto.REASON_TASK);
+        }
+        return List.copyOf(reasons);
+    }
+
     private EquipmentLinkedPprPlanDto toLinkedDto(
             PprPlan plan,
             UUID equipmentId,
