@@ -138,7 +138,7 @@ public class PprPlanService {
 
     /**
      * Returns PPR plans linked to the given equipment for AI / integrations.
-     * Link = direct equipment target, matching equipment-type target, or existing task on that equipment.
+     * Link = direct equipment target, matching equipment-type target, or existing task on that equipment. Includes all non-deleted plan origins/statuses.
      *
      * @param includeTasks when true, each plan includes tasks for this equipment only; otherwise summary only
      */

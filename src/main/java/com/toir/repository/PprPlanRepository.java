@@ -324,14 +324,12 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
     );
 
     /**
-     * Plans linked to equipment via direct target, equipment-type target, or materialized task.
+     * Plans linked to equipment via direct target, equipment-type target, or task. No origin/status visibility filter — AI/integrations need all non-deleted plans.
      */
     @Query(value = """
             SELECT DISTINCT p.*
             FROM ppr_plans p
             WHERE p.is_deleted = false
-              AND (COALESCE(p.origin, 'MANUAL') = 'MANUAL'
-                   OR p.status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
               AND (
                     EXISTS (
                         SELECT 1
@@ -372,8 +370,6 @@ public interface PprPlanRepository extends JpaRepository<PprPlan, UUID> {
             SELECT DISTINCT p.*
             FROM ppr_plans p
             WHERE p.is_deleted = false
-              AND (COALESCE(p.origin, 'MANUAL') = 'MANUAL'
-                   OR p.status IN ('APPROVED', 'IN_PROGRESS', 'CLOSED', 'CANCELLED'))
               AND (
                     EXISTS (
                         SELECT 1
