@@ -5,6 +5,8 @@ import com.toir.entity.PprPlan;
 import com.toir.entity.PprPlanTarget;
 import com.toir.entity.PprTask;
 import com.toir.entity.equipment.Equipment;
+import com.toir.entity.maintenance.MaintenanceRegulation;
+import com.toir.enums.MaintenanceKind;
 import com.toir.enums.PprTargetType;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
@@ -113,17 +115,25 @@ class PprPlanServiceFindLinkedToEquipmentTest {
 
         PprPlan plan = plan(equipmentId, typeId);
         plan.getTasks().clear();
-        plan.getTasks().add(task(equipmentId, inspectionId, "Motor inspection"));
-        plan.getTasks().add(task(equipmentId, inspectionId, "Motor inspection"));
-        plan.getTasks().add(task(equipmentId, inspectionId, "Motor inspection"));
-        plan.getTasks().add(task(equipmentId, oilChangeId, "Oil change"));
-        plan.getTasks().add(task(equipmentId, oilChangeId, "Oil change"));
+        plan.getTasks().add(task(equipmentId, inspectionId, "Motor inspection",
+                java.time.LocalDateTime.of(2026, 3, 1, 9, 0)));
+        plan.getTasks().add(task(equipmentId, inspectionId, "Motor inspection",
+                java.time.LocalDateTime.of(2026, 6, 1, 9, 0)));
+        plan.getTasks().add(task(equipmentId, inspectionId, "Motor inspection",
+                java.time.LocalDateTime.of(2026, 9, 1, 9, 0)));
+        plan.getTasks().add(task(equipmentId, oilChangeId, "Oil change",
+                java.time.LocalDateTime.of(2026, 1, 15, 8, 0)));
+        plan.getTasks().add(task(equipmentId, oilChangeId, "Oil change",
+                java.time.LocalDateTime.of(2026, 4, 15, 8, 0)));
+
+        MaintenanceRegulation inspection = regulation(inspectionId, "Motor inspection", MaintenanceKind.INSPECTION);
+        MaintenanceRegulation oil = regulation(oilChangeId, "Oil change", MaintenanceKind.CURRENT_REPAIR);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(planRepository.findLinkedToEquipment(equipmentId, typeId)).thenReturn(List.of(plan));
         when(taskRepository.countByPlanIdAndIsDeletedFalse(plan.getId())).thenReturn(5L);
         when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(org.mockito.ArgumentMatchers.any()))
-                .thenReturn(List.of());
+                .thenReturn(List.of(inspection, oil));
 
         var response = service.findLinkedToEquipment(equipmentId, false);
 
@@ -135,6 +145,18 @@ class PprPlanServiceFindLinkedToEquipmentTest {
         assertThat(response.plans().getFirst().plannedWorks())
                 .extracting(work -> work.occurrenceCount())
                 .containsExactlyInAnyOrder(3, 2);
+        assertThat(response.plans().getFirst().plannedWorks())
+                .anySatisfy(work -> {
+                    assertThat(work.title()).isEqualTo("Oil change");
+                    assertThat(work.maintenanceKind()).isEqualTo(MaintenanceKind.CURRENT_REPAIR);
+                    assertThat(work.firstTaskStartsAt()).isEqualTo(java.time.LocalDateTime.of(2026, 1, 15, 8, 0));
+                });
+        assertThat(response.plans().getFirst().plannedWorks())
+                .anySatisfy(work -> {
+                    assertThat(work.title()).isEqualTo("Motor inspection");
+                    assertThat(work.maintenanceKind()).isEqualTo(MaintenanceKind.INSPECTION);
+                    assertThat(work.firstTaskStartsAt()).isEqualTo(java.time.LocalDateTime.of(2026, 3, 1, 9, 0));
+                });
     }
 
 
@@ -191,11 +213,25 @@ class PprPlanServiceFindLinkedToEquipmentTest {
     }
 
     private PprTask task(UUID equipmentId, UUID regulationId, String title) {
+        return task(equipmentId, regulationId, title, null);
+    }
+
+    private PprTask task(UUID equipmentId, UUID regulationId, String title, java.time.LocalDateTime startsAt) {
         PprTask task = new PprTask();
         task.setId(UUID.randomUUID());
         task.setEquipmentId(equipmentId);
         task.setRegulationId(regulationId);
         task.setTitle(title);
+        task.setScheduledStart(startsAt);
         return task;
+    }
+
+    private MaintenanceRegulation regulation(UUID id, String name, MaintenanceKind kind) {
+        MaintenanceRegulation regulation = new MaintenanceRegulation();
+        regulation.setId(id);
+        regulation.setName(name);
+        regulation.setCode(name.toUpperCase().replace(' ', '_'));
+        regulation.setMaintenanceKind(kind);
+        return regulation;
     }
 }

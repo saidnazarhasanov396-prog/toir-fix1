@@ -20,6 +20,7 @@ import com.toir.enums.PprScopeType;
 import com.toir.enums.PprPlanOrigin;
 import com.toir.enums.PprTargetType;
 import com.toir.enums.PprTaskStatus;
+import com.toir.enums.MaintenanceKind;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PprType;
 import com.toir.enums.MaterializationMode;
@@ -268,6 +269,9 @@ public class PprPlanService {
         private PprFrequency planFrequency;
         private Long planIntervalHours;
         private int occurrenceCount;
+        private MaintenanceKind maintenanceKind;
+        private UUID firstTaskId;
+        private LocalDateTime firstTaskStartsAt;
         private LocalDateTime nextDueAt;
 
         private void add(
@@ -305,13 +309,24 @@ public class PprPlanService {
                 equipmentMaintenanceRuleName = rule.getName();
                 periodicityUnit = rule.getPeriodicityUnit();
                 periodicityValue = rule.getPeriodicityValue();
+                if (rule.getMaintenanceKind() != null) {
+                    maintenanceKind = rule.getMaintenanceKind();
+                }
                 if (title == null || title.isBlank()) {
                     title = rule.getName();
                 }
             }
+            if (regulation != null && maintenanceKind == null) {
+                maintenanceKind = regulation.getMaintenanceKind();
+            }
             if (plan != null) {
                 planFrequency = plan.getFrequency();
                 planIntervalHours = plan.getIntervalHours();
+            }
+            LocalDateTime startsAt = task.getScheduledStart();
+            if (startsAt != null && (firstTaskStartsAt == null || startsAt.isBefore(firstTaskStartsAt))) {
+                firstTaskStartsAt = startsAt;
+                firstTaskId = task.getId();
             }
             LocalDateTime due = task.getDueDate() != null ? task.getDueDate() : task.getScheduledStart();
             if (due != null && (nextDueAt == null || due.isBefore(nextDueAt))) {
@@ -327,6 +342,7 @@ public class PprPlanService {
                 title = regulation.getName();
                 periodicityUnit = regulation.getPeriodicityUnit();
                 periodicityValue = regulation.getPeriodicityValue();
+                maintenanceKind = regulation.getMaintenanceKind();
             }
             if (plan != null) {
                 planFrequency = plan.getFrequency();
@@ -341,6 +357,7 @@ public class PprPlanService {
             return new EquipmentPprPlannedWorkDto(
                     workKey,
                     title,
+                    maintenanceKind,
                     regulationId,
                     regulationCode,
                     regulationName,
@@ -352,6 +369,8 @@ public class PprPlanService {
                     planFrequency,
                     planIntervalHours,
                     occurrenceCount,
+                    firstTaskId,
+                    firstTaskStartsAt,
                     nextDueAt
             );
         }
