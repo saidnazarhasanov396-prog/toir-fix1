@@ -19,9 +19,11 @@ public class ScopeAccessService {
     private static final String SYSTEM_ADMIN = "SYSTEM_ADMIN";
 
     private final EmployeeRepository employeeRepository;
+    private final com.toir.repository.WarehouseRepository warehouseRepository;
 
-    public ScopeAccessService(EmployeeRepository employeeRepository) {
+    public ScopeAccessService(EmployeeRepository employeeRepository, com.toir.repository.WarehouseRepository warehouseRepository) {
         this.employeeRepository = employeeRepository;
+        this.warehouseRepository = warehouseRepository;
     }
 
     public Optional<AuthenticatedUser> currentUser() {
@@ -167,7 +169,20 @@ public class ScopeAccessService {
         if (warehouseId == null) {
             return false;
         }
-        return isScopeAdmin();
+        if (isScopeAdmin()) {
+            return true;
+        }
+        return warehouseRepository.findByIdAndIsDeletedFalse(warehouseId)
+                .map(warehouse -> {
+                    if (warehouse.getDepartmentId() != null && canAccessDepartment(warehouse.getDepartmentId())) {
+                        return true;
+                    }
+                    if (warehouse.getResponsibleId() != null && canAccessEmployee(warehouse.getResponsibleId())) {
+                        return true;
+                    }
+                    return false;
+                })
+                .orElse(false);
     }
 
     public void assertCanAccessWarehouse(UUID warehouseId) {
