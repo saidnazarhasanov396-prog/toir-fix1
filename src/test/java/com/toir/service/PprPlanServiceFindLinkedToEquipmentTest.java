@@ -98,6 +98,43 @@ class PprPlanServiceFindLinkedToEquipmentTest {
         );
         assertThat(response.plans().getFirst().plan().tasks()).isEmpty();
         assertThat(response.plans().getFirst().plan().taskCount()).isEqualTo(1L);
+        assertThat(response.plans().getFirst().plannedWorks()).hasSize(1);
+    }
+
+    @Test
+    void findLinkedToEquipmentGroupsYearlyTasksIntoUniquePlannedWorks() {
+        UUID equipmentId = UUID.randomUUID();
+        UUID typeId = UUID.randomUUID();
+        UUID inspectionId = UUID.randomUUID();
+        UUID oilChangeId = UUID.randomUUID();
+        Equipment equipment = new Equipment();
+        equipment.setId(equipmentId);
+        equipment.setEquipmentTypeId(typeId);
+
+        PprPlan plan = plan(equipmentId, typeId);
+        plan.getTasks().clear();
+        plan.getTasks().add(task(equipmentId, inspectionId, "Motor inspection"));
+        plan.getTasks().add(task(equipmentId, inspectionId, "Motor inspection"));
+        plan.getTasks().add(task(equipmentId, inspectionId, "Motor inspection"));
+        plan.getTasks().add(task(equipmentId, oilChangeId, "Oil change"));
+        plan.getTasks().add(task(equipmentId, oilChangeId, "Oil change"));
+
+        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
+        when(planRepository.findLinkedToEquipment(equipmentId, typeId)).thenReturn(List.of(plan));
+        when(taskRepository.countByPlanIdAndIsDeletedFalse(plan.getId())).thenReturn(5L);
+        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of());
+
+        var response = service.findLinkedToEquipment(equipmentId, false);
+
+        assertThat(response.plans().getFirst().plan().tasks()).isEmpty();
+        assertThat(response.plans().getFirst().plannedWorks()).hasSize(2);
+        assertThat(response.plans().getFirst().plannedWorks())
+                .extracting(work -> work.title())
+                .containsExactlyInAnyOrder("Motor inspection", "Oil change");
+        assertThat(response.plans().getFirst().plannedWorks())
+                .extracting(work -> work.occurrenceCount())
+                .containsExactlyInAnyOrder(3, 2);
     }
 
 
@@ -148,7 +185,17 @@ class PprPlanServiceFindLinkedToEquipmentTest {
         PprTask task = new PprTask();
         task.setId(UUID.randomUUID());
         task.setEquipmentId(equipmentId);
+        task.setTitle("Linked task");
         plan.getTasks().add(task);
         return plan;
+    }
+
+    private PprTask task(UUID equipmentId, UUID regulationId, String title) {
+        PprTask task = new PprTask();
+        task.setId(UUID.randomUUID());
+        task.setEquipmentId(equipmentId);
+        task.setRegulationId(regulationId);
+        task.setTitle(title);
+        return task;
     }
 }

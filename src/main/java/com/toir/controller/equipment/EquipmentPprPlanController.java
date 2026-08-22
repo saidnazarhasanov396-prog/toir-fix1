@@ -32,13 +32,13 @@ public class EquipmentPprPlanController {
     @PreAuthorize(READ_AUTH)
     @Operation(
             summary = "List PPR plans linked to equipment (includes type-level)",
-            description = "Returns all non-deleted plans attached via equipment target, equipment-type "
-                    + "target, or PPR tasks for this equipment. Tasks for this equipment are included "
-                    + "by default (includeTasks=true)."
+            description = "Returns all non-deleted plans for this equipment. Each plan includes unique "
+                    + "planned works (regulation/rule), not every yearly generated task. "
+                    + "Pass includeTasks=true only if full task instances are needed."
     )
     public ResponseEntity<EquipmentPprPlansResponse> list(
             @PathVariable UUID equipmentId,
-            @RequestParam(defaultValue = "true") boolean includeTasks
+            @RequestParam(defaultValue = "false") boolean includeTasks
     ) {
         return ResponseEntity.ok(pprPlanService.findLinkedToEquipment(equipmentId, includeTasks));
     }
@@ -49,11 +49,11 @@ public class EquipmentPprPlanController {
             summary = "List PPR plans assigned to this equipment only",
             description = "Returns all non-deleted plans linked to this concrete equipment only "
                     + "(direct EQUIPMENT target or tasks). Does not include type-only plans. "
-                    + "Tasks included by default."
+                    + "Unique planned works are included; pass includeTasks=true for instances."
     )
     public ResponseEntity<EquipmentPprPlansResponse> listDirect(
             @PathVariable UUID equipmentId,
-            @RequestParam(defaultValue = "true") boolean includeTasks
+            @RequestParam(defaultValue = "false") boolean includeTasks
     ) {
         return ResponseEntity.ok(pprPlanService.findDirectlyLinkedToEquipment(equipmentId, includeTasks));
     }

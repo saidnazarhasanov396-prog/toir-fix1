@@ -20,6 +20,7 @@ import com.toir.enums.PprScopeType;
 import com.toir.enums.PprPlanOrigin;
 import com.toir.enums.PprTargetType;
 import com.toir.enums.PprTaskStatus;
+import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PprType;
 import com.toir.enums.MaterializationMode;
 import com.toir.enums.TaskMaterializationStatus;
@@ -178,7 +179,10 @@ public class PprPlanService {
         PprPlanDto dto = includeTasks
                 ? toDtos(List.of(plan), equipmentId).getFirst()
                 : toSummaryDto(plan, false);
-        return new EquipmentLinkedPprPlanDto(dto, resolveDirectLinkReasons(plan, equipmentId));
+        return new EquipmentLinkedPprPlanDto(
+                dto,
+                resolveDirectLinkReasons(plan, equipmentId),
+                plannedWorksFor(plan, equipmentId));
     }
 
     private List<String> resolveDirectLinkReasons(PprPlan plan, UUID equipmentId) {
@@ -200,6 +204,159 @@ public class PprPlanService {
         return List.copyOf(reasons);
     }
 
+    private List<EquipmentPprPlannedWorkDto> plannedWorksFor(PprPlan plan, UUID equipmentId) {
+        List<PprTask> tasks = collectTasks(List.of(plan), equipmentId);
+        Map<UUID, EquipmentMaintenanceRule> ruleById = loadMaintenanceRuleById(tasks);
+        Map<UUID, MaintenanceRegulation> regulationById = loadRegulations(plan, tasks);
+        Map<String, PlannedWorkAccumulator> grouped = new java.util.LinkedHashMap<>();
+        for (PprTask task : tasks) {
+            String workKey = plannedWorkKey(task);
+            PlannedWorkAccumulator acc = grouped.computeIfAbsent(workKey, ignored -> new PlannedWorkAccumulator());
+            acc.add(task, plan, ruleById.get(task.getEquipmentMaintenanceRuleId()),
+                    regulationById.get(task.getRegulationId()));
+        }
+        for (PprPlanTarget target : plan.getTargets()) {
+            if (target.isDeleted() || target.getTargetType() != PprTargetType.REGULATION
+                    || target.getRegulationId() == null) {
+                continue;
+            }
+            String workKey = "REGULATION:" + target.getRegulationId();
+            if (grouped.containsKey(workKey)) {
+                continue;
+            }
+            MaintenanceRegulation regulation = regulationById.get(target.getRegulationId());
+            PlannedWorkAccumulator acc = new PlannedWorkAccumulator();
+            acc.addRegulationOnly(plan, regulation);
+            grouped.put(workKey, acc);
+        }
+        return grouped.values().stream().map(PlannedWorkAccumulator::toDto).toList();
+    }
+
+    private String plannedWorkKey(PprTask task) {
+        if (task.getEquipmentMaintenanceRuleId() != null) {
+            return "RULE:" + task.getEquipmentMaintenanceRuleId();
+        }
+        if (task.getRegulationId() != null) {
+            return "REGULATION:" + task.getRegulationId();
+        }
+        String title = task.getTitle() == null ? "" : task.getTitle().trim().toLowerCase(Locale.ROOT);
+        return title.isEmpty() ? "TITLE:UNSPECIFIED" : "TITLE:" + title;
+    }
+
+    private Map<UUID, MaintenanceRegulation> loadRegulations(PprPlan plan, List<PprTask> tasks) {
+        List<UUID> regulationIds = distinctUuidStream(java.util.stream.Stream.concat(
+                tasks.stream().map(PprTask::getRegulationId),
+                plan.getTargets().stream().map(PprPlanTarget::getRegulationId)
+        ));
+        if (regulationIds.isEmpty()) {
+            return Map.of();
+        }
+        return maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(regulationIds).stream()
+                .collect(Collectors.toMap(MaintenanceRegulation::getId, regulation -> regulation, (left, right) -> left));
+    }
+
+    private static final class PlannedWorkAccumulator {
+        private String title;
+        private UUID regulationId;
+        private String regulationCode;
+        private String regulationName;
+        private UUID equipmentMaintenanceRuleId;
+        private String equipmentMaintenanceRuleCode;
+        private String equipmentMaintenanceRuleName;
+        private PeriodicityUnit periodicityUnit;
+        private Integer periodicityValue;
+        private PprFrequency planFrequency;
+        private Long planIntervalHours;
+        private int occurrenceCount;
+        private LocalDateTime nextDueAt;
+
+        private void add(
+                PprTask task,
+                PprPlan plan,
+                EquipmentMaintenanceRule rule,
+                MaintenanceRegulation regulation
+        ) {
+            occurrenceCount++;
+            if (title == null || title.isBlank()) {
+                if (rule != null && rule.getName() != null) {
+                    title = rule.getName();
+                } else if (regulation != null && regulation.getName() != null) {
+                    title = regulation.getName();
+                } else {
+                    title = task.getTitle();
+                }
+            }
+            if (task.getRegulationId() != null) {
+                regulationId = task.getRegulationId();
+            }
+            if (regulation != null) {
+                regulationCode = regulation.getCode();
+                regulationName = regulation.getName();
+                if (periodicityUnit == null) {
+                    periodicityUnit = regulation.getPeriodicityUnit();
+                    periodicityValue = regulation.getPeriodicityValue();
+                }
+            }
+            if (task.getEquipmentMaintenanceRuleId() != null) {
+                equipmentMaintenanceRuleId = task.getEquipmentMaintenanceRuleId();
+            }
+            if (rule != null) {
+                equipmentMaintenanceRuleCode = rule.getCode();
+                equipmentMaintenanceRuleName = rule.getName();
+                periodicityUnit = rule.getPeriodicityUnit();
+                periodicityValue = rule.getPeriodicityValue();
+                if (title == null || title.isBlank()) {
+                    title = rule.getName();
+                }
+            }
+            if (plan != null) {
+                planFrequency = plan.getFrequency();
+                planIntervalHours = plan.getIntervalHours();
+            }
+            LocalDateTime due = task.getDueDate() != null ? task.getDueDate() : task.getScheduledStart();
+            if (due != null && (nextDueAt == null || due.isBefore(nextDueAt))) {
+                nextDueAt = due;
+            }
+        }
+
+        private void addRegulationOnly(PprPlan plan, MaintenanceRegulation regulation) {
+            if (regulation != null) {
+                regulationId = regulation.getId();
+                regulationCode = regulation.getCode();
+                regulationName = regulation.getName();
+                title = regulation.getName();
+                periodicityUnit = regulation.getPeriodicityUnit();
+                periodicityValue = regulation.getPeriodicityValue();
+            }
+            if (plan != null) {
+                planFrequency = plan.getFrequency();
+                planIntervalHours = plan.getIntervalHours();
+            }
+        }
+
+        private EquipmentPprPlannedWorkDto toDto() {
+            String workKey = equipmentMaintenanceRuleId != null
+                    ? "RULE:" + equipmentMaintenanceRuleId
+                    : (regulationId != null ? "REGULATION:" + regulationId : "TITLE:" + (title == null ? "" : title));
+            return new EquipmentPprPlannedWorkDto(
+                    workKey,
+                    title,
+                    regulationId,
+                    regulationCode,
+                    regulationName,
+                    equipmentMaintenanceRuleId,
+                    equipmentMaintenanceRuleCode,
+                    equipmentMaintenanceRuleName,
+                    periodicityUnit,
+                    periodicityValue,
+                    planFrequency,
+                    planIntervalHours,
+                    occurrenceCount,
+                    nextDueAt
+            );
+        }
+    }
+
     private EquipmentLinkedPprPlanDto toLinkedDto(
             PprPlan plan,
             UUID equipmentId,
@@ -210,7 +367,7 @@ public class PprPlanService {
                 ? toDtos(List.of(plan), equipmentId).getFirst()
                 : toSummaryDto(plan, false);
         List<String> reasons = resolveLinkReasons(plan, equipmentId, equipmentTypeId);
-        return new EquipmentLinkedPprPlanDto(dto, reasons);
+        return new EquipmentLinkedPprPlanDto(dto, reasons, plannedWorksFor(plan, equipmentId));
     }
 
     private List<String> resolveLinkReasons(PprPlan plan, UUID equipmentId, UUID equipmentTypeId) {
