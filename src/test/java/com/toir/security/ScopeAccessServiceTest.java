@@ -1,6 +1,7 @@
 package com.toir.security;
 
 import com.toir.entity.users.Employee;
+import com.toir.repository.WarehouseRepository;
 import com.toir.repository.users.EmployeeRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,9 @@ class ScopeAccessServiceTest {
 
     @Mock
     private EmployeeRepository employeeRepository;
+
+    @Mock
+    private WarehouseRepository warehouseRepository;
 
     @AfterEach
     void clearSecurityContext() {
@@ -215,7 +219,7 @@ class ScopeAccessServiceTest {
     }
 
     private ScopeAccessService service() {
-        return new ScopeAccessService(employeeRepository);
+        return new ScopeAccessService(employeeRepository, warehouseRepository);
     }
 
     private void authenticate(AuthenticatedUser user, List<String> authorities) {
