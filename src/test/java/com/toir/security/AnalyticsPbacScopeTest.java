@@ -529,7 +529,7 @@ class AnalyticsPbacScopeTest {
                 equipmentRepository,
                 departmentRepository,
                 actualCostRepository,
-                new ScopeAccessService(mock(com.toir.repository.users.EmployeeRepository.class)),
+                new ScopeAccessService(mock(com.toir.repository.users.EmployeeRepository.class), mock(com.toir.repository.WarehouseRepository.class)),
                 new AnalyticsContextService(java.time.Clock.systemUTC())
         );
     }
