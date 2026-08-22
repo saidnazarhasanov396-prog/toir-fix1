@@ -66,7 +66,7 @@ class EquipmentPprPlanControllerContractTest {
                 null,
                 null
         );
-        when(pprPlanService.findLinkedToEquipment(equipmentId, true))
+        when(pprPlanService.findLinkedToEquipment(equipmentId, false))
                 .thenReturn(new EquipmentPprPlansResponse(
                         equipmentId,
                         typeId,
@@ -86,7 +86,7 @@ class EquipmentPprPlanControllerContractTest {
                 .andExpect(jsonPath("$.plans[0].plan.code").value("PPR-2026-001"))
                 .andExpect(jsonPath("$.plans[0].linkReasons[0]").value("EQUIPMENT_TARGET"));
 
-        verify(pprPlanService).findLinkedToEquipment(equipmentId, true);
+        verify(pprPlanService).findLinkedToEquipment(equipmentId, false);
     }
 
     @Test
@@ -132,7 +132,7 @@ class EquipmentPprPlanControllerContractTest {
                 null,
                 null
         );
-        when(pprPlanService.findDirectlyLinkedToEquipment(equipmentId, true))
+        when(pprPlanService.findDirectlyLinkedToEquipment(equipmentId, false))
                 .thenReturn(new EquipmentPprPlansResponse(
                         equipmentId,
                         typeId,
@@ -150,6 +150,6 @@ class EquipmentPprPlanControllerContractTest {
                 .andExpect(jsonPath("$.plans[0].plan.code").value("PPR-2026-002"))
                 .andExpect(jsonPath("$.plans[0].linkReasons[0]").value("EQUIPMENT_TARGET"));
 
-        verify(pprPlanService).findDirectlyLinkedToEquipment(equipmentId, true);
+        verify(pprPlanService).findDirectlyLinkedToEquipment(equipmentId, false);
     }
 }
