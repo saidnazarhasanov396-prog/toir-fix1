@@ -441,10 +441,6 @@ public class RepairMaterialUsageService {
     }
 
     private boolean canAccessWarehouse(Warehouse warehouse) {
-        if (scopeAccessService.isScopeAdmin()) {
-            return true;
-        }
-        return (warehouse.getDepartmentId() != null && scopeAccessService.canAccessDepartment(warehouse.getDepartmentId()))
-                || (warehouse.getResponsibleId() != null && scopeAccessService.canAccessEmployee(warehouse.getResponsibleId()));
+        return scopeAccessService.canAccessWarehouse(warehouse.getId());
     }
 }

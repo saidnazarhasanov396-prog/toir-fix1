@@ -5,6 +5,7 @@ import com.toir.enums.sparepartlifecycle.SparePartLifecycleOperation;
 import com.toir.exception.RestException;
 import com.toir.exception.SparePartLifecycleErrorCodes;
 import com.toir.repository.sparepartlifecycle.SparePartDueEventRepository;
+import com.toir.security.ScopeAccessService;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -15,9 +16,13 @@ import org.springframework.stereotype.Service;
 public class SparePartLifecycleOperationGuard {
 
     private final SparePartDueEventRepository dueEventRepository;
+    private final ScopeAccessService scopeAccessService;
 
     public void assertAllowed(UUID equipmentId, SparePartLifecycleOperation operation) {
         if (equipmentId == null) {
+            return;
+        }
+        if (scopeAccessService.isScopeAdmin()) {
             return;
         }
         List<SparePartDueEvent> blocking = dueEventRepository.findBlockingForEquipmentForUpdate(equipmentId);
