@@ -1,5 +1,6 @@
 package com.toir.dto.pprplanning;
 
+import com.toir.enums.MaintenanceKind;
 import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PprFrequency;
 import java.time.LocalDateTime;
@@ -11,6 +12,7 @@ import java.util.UUID;
 public record EquipmentPprPlannedWorkDto(
         String workKey,
         String title,
+        MaintenanceKind maintenanceKind,
         UUID regulationId,
         String regulationCode,
         String regulationName,
@@ -22,6 +24,8 @@ public record EquipmentPprPlannedWorkDto(
         PprFrequency planFrequency,
         Long planIntervalHours,
         int occurrenceCount,
+        UUID firstTaskId,
+        LocalDateTime firstTaskStartsAt,
         LocalDateTime nextDueAt
 ) {
 }
