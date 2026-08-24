@@ -72,6 +72,9 @@ logging:
     com.google.firebase: WARN
 
 toir:
+  telemetry:
+    simulator:
+      ingest-secret: ${TOIR_TELEMETRY_INGEST_SECRET:K8wN4qR2vL7pH9cT5xB1mY6jF3dA0uZsQeW}
   features:
     annual-maintenance-approval-first:
       enabled: ${TOIR_FEATURES_ANNUAL_MAINTENANCE_APPROVAL_FIRST_ENABLED:true}

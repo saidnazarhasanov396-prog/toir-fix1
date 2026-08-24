@@ -52,6 +52,7 @@ toir:
     simulator:
       enabled: ${TOIR_TELEMETRY_ENABLED:false}
       ws-url: ${TOIR_TELEMETRY_WS_URL:}
+      ingest-secret: ${TOIR_TELEMETRY_INGEST_SECRET:}
       reconnect-initial: ${TOIR_TELEMETRY_RECONNECT_INITIAL:PT1S}
       reconnect-max: ${TOIR_TELEMETRY_RECONNECT_MAX:PT30S}
   features:
