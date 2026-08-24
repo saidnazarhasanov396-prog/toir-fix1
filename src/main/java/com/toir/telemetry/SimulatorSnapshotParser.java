@@ -26,21 +26,35 @@ public class SimulatorSnapshotParser {
             if (!isExpectedEnvelope(root)) {
                 return Optional.empty();
             }
-            JsonNode data = root.path("data");
-            Instant sentAt = parseSentAt(data.path("sentAt")).orElse(null);
-            JsonNode assets = data.path("assets");
-            if (sentAt == null || !assets.isArray()) {
-                return Optional.empty();
-            }
-
-            List<SimulatorSnapshot.Asset> parsedAssets = new ArrayList<>();
-            for (JsonNode asset : assets) {
-                parseAsset(asset).ifPresent(parsedAssets::add);
-            }
-            return Optional.of(new SimulatorSnapshot(parsedAssets, sentAt));
+            return snapshotFrom(root.path("data"));
         } catch (Exception ignored) {
             return Optional.empty();
         }
+    }
+
+    public Optional<SimulatorSnapshot> parsePush(String body) {
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            if (root == null || !root.isObject()) {
+                return Optional.empty();
+            }
+            return snapshotFrom(root);
+        } catch (Exception ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<SimulatorSnapshot> snapshotFrom(JsonNode node) {
+        Instant sentAt = parseSentAt(node.path("sentAt")).orElse(null);
+        JsonNode assets = node.path("assets");
+        if (sentAt == null || !assets.isArray()) {
+            return Optional.empty();
+        }
+        List<SimulatorSnapshot.Asset> parsedAssets = new ArrayList<>();
+        for (JsonNode asset : assets) {
+            parseAsset(asset).ifPresent(parsedAssets::add);
+        }
+        return Optional.of(new SimulatorSnapshot(parsedAssets, sentAt));
     }
 
     private boolean isExpectedEnvelope(JsonNode root) {

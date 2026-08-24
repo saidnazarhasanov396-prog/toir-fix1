@@ -13,6 +13,7 @@ public class TelemetrySimulatorProperties {
 
     private boolean enabled;
     private URI wsUrl;
+    private String ingestSecret;
     private Duration reconnectInitial = Duration.ofSeconds(1);
     private Duration reconnectMax = Duration.ofSeconds(30);
 

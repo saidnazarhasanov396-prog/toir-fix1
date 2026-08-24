@@ -43,6 +43,23 @@ class SimulatorSnapshotParserTest {
     }
 
     @Test
+    void parsesPushPayloadWithoutWebsocketEnvelope() {
+        Optional<SimulatorSnapshot> parsed = parser.parsePush("""
+                {"sentAt":"2026-08-24T10:00:00Z","assets":[{"assetId":"0301b754-f675-4cf2-96a2-8a84fc11ebd5",
+                "metrics":{"f67c1f29-1d51-4c57-b4f7-520209f29a20":{"value":13001.5,"unit":"km"}}}]}
+                """);
+
+        assertThat(parsed).isPresent();
+        assertThat(parsed.orElseThrow().sentAt()).isEqualTo(Instant.parse("2026-08-24T10:00:00Z"));
+        assertThat(parsed.orElseThrow().assets().getFirst().metrics()
+                .get("f67c1f29-1d51-4c57-b4f7-520209f29a20").value())
+                .isEqualTo(13001.5);
+        assertThat(parser.parse("""
+                {"sentAt":"2026-08-24T10:00:00Z","assets":[]}
+                """)).isEmpty();
+    }
+
+    @Test
     void ignoresResponsesMalformedJsonAndUnsupportedEvents() {
         assertThat(parser.parse("{bad")).isEmpty();
         assertThat(parser.parse("{\"type\":\"response\",\"ok\":true}")).isEmpty();

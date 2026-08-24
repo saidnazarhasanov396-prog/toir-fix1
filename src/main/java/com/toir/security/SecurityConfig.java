@@ -32,7 +32,8 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/actuator/health",
-            "/api/ai-job/callback"
+            "/api/ai-job/callback",
+            "/api/v1/telemetry/simulator-snapshots"
     };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
