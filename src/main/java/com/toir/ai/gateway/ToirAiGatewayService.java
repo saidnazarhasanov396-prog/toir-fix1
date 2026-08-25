@@ -34,6 +34,8 @@ public class ToirAiGatewayService {
             "/ai/recurrent_failure_analysis/equipment/{equipment_id}/failure-evidence";
     public static final String PATH_CAUSE_REPAIR =
             "/ai/recurrent_failure_analysis/equipment/{equipment_id}/cause-repair-analysis";
+    public static final String PATH_MAINTENANCE_KIND_INTERVALS =
+            "/ai/technical-schedule-optimizer/equipment/{equipment_id}/maintenance-kind-intervals";
     public static final String PATH_HEALTH = "/health";
 
     public static final String PATH_JOB_DRAFT_TEXT = "/ai/jobs/work-order/generate-draft/text";
@@ -183,6 +185,12 @@ public class ToirAiGatewayService {
                 payload,
                 null
         );
+    }
+
+    public JsonNode maintenanceKindIntervals(UUID equipmentId) {
+        requireEnabled();
+        String path = PATH_MAINTENANCE_KIND_INTERVALS.replace("{equipment_id}", equipmentId.toString());
+        return execute(() -> client.getJson(path, Map.of()));
     }
 
     public JsonNode health() {
