@@ -74,6 +74,15 @@ public class TelemetryReadingIngestor {
                 || isOlderThanCurrentReading(sentAt, meter.getLastReadAt())) {
             return Outcome.SKIPPED;
         }
+        if (isDecreaseWithoutRollover(meter, metric.value())) {
+            log.warn(
+                    "telemetry_reading_below_current assetId={} meterId={} incoming={} current={}",
+                    assetId,
+                    meter.getId(),
+                    metric.value(),
+                    meter.getCurrentValue());
+            return Outcome.SKIPPED;
+        }
 
         MeterReadingDto reading = meterService.addReading(new MeterReadingRequest(
                 meter.getId(),
@@ -90,6 +99,13 @@ public class TelemetryReadingIngestor {
                 reading.readAt(),
                 reading.source()));
         return Outcome.ACCEPTED;
+    }
+
+    private boolean isDecreaseWithoutRollover(EquipmentMeter meter, double incoming) {
+        if (incoming >= meter.getCurrentValue()) {
+            return false;
+        }
+        return meter.getRolloverValue() == null || meter.getRolloverValue() <= 0;
     }
 
     private boolean isOlderThanCurrentReading(Instant sentAt, Instant lastReadAt) {
