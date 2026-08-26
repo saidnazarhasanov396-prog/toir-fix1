@@ -25,7 +25,11 @@ public class TelemetryMeterResolver {
             Map.entry("cycle_count", MeterType.CYCLES),
             Map.entry("tons_produced", MeterType.TONS_PRODUCED),
             Map.entry("kwh_consumed", MeterType.KWH_CONSUMED),
-            Map.entry("energy_kwh", MeterType.KWH_CONSUMED));
+            Map.entry("energy_kwh", MeterType.KWH_CONSUMED),
+            Map.entry("fuel", MeterType.CUSTOM),
+            Map.entry("fuel_l", MeterType.CUSTOM),
+            Map.entry("fuel_level", MeterType.CUSTOM),
+            Map.entry("tank", MeterType.CUSTOM));
 
     private final EquipmentRepository equipmentRepository;
     private final EquipmentMeterRepository meterRepository;
@@ -97,7 +101,32 @@ public class TelemetryMeterResolver {
     }
 
     private boolean unitsEqual(String meterUnit, String simulatorUnit) {
-        return meterUnit != null && simulatorUnit != null
-                && meterUnit.trim().equalsIgnoreCase(simulatorUnit.trim());
+        String left = canonicalUnit(meterUnit);
+        String right = canonicalUnit(simulatorUnit);
+        return left != null && left.equals(right);
+    }
+
+    private static String canonicalUnit(String unit) {
+        if (unit == null) {
+            return null;
+        }
+        String normalized = unit.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if ("hr".equals(normalized) || "hour".equals(normalized) || "hours".equals(normalized) || "soat".equals(normalized)) {
+            return "h";
+        }
+        if (normalized.contains("kilomet") || "км".equals(normalized)) {
+            return "km";
+        }
+        if ("ltr".equals(normalized) || "liter".equals(normalized) || "litre".equals(normalized)
+                || "лит".equals(normalized) || "литр".equals(normalized)) {
+            return "l";
+        }
+        if ("kw/h".equals(normalized) || "kw.h".equals(normalized)) {
+            return "kwh";
+        }
+        return normalized;
     }
 }

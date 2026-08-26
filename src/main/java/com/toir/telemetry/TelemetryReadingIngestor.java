@@ -4,6 +4,7 @@ import com.toir.dto.meter.MeterReadingDto;
 import com.toir.dto.meter.MeterReadingRequest;
 import com.toir.entity.equipment.EquipmentMeter;
 import com.toir.enums.MeterSource;
+import com.toir.enums.MeterType;
 import com.toir.service.MeterService;
 import java.time.Instant;
 import java.util.Map;
@@ -103,6 +104,9 @@ public class TelemetryReadingIngestor {
 
     private boolean isDecreaseWithoutRollover(EquipmentMeter meter, double incoming) {
         if (incoming >= meter.getCurrentValue()) {
+            return false;
+        }
+        if (meter.getMeterType() == MeterType.CUSTOM) {
             return false;
         }
         return meter.getRolloverValue() == null || meter.getRolloverValue() <= 0;
