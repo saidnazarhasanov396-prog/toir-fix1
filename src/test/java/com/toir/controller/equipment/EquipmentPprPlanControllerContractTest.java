@@ -1,6 +1,8 @@
 package com.toir.controller.equipment;
 
 import com.toir.dto.pprplanning.EquipmentLinkedPprPlanDto;
+import com.toir.dto.pprplanning.EquipmentPprPlannedWorkDto;
+import com.toir.dto.pprplanning.EquipmentPprPlannedWorksResponse;
 import com.toir.dto.pprplanning.EquipmentPprPlansResponse;
 import com.toir.dto.pprplanning.PprPlanDto;
 import com.toir.enums.PlanStatus;
@@ -104,52 +106,43 @@ class EquipmentPprPlanControllerContractTest {
     }
 
     @Test
-    void listDirectReturnsOnlyEquipmentScopedPlans() throws Exception {
+    void listDirectReturnsOnlyPlannedWorks() throws Exception {
         UUID equipmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
-        UUID planId = UUID.randomUUID();
-        PprPlanDto plan = new PprPlanDto(
-                planId,
-                "PPR-2026-002",
-                "Equipment-only plan",
-                PlanStatus.APPROVED,
+        EquipmentPprPlannedWorkDto work = new EquipmentPprPlannedWorkDto(
+                "RULE:" + UUID.randomUUID(),
+                "Oil change",
                 null,
                 null,
                 null,
                 null,
+                UUID.randomUUID(),
+                "OIL-CHANGE",
+                "Oil change",
                 null,
-                List.of(),
-                1L,
-                LocalDate.of(2026, 1, 1),
-                LocalDate.of(2026, 12, 31),
-                null,
-                null,
+                2,
                 null,
                 null,
-                null,
-                List.of(),
+                1,
                 null,
                 null,
                 null
         );
-        when(pprPlanService.findDirectlyLinkedToEquipment(equipmentId, false))
-                .thenReturn(new EquipmentPprPlansResponse(
+        when(pprPlanService.findDirectPlannedWorks(equipmentId))
+                .thenReturn(new EquipmentPprPlannedWorksResponse(
                         equipmentId,
                         typeId,
                         1,
-                        List.of(new EquipmentLinkedPprPlanDto(
-                                plan,
-                                List.of(EquipmentLinkedPprPlanDto.REASON_EQUIPMENT_TARGET)
-                        ))
+                        List.of(work)
                 ));
 
         mockMvc.perform(get("/api/v1/equipment/{equipmentId}/ppr-plans/direct", equipmentId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.equipmentId").value(equipmentId.toString()))
-                .andExpect(jsonPath("$.planCount").value(1))
-                .andExpect(jsonPath("$.plans[0].plan.code").value("PPR-2026-002"))
-                .andExpect(jsonPath("$.plans[0].linkReasons[0]").value("EQUIPMENT_TARGET"));
+                .andExpect(jsonPath("$.plannedWorkCount").value(1))
+                .andExpect(jsonPath("$.plannedWorks[0].title").value("Oil change"))
+                .andExpect(jsonPath("$.plans").doesNotExist());
 
-        verify(pprPlanService).findDirectlyLinkedToEquipment(equipmentId, false);
+        verify(pprPlanService).findDirectPlannedWorks(equipmentId);
     }
 }

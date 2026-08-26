@@ -1,5 +1,6 @@
 package com.toir.controller.equipment;
 
+import com.toir.dto.pprplanning.EquipmentPprPlannedWorksResponse;
 import com.toir.dto.pprplanning.EquipmentPprPlansResponse;
 import com.toir.service.PprPlanService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -46,15 +47,14 @@ public class EquipmentPprPlanController {
     @GetMapping("/direct")
     @PreAuthorize(READ_AUTH)
     @Operation(
-            summary = "List PPR plans assigned to this equipment only",
-            description = "Returns all non-deleted plans linked to this concrete equipment only "
-                    + "(direct EQUIPMENT target or tasks). Does not include type-only plans. "
-                    + "Unique planned works are included; pass includeTasks=true for instances."
+            summary = "List planned works for this equipment only",
+            description = "Returns unique planned works linked to this concrete equipment only "
+                    + "(direct EQUIPMENT target or tasks). Does not include type-only plans "
+                    + "and does not return full PPR plan payloads."
     )
-    public ResponseEntity<EquipmentPprPlansResponse> listDirect(
-            @PathVariable UUID equipmentId,
-            @RequestParam(defaultValue = "false") boolean includeTasks
+    public ResponseEntity<EquipmentPprPlannedWorksResponse> listDirect(
+            @PathVariable UUID equipmentId
     ) {
-        return ResponseEntity.ok(pprPlanService.findDirectlyLinkedToEquipment(equipmentId, includeTasks));
+        return ResponseEntity.ok(pprPlanService.findDirectPlannedWorks(equipmentId));
     }
 }
