@@ -47,9 +47,10 @@ public class EquipmentPprPlanController {
     @GetMapping("/direct")
     @PreAuthorize(READ_AUTH)
     @Operation(
-            summary = "List planned works for this equipment only",
-            description = "Returns unique planned works linked to this concrete equipment only "
-                    + "(direct EQUIPMENT target or tasks). Does not include type-only plans "
+            summary = "List unique planned works for this equipment only",
+            description = "Returns one planned work per unique work type (oil change, motor repair, "
+                    + "general, and so on) for this concrete equipment only. Repeated yearly "
+                    + "tasks collapse into the latest occurrence. Does not include type-only plans "
                     + "and does not return full PPR plan payloads."
     )
     public ResponseEntity<EquipmentPprPlannedWorksResponse> listDirect(
