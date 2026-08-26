@@ -107,6 +107,25 @@ class TelemetryReadingIngestorTest {
     }
 
     @Test
+    void acceptsFuelLevelDecreaseForCustomMeter() {
+        EquipmentMeter meter = meter(48.0, Instant.parse("2026-08-03T08:00:00Z"));
+        meter.setMeterType(MeterType.CUSTOM);
+        meter.setUnit("L");
+        when(resolver.resolve(EQUIPMENT_ID.toString(), METER_ID.toString(), "L"))
+                .thenReturn(Optional.of(meter));
+        when(meterService.addReading(any())).thenReturn(readingDto(47.2));
+
+        SimulatorSnapshot snapshot = new SimulatorSnapshot(
+                java.util.List.of(new SimulatorSnapshot.Asset(
+                        EQUIPMENT_ID.toString(),
+                        Map.of(METER_ID.toString(), new SimulatorSnapshot.Metric(47.2, "L")))),
+                Instant.parse("2026-08-03T09:00:00Z"));
+
+        assertThat(ingestor.ingest(snapshot)).isEqualTo(new IngestionResult(1, 0, 0));
+        verify(meterService).addReading(any());
+    }
+
+    @Test
     void isolatesOneRejectedMetricFromAnotherValidMetric() {
         when(resolver.resolve(anyString(), eq("bad_counter"), anyString()))
                 .thenThrow(new IllegalStateException("bad mapping"));

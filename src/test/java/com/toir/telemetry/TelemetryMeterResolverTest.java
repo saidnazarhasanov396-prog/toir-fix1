@@ -47,6 +47,7 @@ class TelemetryMeterResolverTest {
 
         assertThat(resolver.resolve(EQUIPMENT_ID.toString(), "engine-hours", "h")).containsSame(meter);
         assertThat(resolver.resolve(EQUIPMENT_ID.toString(), "moto_hours", "h")).containsSame(meter);
+        assertThat(resolver.resolve(EQUIPMENT_ID.toString(), "engine_hours", "hour")).containsSame(meter);
     }
 
     @Test
