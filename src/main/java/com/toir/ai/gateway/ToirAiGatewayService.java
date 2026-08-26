@@ -541,15 +541,34 @@ public class ToirAiGatewayService {
         return new RestException(message, HttpStatus.BAD_GATEWAY, "AI_GATEWAY_HTTP_ERROR");
     }
 
-    private static String extractDetail(String body) {
+    private String extractDetail(String body) {
         if (!StringUtils.hasText(body)) {
             return null;
         }
         String trimmed = body.trim();
-        if (trimmed.length() > 2000) {
-            return trimmed.substring(0, 2000);
+        if (trimmed.startsWith("{")) {
+            try {
+                JsonNode root = objectMapper.readTree(trimmed);
+                JsonNode detailNode = root.get("detail");
+                if (detailNode != null && detailNode.isTextual() && StringUtils.hasText(detailNode.asText())) {
+                    return truncate(detailNode.asText());
+                }
+                JsonNode messageNode = root.get("message");
+                if (messageNode != null && messageNode.isTextual() && StringUtils.hasText(messageNode.asText())) {
+                    return truncate(messageNode.asText());
+                }
+            } catch (IOException ignored) {
+                // fall through to raw body
+            }
         }
-        return trimmed;
+        return truncate(trimmed);
+    }
+
+    private static String truncate(String value) {
+        if (value.length() <= 2000) {
+            return value;
+        }
+        return value.substring(0, 2000);
     }
 
     @FunctionalInterface

@@ -26,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -161,27 +162,31 @@ class PprPlanServiceFindLinkedToEquipmentTest {
 
 
     @Test
-    void findDirectlyLinkedToEquipmentExcludesTypeOnlyPlans() {
+    void findDirectPlannedWorksReturnsOnlyWorksWithoutPlans() {
         UUID equipmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
+        UUID regulationId = UUID.randomUUID();
         Equipment equipment = new Equipment();
         equipment.setId(equipmentId);
         equipment.setEquipmentTypeId(typeId);
 
         PprPlan direct = plan(equipmentId, typeId);
+        direct.getTasks().clear();
+        PprTask task = task(equipmentId, regulationId, "Oil change", LocalDateTime.of(2026, 3, 1, 9, 0));
+        direct.getTasks().add(task);
+
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
         when(planRepository.findDirectlyLinkedToEquipment(equipmentId)).thenReturn(List.of(direct));
-        when(taskRepository.countByPlanIdAndIsDeletedFalse(direct.getId())).thenReturn(1L);
+        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(List.of(regulationId)))
+                .thenReturn(List.of(regulation(regulationId, "Oil change", MaintenanceKind.PREVENTIVE)));
 
-        var response = service.findDirectlyLinkedToEquipment(equipmentId, false);
+        var response = service.findDirectPlannedWorks(equipmentId);
 
-        assertThat(response.planCount()).isEqualTo(1);
-        assertThat(response.plans().getFirst().linkReasons()).containsExactly(
-                EquipmentLinkedPprPlanDto.REASON_EQUIPMENT_TARGET,
-                EquipmentLinkedPprPlanDto.REASON_TASK
-        );
-        assertThat(response.plans().getFirst().linkReasons())
-                .doesNotContain(EquipmentLinkedPprPlanDto.REASON_EQUIPMENT_TYPE_TARGET);
+        assertThat(response.equipmentId()).isEqualTo(equipmentId);
+        assertThat(response.plannedWorkCount()).isEqualTo(1);
+        assertThat(response.plannedWorks()).hasSize(1);
+        assertThat(response.plannedWorks().getFirst().title()).isEqualTo("Oil change");
+        assertThat(response.plannedWorks().getFirst().maintenanceKind()).isEqualTo(MaintenanceKind.PREVENTIVE);
     }
 
     private PprPlan plan(UUID equipmentId, UUID typeId) {

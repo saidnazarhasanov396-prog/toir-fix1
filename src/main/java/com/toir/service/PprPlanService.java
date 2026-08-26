@@ -64,6 +64,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
 
@@ -157,52 +158,43 @@ public class PprPlanService {
     }
 
     /**
-     * Returns PPR plans assigned to this concrete equipment only (not via equipment-type targets).
+     * Returns unique planned works for this concrete equipment only (not via equipment-type targets).
      * Link = direct EQUIPMENT target or existing task on that equipment.
      */
     @Transactional(readOnly = true)
-    public EquipmentPprPlansResponse findDirectlyLinkedToEquipment(UUID equipmentId, boolean includeTasks) {
+    public EquipmentPprPlannedWorksResponse findDirectPlannedWorks(UUID equipmentId) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
         UUID equipmentTypeId = equipment.getEquipmentTypeId();
         List<PprPlan> plans = planRepository.findDirectlyLinkedToEquipment(equipmentId);
-        List<EquipmentLinkedPprPlanDto> linked = plans.stream()
-                .map(plan -> toDirectLinkedDto(plan, equipmentId, includeTasks))
-                .toList();
-        return new EquipmentPprPlansResponse(equipmentId, equipmentTypeId, linked.size(), linked);
+        Map<String, EquipmentPprPlannedWorkDto> byWorkKey = new LinkedHashMap<>();
+        for (PprPlan plan : plans) {
+            for (EquipmentPprPlannedWorkDto work : plannedWorksFor(plan, equipmentId)) {
+                byWorkKey.merge(work.workKey(), work, PprPlanService::preferEarlierPlannedWork);
+            }
+        }
+        List<EquipmentPprPlannedWorkDto> plannedWorks = List.copyOf(byWorkKey.values());
+        return new EquipmentPprPlannedWorksResponse(
+                equipmentId,
+                equipmentTypeId,
+                plannedWorks.size(),
+                plannedWorks
+        );
     }
 
-    private EquipmentLinkedPprPlanDto toDirectLinkedDto(
-            PprPlan plan,
-            UUID equipmentId,
-            boolean includeTasks
+    private static EquipmentPprPlannedWorkDto preferEarlierPlannedWork(
+            EquipmentPprPlannedWorkDto left,
+            EquipmentPprPlannedWorkDto right
     ) {
-        PprPlanDto dto = includeTasks
-                ? toDtos(List.of(plan), equipmentId).getFirst()
-                : toSummaryDto(plan, false);
-        return new EquipmentLinkedPprPlanDto(
-                dto,
-                resolveDirectLinkReasons(plan, equipmentId),
-                plannedWorksFor(plan, equipmentId));
-    }
-
-    private List<String> resolveDirectLinkReasons(PprPlan plan, UUID equipmentId) {
-        LinkedHashSet<String> reasons = new LinkedHashSet<>();
-        for (PprPlanTarget target : plan.getTargets()) {
-            if (target.isDeleted()) {
-                continue;
-            }
-            if (target.getTargetType() == PprTargetType.EQUIPMENT
-                    && equipmentId.equals(target.getEquipmentId())) {
-                reasons.add(EquipmentLinkedPprPlanDto.REASON_EQUIPMENT_TARGET);
-            }
+        LocalDateTime leftDue = left.nextDueAt() != null ? left.nextDueAt() : left.firstTaskStartsAt();
+        LocalDateTime rightDue = right.nextDueAt() != null ? right.nextDueAt() : right.firstTaskStartsAt();
+        if (leftDue == null) {
+            return right;
         }
-        boolean hasTask = plan.getTasks().stream()
-                .anyMatch(task -> !task.isDeleted() && equipmentId.equals(task.getEquipmentId()));
-        if (hasTask) {
-            reasons.add(EquipmentLinkedPprPlanDto.REASON_TASK);
+        if (rightDue == null) {
+            return left;
         }
-        return List.copyOf(reasons);
+        return rightDue.isBefore(leftDue) ? right : left;
     }
 
     private List<EquipmentPprPlannedWorkDto> plannedWorksFor(PprPlan plan, UUID equipmentId) {
@@ -213,8 +205,12 @@ public class PprPlanService {
         for (PprTask task : tasks) {
             String workKey = plannedWorkKey(task);
             PlannedWorkAccumulator acc = grouped.computeIfAbsent(workKey, ignored -> new PlannedWorkAccumulator());
-            acc.add(task, plan, ruleById.get(task.getEquipmentMaintenanceRuleId()),
-                    regulationById.get(task.getRegulationId()));
+            acc.add(
+                    task,
+                    plan,
+                    lookup(ruleById, task.getEquipmentMaintenanceRuleId()),
+                    lookup(regulationById, task.getRegulationId())
+            );
         }
         for (PprPlanTarget target : plan.getTargets()) {
             if (target.isDeleted() || target.getTargetType() != PprTargetType.REGULATION
@@ -225,12 +221,16 @@ public class PprPlanService {
             if (grouped.containsKey(workKey)) {
                 continue;
             }
-            MaintenanceRegulation regulation = regulationById.get(target.getRegulationId());
+            MaintenanceRegulation regulation = lookup(regulationById, target.getRegulationId());
             PlannedWorkAccumulator acc = new PlannedWorkAccumulator();
             acc.addRegulationOnly(plan, regulation);
             grouped.put(workKey, acc);
         }
         return grouped.values().stream().map(PlannedWorkAccumulator::toDto).toList();
+    }
+
+    private static <T> T lookup(Map<UUID, T> byId, UUID id) {
+        return id == null ? null : byId.get(id);
     }
 
     private String plannedWorkKey(PprTask task) {

@@ -86,6 +86,13 @@ public final class BackendErrorLocalizer {
             return new LocalizedError(code, params, lifetimeExpired(locale, params));
         }
 
+        if (code.startsWith("AI_GATEWAY_")
+                && legacyEnglishMessage != null
+                && !legacyEnglishMessage.isBlank()
+                && !legacyEnglishMessage.matches("[A-Z][A-Z0-9_]+")) {
+            return new LocalizedError(code, params, legacyEnglishMessage);
+        }
+
         Translation translation = TRANSLATIONS.get(code);
         if (translation == null) {
             translation = TRANSLATIONS.get(defaultCode(status));
