@@ -7,7 +7,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Unique planned work on equipment inside a PPR plan (not every generated yearly task).
+ * Unique planned work on equipment from its effective maintenance regulation/rule
+ * (not every generated yearly PPR task).
  */
 public record EquipmentPprPlannedWorkDto(
         String workKey,

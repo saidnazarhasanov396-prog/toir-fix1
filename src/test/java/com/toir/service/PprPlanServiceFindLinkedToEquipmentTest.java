@@ -8,6 +8,7 @@ import com.toir.entity.equipment.Equipment;
 import com.toir.entity.maintenance.EquipmentMaintenanceRule;
 import com.toir.entity.maintenance.MaintenanceRegulation;
 import com.toir.enums.MaintenanceKind;
+import com.toir.enums.PeriodicityUnit;
 import com.toir.enums.PprTargetType;
 import com.toir.exception.RestException;
 import com.toir.repository.PprPlanRepository;
@@ -17,6 +18,8 @@ import com.toir.repository.equipment.EquipmentRepository;
 import com.toir.repository.equipment.EquipmentTypeRepository;
 import com.toir.repository.maintenance.EquipmentMaintenanceRuleRepository;
 import com.toir.repository.maintenance.MaintenanceRegulationRepository;
+import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
+import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
 import com.toir.util.AuditBuilderService;
 import com.toir.util.AuditSerializationService;
 import org.junit.jupiter.api.Test;
@@ -60,6 +63,8 @@ class PprPlanServiceFindLinkedToEquipmentTest {
     AuditBuilderService auditBuilderService;
     @Mock
     AuditSerializationService auditSerializationService;
+    @Mock
+    EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
 
     @InjectMocks
     PprPlanService service;
@@ -163,140 +168,92 @@ class PprPlanServiceFindLinkedToEquipmentTest {
 
 
     @Test
-    void findDirectPlannedWorksReturnsOnlyWorksWithoutPlans() {
+    void findDirectPlannedWorksReturnsApplicableRegulationsForEquipment() {
         UUID equipmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
-        UUID regulationId = UUID.randomUUID();
         Equipment equipment = new Equipment();
         equipment.setId(equipmentId);
         equipment.setEquipmentTypeId(typeId);
 
-        PprPlan direct = plan(equipmentId, typeId);
-        direct.getTasks().clear();
-        PprTask task = task(equipmentId, regulationId, "Oil change", LocalDateTime.of(2026, 3, 1, 9, 0));
-        direct.getTasks().add(task);
+        MaintenanceRegulation oil = regulation(UUID.randomUUID(), "Oil change", MaintenanceKind.PREVENTIVE);
+        oil.setPeriodicityUnit(PeriodicityUnit.MONTH);
+        oil.setPeriodicityValue(2);
+        MaintenanceRegulation bolts = regulation(UUID.randomUUID(), "Bolt replacement", MaintenanceKind.PREVENTIVE);
+        bolts.setPeriodicityUnit(PeriodicityUnit.WEEK);
+        bolts.setPeriodicityValue(1);
+        MaintenanceRegulation motor = regulation(UUID.randomUUID(), "Motor repair", MaintenanceKind.CURRENT_REPAIR);
+        motor.setPeriodicityUnit(PeriodicityUnit.MONTH);
+        motor.setPeriodicityValue(6);
+        MaintenanceRegulation general = regulation(UUID.randomUUID(), "General inspection", MaintenanceKind.INSPECTION);
+        general.setPeriodicityUnit(PeriodicityUnit.MONTH);
+        general.setPeriodicityValue(3);
+
+        EquipmentMaintenanceRule individual = new EquipmentMaintenanceRule();
+        individual.setId(UUID.randomUUID());
+        individual.setEquipmentId(equipmentId);
+        individual.setName("Seasonal service");
+        individual.setCode("SEASONAL-SERVICE");
+        individual.setMaintenanceKind(MaintenanceKind.SEASONAL);
+        individual.setPeriodicityUnit(PeriodicityUnit.YEAR);
+        individual.setPeriodicityValue(1);
+        individual.setActive(true);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(planRepository.findDirectlyLinkedToEquipment(equipmentId)).thenReturn(List.of(direct));
-        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(List.of(regulationId)))
-                .thenReturn(List.of(regulation(regulationId, "Oil change", MaintenanceKind.PREVENTIVE)));
+        when(effectiveRuleResolver.resolveApplicable(equipmentId)).thenReturn(List.of(
+                EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, oil),
+                EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, bolts),
+                EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, motor),
+                EquipmentMaintenanceEffectiveRule.fromRegulation(equipmentId, general),
+                EquipmentMaintenanceEffectiveRule.fromIndividual(individual)
+        ));
 
         var response = service.findDirectPlannedWorks(equipmentId);
 
         assertThat(response.equipmentId()).isEqualTo(equipmentId);
-        assertThat(response.plannedWorkCount()).isEqualTo(1);
-        assertThat(response.plannedWorks()).hasSize(1);
-        assertThat(response.plannedWorks().getFirst().title()).isEqualTo("Oil change");
-        assertThat(response.plannedWorks().getFirst().maintenanceKind()).isEqualTo(MaintenanceKind.PREVENTIVE);
-    }
-
-    @Test
-    void findDirectPlannedWorksReturnsOneLatestWorkPerUniqueType() {
-        UUID equipmentId = UUID.randomUUID();
-        UUID typeId = UUID.randomUUID();
-        UUID oilChange2025Id = UUID.randomUUID();
-        UUID oilChange2026Id = UUID.randomUUID();
-        UUID motorRepairId = UUID.randomUUID();
-        UUID generalId = UUID.randomUUID();
-        Equipment equipment = new Equipment();
-        equipment.setId(equipmentId);
-        equipment.setEquipmentTypeId(typeId);
-        equipment.setCode("PUMP-1");
-
-        PprPlan olderPlan = plan(equipmentId, typeId);
-        olderPlan.getTasks().clear();
-        olderPlan.getTasks().add(task(equipmentId, oilChange2025Id, "Oil change - PUMP-1",
-                LocalDateTime.of(2025, 1, 15, 8, 0)));
-        olderPlan.getTasks().add(task(equipmentId, oilChange2025Id, "Oil change - PUMP-1",
-                LocalDateTime.of(2025, 7, 15, 8, 0)));
-        olderPlan.getTasks().add(task(equipmentId, motorRepairId, "Motor repair",
-                LocalDateTime.of(2025, 4, 1, 9, 0)));
-
-        PprPlan newerPlan = plan(equipmentId, typeId);
-        newerPlan.getTasks().clear();
-        newerPlan.getTasks().add(task(equipmentId, oilChange2026Id, "Oil change",
-                LocalDateTime.of(2026, 3, 1, 8, 0)));
-        newerPlan.getTasks().add(task(equipmentId, generalId, "General",
-                LocalDateTime.of(2026, 6, 1, 9, 0)));
-
-        MaintenanceRegulation oil2025 = regulation(oilChange2025Id, "Oil change", MaintenanceKind.PREVENTIVE);
-        MaintenanceRegulation oil2026 = regulation(oilChange2026Id, "Oil change", MaintenanceKind.PREVENTIVE);
-        MaintenanceRegulation motor = regulation(motorRepairId, "Motor repair", MaintenanceKind.CURRENT_REPAIR);
-        MaintenanceRegulation general = regulation(generalId, "General", MaintenanceKind.OVERHAUL);
-
-        when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(planRepository.findDirectlyLinkedToEquipment(equipmentId)).thenReturn(List.of(newerPlan, olderPlan));
-        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(org.mockito.ArgumentMatchers.any()))
-                .thenReturn(List.of(oil2025, oil2026, motor, general));
-
-        var response = service.findDirectPlannedWorks(equipmentId);
-
-        assertThat(response.plannedWorkCount()).isEqualTo(3);
+        assertThat(response.equipmentTypeId()).isEqualTo(typeId);
+        assertThat(response.plannedWorkCount()).isEqualTo(5);
         assertThat(response.plannedWorks())
                 .extracting(work -> work.title())
-                .containsExactlyInAnyOrder("Oil change", "Motor repair", "General");
+                .containsExactly(
+                        "Oil change",
+                        "Bolt replacement",
+                        "Motor repair",
+                        "General inspection",
+                        "Seasonal service"
+                );
         assertThat(response.plannedWorks())
                 .anySatisfy(work -> {
                     assertThat(work.title()).isEqualTo("Oil change");
-                    assertThat(work.occurrenceCount()).isEqualTo(3);
-                    assertThat(work.regulationId()).isEqualTo(oilChange2026Id);
-                    assertThat(work.firstTaskStartsAt()).isEqualTo(LocalDateTime.of(2026, 3, 1, 8, 0));
+                    assertThat(work.regulationId()).isEqualTo(oil.getId());
+                    assertThat(work.periodicityUnit()).isEqualTo(PeriodicityUnit.MONTH);
+                    assertThat(work.periodicityValue()).isEqualTo(2);
+                    assertThat(work.workKey()).isEqualTo("REGULATION:" + oil.getId());
                 });
         assertThat(response.plannedWorks())
                 .anySatisfy(work -> {
-                    assertThat(work.title()).isEqualTo("Motor repair");
-                    assertThat(work.maintenanceKind()).isEqualTo(MaintenanceKind.CURRENT_REPAIR);
-                    assertThat(work.occurrenceCount()).isEqualTo(1);
-                });
-        assertThat(response.plannedWorks())
-                .anySatisfy(work -> {
-                    assertThat(work.title()).isEqualTo("General");
-                    assertThat(work.maintenanceKind()).isEqualTo(MaintenanceKind.OVERHAUL);
+                    assertThat(work.title()).isEqualTo("Seasonal service");
+                    assertThat(work.equipmentMaintenanceRuleId()).isEqualTo(individual.getId());
+                    assertThat(work.periodicityUnit()).isEqualTo(PeriodicityUnit.YEAR);
+                    assertThat(work.periodicityValue()).isEqualTo(1);
+                    assertThat(work.workKey()).isEqualTo("RULE:" + individual.getId());
                 });
     }
 
     @Test
-    void findDirectPlannedWorksMergesRuleAndRegulationWithSameWorkTypeName() {
+    void findDirectPlannedWorksReturnsEmptyWhenEquipmentHasNoApplicableRules() {
         UUID equipmentId = UUID.randomUUID();
         UUID typeId = UUID.randomUUID();
-        UUID regulationId = UUID.randomUUID();
-        UUID ruleId = UUID.randomUUID();
         Equipment equipment = new Equipment();
         equipment.setId(equipmentId);
         equipment.setEquipmentTypeId(typeId);
-        equipment.setCode("EQ-9");
-
-        PprPlan plan = plan(equipmentId, typeId);
-        plan.getTasks().clear();
-        PprTask regulationTask = task(equipmentId, regulationId, "Oil change",
-                LocalDateTime.of(2026, 1, 10, 8, 0));
-        PprTask ruleTask = task(equipmentId, null, "Oil change - EQ-9",
-                LocalDateTime.of(2026, 8, 10, 8, 0));
-        ruleTask.setEquipmentMaintenanceRuleId(ruleId);
-        plan.getTasks().add(regulationTask);
-        plan.getTasks().add(ruleTask);
-
-        EquipmentMaintenanceRule rule = new EquipmentMaintenanceRule();
-        rule.setId(ruleId);
-        rule.setName("Oil change");
-        rule.setCode("OIL-CHANGE");
-        rule.setMaintenanceKind(MaintenanceKind.PREVENTIVE);
 
         when(equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)).thenReturn(Optional.of(equipment));
-        when(planRepository.findDirectlyLinkedToEquipment(equipmentId)).thenReturn(List.of(plan));
-        when(maintenanceRegulationRepository.findAllByIdInAndIsDeletedFalse(List.of(regulationId)))
-                .thenReturn(List.of(regulation(regulationId, "Oil change", MaintenanceKind.PREVENTIVE)));
-        when(equipmentMaintenanceRuleRepository.findAllByIdInAndIsDeletedFalse(List.of(ruleId)))
-                .thenReturn(List.of(rule));
+        when(effectiveRuleResolver.resolveApplicable(equipmentId)).thenReturn(List.of());
 
         var response = service.findDirectPlannedWorks(equipmentId);
 
-        assertThat(response.plannedWorkCount()).isEqualTo(1);
-        assertThat(response.plannedWorks()).hasSize(1);
-        assertThat(response.plannedWorks().getFirst().title()).isEqualTo("Oil change");
-        assertThat(response.plannedWorks().getFirst().occurrenceCount()).isEqualTo(2);
-        assertThat(response.plannedWorks().getFirst().firstTaskStartsAt())
-                .isEqualTo(LocalDateTime.of(2026, 8, 10, 8, 0));
+        assertThat(response.plannedWorkCount()).isEqualTo(0);
+        assertThat(response.plannedWorks()).isEmpty();
     }
 
     private PprPlan plan(UUID equipmentId, UUID typeId) {
