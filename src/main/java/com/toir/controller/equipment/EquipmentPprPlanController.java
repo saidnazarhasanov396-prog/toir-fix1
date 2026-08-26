@@ -47,11 +47,11 @@ public class EquipmentPprPlanController {
     @GetMapping("/direct")
     @PreAuthorize(READ_AUTH)
     @Operation(
-            summary = "List unique planned works for this equipment only",
-            description = "Returns one planned work per unique work type (oil change, motor repair, "
-                    + "general, and so on) for this concrete equipment only. Repeated yearly "
-                    + "tasks collapse into the latest occurrence. Does not include type-only plans "
-                    + "and does not return full PPR plan payloads."
+            summary = "List unique maintenance regulations for this equipment",
+            description = "Returns the effective maintenance regulations/rules for this concrete "
+                    + "equipment (oil change every 2 months, motor repair every 6 months, and so on). "
+                    + "One item per applicable regulation or equipment-specific rule. "
+                    + "Does not return generated PPR tasks or full plan payloads."
     )
     public ResponseEntity<EquipmentPprPlannedWorksResponse> listDirect(
             @PathVariable UUID equipmentId

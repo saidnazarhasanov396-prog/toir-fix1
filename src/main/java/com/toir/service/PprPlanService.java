@@ -42,6 +42,8 @@ import com.toir.service.repair.RepairMaterialUsageService;
 import com.toir.service.pprcalendar.PprPlanEquipmentAccessPolicy;
 import com.toir.service.pprcalendar.PprOperationalCalendarPolicy;
 import com.toir.service.ppr.PprTaskExecutionPolicy;
+import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRule;
+import com.toir.service.maintanance.EquipmentMaintenanceEffectiveRuleResolver;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -92,6 +94,7 @@ public class PprPlanService {
     private final PprPlanEquipmentAccessPolicy equipmentAccessPolicy;
     private final PprOperationalCalendarPolicy operationalCalendarPolicy;
     private final AnnualMaintenanceApprovalFirstFeature approvalFirstFeature;
+    private final EquipmentMaintenanceEffectiveRuleResolver effectiveRuleResolver;
     private static final int MAX_PLAN_CODE_GENERATION_ATTEMPTS = 50;
     private static final int MAX_TASK_CODE_GENERATION_ATTEMPTS = 50;
     private static final String CLIENT_CODE_REJECT_MESSAGE =
@@ -158,129 +161,50 @@ public class PprPlanService {
     }
 
     /**
-     * Returns unique planned works for this concrete equipment only (not via equipment-type targets).
-     * Link = direct EQUIPMENT target or existing task on that equipment.
-     * One row per work type name (regulation/rule/title), keeping the latest occurrence.
+     * Returns unique effective maintenance regulations/rules for this concrete equipment.
+     * Source is the equipment maintenance profile (type regulations + equipment-specific rules),
+     * not generated PPR task instances.
      */
     @Transactional(readOnly = true)
     public EquipmentPprPlannedWorksResponse findDirectPlannedWorks(UUID equipmentId) {
         Equipment equipment = equipmentRepository.findByIdAndIsDeletedFalse(equipmentId)
                 .orElseThrow(() -> RestException.notFound("Equipment not found: " + equipmentId));
-        UUID equipmentTypeId = equipment.getEquipmentTypeId();
-        List<PprPlan> plans = planRepository.findDirectlyLinkedToEquipment(equipmentId);
-        Map<String, EquipmentPprPlannedWorkDto> byWorkType = new LinkedHashMap<>();
-        for (PprPlan plan : plans) {
-            for (EquipmentPprPlannedWorkDto work : plannedWorksFor(plan, equipmentId)) {
-                String workTypeKey = uniqueDirectPlannedWorkKey(work, equipment.getCode());
-                byWorkType.merge(workTypeKey, work, PprPlanService::preferLatestPlannedWork);
-            }
-        }
-        List<EquipmentPprPlannedWorkDto> plannedWorks = List.copyOf(byWorkType.values());
+        List<EquipmentPprPlannedWorkDto> plannedWorks = effectiveRuleResolver.resolveApplicable(equipmentId)
+                .stream()
+                .map(PprPlanService::toDirectPlannedWork)
+                .toList();
         return new EquipmentPprPlannedWorksResponse(
                 equipmentId,
-                equipmentTypeId,
+                equipment.getEquipmentTypeId(),
                 plannedWorks.size(),
                 plannedWorks
         );
     }
 
-    private static String uniqueDirectPlannedWorkKey(EquipmentPprPlannedWorkDto work, String equipmentCode) {
-        String name = firstNonBlank(
-                work.regulationName(),
-                work.equipmentMaintenanceRuleName(),
-                stripEquipmentCodeSuffix(work.title(), equipmentCode)
-        );
-        if (name != null && !name.isBlank()) {
-            return "NAME:" + name.trim().toLowerCase(Locale.ROOT);
-        }
-        if (work.maintenanceKind() != null) {
-            return "KIND:" + work.maintenanceKind().name();
-        }
-        return work.workKey() != null ? work.workKey() : "UNSPECIFIED";
-    }
-
-    private static String stripEquipmentCodeSuffix(String title, String equipmentCode) {
-        if (title == null) {
-            return null;
-        }
-        String trimmed = title.trim();
-        if (equipmentCode == null || equipmentCode.isBlank()) {
-            return trimmed;
-        }
-        String suffix = " - " + equipmentCode.trim();
-        if (trimmed.length() > suffix.length()
-                && trimmed.regionMatches(true, trimmed.length() - suffix.length(), suffix, 0, suffix.length())) {
-            return trimmed.substring(0, trimmed.length() - suffix.length()).trim();
-        }
-        return trimmed;
-    }
-
-    private static String firstNonBlank(String... values) {
-        if (values == null) {
-            return null;
-        }
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return null;
-    }
-
-    private static EquipmentPprPlannedWorkDto preferLatestPlannedWork(
-            EquipmentPprPlannedWorkDto left,
-            EquipmentPprPlannedWorkDto right
-    ) {
-        LocalDateTime leftAt = plannedWorkSortInstant(left);
-        LocalDateTime rightAt = plannedWorkSortInstant(right);
-        EquipmentPprPlannedWorkDto latest;
-        if (leftAt == null) {
-            latest = right;
-        } else if (rightAt == null || !rightAt.isAfter(leftAt)) {
-            latest = left;
-        } else {
-            latest = right;
-        }
-        int totalOccurrences = left.occurrenceCount() + right.occurrenceCount();
-        return latest.occurrenceCount() == totalOccurrences
-                ? latest
-                : copyWithOccurrenceCount(latest, totalOccurrences);
-    }
-
-    private static LocalDateTime plannedWorkSortInstant(EquipmentPprPlannedWorkDto work) {
-        LocalDateTime due = work.nextDueAt();
-        LocalDateTime start = work.firstTaskStartsAt();
-        if (due == null) {
-            return start;
-        }
-        if (start == null) {
-            return due;
-        }
-        return due.isAfter(start) ? due : start;
-    }
-
-    private static EquipmentPprPlannedWorkDto copyWithOccurrenceCount(
-            EquipmentPprPlannedWorkDto work,
-            int occurrenceCount
-    ) {
+    private static EquipmentPprPlannedWorkDto toDirectPlannedWork(EquipmentMaintenanceEffectiveRule rule) {
+        boolean fromRule = rule.equipmentMaintenanceRuleId() != null;
+        boolean fromRegulation = rule.regulationId() != null;
+        String workKey = fromRule
+                ? "RULE:" + rule.equipmentMaintenanceRuleId()
+                : (fromRegulation ? "REGULATION:" + rule.regulationId() : "NAME:" + rule.name());
         return new EquipmentPprPlannedWorkDto(
-                work.workKey(),
-                work.title(),
-                work.maintenanceKind(),
-                work.regulationId(),
-                work.regulationCode(),
-                work.regulationName(),
-                work.equipmentMaintenanceRuleId(),
-                work.equipmentMaintenanceRuleCode(),
-                work.equipmentMaintenanceRuleName(),
-                work.periodicityUnit(),
-                work.periodicityValue(),
-                work.planFrequency(),
-                work.planIntervalHours(),
-                occurrenceCount,
-                work.firstTaskId(),
-                work.firstTaskStartsAt(),
-                work.nextDueAt()
+                workKey,
+                rule.name(),
+                rule.maintenanceKind(),
+                rule.regulationId(),
+                fromRegulation ? rule.code() : null,
+                fromRegulation ? rule.name() : null,
+                rule.equipmentMaintenanceRuleId(),
+                fromRule ? rule.code() : null,
+                fromRule ? rule.name() : null,
+                rule.periodicityUnit(),
+                rule.periodicityValue(),
+                null,
+                null,
+                1,
+                null,
+                null,
+                null
         );
     }
 
